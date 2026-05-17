@@ -1,0 +1,91 @@
+# Medium configuration - 40% of production size
+# For testing on Mac M4 Pro (48 GB RAM)
+# Target: ~90,000 cells (vs 604,800 in production)
+
+# ============================================================
+# MESH (reduced from production)
+# ============================================================
+nr = 35
+ntheta = 70
+nz = 50
+stretch_r = 1.5
+stretch_z = 1.5
+
+# ============================================================
+# EAF GEOMETRY (130-ton AC EAF)
+# ============================================================
+R_shell = 3.80
+H_total = 4.50
+H_bowl = 0.60
+R_bowl = 2.50
+R_pcd = 0.85
+R_elec = 0.30
+
+# ============================================================
+# TIME INTEGRATION (shorter simulation)
+# ============================================================
+dt = 0.1
+dt_min = 0.001
+dt_max = 1.0
+t_final = 100.0
+adaptive_dt = true
+
+# ============================================================
+# SIMPLE ALGORITHM
+# ============================================================
+max_outer = 20
+max_inner_mom = 5
+max_inner_pres = 50
+
+# Under-relaxation factors
+alpha_u = 0.3
+alpha_p = 0.7
+alpha_T = 0.7
+alpha_k = 0.5
+alpha_eps = 0.5
+
+# ============================================================
+# CONVERGENCE TOLERANCES
+# ============================================================
+tol_cont = 1.0e-4
+tol_mom = 1.0e-4
+tol_energy = 1.0e-3
+tol_turb = 1.0e-4
+
+# ============================================================
+# MATERIAL PROPERTIES (Table 2 from paper)
+# ============================================================
+rho_steel = 7500.0
+T_solidus = 1600.0
+T_liquidus = 1809.0
+cp_s = 400.0
+cp_l = 696.4
+h_fusion = 247000.0
+k_s = 35.0
+k_l = 30.0
+T_initial = 300.0
+T_ambient = 300.0
+
+# ============================================================
+# PHYSICS MODULES
+# ============================================================
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = true
+solve_radiation = true
+solve_chemistry = false
+solve_arc = true
+solve_multiphase = true
+
+# ============================================================
+# OUTPUT
+# ============================================================
+output_freq = 10
+monitor_freq = 5
+output_dir = output
+
+# ============================================================
+# CHARGE TIMING
+# ============================================================
+t_bucket2_charge = 50.0

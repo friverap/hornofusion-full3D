@@ -1,0 +1,67 @@
+# Full 3D EAF Configuration
+# Ugarte et al. (2024) - HBI/Scrap Melting in Industrial EAF
+
+# Geometry (130-ton AC EAF)
+R_shell = 3.80
+H_total = 4.50
+H_bowl = 0.60
+R_bowl = 2.50
+R_pcd = 0.85
+R_elec = 0.30
+
+# Mesh (~604,800 cells)
+nr = 60
+ntheta = 120
+nz = 84
+stretch_r = 1.5
+stretch_z = 1.5
+
+# Time
+dt = 0.1
+dt_min = 1.0e-3
+dt_max = 1.0
+t_final = 5040.0
+adaptive_dt = true
+
+# SIMPLE
+max_outer = 20
+max_inner_mom = 5
+max_inner_pres = 50
+alpha_u = 0.3
+alpha_p = 0.7
+alpha_T = 0.7
+
+# Convergence
+tol_cont = 1.0e-4
+tol_mom = 1.0e-4
+tol_energy = 1.0e-6
+
+# Material - steel (Table 2)
+rho_steel = 7500.0
+T_solidus = 1600.0
+T_liquidus = 1809.0
+cp_s = 400.0
+cp_l = 696.4
+h_fusion = 247000.0
+
+# Boundary conditions
+T_initial = 300.0
+T_ambient = 300.0
+
+# Physics
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = true
+solve_radiation = true
+solve_chemistry = false
+solve_arc = true
+solve_multiphase = true
+
+# Output
+output_freq = 500
+monitor_freq = 50
+output_dir = output
+
+# Second bucket timing
+t_bucket2_charge = 2100.0

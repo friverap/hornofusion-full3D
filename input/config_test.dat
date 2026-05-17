@@ -1,0 +1,20 @@
+# Test configuration - small mesh for quick verification
+nr = 20
+ntheta = 36
+nz = 30
+stretch_r = 1.0
+stretch_z = 1.0
+
+dt = 1.0
+t_final = 10.0
+
+solve_flow = false
+solve_energy = false
+solve_melting = false
+solve_turb = false
+solve_arc = false
+solve_multiphase = false
+
+output_freq = 1
+monitor_freq = 1
+output_dir = output

@@ -1,0 +1,70 @@
+!===============================================================================
+! mod_constants.f90 - Physical and numerical constants for 3D EAF simulator
+!
+! Ugarte et al. (2024) Materials 17(21), 5139
+!===============================================================================
+module mod_constants
+    implicit none
+
+    integer, parameter :: dp = selected_real_kind(15, 307)
+
+    ! Mathematical
+    real(dp), parameter :: PI = 3.141592653589793238_dp
+    real(dp), parameter :: TWO_PI = 6.283185307179586477_dp
+
+    ! Physical
+    real(dp), parameter :: STEFAN_BOLTZMANN = 5.670374419e-8_dp   ! W/(m^2 K^4)
+    real(dp), parameter :: R_GAS = 8.314462_dp                     ! J/(mol K)
+    real(dp), parameter :: GRAVITY = 9.81_dp                       ! m/s^2
+    real(dp), parameter :: KELVIN_OFFSET = 273.15_dp               ! K
+    real(dp), parameter :: MU_0 = 1.2566370614e-6_dp              ! H/m
+
+    ! Steel properties (Table 2 of paper)
+    real(dp), parameter :: RHO_STEEL    = 7500.0_dp    ! kg/m^3
+    real(dp), parameter :: T_SOLIDUS    = 1600.0_dp    ! K
+    real(dp), parameter :: T_LIQUIDUS   = 1809.0_dp    ! K
+    real(dp), parameter :: T_LIQ_HBI   = 1798.1_dp    ! K
+    real(dp), parameter :: CP_SOLID     = 400.0_dp     ! J/(kg K)
+    real(dp), parameter :: CP_LIQUID    = 696.4_dp     ! J/(kg K)
+
+    ! Steel properties (standard references, not in paper)
+    real(dp), parameter :: H_FUSION     = 247000.0_dp  ! J/kg
+    real(dp), parameter :: K_SOLID      = 35.0_dp      ! W/(m K)
+    real(dp), parameter :: K_LIQUID     = 30.0_dp      ! W/(m K)
+    real(dp), parameter :: MU_LIQUID    = 6.0e-3_dp    ! Pa s
+    real(dp), parameter :: EMISSIVITY   = 0.7_dp
+    real(dp), parameter :: BETA_EXPANSION = 1.2e-4_dp  ! 1/K
+
+    ! Gas properties
+    real(dp), parameter :: RHO_GAS_REF = 1.2_dp        ! kg/m^3
+    real(dp), parameter :: CP_GAS      = 1000.0_dp     ! J/(kg K)
+    real(dp), parameter :: K_GAS       = 0.5_dp        ! W/(m K)
+    real(dp), parameter :: MU_GAS      = 5.0e-5_dp     ! Pa s
+
+    ! k-epsilon
+    real(dp), parameter :: C_MU      = 0.09_dp
+    real(dp), parameter :: C1_EPS    = 1.44_dp
+    real(dp), parameter :: C2_EPS    = 1.92_dp
+    real(dp), parameter :: SIGMA_K   = 1.0_dp
+    real(dp), parameter :: SIGMA_EPS = 1.3_dp
+    real(dp), parameter :: PR_T      = 0.85_dp
+
+    ! Numerical
+    real(dp), parameter :: SMALL = 1.0e-30_dp
+    real(dp), parameter :: LARGE = 1.0e+30_dp
+    real(dp), parameter :: TOL_DEFAULT = 1.0e-6_dp
+
+    ! Ergun porous media defaults
+    real(dp), parameter :: D_PARTICLE = 0.10_dp   ! m (characteristic scrap chunk size)
+
+    ! Cassie-Mayr arc defaults
+    ! ARC_W is the arc cooling power [W].  Physical calibration:
+    !   R_eq = P_rad / ARC_W.  With I~55 kA and R_eq~9 mOhm → P_arc~27.5 MW.
+    !   ARC_W = 30 W  →  R_eq = 9.1e-3 Ohm  →  P_arc ≈ 27.5 MW  ✓
+    !   ARC_W = 1e5 W →  R_eq = 2.7e-9 Ohm  →  short-circuit, P_arc ≈ 0  ✗
+    real(dp), parameter :: ARC_TAU   = 3.0e-4_dp  ! s (arc time constant)
+    real(dp), parameter :: ARC_W     = 30.0_dp    ! W (cooling power) — calibrated
+    real(dp), parameter :: ARC_SIGMA = 1.0e3_dp   ! S/m (ionized air conductivity)
+    real(dp), parameter :: ARC_T_REF = 12000.0_dp ! K (reference arc temperature)
+
+end module mod_constants

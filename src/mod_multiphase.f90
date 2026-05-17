@@ -1,0 +1,106 @@
+!===============================================================================
+! mod_multiphase.f90 - Eulerian-Eulerian multiphase coupling
+!
+! Orchestrates:
+!   1. Momentum for liquid phase
+!   2. Momentum for gas phase
+!   3. Shared pressure correction
+!   4. Volume fraction update
+!   5. Energy for both phases
+!
+! MPI-aware: Coordinates halo exchanges between physics modules
+!===============================================================================
+module mod_multiphase
+    use mod_constants
+    use mod_types_3d
+    use mod_momentum_3d
+    use mod_pressure_3d
+    use mod_energy_3d
+    use mod_continuity
+    use mod_drag_ergun
+    use mod_properties_3d
+    use mod_fields_3d
+    implicit none
+
+contains
+
+    subroutine multiphase_iteration(liq, gas, liq_old, gas_old, sol, sh, m, cfg, &
+                                     S_drag_r, S_drag_th, S_drag_z, conv)
+        type(phase_t), intent(inout) :: liq, gas, liq_old, gas_old
+        type(solid_t), intent(inout) :: sol
+        type(shared_t), intent(inout) :: sh
+        type(mesh_t), intent(in)     :: m
+        type(config_t), intent(in)   :: cfg
+        real(dp), intent(inout)      :: S_drag_r(:,:,:), S_drag_th(:,:,:), S_drag_z(:,:,:)
+        type(convergence_t), intent(inout) :: conv
+
+        real(dp) :: res_ur_l, res_uth_l, res_uz_l
+        real(dp) :: res_ur_g, res_uth_g, res_uz_g
+        real(dp) :: res_cont, res_energy_l, res_energy_g
+
+        ! Exchange halos before starting iteration
+        call phase_exchange_halos(liq, m)
+        call phase_exchange_halos(gas, m)
+        call solid_exchange_halos(sol, m)
+        call shared_exchange_halos(sh, m)
+
+        ! Compute Ergun drag on both phases from solid
+        call compute_ergun_drag(liq, sol, m, cfg, S_drag_r, S_drag_th, S_drag_z)
+
+        ! Liquid momentum
+        call solve_momentum_3d(liq, liq_old, sh, m, cfg, liq%alpha, &
+                               S_drag_r, S_drag_th, S_drag_z, &
+                               res_ur_l, res_uth_l, res_uz_l)
+        
+        ! Exchange halos after momentum
+        call phase_exchange_halos(liq, m)
+
+        ! Gas momentum (with same drag field -- separate would be more correct
+        ! but gas drag through scrap is similar)
+        call solve_momentum_3d(gas, gas_old, sh, m, cfg, gas%alpha, &
+                               S_drag_r, S_drag_th, S_drag_z, &
+                               res_ur_g, res_uth_g, res_uz_g)
+        
+        ! Exchange halos after momentum
+        call phase_exchange_halos(gas, m)
+
+        ! Pressure correction (uses liquid as primary phase)
+        call solve_pressure_correction(liq, sh, m, cfg, liq%alpha, res_cont)
+        
+        ! Exchange halos after pressure
+        call shared_exchange_halos(sh, m)
+        call phase_exchange_halos(liq, m)
+
+        ! Volume fraction update
+        if (cfg%solve_multiphase) then
+            call solve_volume_fraction(liq, gas, sol, m, cfg)
+            ! Exchange after volume fraction update
+            call phase_exchange_halos(liq, m)
+            call phase_exchange_halos(gas, m)
+        end if
+
+        ! Energy
+        if (cfg%solve_energy) then
+            call solve_energy_3d(liq, liq_old%T, sh, m, cfg, liq%alpha, res_energy_l)
+            call phase_exchange_halos(liq, m)
+            
+            call solve_energy_3d(gas, gas_old%T, sh, m, cfg, gas%alpha, res_energy_g)
+            call phase_exchange_halos(gas, m)
+        else
+            res_energy_l = 0.0_dp
+            res_energy_g = 0.0_dp
+        end if
+
+        ! Update properties
+        call update_properties(liq, gas, sh, m, cfg)
+
+        ! Record convergence
+        conv%res_ur   = max(res_ur_l, res_ur_g)
+        conv%res_uth  = max(res_uth_l, res_uth_g)
+        conv%res_uz   = max(res_uz_l, res_uz_g)
+        conv%res_cont = res_cont
+        conv%res_energy = max(res_energy_l, res_energy_g)
+
+    end subroutine multiphase_iteration
+
+end module mod_multiphase

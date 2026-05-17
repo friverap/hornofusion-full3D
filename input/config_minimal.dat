@@ -1,0 +1,23 @@
+# Minimal configuration - NO physics, just MPI mesh and time loop
+nr = 10
+ntheta = 12  
+nz = 8
+stretch_r = 1.0
+stretch_z = 1.0
+
+dt = 1.0
+t_final = 3.0
+
+# DISABLE ALL PHYSICS
+solve_flow = false
+solve_energy = false
+solve_melting = false
+solve_turb = false
+solve_arc = false
+solve_multiphase = false
+solve_radiation = false
+solve_chemistry = false
+
+output_freq = 1
+monitor_freq = 1
+output_dir = output

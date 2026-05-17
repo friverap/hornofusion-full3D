@@ -1,0 +1,30 @@
+# Simulation outputs (heavy)
+output/
+output_prod2/
+*.h5
+*.hdf5
+*.vtk
+*.vtu
+
+# Build artifacts
+obj/
+bin/
+*.o
+*.mod
+*.smod
+*.a
+
+# Compilation logs
+*.log
+
+# Backup / staged versions of source files
+*.bak
+*.final
+*.orig
+*~
+
+# macOS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp

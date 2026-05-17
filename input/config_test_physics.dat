@@ -1,0 +1,34 @@
+# Test configuration with limited physics - debug solver convergence
+nr = 20
+ntheta = 36
+nz = 30
+stretch_r = 1.0
+stretch_z = 1.0
+
+dt = 1.0
+t_final = 3.0
+
+# ENABLE ONLY ONE PHYSICS AT A TIME
+solve_flow = true
+solve_energy = false
+solve_melting = false
+solve_turb = false
+solve_arc = false
+solve_multiphase = false
+solve_radiation = false
+solve_chemistry = false
+
+# More conservative solver settings
+max_outer = 3
+max_inner_mom = 2
+max_inner_pres = 10
+
+# More relaxed tolerances
+tol_cont = 1.0e-3
+tol_mom = 1.0e-3
+tol_energy = 1.0e-2
+tol_turb = 1.0e-3
+
+output_freq = 1
+monitor_freq = 1
+output_dir = output

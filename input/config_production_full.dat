@@ -1,0 +1,157 @@
+# =============================================================================
+# config_production_full.dat — Corrida de producción EAF 3D
+#
+# Replica Ugarte et al. (2024) Materials 17(21), 5139
+# Horno eléctrico de arco 130 t, corriente alterna trifásica
+#
+# FÍSICA COMPLETA:
+#   - Flujo multifase (Euler-Euler): gas + líquido + sólido (Ergun)
+#   - Energía (implícita) + fusión/solidificación
+#   - Turbulencia k-ε
+#   - Arco: Cassie-Mayr + MC radiación + impingement + Lorentz
+#   - Radiación DO (Discrete Ordinates)
+#   - Química: C + ½O₂ → CO (Maahs) + combustión secundaria CO → CO₂
+#   - Transporte de especies CO / CO₂
+#   - Escoria (pseudo-fase con flotabilidad)
+#   - Buoyancy de Boussinesq
+#
+# MALLA: 60 × 120 × 84 = 604,800 celdas
+#
+# MPI:
+#   12 procs (M4 Pro, 12 núcleos): mpirun -n 12  → descomposición 1×4×3
+#    8 procs (MacBook):             mpirun -n  8  → descomposición 1×4×2
+#   16 procs (cluster):             mpirun -n 16  → descomposición 1×4×4
+#
+# TIEMPO TOTAL: 5040 s (tap-to-tap completo)
+#   dt_0=0.5 s, adaptativo hasta dt_max=2.0 s
+#   ~ 4,000–10,000 pasos según dt adaptativo
+#
+# OUTPUT: ~50 snapshots HDF5 × ~120 MB ≈ 6 GB  (output_prod2/)
+#
+# RUN:
+#   mkdir -p output_prod2
+#   mpirun -n 12 ./bin/eaf3d_mpi input/config_production_full.dat
+# =============================================================================
+
+# ============================================================
+# MALLA  (Ugarte et al. Tabla 1: 603,288 ≈ 604,800 celdas)
+# ============================================================
+nr      = 60
+ntheta  = 120
+nz      = 84
+stretch_r = 1.5
+stretch_z = 1.5
+
+# ============================================================
+# GEOMETRÍA EAF 130 t  (Ugarte et al. Figura 1)
+# ============================================================
+R_shell  = 3.80
+H_total  = 4.50
+H_bowl   = 0.60
+R_bowl   = 2.50
+R_pcd    = 0.85
+R_elec   = 0.30
+
+# ============================================================
+# INTEGRACIÓN TEMPORAL
+#   Bore-in dura ~200 s (electrodo baja 2 m a 0.01 m/s)
+#   Cubo 2 cargado en t=2100 s
+#   Tap-to-tap: 5040 s
+# ============================================================
+dt           = 0.5
+dt_min       = 0.01
+dt_max       = 2.0
+t_final      = 7200.0
+adaptive_dt  = true
+
+# ============================================================
+# ALGORITMO SIMPLE
+# ============================================================
+max_outer     = 10
+max_inner_mom = 5
+max_inner_pres= 50
+
+alpha_u     = 0.3
+alpha_p     = 0.7
+alpha_T     = 0.7
+alpha_k     = 0.5
+alpha_eps   = 0.5
+
+# ============================================================
+# TOLERANCIAS DE CONVERGENCIA
+# ============================================================
+tol_cont   = 1.0e-4
+tol_mom    = 1.0e-4
+tol_energy = 1.0e-3
+tol_turb   = 1.0e-4
+
+# ============================================================
+# PROPIEDADES MATERIALES  (Ugarte et al. Tabla 2)
+# ============================================================
+rho_steel  = 7500.0
+T_solidus  = 1600.0
+T_liquidus = 1809.0
+cp_s       = 400.0
+cp_l       = 696.4
+h_fusion   = 247000.0
+k_s        = 35.0
+k_l        = 30.0
+T_initial  = 300.0
+T_ambient  = 300.0
+
+# ============================================================
+# FÍSICA ACTIVA — todos los módulos
+# ============================================================
+solve_flow       = true
+solve_energy     = true
+solve_melting    = true
+solve_turb       = true
+solve_radiation  = true
+solve_chemistry  = true
+solve_arc        = true
+solve_multiphase = true
+
+# ============================================================
+# ARCO: FRACCIONES DE CALOR  (Ugarte et al. Tabla 3)
+#   P_total = V × I ≈ 27.5 MW/electrodo (ver electrode_profile.dat)
+#   P_rad  = 0.50 × P → depositado en superficie del scrap (kscrap_loop)
+#   P_conv = 0.30 × P → distribuido en columna de gas (kscrap→ktip)
+#   P_elec = 0.20 × P → punta del electrodo
+#   arc_w  = 30 W  →  R_eq = 9 mΩ  →  P_arc ≈ 27.5 MW  ✓
+# ============================================================
+frac_rad  = 0.50
+frac_conv = 0.30
+frac_elec = 0.20
+arc_w     = 30.0
+
+# ============================================================
+# ESCORIA (capa de escoria encima del scrap)
+# ============================================================
+solve_slag   = true
+rho_slag     = 2800.0
+cp_slag      = 1200.0
+k_slag       = 1.5
+h_contact_sl = 1000.0
+m_slag_init  = 3300.0
+
+# ============================================================
+# TRANSPORTE DE ESPECIES CO / CO₂
+# ============================================================
+solve_species   = true
+Sc_t_species    = 0.7
+alpha_Y_species = 0.5
+
+# ============================================================
+# CARGA (cubo 2 en t=2100 s)
+# ============================================================
+t_bucket2_charge = 2100.0
+
+# ============================================================
+# SALIDA
+#   output_freq=200 → snapshot cada 200 pasos × 0.5 s = 100 s simulados
+#   → ~50 archivos HDF5 × ~120 MB ≈ 6 GB total
+#   monitor_freq=20  → línea de monitor cada 20 pasos = 10 s simulados
+# ============================================================
+output_freq  = 200
+monitor_freq = 1
+output_dir   = output_prod2

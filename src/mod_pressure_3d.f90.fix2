@@ -1,0 +1,228 @@
+!===============================================================================
+! mod_pressure_3d.f90 - Pressure correction equation (SIMPLE)
+!
+! Solves the pressure Poisson equation derived from continuity:
+!   sum_f (d_f * A_f * dp'/dn) = -sum_f (rho * alpha * u* * A_f)
+!
+! where d_f = V_f / aP_f is the Rhie-Chow coefficient.
+!
+! After solving p', correct velocities and pressure:
+!   u' = -d * dp'/dn   (at each face)
+!   p  = p + alpha_p * p'
+!
+! MPI-aware: Uses local loops and SOR with global residual
+!===============================================================================
+module mod_pressure_3d
+    use mod_constants
+    use mod_types_3d
+    use mod_solver_3d
+    use mod_boundary_3d
+    use mod_parallel_utils
+    implicit none
+
+contains
+
+    subroutine solve_pressure_correction(ph, sh, m, cfg, alpha_q, residual)
+        type(phase_t), intent(inout) :: ph
+        type(shared_t), intent(inout) :: sh
+        type(mesh_t), intent(in)     :: m
+        type(config_t), intent(in)   :: cfg
+        real(dp), intent(in)         :: alpha_q(:,:,:)
+        real(dp), intent(out)        :: residual
+
+        integer :: i, j, k, jm, jp
+        integer :: istart, iend, jstart, jend, kstart, kend
+        real(dp), allocatable :: aW(:,:,:), aE(:,:,:), aS(:,:,:), aN(:,:,:)
+        real(dp), allocatable :: aB(:,:,:), aT(:,:,:), aP(:,:,:), Su(:,:,:)
+        real(dp) :: dW, dE, dS, dN, dB, dT
+        real(dp) :: alpha_f, rho_f
+        integer  :: n_iter_sor
+        real(dp) :: sor_res
+
+        ! Get loop bounds
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+
+        ! Allocate with halos
+        allocate(aW, mold=sh%pp)
+        allocate(aE, mold=sh%pp)
+        allocate(aS, mold=sh%pp)
+        allocate(aN, mold=sh%pp)
+        allocate(aB, mold=sh%pp)
+        allocate(aT, mold=sh%pp)
+        allocate(aP, mold=sh%pp)
+        allocate(Su, mold=sh%pp)
+
+        aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
+        aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
+        sh%pp = 0.0_dp
+
+        ! Loop over local cells
+        do k = kstart, kend
+            do j = jstart, jend
+                jm = j - 1; if (jm < jstart) jm = jend
+                jp = j + 1; if (jp > jend) jp = jstart
+
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+
+                    alpha_f = max(alpha_q(i,j,k), SMALL)
+                    rho_f = ph%rho(i,j,k)
+
+                    ! Rhie-Chow d-coefficients: d = alpha * vol / aP
+                    ! West
+                    if (i > 1) then
+                        if (m%cell_type(i-1,j,k) /= 0) then
+                            dW = 0.5_dp * (m%vol(i,j,k)/max(ph%aP_ur(i,j,k),SMALL) + &
+                                 m%vol(i-1,j,k)/max(ph%aP_ur(i-1,j,k),SMALL))
+                            aW(i,j,k) = alpha_f * rho_f * dW * m%Ar(i-1,j,k) / &
+                                        (0.5_dp*(m%dr(i)+m%dr(i-1)))
+                        end if
+                    end if
+                    ! East
+                    if (i < nr) then
+                        if (m%cell_type(i+1,j,k) /= 0) then
+                            dE = 0.5_dp * (m%vol(i,j,k)/max(ph%aP_ur(i,j,k),SMALL) + &
+                                 m%vol(i+1,j,k)/max(ph%aP_ur(i+1,j,k),SMALL))
+                            aE(i,j,k) = alpha_f * rho_f * dE * m%Ar(i,j,k) / &
+                                        (0.5_dp*(m%dr(i)+m%dr(i+1)))
+                        end if
+                    end if
+                    ! South
+                    dS = 0.5_dp * (m%vol(i,j,k)/max(ph%aP_uth(i,j,k),SMALL) + &
+                         m%vol(i,jm,k)/max(ph%aP_uth(i,jm,k),SMALL))
+                    aS(i,j,k) = alpha_f * rho_f * dS * m%Ath(i,j,k) / &
+                                (m%r(i) * 0.5_dp*(m%dtheta(j)+m%dtheta(jm)))
+                    ! North
+                    dN = 0.5_dp * (m%vol(i,j,k)/max(ph%aP_uth(i,j,k),SMALL) + &
+                         m%vol(i,jp,k)/max(ph%aP_uth(i,jp,k),SMALL))
+                    aN(i,j,k) = alpha_f * rho_f * dN * m%Ath(i,j,k) / &
+                                (m%r(i) * 0.5_dp*(m%dtheta(j)+m%dtheta(jp)))
+                    ! Bottom
+                    if (k > 1) then
+                        if (m%cell_type(i,j,k-1) /= 0) then
+                            dB = 0.5_dp * (m%vol(i,j,k)/max(ph%aP_uz(i,j,k),SMALL) + &
+                                 m%vol(i,j,k-1)/max(ph%aP_uz(i,j,k-1),SMALL))
+                            aB(i,j,k) = alpha_f * rho_f * dB * m%Az(i,j,k-1) / &
+                                        (0.5_dp*(m%dz(k)+m%dz(k-1)))
+                        end if
+                    end if
+                    ! Top
+                    if (k < nz) then
+                        if (m%cell_type(i,j,k+1) /= 0) then
+                            dT = 0.5_dp * (m%vol(i,j,k)/max(ph%aP_uz(i,j,k),SMALL) + &
+                                 m%vol(i,j,k+1)/max(ph%aP_uz(i,j,k+1),SMALL))
+                            aT(i,j,k) = alpha_f * rho_f * dT * m%Az(i,j,k) / &
+                                        (0.5_dp*(m%dz(k)+m%dz(k+1)))
+                        end if
+                    end if
+
+                    aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
+                               + aB(i,j,k) + aT(i,j,k)
+
+                    ! Mass source (continuity imbalance)
+                    Su(i,j,k) = 0.0_dp
+                    ! Radial fluxes
+                    if (i > 1) Su(i,j,k) = Su(i,j,k) + &
+                        alpha_f * rho_f * ph%ur(i,j,k) * m%Ar(i-1,j,k)
+                    if (i < nr) Su(i,j,k) = Su(i,j,k) - &
+                        alpha_f * rho_f * ph%ur(i+1,j,k) * m%Ar(i,j,k)
+                    ! Theta fluxes
+                    Su(i,j,k) = Su(i,j,k) + &
+                        alpha_f * rho_f * ph%uth(i,j,k) * m%Ath(i,j,k) / m%r(i) - &
+                        alpha_f * rho_f * ph%uth(i,jp,k) * m%Ath(i,j,k) / m%r(i)
+                    ! Axial fluxes
+                    if (k > 1) Su(i,j,k) = Su(i,j,k) + &
+                        alpha_f * rho_f * ph%uz(i,j,k) * m%Az(i,j,k-1)
+                    if (k < nz) Su(i,j,k) = Su(i,j,k) - &
+                        alpha_f * rho_f * ph%uz(i,j,k+1) * m%Az(i,j,k)
+                end do
+            end do
+        end do
+
+        ! Pressure BCs
+        call apply_pressure_bc(aW, aE, aS, aN, aB, aT, aP, Su, sh%pp, m, cfg)
+
+        ! Fix reference pressure (avoid singular matrix)
+        ! Only fix on process that owns cell (1,1,1)
+        if (m%is_parallel) then
+            if (m%topo%iglobal_start == 1 .and. m%topo%jglobal_start == 1 .and. &
+                m%topo%kglobal_start == 1) then
+                if (m%cell_type(1,1,1) /= 0) then
+                    aP(1,1,1) = aP(1,1,1) * 1.0e10_dp
+                    Su(1,1,1) = 0.0_dp
+                end if
+            end if
+        else
+            if (m%cell_type(1,1,1) /= 0) then
+                aP(1,1,1) = aP(1,1,1) * 1.0e10_dp
+                Su(1,1,1) = 0.0_dp
+            end if
+        end if
+
+        ! Solve with SOR (MPI-aware)
+        call sor_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, sh%pp, m, &
+                        1.5_dp, cfg%max_inner_pres, 1.0e-5_dp, sor_res, n_iter_sor)
+
+        residual = sor_res
+
+        ! Correct velocities
+        call correct_velocities(ph, sh, m, alpha_q)
+
+        ! Correct pressure
+        sh%p = sh%p + cfg%alpha_p * sh%pp
+
+        deallocate(aW, aE, aS, aN, aB, aT, aP, Su)
+    end subroutine solve_pressure_correction
+
+    !---------------------------------------------------------------------------
+    ! Correct velocities using pressure correction gradient
+    !---------------------------------------------------------------------------
+    subroutine correct_velocities(ph, sh, m, alpha_q)
+        type(phase_t), intent(inout) :: ph
+        type(shared_t), intent(in)   :: sh
+        type(mesh_t), intent(in)     :: m
+        real(dp), intent(in)         :: alpha_q(:,:,:)
+
+        integer :: i, j, k, jm, jp
+        integer :: istart, iend, jstart, jend, kstart, kend
+        real(dp) :: d_coeff
+
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+
+        do k = kstart, kend
+            do j = jstart, jend
+                jm = j - 1; if (jm < jstart) jm = jend
+                jp = j + 1; if (jp > jend) jp = jstart
+
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+
+                    ! u_r correction
+                    if (i > 1 .and. i < nr .and. abs(ph%aP_ur(i,j,k)) > SMALL) then
+                        d_coeff = m%vol(i,j,k) / ph%aP_ur(i,j,k)
+                        ph%ur(i,j,k) = ph%ur(i,j,k) - d_coeff * &
+                            (sh%pp(i+1,j,k) - sh%pp(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
+                    end if
+
+                    ! u_theta correction
+                    if (abs(ph%aP_uth(i,j,k)) > SMALL) then
+                        d_coeff = m%vol(i,j,k) / ph%aP_uth(i,j,k)
+                        ph%uth(i,j,k) = ph%uth(i,j,k) - d_coeff * &
+                            (sh%pp(i,jp,k) - sh%pp(i,jm,k)) / &
+                            (m%r(i) * (m%theta(jp) - m%theta(jm) + &
+                             merge(TWO_PI, 0.0_dp, jp < jm)))
+                    end if
+
+                    ! u_z correction
+                    if (k > 1 .and. k < nz .and. abs(ph%aP_uz(i,j,k)) > SMALL) then
+                        d_coeff = m%vol(i,j,k) / ph%aP_uz(i,j,k)
+                        ph%uz(i,j,k) = ph%uz(i,j,k) - d_coeff * &
+                            (sh%pp(i,j,k+1) - sh%pp(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
+                    end if
+                end do
+            end do
+        end do
+
+    end subroutine correct_velocities
+
+end module mod_pressure_3d
