@@ -1,10 +1,14 @@
 # Simulation outputs (heavy)
-output/
-output_prod2/
+output*/
 *.h5
 *.hdf5
 *.vtk
 *.vtu
+
+# Generated plots and videos (reproducible artifacts)
+plots*/
+*.png
+*.mp4
 
 # Build artifacts
 obj/
@@ -20,6 +24,7 @@ bin/
 # Backup / staged versions of source files
 *.bak
 *.final
+*.fix*
 *.orig
 *~
 

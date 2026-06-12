@@ -63,10 +63,10 @@ El binario se genera en `bin/eaf3d_mpi`.
 
 ## Ejecución rápida
 
-### Test de regresión (10 pasos, 15,552 celdas)
+### Test de regresión (10 pasos, 4,608 celdas)
 
 ```bash
-mpirun -n 8 ./bin/eaf3d_mpi input/config_10step_full_physics.dat
+mpirun -n 8 ./bin/eaf3d_mpi input/config_small_test.dat
 ```
 
 Salida esperada: 10 pasos estables, archivos `output/eaf3d_0000000{1..10}.h5`.  
