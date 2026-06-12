@@ -8,6 +8,7 @@
 module mod_electrode_3d
     use mod_constants
     use mod_types_3d
+    use mod_mpi_topology, only: mpi_allreduce_max
     implicit none
 
     real(dp), parameter :: BORE_IN_SPEED  = 0.01_dp   ! m/s descent rate
@@ -26,7 +27,7 @@ contains
 
         integer :: e, i, j, k_tip
         real(dp) :: z_scrap_top, x_elec, y_elec, x_cell, y_cell, dist
-        real(dp) :: dz, arc_error
+        real(dp) :: dz, arc_error, z_top_global
 
         do e = 1, N_ELECTRODES
             x_elec = cfg%R_pcd * cos(elec(e)%theta_pos)
@@ -49,6 +50,13 @@ contains
                 end do
                 if (z_scrap_top > 0.0_dp) exit
             end do
+
+            ! Parallel: the scrap top must be GLOBAL — otherwise bore_in_done
+            ! diverges across ranks and electrode state becomes inconsistent
+            if (m%is_parallel) then
+                call mpi_allreduce_max(z_scrap_top, z_top_global, m%topo)
+                z_scrap_top = z_top_global
+            end if
 
             if (.not. elec(e)%bore_in_done) then
                 ! Bore-in phase: descend through scrap

@@ -68,7 +68,8 @@ contains
         elec%current = I_amp
 
         ! Arc length (Eq. 3)
-        elec%arc_length = max((abs(V) - 40.0_dp) / 11.5_dp, 0.01_dp)
+        elec%arc_length = max((abs(V) - ARC_VOLT_THRESHOLD) / ARC_LENGTH_GRAD, &
+                              ARC_LENGTH_MIN)
 
     end subroutine update_arc_resistance
 
@@ -97,20 +98,17 @@ contains
     !
     ! Physical model:
     !   P_rad  (frac_rad)  : arc radiation travels DOWN the plasma column and
-    !                        deposits at the SCRAP SURFACE (k_scrap level).
-    !                        Prevents catastrophic gas overheating at electrode tip.
+    !                        deposits at the SCRAP SURFACE (kg_scrap level).
     !   P_conv (frac_conv) : convective enthalpy of arc plasma column, deposited
-    !                        over the full arc column (k_scrap → k_tip).
-    !   P_elec (frac_elec) : electron-flow heating of liquid bath; handled by
-    !                        compute_arc_impingement AFTER bore_in_done.
+    !                        over the full arc column (kg_scrap → kg_tip).
+    !   P_elec (frac_elec) : electron-flow heating of liquid bath; deposited
+    !                        below the tip AFTER bore_in_done.
     !
-    ! alpha_s(-1:,-1:,-1:) is the solid volume fraction, used to locate the
-    ! scrap surface below each electrode.
-    !
-    ! Fix (2024): P_rad is deposited DIRECTLY into sol%E_s / sol%T_s (solid
-    ! energy) instead of sh%S_arc (gas energy).  This is physically correct:
-    ! arc radiation hits the scrap surface without going through the gas.
-    ! Only the fallback case (no scrap found) still uses sh%S_arc.
+    ! Decomposition-invariant implementation: every rank replicates alpha_s
+    ! globally (exact disjoint-owner gather) and computes the arc column and
+    ! the weight sums by looping over the GLOBAL mesh in the same order as a
+    ! serial run, so the totals are bit-identical regardless of the MPI
+    ! decomposition.  Deposits are then applied only to locally-owned cells.
     !---------------------------------------------------------------------------
     subroutine distribute_arc_heat(elec, sh, sol, m, cfg, alpha_s, n_elec)
         type(electrode_t), intent(in)   :: elec(:)
@@ -121,17 +119,21 @@ contains
         real(dp), intent(in)            :: alpha_s(-1:,-1:,-1:)
         integer, intent(in)             :: n_elec
 
-        integer  :: e, i, j, k, k_tip, k_scrap
+        integer  :: e, ig, jg, kg, il, jl, kl, kg_tip, kg_scrap
         real(dp) :: P_total, P_rad_arc, P_conv, P_elec_flow
         real(dp) :: x_elec, y_elec, x_cell, y_cell, dist
         real(dp) :: r2, sigma_r, gw
         real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol
         real(dp) :: Q_rad, Q_rad_lim
+        real(dp), allocatable :: alpha_g(:,:,:)
+        logical  :: found_scrap, owned
         ! Maximum ΔT_solid per timestep from direct arc radiation [K].
         ! Prevents T_s → NaN/Inf in cells with small m_s (explicit E_s update
         ! has no implicit solver to absorb large source terms).
         real(dp), parameter :: DT_RAD_MAX = 2.0_dp
-        logical  :: found_scrap
+
+        allocate(alpha_g(m%nr_g, m%nth_g, m%nz_g))
+        call gather_global_field(alpha_s, alpha_g, m)
 
         sh%S_arc     = 0.0_dp
         sh%S_arc_mom = 0.0_dp
@@ -149,30 +151,28 @@ contains
             x_elec = cfg%R_pcd * cos(elec(e)%theta_pos)
             y_elec = cfg%R_pcd * sin(elec(e)%theta_pos)
 
-            ! ── Find electrode tip k-level ──────────────────────────────────
-            k_tip = 1
-            do k = m%nz, 1, -1
-                if (m%z(k) <= elec(e)%z_tip) then
-                    k_tip = k
+            ! ── Electrode tip k-level (global) ──────────────────────────────
+            kg_tip = 1
+            do kg = m%nz_g, 1, -1
+                if (m%z_global(kg) <= elec(e)%z_tip) then
+                    kg_tip = kg
                     exit
                 end if
             end do
 
-            ! ── Find scrap surface below electrode ─────────────────────────
-            ! Search downward from k_tip for solid cells within sigma_r*2 radius.
-            ! In parallel: each rank searches its local k range; the rank(s) that
-            ! own the scrap-surface z-levels will find found_scrap = .true.
-            k_scrap = max(1, k_tip - 1)
+            ! ── Scrap surface below electrode (global search) ───────────────
+            kg_scrap = max(1, kg_tip - 1)
             found_scrap = .false.
-            kscrap: do k = k_tip, 1, -1
-                do j = 1, m%ntheta
-                    do i = 1, m%nr
-                        if (m%cell_type(i,j,k) == 0) cycle
-                        x_cell = m%r(i) * cos(m%theta(j))
-                        y_cell = m%r(i) * sin(m%theta(j))
+            kscrap: do kg = kg_tip, 1, -1
+                do jg = 1, m%nth_g
+                    do ig = 1, m%nr_g
+                        if (m%cell_type_global(ig,jg,kg) == 0) cycle
+                        x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                        y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                         dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
-                        if (dist <= sigma_r * 2.0_dp .and. alpha_s(i,j,k) > 0.05_dp) then
-                            k_scrap      = k
+                        if (dist <= sigma_r * 2.0_dp .and. &
+                            alpha_g(ig,jg,kg) > 0.05_dp) then
+                            kg_scrap     = kg
                             found_scrap  = .true.
                             exit kscrap
                         end if
@@ -183,17 +183,18 @@ contains
             ! ── P_rad: first pass — Gaussian weight sum at scrap surface ───
             total_gw_vol_rad = 0.0_dp
             if (found_scrap) then
-                do k = max(1, k_scrap-1), min(m%nz, k_scrap+1)
-                    do j = 1, m%ntheta
-                        do i = 1, m%nr
-                            if (m%cell_type(i,j,k) == 0) cycle
-                            if (alpha_s(i,j,k) < 0.01_dp) cycle
-                            x_cell = m%r(i) * cos(m%theta(j))
-                            y_cell = m%r(i) * sin(m%theta(j))
+                do kg = max(1, kg_scrap-1), min(m%nz_g, kg_scrap+1)
+                    do jg = 1, m%nth_g
+                        do ig = 1, m%nr_g
+                            if (m%cell_type_global(ig,jg,kg) == 0) cycle
+                            if (alpha_g(ig,jg,kg) < 0.01_dp) cycle
+                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
                             r2 = dist**2 / (sigma_r**2 + SMALL)
                             if (r2 < 16.0_dp) then
-                                total_gw_vol_rad = total_gw_vol_rad + exp(-r2) * m%vol(i,j,k)
+                                total_gw_vol_rad = total_gw_vol_rad + &
+                                    exp(-r2) * m%vol_global(ig,jg,kg)
                             end if
                         end do
                     end do
@@ -201,18 +202,18 @@ contains
             end if
 
             ! ── P_conv: first pass — weight sum over full arc column ────────
-            ! Arc column spans from k_scrap (scrap surface) to k_tip (electrode).
             total_gw_vol_conv = 0.0_dp
-            do k = k_scrap, k_tip
-                do j = 1, m%ntheta
-                    do i = 1, m%nr
-                        if (m%cell_type(i,j,k) == 0) cycle
-                        x_cell = m%r(i) * cos(m%theta(j))
-                        y_cell = m%r(i) * sin(m%theta(j))
+            do kg = kg_scrap, kg_tip
+                do jg = 1, m%nth_g
+                    do ig = 1, m%nr_g
+                        if (m%cell_type_global(ig,jg,kg) == 0) cycle
+                        x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                        y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                         dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
                         r2 = dist**2 / (sigma_r**2 + SMALL)
                         if (r2 < 16.0_dp) then
-                            total_gw_vol_conv = total_gw_vol_conv + exp(-r2) * m%vol(i,j,k)
+                            total_gw_vol_conv = total_gw_vol_conv + &
+                                exp(-r2) * m%vol_global(ig,jg,kg)
                         end if
                     end do
                 end do
@@ -222,30 +223,31 @@ contains
             ! P_rad bypasses the gas: arc photons hit the scrap surface and
             ! heat it directly (no gas bottleneck via h_gs).
             if (found_scrap .and. total_gw_vol_rad > SMALL) then
-                do k = max(1, k_scrap-1), min(m%nz, k_scrap+1)
-                    do j = 1, m%ntheta
-                        do i = 1, m%nr
-                            if (m%cell_type(i,j,k) == 0) cycle
-                            if (alpha_s(i,j,k) < 0.01_dp) cycle
-                            x_cell = m%r(i) * cos(m%theta(j))
-                            y_cell = m%r(i) * sin(m%theta(j))
+                do kg = max(1, kg_scrap-1), min(m%nz_g, kg_scrap+1)
+                    do jg = 1, m%nth_g
+                        do ig = 1, m%nr_g
+                            if (m%cell_type_global(ig,jg,kg) == 0) cycle
+                            if (alpha_g(ig,jg,kg) < 0.01_dp) cycle
+                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
                             r2 = dist**2 / (sigma_r**2 + SMALL)
-                            if (r2 < 16.0_dp) then
-                                gw = exp(-r2)
-                                if (sol%m_s(i,j,k) > SMALL) then
-                                    ! [W/m^3] * [m^3] * [s] = [J]
-                                    Q_rad = P_rad_arc * gw / total_gw_vol_rad * &
-                                            m%vol(i,j,k) * cfg%dt
-                                    ! Stability guard: limit ΔT_s to DT_RAD_MAX per step.
-                                    ! Without this, cells with small m_s can receive
-                                    ! Q_rad >> m_s*cp_s → T_s → Inf → NaN.
-                                    Q_rad_lim = DT_RAD_MAX * sol%m_s(i,j,k) * cfg%cp_s
-                                    Q_rad = min(Q_rad, Q_rad_lim)
-                                    sol%E_s(i,j,k) = sol%E_s(i,j,k) + Q_rad
-                                    sol%T_s(i,j,k) = sol%E_s(i,j,k) / &
-                                                     (sol%m_s(i,j,k) * cfg%cp_s)
-                                end if
+                            if (r2 >= 16.0_dp) cycle
+
+                            call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
+                            if (.not. owned) cycle
+
+                            gw = exp(-r2)
+                            if (sol%m_s(il,jl,kl) > SMALL) then
+                                ! [W/m^3] * [m^3] * [s] = [J]
+                                Q_rad = P_rad_arc * gw / total_gw_vol_rad * &
+                                        m%vol_global(ig,jg,kg) * cfg%dt
+                                ! Stability guard: limit ΔT_s to DT_RAD_MAX per step.
+                                Q_rad_lim = DT_RAD_MAX * sol%m_s(il,jl,kl) * cfg%cp_s
+                                Q_rad = min(Q_rad, Q_rad_lim)
+                                sol%E_s(il,jl,kl) = sol%E_s(il,jl,kl) + Q_rad
+                                sol%T_s(il,jl,kl) = sol%E_s(il,jl,kl) / &
+                                                    (sol%m_s(il,jl,kl) * cfg%cp_s)
                             end if
                         end do
                     end do
@@ -253,18 +255,22 @@ contains
             else if (.not. found_scrap .and. total_gw_vol_conv > SMALL) then
                 ! Fallback: no scrap below electrode (pre-charge or empty furnace).
                 ! Deposit P_rad in the arc column (same as P_conv).
-                do k = max(1, k_tip-3), min(m%nz, k_tip+3)
-                    do j = 1, m%ntheta
-                        do i = 1, m%nr
-                            if (m%cell_type(i,j,k) == 0) cycle
-                            x_cell = m%r(i) * cos(m%theta(j))
-                            y_cell = m%r(i) * sin(m%theta(j))
+                do kg = max(1, kg_tip-3), min(m%nz_g, kg_tip+3)
+                    do jg = 1, m%nth_g
+                        do ig = 1, m%nr_g
+                            if (m%cell_type_global(ig,jg,kg) == 0) cycle
+                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
                             r2 = dist**2 / (sigma_r**2 + SMALL)
-                            if (r2 < 16.0_dp) then
-                                gw = exp(-r2)
-                                sh%S_arc(i,j,k) = sh%S_arc(i,j,k) + P_rad_arc * gw / total_gw_vol_conv
-                            end if
+                            if (r2 >= 16.0_dp) cycle
+
+                            call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
+                            if (.not. owned) cycle
+
+                            gw = exp(-r2)
+                            sh%S_arc(il,jl,kl) = sh%S_arc(il,jl,kl) + &
+                                P_rad_arc * gw / total_gw_vol_conv
                         end do
                     end do
                 end do
@@ -272,18 +278,22 @@ contains
 
             ! ── P_conv: second pass — deposit over arc column ───────────────
             if (total_gw_vol_conv > SMALL) then
-                do k = k_scrap, k_tip
-                    do j = 1, m%ntheta
-                        do i = 1, m%nr
-                            if (m%cell_type(i,j,k) == 0) cycle
-                            x_cell = m%r(i) * cos(m%theta(j))
-                            y_cell = m%r(i) * sin(m%theta(j))
+                do kg = kg_scrap, kg_tip
+                    do jg = 1, m%nth_g
+                        do ig = 1, m%nr_g
+                            if (m%cell_type_global(ig,jg,kg) == 0) cycle
+                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
                             r2 = dist**2 / (sigma_r**2 + SMALL)
-                            if (r2 < 16.0_dp) then
-                                gw = exp(-r2)
-                                sh%S_arc(i,j,k) = sh%S_arc(i,j,k) + P_conv * gw / total_gw_vol_conv
-                            end if
+                            if (r2 >= 16.0_dp) cycle
+
+                            call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
+                            if (.not. owned) cycle
+
+                            gw = exp(-r2)
+                            sh%S_arc(il,jl,kl) = sh%S_arc(il,jl,kl) + &
+                                P_conv * gw / total_gw_vol_conv
                         end do
                     end do
                 end do
@@ -292,30 +302,34 @@ contains
             ! ── P_elec: electron-flow heating to liquid bath (post bore-in) ─
             if (elec(e)%bore_in_done) then
                 total_vol = 0.0_dp
-                do k = 1, k_tip
-                    do j = 1, m%ntheta
-                        do i = 1, m%nr
-                            if (m%cell_type(i,j,k) == 0) cycle
-                            x_cell = m%r(i) * cos(m%theta(j))
-                            y_cell = m%r(i) * sin(m%theta(j))
+                do kg = 1, kg_tip
+                    do jg = 1, m%nth_g
+                        do ig = 1, m%nr_g
+                            if (m%cell_type_global(ig,jg,kg) == 0) cycle
+                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
                             if (dist <= cfg%R_elec * 2.0_dp) then
-                                total_vol = total_vol + m%vol(i,j,k)
+                                total_vol = total_vol + m%vol_global(ig,jg,kg)
                             end if
                         end do
                     end do
                 end do
                 if (total_vol > SMALL) then
-                    do k = 1, k_tip
-                        do j = 1, m%ntheta
-                            do i = 1, m%nr
-                                if (m%cell_type(i,j,k) == 0) cycle
-                                x_cell = m%r(i) * cos(m%theta(j))
-                                y_cell = m%r(i) * sin(m%theta(j))
+                    do kg = 1, kg_tip
+                        do jg = 1, m%nth_g
+                            do ig = 1, m%nr_g
+                                if (m%cell_type_global(ig,jg,kg) == 0) cycle
+                                x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                                y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                                 dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
-                                if (dist <= cfg%R_elec * 2.0_dp) then
-                                    sh%S_arc(i,j,k) = sh%S_arc(i,j,k) + P_elec_flow / total_vol
-                                end if
+                                if (dist > cfg%R_elec * 2.0_dp) cycle
+
+                                call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
+                                if (.not. owned) cycle
+
+                                sh%S_arc(il,jl,kl) = sh%S_arc(il,jl,kl) + &
+                                    P_elec_flow / total_vol
                             end do
                         end do
                     end do
@@ -323,6 +337,8 @@ contains
             end if
 
         end do
+
+        deallocate(alpha_g)
 
     end subroutine distribute_arc_heat
 

@@ -16,7 +16,18 @@ module mod_mpi_topology
     public :: mpi_init_topology, mpi_finalize_topology
     public :: mpi_exchange_halos_3d, mpi_exchange_halos_3d_int
     public :: mpi_allreduce_sum, mpi_allreduce_max
-    
+    public :: check_mpi
+
+    ! Communication statistics accumulated at module level (topo is intent(in)
+    ! at every call site, so the counters cannot live inside the type)
+    integer, save :: total_exchanges = 0
+    real(dp), save :: total_time_exchange = 0.0_dp
+
+    ! Persistent halo buffers, grown on demand (avoids 2 alloc/dealloc pairs
+    ! per field per SIMPLE iteration)
+    real(dp), allocatable, save :: hbuf_send(:,:), hbuf_recv(:,:)
+    integer,  allocatable, save :: hbuf_send_int(:,:), hbuf_recv_int(:,:)
+
 
     type :: mpi_topology_t
         ! Communicators
@@ -74,10 +85,13 @@ contains
         
         ! Initialize MPI
         call MPI_Init(ierr)
-        
+        call check_mpi(ierr, 'MPI_Init')
+
         topo%comm_world = MPI_COMM_WORLD
         call MPI_Comm_rank(topo%comm_world, topo%rank, ierr)
+        call check_mpi(ierr, 'MPI_Comm_rank(comm_world)')
         call MPI_Comm_size(topo%comm_world, topo%nprocs, ierr)
+        call check_mpi(ierr, 'MPI_Comm_size')
         
         ! Store global dimensions
         topo%nr_global = nr
@@ -100,9 +114,16 @@ contains
         call MPI_Cart_create(topo%comm_world, 3, &
                             [topo%npr, topo%npth, topo%npz], &
                             periods, reorder, topo%comm_cart, ierr)
-        
+        call check_mpi(ierr, 'MPI_Cart_create')
+
+        ! With reorder=.true. the rank in comm_cart may differ from the rank
+        ! in comm_world; all topology logic must use the cartesian rank
+        call MPI_Comm_rank(topo%comm_cart, topo%rank, ierr)
+        call check_mpi(ierr, 'MPI_Comm_rank(comm_cart)')
+
         ! Get coordinates in process grid
         call MPI_Cart_coords(topo%comm_cart, topo%rank, 3, topo%coords, ierr)
+        call check_mpi(ierr, 'MPI_Cart_coords')
         
         ! Decompose domain
         call decompose_domain(topo)
@@ -273,12 +294,11 @@ contains
         
         integer :: ierr, send_tag, recv_tag
         integer :: nreq_send, nreq_recv
-        integer, allocatable :: req_send(:), req_recv(:)
+        integer :: req_send(26), req_recv(26)
         integer :: di, dj, dk, idx
-        real(dp), allocatable :: sendbufs(:,:), recvbufs(:,:)
-        integer :: bufsize, max_bufsize
+        integer :: bufsize, max_bufsize, alloc_stat
         real(dp) :: t_start
-        
+
         ! Handle serial case with periodic boundaries
         if (topo%nprocs == 1) then
             if (topo%periodic_theta) then
@@ -289,9 +309,9 @@ contains
             end if
             return
         end if
-        
+
         t_start = MPI_Wtime()
-        
+
         ! Find max buffer size needed
         max_bufsize = 0
         do dk = -1, 1
@@ -304,12 +324,19 @@ contains
                 end do
             end do
         end do
-        
+
         if (max_bufsize == 0) return
-        
-        ! Allocate persistent buffers and requests
-        allocate(req_send(26), req_recv(26))
-        allocate(sendbufs(max_bufsize, 26), recvbufs(max_bufsize, 26))
+
+        ! Grow persistent buffers only when needed
+        if (.not. allocated(hbuf_send) .or. size(hbuf_send, 1) < max_bufsize) then
+            if (allocated(hbuf_send)) deallocate(hbuf_send, hbuf_recv)
+            allocate(hbuf_send(max_bufsize, 26), hbuf_recv(max_bufsize, 26), &
+                     stat=alloc_stat)
+            if (alloc_stat /= 0) then
+                write(*,'(A,I0)') '[MPI] ERROR: cannot allocate halo buffers, rank ', topo%rank
+                call MPI_Abort(MPI_COMM_WORLD, 1, ierr)
+            end if
+        end if
         nreq_send = 0
         nreq_recv = 0
         
@@ -326,10 +353,11 @@ contains
                     
                     recv_tag = 100 + encode_direction(-di, -dj, -dk)
                     nreq_recv = nreq_recv + 1
-                    
-                    call MPI_Irecv(recvbufs(1:bufsize, idx), bufsize, MPI_DOUBLE_PRECISION, &
+
+                    call MPI_Irecv(hbuf_recv(1:bufsize, idx), bufsize, MPI_DOUBLE_PRECISION, &
                                   topo%neighbors(di, dj, dk), recv_tag, &
                                   topo%comm_cart, req_recv(nreq_recv), ierr)
+                    call check_mpi(ierr, 'MPI_Irecv(halo real)')
                 end do
             end do
         end do
@@ -345,22 +373,29 @@ contains
                     idx = idx + 1
                     bufsize = compute_halo_size(di, dj, dk, topo)
                     
-                    call pack_halo(field, sendbufs(1:bufsize, idx), di, dj, dk, topo)
-                    
+                    call pack_halo(field, hbuf_send(1:bufsize, idx), di, dj, dk, topo)
+
                     send_tag = 100 + encode_direction(di, dj, dk)
                     nreq_send = nreq_send + 1
-                    
-                    call MPI_Isend(sendbufs(1:bufsize, idx), bufsize, MPI_DOUBLE_PRECISION, &
+
+                    call MPI_Isend(hbuf_send(1:bufsize, idx), bufsize, MPI_DOUBLE_PRECISION, &
                                   topo%neighbors(di, dj, dk), send_tag, &
                                   topo%comm_cart, req_send(nreq_send), ierr)
+                    call check_mpi(ierr, 'MPI_Isend(halo real)')
                 end do
             end do
         end do
         
         ! Wait for receives and sends
-        if (nreq_recv > 0) call MPI_Waitall(nreq_recv, req_recv(1:nreq_recv), MPI_STATUSES_IGNORE, ierr)
-        if (nreq_send > 0) call MPI_Waitall(nreq_send, req_send(1:nreq_send), MPI_STATUSES_IGNORE, ierr)
-        
+        if (nreq_recv > 0) then
+            call MPI_Waitall(nreq_recv, req_recv(1:nreq_recv), MPI_STATUSES_IGNORE, ierr)
+            call check_mpi(ierr, 'MPI_Waitall(recv real)')
+        end if
+        if (nreq_send > 0) then
+            call MPI_Waitall(nreq_send, req_send(1:nreq_send), MPI_STATUSES_IGNORE, ierr)
+            call check_mpi(ierr, 'MPI_Waitall(send real)')
+        end if
+
         ! Unpack
         idx = 0
         do dk = -1, 1
@@ -368,16 +403,17 @@ contains
                 do di = -1, 1
                     if (di == 0 .and. dj == 0 .and. dk == 0) cycle
                     if (topo%neighbors(di, dj, dk) == MPI_PROC_NULL) cycle
-                    
+
                     idx = idx + 1
                     bufsize = compute_halo_size(di, dj, dk, topo)
-                    call unpack_halo(field, recvbufs(1:bufsize, idx), di, dj, dk, topo)
+                    call unpack_halo(field, hbuf_recv(1:bufsize, idx), di, dj, dk, topo)
                 end do
             end do
         end do
-        
-        deallocate(req_send, req_recv, sendbufs, recvbufs)
-        
+
+        total_exchanges = total_exchanges + 1
+        total_time_exchange = total_time_exchange + (MPI_Wtime() - t_start)
+
     end subroutine mpi_exchange_halos_3d
     
     !---------------------------------------------------------------------------
@@ -582,21 +618,39 @@ contains
     !---------------------------------------------------------------------------
     subroutine mpi_finalize_topology(topo)
         type(mpi_topology_t), intent(in) :: topo
-        
+
         integer :: ierr
-        
+
         if (topo%rank == 0) then
             print *, ''
-            print '(A,I10)', '  Total halo exchanges: ', topo%n_exchanges
-            if (topo%n_exchanges > 0) then
+            print '(A,I10)', '  Total halo exchanges: ', total_exchanges
+            if (total_exchanges > 0) then
                 print '(A,F10.3,A)', '  Avg time per exchange: ', &
-                      topo%time_exchange / real(topo%n_exchanges, dp) * 1000.0_dp, ' ms'
+                      total_time_exchange / real(total_exchanges, dp) * 1000.0_dp, ' ms'
             end if
         end if
-        
+
+        if (allocated(hbuf_send)) deallocate(hbuf_send, hbuf_recv)
+        if (allocated(hbuf_send_int)) deallocate(hbuf_send_int, hbuf_recv_int)
+
         call MPI_Finalize(ierr)
-        
+
     end subroutine mpi_finalize_topology
+
+    !---------------------------------------------------------------------------
+    ! Abort with a clear message if an MPI call failed
+    !---------------------------------------------------------------------------
+    subroutine check_mpi(ierr, context)
+        integer, intent(in) :: ierr
+        character(len=*), intent(in) :: context
+
+        integer :: abort_err
+
+        if (ierr /= MPI_SUCCESS) then
+            write(*,'(A,A,A,I0)') '[MPI] ERROR in ', trim(context), ', ierr=', ierr
+            call MPI_Abort(MPI_COMM_WORLD, 1, abort_err)
+        end if
+    end subroutine check_mpi
 
 
     !---------------------------------------------------------------------------
@@ -609,12 +663,11 @@ contains
         
         integer :: ierr, send_tag, recv_tag
         integer :: nreq_send, nreq_recv
-        integer, allocatable :: req_send(:), req_recv(:)
+        integer :: req_send(26), req_recv(26)
         integer :: di, dj, dk, idx
-        integer, allocatable :: sendbufs(:,:), recvbufs(:,:)
-        integer :: bufsize, max_bufsize
+        integer :: bufsize, max_bufsize, alloc_stat
         real(dp) :: t_start
-        
+
         ! Handle serial case with periodic boundaries
         if (topo%nprocs == 1) then
             if (topo%periodic_theta) then
@@ -625,9 +678,9 @@ contains
             end if
             return
         end if
-        
+
         t_start = MPI_Wtime()
-        
+
         ! Find max buffer size needed
         max_bufsize = 0
         do dk = -1, 1
@@ -640,12 +693,19 @@ contains
                 end do
             end do
         end do
-        
+
         if (max_bufsize == 0) return
-        
-        ! Allocate persistent buffers and requests
-        allocate(req_send(26), req_recv(26))
-        allocate(sendbufs(max_bufsize, 26), recvbufs(max_bufsize, 26))
+
+        ! Grow persistent buffers only when needed
+        if (.not. allocated(hbuf_send_int) .or. size(hbuf_send_int, 1) < max_bufsize) then
+            if (allocated(hbuf_send_int)) deallocate(hbuf_send_int, hbuf_recv_int)
+            allocate(hbuf_send_int(max_bufsize, 26), hbuf_recv_int(max_bufsize, 26), &
+                     stat=alloc_stat)
+            if (alloc_stat /= 0) then
+                write(*,'(A,I0)') '[MPI] ERROR: cannot allocate int halo buffers, rank ', topo%rank
+                call MPI_Abort(MPI_COMM_WORLD, 1, ierr)
+            end if
+        end if
         nreq_send = 0
         nreq_recv = 0
         
@@ -662,10 +722,11 @@ contains
                     
                     recv_tag = 100 + encode_direction(-di, -dj, -dk)
                     nreq_recv = nreq_recv + 1
-                    
-                    call MPI_Irecv(recvbufs(1:bufsize, idx), bufsize, MPI_INTEGER, &
+
+                    call MPI_Irecv(hbuf_recv_int(1:bufsize, idx), bufsize, MPI_INTEGER, &
                                   topo%neighbors(di, dj, dk), recv_tag, &
                                   topo%comm_cart, req_recv(nreq_recv), ierr)
+                    call check_mpi(ierr, 'MPI_Irecv(halo int)')
                 end do
             end do
         end do
@@ -681,38 +742,49 @@ contains
                     idx = idx + 1
                     bufsize = compute_halo_size(di, dj, dk, topo)
                     
-                    call pack_halo_int(field, sendbufs(1:bufsize, idx), di, dj, dk, topo)
-                    
+                    call pack_halo_int(field, hbuf_send_int(1:bufsize, idx), di, dj, dk, topo)
+
                     send_tag = 100 + encode_direction(di, dj, dk)
                     nreq_send = nreq_send + 1
-                    
-                    call MPI_Isend(sendbufs(1:bufsize, idx), bufsize, MPI_INTEGER, &
+
+                    call MPI_Isend(hbuf_send_int(1:bufsize, idx), bufsize, MPI_INTEGER, &
                                   topo%neighbors(di, dj, dk), send_tag, &
                                   topo%comm_cart, req_send(nreq_send), ierr)
+                    call check_mpi(ierr, 'MPI_Isend(halo int)')
                 end do
             end do
         end do
         
         ! Wait for receives and sends
-        if (nreq_recv > 0) call MPI_Waitall(nreq_recv, req_recv(1:nreq_recv), MPI_STATUSES_IGNORE, ierr)
-        if (nreq_send > 0) call MPI_Waitall(nreq_send, req_send(1:nreq_send), MPI_STATUSES_IGNORE, ierr)
-        
-        ! Unpack receives
+        if (nreq_recv > 0) then
+            call MPI_Waitall(nreq_recv, req_recv(1:nreq_recv), MPI_STATUSES_IGNORE, ierr)
+            call check_mpi(ierr, 'MPI_Waitall(recv int)')
+        end if
+        if (nreq_send > 0) then
+            call MPI_Waitall(nreq_send, req_send(1:nreq_send), MPI_STATUSES_IGNORE, ierr)
+            call check_mpi(ierr, 'MPI_Waitall(send int)')
+        end if
+
+        ! Unpack receives — same direction convention as the real-valued
+        ! exchange: data received from neighbor (di,dj,dk) fills the halo
+        ! region on that same side
         idx = 0
         do dk = -1, 1
             do dj = -1, 1
                 do di = -1, 1
                     if (di == 0 .and. dj == 0 .and. dk == 0) cycle
                     if (topo%neighbors(di, dj, dk) == MPI_PROC_NULL) cycle
-                    
+
                     idx = idx + 1
-                    call unpack_halo_int(field, recvbufs(:, idx), -di, -dj, -dk, topo)
+                    bufsize = compute_halo_size(di, dj, dk, topo)
+                    call unpack_halo_int(field, hbuf_recv_int(1:bufsize, idx), di, dj, dk, topo)
                 end do
             end do
         end do
-        
-        deallocate(req_send, req_recv, sendbufs, recvbufs)
-        
+
+        total_exchanges = total_exchanges + 1
+        total_time_exchange = total_time_exchange + (MPI_Wtime() - t_start)
+
     end subroutine mpi_exchange_halos_3d_int
     
     !---------------------------------------------------------------------------

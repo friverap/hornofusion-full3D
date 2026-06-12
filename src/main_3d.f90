@@ -87,6 +87,7 @@ program eaf_3d_simulator
     else
         print *, ' [MAIN] No config file specified, using defaults.'
     end if
+    call config_validate(cfg)
     
     ! Initialize MPI with correct mesh dimensions
     call mpi_init_topology(cfg%nr, cfg%ntheta, cfg%nz, mesh%topo)
@@ -134,9 +135,16 @@ program eaf_3d_simulator
     call default_charge_recipe(cfg)
     call read_electrode_profile(elec_prof, 'input/electrode_profile.dat')
 
-    ! Create output directory (only rank 0)
+    ! Create output directory (only rank 0), then synchronize so no rank
+    ! tries to create the HDF5 file before the directory exists
     if (should_print(mesh)) then
         call execute_command_line('mkdir -p ' // trim(cfg%output_dir))
+    end if
+    if (mesh%is_parallel) then
+        block
+            integer :: ierr_barrier
+            call MPI_Barrier(mesh%topo%comm_cart, ierr_barrier)
+        end block
     end if
 
     ! Write initial mesh (HDF5)
@@ -263,6 +271,8 @@ program eaf_3d_simulator
                 call solve_momentum_3d(liq, liq_old, sh, mesh, cfg, liq%alpha, &
                                        S_drag_r, S_drag_th, S_drag_z, &
                                        conv%res_ur, conv%res_uth, conv%res_uz)
+                ! Refresh halos (incl. aP_*) before Rhie-Chow in the pressure solve
+                call phase_exchange_halos(liq, mesh)
                 call solve_pressure_correction(liq, sh, mesh, cfg, liq%alpha, conv%res_cont)
                 if (cfg%solve_energy) then
                     call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, conv%res_energy)
@@ -354,12 +364,12 @@ program eaf_3d_simulator
     deallocate(S_drag_r, S_drag_th, S_drag_z)
     deallocate(Y_CO_old, Y_CO2_old)
 
-    ! Finalize MPI
-    call mpi_finalize_topology(mesh%topo)
-
     if (should_print(mesh)) then
         print *, '  Resources freed. Done.'
     end if
+
+    ! Finalize MPI (must be the last MPI-related action)
+    call mpi_finalize_topology(mesh%topo)
 
 contains
 

@@ -30,10 +30,12 @@ contains
         real(dp), intent(in) :: T_bc
 
         integer :: i, j, k, nr, nth, nz
+        logical :: at_rmin, at_rmax, at_zmin, at_zmax
 
         nr  = m%nr
         nth = m%ntheta
         nz  = m%nz
+        call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
         do k = 1, nz
             do j = 1, nth
@@ -52,22 +54,22 @@ contains
                     end if
 
                     ! Inner radius (i=1): zero-gradient dphi/dr = 0
-                    if (i == 1) then
+                    if (i == 1 .and. at_rmin) then
                         aW(i,j,k) = 0.0_dp
                     end if
 
                     ! Outer radius (i=nr): adiabatic wall
-                    if (i == nr) then
+                    if (i == nr .and. at_rmax) then
                         aE(i,j,k) = 0.0_dp
                     end if
 
                     ! Bottom (k=1): adiabatic
-                    if (k == 1) then
+                    if (k == 1 .and. at_zmin) then
                         aB(i,j,k) = 0.0_dp
                     end if
 
                     ! Top (k=nz): adiabatic
-                    if (k == nz) then
+                    if (k == nz .and. at_zmax) then
                         aT(i,j,k) = 0.0_dp
                     end if
 
@@ -103,10 +105,12 @@ contains
         character(len=*), intent(in) :: component
 
         integer :: i, j, k, nr, nth, nz
+        logical :: at_rmin, at_rmax, at_zmin, at_zmax
 
         nr  = m%nr
         nth = m%ntheta
         nz  = m%nz
+        call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
         do k = 1, nz
             do j = 1, nth
@@ -120,7 +124,7 @@ contains
                     end if
 
                     ! Inner radius: u_r=0 (symmetry), du_th/dr=0, du_z/dr=0
-                    if (i == 1) then
+                    if (i == 1 .and. at_rmin) then
                         if (component == 'ur') then
                             aW(i,j,k) = 0.0_dp
                             aE(i,j,k) = 0.0_dp
@@ -136,18 +140,18 @@ contains
                     end if
 
                     ! Outer wall: no-slip v=0
-                    if (i == nr) then
+                    if (i == nr .and. at_rmax) then
                         aE(i,j,k) = 0.0_dp
                         ! Large aP to enforce zero at wall-adjacent
                     end if
 
                     ! Bottom wall
-                    if (k == 1) then
+                    if (k == 1 .and. at_zmin) then
                         aB(i,j,k) = 0.0_dp
                     end if
 
                     ! Top wall
-                    if (k == nz) then
+                    if (k == nz .and. at_zmax) then
                         aT(i,j,k) = 0.0_dp
                     end if
 
@@ -182,10 +186,12 @@ contains
 
         integer :: i, j, k, nr, nth, nz, e
         logical :: is_outlet
+        logical :: at_rmin, at_rmax, at_zmin, at_zmax
 
         nr  = m%nr
         nth = m%ntheta
         nz  = m%nz
+        call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
         do k = 1, nz
             do j = 1, nth
@@ -199,20 +205,26 @@ contains
                     end if
 
                     ! Walls: Neumann dp/dn = 0
-                    if (i == 1)  aW(i,j,k) = 0.0_dp
-                    if (i == nr) aE(i,j,k) = 0.0_dp
-                    if (k == 1)  aB(i,j,k) = 0.0_dp
+                    if (i == 1 .and. at_rmin)  aW(i,j,k) = 0.0_dp
+                    if (i == nr .and. at_rmax) aE(i,j,k) = 0.0_dp
+                    if (k == 1 .and. at_zmin)  aB(i,j,k) = 0.0_dp
 
                     ! Top: check if outlet (electrode holes)
-                    if (k == nz) then
+                    if (k == nz .and. at_zmax) then
                         is_outlet = .false.
                         do e = 1, N_ELECTRODES
                             if (m%is_electrode(i,j,k,e)) is_outlet = .true.
                         end do
                         if (is_outlet) then
-                            ! p' = 0 at outlet (Dirichlet)
-                            aT(i,j,k) = 0.0_dp
+                            ! Dirichlet p' = 0 at outlet: fix the cell value,
+                            ! which also anchors the pressure level
+                            aW(i,j,k) = 0.0_dp; aE(i,j,k) = 0.0_dp
+                            aS(i,j,k) = 0.0_dp; aN(i,j,k) = 0.0_dp
+                            aB(i,j,k) = 0.0_dp; aT(i,j,k) = 0.0_dp
+                            aP(i,j,k) = 1.0_dp; Su(i,j,k) = 0.0_dp
+                            cycle
                         else
+                            ! Wall: Neumann dp'/dn = 0
                             aT(i,j,k) = 0.0_dp
                         end if
                     end if
@@ -235,5 +247,27 @@ contains
         end do
 
     end subroutine apply_pressure_bc
+
+    !---------------------------------------------------------------------------
+    ! Determine which faces of the local block are PHYSICAL boundaries.
+    ! In parallel, i==1 / i==nr (local indices) may be internal rank-to-rank
+    ! interfaces where no wall BC must be applied (halos carry neighbor data).
+    !---------------------------------------------------------------------------
+    subroutine physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
+        type(mesh_t), intent(in) :: m
+        logical, intent(out) :: at_rmin, at_rmax, at_zmin, at_zmax
+
+        if (m%is_parallel) then
+            at_rmin = (m%topo%coords(1) == 0)
+            at_rmax = (m%topo%coords(1) == m%topo%npr - 1)
+            at_zmin = (m%topo%coords(3) == 0)
+            at_zmax = (m%topo%coords(3) == m%topo%npz - 1)
+        else
+            at_rmin = .true.
+            at_rmax = .true.
+            at_zmin = .true.
+            at_zmax = .true.
+        end if
+    end subroutine physical_boundary_flags
 
 end module mod_boundary_3d

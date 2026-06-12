@@ -135,6 +135,15 @@ module mod_types_3d
         real(dp), allocatable :: theta_global(:)  ! nth_global cell centers
         real(dp), allocatable :: z_global(:)      ! nz_global cell centers
 
+        ! Global geometry replicated on every rank so that decomposition-
+        ! sensitive physics (arc heat, MC radiation) can be computed in the
+        ! exact same order as the serial code, bit-for-bit.
+        integer :: nr_g, nth_g, nz_g                       ! global dimensions
+        real(dp), allocatable :: rf_global(:)              ! 0:nr_g face radii
+        real(dp), allocatable :: zf_global(:)              ! 0:nz_g face heights
+        real(dp), allocatable :: vol_global(:,:,:)         ! global cell volumes
+        integer,  allocatable :: cell_type_global(:,:,:)   ! global cell flags
+
         ! Electrode cells mask (1..N_ELECTRODES, per electrode) (with halos in parallel)
         logical, allocatable :: is_electrode(:,:,:,:)
     end type mesh_t

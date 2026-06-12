@@ -42,7 +42,7 @@ contains
                     T_l = liq%T(i,j,k)
 
                     ! Melting: solid above liquidus transfers mass to liquid
-                    if (sol%alpha_s(i,j,k) > 1.0e-6_dp .and. T_s >= cfg%T_liquidus) then
+                    if (sol%alpha_s(i,j,k) > ALPHA_CUTOFF .and. T_s >= cfg%T_liquidus) then
                         ! Energy available for melting
                         cp_eff = effective_cp(T_s, cfg)
                         E_available = sol%m_s(i,j,k) * cp_eff * (T_s - cfg%T_liquidus)
@@ -78,10 +78,10 @@ contains
                         end if
 
                     ! Re-solidification: liquid below solidus deposits mass to solid
-                    else if (liq%alpha(i,j,k) > 1.0e-6_dp .and. T_l < cfg%T_solidus) then
+                    else if (liq%alpha(i,j,k) > ALPHA_CUTOFF .and. T_l < cfg%T_solidus) then
                         dm = liq%alpha(i,j,k) * liq%rho(i,j,k) * m%vol(i,j,k) * &
                              (cfg%T_solidus - T_l) * cfg%cp_l / cfg%h_fusion
-                        dm = max(dm, 0.0_dp) * 0.1_dp  ! stability limiter
+                        dm = max(dm, 0.0_dp) * RESOLID_LIMITER
 
                         sol%mdot(i,j,k) = -dm / dt
                         sol%m_s(i,j,k) = sol%m_s(i,j,k) + dm

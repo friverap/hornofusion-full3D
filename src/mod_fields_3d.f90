@@ -18,27 +18,43 @@ contains
         type(phase_t), intent(out) :: ph
         type(mesh_t), intent(in) :: m
 
-        integer :: i1, i2, j1, j2, k1, k2
-        
+        integer :: i1, i2, j1, j2, k1, k2, ierr
+
         ! Always allocate with halos (-1 to N+2) for consistency
         i1 = -1; i2 = m%nr + 2
         j1 = -1; j2 = m%ntheta + 2
         k1 = -1; k2 = m%nz + 2
 
-        allocate(ph%alpha(i1:i2, j1:j2, k1:k2));   ph%alpha = 0.0_dp
-        allocate(ph%ur(i1:i2, j1:j2, k1:k2));      ph%ur = 0.0_dp
-        allocate(ph%uth(i1:i2, j1:j2, k1:k2));     ph%uth = 0.0_dp
-        allocate(ph%uz(i1:i2, j1:j2, k1:k2));      ph%uz = 0.0_dp
-        allocate(ph%T(i1:i2, j1:j2, k1:k2));       ph%T = 0.0_dp
-        allocate(ph%rho(i1:i2, j1:j2, k1:k2));     ph%rho = 0.0_dp
-        allocate(ph%cp(i1:i2, j1:j2, k1:k2));      ph%cp = 0.0_dp
-        allocate(ph%kth(i1:i2, j1:j2, k1:k2));     ph%kth = 0.0_dp
-        allocate(ph%mu(i1:i2, j1:j2, k1:k2));      ph%mu = 0.0_dp
-        allocate(ph%mu_eff(i1:i2, j1:j2, k1:k2));  ph%mu_eff = 0.0_dp
-        allocate(ph%aP_ur(i1:i2, j1:j2, k1:k2));   ph%aP_ur = 0.0_dp
-        allocate(ph%aP_uth(i1:i2, j1:j2, k1:k2));  ph%aP_uth = 0.0_dp
-        allocate(ph%aP_uz(i1:i2, j1:j2, k1:k2));   ph%aP_uz = 0.0_dp
+        allocate(ph%alpha(i1:i2, j1:j2, k1:k2), ph%ur(i1:i2, j1:j2, k1:k2), &
+                 ph%uth(i1:i2, j1:j2, k1:k2), ph%uz(i1:i2, j1:j2, k1:k2), &
+                 ph%T(i1:i2, j1:j2, k1:k2), ph%rho(i1:i2, j1:j2, k1:k2), &
+                 ph%cp(i1:i2, j1:j2, k1:k2), ph%kth(i1:i2, j1:j2, k1:k2), &
+                 ph%mu(i1:i2, j1:j2, k1:k2), ph%mu_eff(i1:i2, j1:j2, k1:k2), &
+                 ph%aP_ur(i1:i2, j1:j2, k1:k2), ph%aP_uth(i1:i2, j1:j2, k1:k2), &
+                 ph%aP_uz(i1:i2, j1:j2, k1:k2), stat=ierr)
+        call check_alloc(ierr, 'phase fields')
+
+        ph%alpha = 0.0_dp; ph%ur = 0.0_dp; ph%uth = 0.0_dp; ph%uz = 0.0_dp
+        ph%T = 0.0_dp; ph%rho = 0.0_dp; ph%cp = 0.0_dp; ph%kth = 0.0_dp
+        ph%mu = 0.0_dp; ph%mu_eff = 0.0_dp
+        ph%aP_ur = 0.0_dp; ph%aP_uth = 0.0_dp; ph%aP_uz = 0.0_dp
     end subroutine phase_allocate
+
+    !---------------------------------------------------------------------------
+    ! Abort cleanly (all MPI processes) if a field allocation failed
+    !---------------------------------------------------------------------------
+    subroutine check_alloc(ierr, what)
+        integer, intent(in) :: ierr
+        character(len=*), intent(in) :: what
+
+        integer :: abort_err
+
+        if (ierr /= 0) then
+            write(*,'(3A,I0)') '[FIELDS] ERROR: cannot allocate ', what, &
+                  ', stat=', ierr
+            call MPI_Abort(MPI_COMM_WORLD, 1, abort_err)
+        end if
+    end subroutine check_alloc
 
     !---------------------------------------------------------------------------
     ! Exchange halos for a phase (all fields)
@@ -108,18 +124,20 @@ contains
         type(solid_t), intent(out) :: sol
         type(mesh_t), intent(in) :: m
 
-        integer :: i1, i2, j1, j2, k1, k2
-        
+        integer :: i1, i2, j1, j2, k1, k2, ierr
+
         i1 = -1; i2 = m%nr + 2
         j1 = -1; j2 = m%ntheta + 2
         k1 = -1; k2 = m%nz + 2
 
-        allocate(sol%alpha_s(i1:i2, j1:j2, k1:k2));  sol%alpha_s = 0.0_dp
-        allocate(sol%m_s(i1:i2, j1:j2, k1:k2));      sol%m_s = 0.0_dp
-        allocate(sol%T_s(i1:i2, j1:j2, k1:k2));      sol%T_s = 0.0_dp
-        allocate(sol%E_s(i1:i2, j1:j2, k1:k2));      sol%E_s = 0.0_dp
-        allocate(sol%layer_id(i1:i2, j1:j2, k1:k2)); sol%layer_id = 0
-        allocate(sol%mdot(i1:i2, j1:j2, k1:k2));     sol%mdot = 0.0_dp
+        allocate(sol%alpha_s(i1:i2, j1:j2, k1:k2), sol%m_s(i1:i2, j1:j2, k1:k2), &
+                 sol%T_s(i1:i2, j1:j2, k1:k2), sol%E_s(i1:i2, j1:j2, k1:k2), &
+                 sol%layer_id(i1:i2, j1:j2, k1:k2), sol%mdot(i1:i2, j1:j2, k1:k2), &
+                 stat=ierr)
+        call check_alloc(ierr, 'solid fields')
+
+        sol%alpha_s = 0.0_dp; sol%m_s = 0.0_dp; sol%T_s = 0.0_dp
+        sol%E_s = 0.0_dp; sol%layer_id = 0; sol%mdot = 0.0_dp
     end subroutine solid_allocate
     
     !---------------------------------------------------------------------------
@@ -166,16 +184,19 @@ contains
         type(slag_t), intent(out) :: slag
         type(mesh_t), intent(in)  :: m
 
-        integer :: i1, i2, j1, j2, k1, k2
+        integer :: i1, i2, j1, j2, k1, k2, ierr
 
         i1 = -1; i2 = m%nr + 2
         j1 = -1; j2 = m%ntheta + 2
         k1 = -1; k2 = m%nz + 2
 
-        allocate(slag%alpha_sl(i1:i2, j1:j2, k1:k2)); slag%alpha_sl = 0.0_dp
-        allocate(slag%m_sl(i1:i2, j1:j2, k1:k2));     slag%m_sl     = 0.0_dp
-        allocate(slag%T_sl(i1:i2, j1:j2, k1:k2));     slag%T_sl     = 0.0_dp
-        allocate(slag%E_sl(i1:i2, j1:j2, k1:k2));     slag%E_sl     = 0.0_dp
+        allocate(slag%alpha_sl(i1:i2, j1:j2, k1:k2), slag%m_sl(i1:i2, j1:j2, k1:k2), &
+                 slag%T_sl(i1:i2, j1:j2, k1:k2), slag%E_sl(i1:i2, j1:j2, k1:k2), &
+                 stat=ierr)
+        call check_alloc(ierr, 'slag fields')
+
+        slag%alpha_sl = 0.0_dp; slag%m_sl = 0.0_dp
+        slag%T_sl = 0.0_dp; slag%E_sl = 0.0_dp
     end subroutine slag_allocate
 
     !---------------------------------------------------------------------------
@@ -218,27 +239,28 @@ contains
         type(shared_t), intent(out) :: sh
         type(mesh_t), intent(in) :: m
 
-        integer :: i1, i2, j1, j2, k1, k2
-        
+        integer :: i1, i2, j1, j2, k1, k2, ierr
+
         i1 = -1; i2 = m%nr + 2
         j1 = -1; j2 = m%ntheta + 2
         k1 = -1; k2 = m%nz + 2
 
-        allocate(sh%p(i1:i2, j1:j2, k1:k2));        sh%p = 0.0_dp
-        allocate(sh%pp(i1:i2, j1:j2, k1:k2));       sh%pp = 0.0_dp
-        allocate(sh%tke(i1:i2, j1:j2, k1:k2));      sh%tke = 0.0_dp
-        allocate(sh%eps(i1:i2, j1:j2, k1:k2));      sh%eps = 0.0_dp
-        allocate(sh%mu_t(i1:i2, j1:j2, k1:k2));     sh%mu_t = 0.0_dp
-        allocate(sh%S_arc(i1:i2, j1:j2, k1:k2));         sh%S_arc = 0.0_dp
-        allocate(sh%S_arc_mom(i1:i2, j1:j2, k1:k2));    sh%S_arc_mom = 0.0_dp
-        allocate(sh%F_lorentz_r(i1:i2, j1:j2, k1:k2));  sh%F_lorentz_r = 0.0_dp
-        allocate(sh%F_lorentz_th(i1:i2, j1:j2, k1:k2)); sh%F_lorentz_th = 0.0_dp
-        allocate(sh%S_rad(i1:i2, j1:j2, k1:k2));         sh%S_rad = 0.0_dp
-        allocate(sh%S_chem(i1:i2, j1:j2, k1:k2));        sh%S_chem = 0.0_dp
-        allocate(sh%Y_CO(i1:i2, j1:j2, k1:k2));           sh%Y_CO      = 0.0_dp
-        allocate(sh%Y_CO2(i1:i2, j1:j2, k1:k2));          sh%Y_CO2     = 0.0_dp
-        allocate(sh%S_CO_src(i1:i2, j1:j2, k1:k2));       sh%S_CO_src  = 0.0_dp
-        allocate(sh%S_CO2_src(i1:i2, j1:j2, k1:k2));      sh%S_CO2_src = 0.0_dp
+        allocate(sh%p(i1:i2, j1:j2, k1:k2), sh%pp(i1:i2, j1:j2, k1:k2), &
+                 sh%tke(i1:i2, j1:j2, k1:k2), sh%eps(i1:i2, j1:j2, k1:k2), &
+                 sh%mu_t(i1:i2, j1:j2, k1:k2), sh%S_arc(i1:i2, j1:j2, k1:k2), &
+                 sh%S_arc_mom(i1:i2, j1:j2, k1:k2), sh%F_lorentz_r(i1:i2, j1:j2, k1:k2), &
+                 sh%F_lorentz_th(i1:i2, j1:j2, k1:k2), sh%S_rad(i1:i2, j1:j2, k1:k2), &
+                 sh%S_chem(i1:i2, j1:j2, k1:k2), sh%Y_CO(i1:i2, j1:j2, k1:k2), &
+                 sh%Y_CO2(i1:i2, j1:j2, k1:k2), sh%S_CO_src(i1:i2, j1:j2, k1:k2), &
+                 sh%S_CO2_src(i1:i2, j1:j2, k1:k2), stat=ierr)
+        call check_alloc(ierr, 'shared fields')
+
+        sh%p = 0.0_dp; sh%pp = 0.0_dp; sh%tke = 0.0_dp; sh%eps = 0.0_dp
+        sh%mu_t = 0.0_dp; sh%S_arc = 0.0_dp; sh%S_arc_mom = 0.0_dp
+        sh%F_lorentz_r = 0.0_dp; sh%F_lorentz_th = 0.0_dp
+        sh%S_rad = 0.0_dp; sh%S_chem = 0.0_dp
+        sh%Y_CO = 0.0_dp; sh%Y_CO2 = 0.0_dp
+        sh%S_CO_src = 0.0_dp; sh%S_CO2_src = 0.0_dp
     end subroutine shared_allocate
     
     !---------------------------------------------------------------------------
@@ -494,13 +516,8 @@ contains
                 
                 k_global = k_global + 1
             end do
-            
-            ! Update z_top for the next layer
-            if (vol_acc > 0.0_dp) then
-                ! We filled up to k_global-1
-                ! We need the true z_top. Just let the loop naturally skip filled cells next time
-                ! because we don't reset k_global between layers!
-            end if
+            ! No z_top bookkeeping needed between layers: k_global is not
+            ! reset, so the next layer continues filling above this one
         end do
 
         if (.not. m%is_parallel .or. m%topo%rank == 0) then

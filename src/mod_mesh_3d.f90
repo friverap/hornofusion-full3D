@@ -13,6 +13,7 @@ module mod_mesh_3d
     use mod_constants
     use mod_types_3d
     use mod_mpi_topology, only: mpi_exchange_halos_3d_int
+    use mod_parallel_utils, only: gather_global_field, gather_global_field_int
     implicit none
 
 contains
@@ -66,7 +67,7 @@ contains
         allocate(rf_global(0:nr_global), thetaf_global(0:nth_global), &
                  zf_global(0:nz_global))
         
-        r_min = 0.02_dp
+        r_min = R_AXIS_MIN
         call generate_stretched_faces(rf_global, nr_global, r_min, cfg%R_shell, cfg%stretch_r)
         
         do j = 0, nth_global
@@ -193,6 +194,17 @@ contains
             m%z_global(k) = 0.5_dp * (zf_global(k-1) + zf_global(k))
         end do
 
+        ! Replicate global geometry on every rank: bitwise-identical inputs
+        ! for decomposition-sensitive physics (arc heat, MC radiation)
+        m%nr_g = nr_global; m%nth_g = nth_global; m%nz_g = nz_global
+        allocate(m%rf_global(0:nr_global), m%zf_global(0:nz_global))
+        m%rf_global = rf_global(0:nr_global)
+        m%zf_global = zf_global(0:nz_global)
+        allocate(m%vol_global(nr_global, nth_global, nz_global))
+        allocate(m%cell_type_global(nr_global, nth_global, nz_global))
+        call gather_global_field(m%vol, m%vol_global, m)
+        call gather_global_field_int(m%cell_type, m%cell_type_global, m)
+
         ! Cleanup
         deallocate(rf_global, thetaf_global, zf_global)
         
@@ -241,7 +253,7 @@ contains
         allocate(m%is_electrode(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2, N_ELECTRODES))
 
         ! Radial faces: r_min (pole cell) to R_shell, with stretching
-        r_min = 0.02_dp
+        r_min = R_AXIS_MIN
         call generate_stretched_faces(m%rf, m%nr, r_min, cfg%R_shell, cfg%stretch_r)
 
         ! Azimuthal faces: uniform 0 to 2*pi
@@ -311,6 +323,21 @@ contains
 
         ! Identify electrode cells
         call mark_electrode_cells(m, cfg)
+
+        ! Global geometry mirrors (single rank: direct copies) so that the
+        ! arc/MC physics uses one code path in serial and parallel
+        m%nr_g = m%nr; m%nth_g = m%ntheta; m%nz_g = m%nz
+        allocate(m%r_global(m%nr), m%theta_global(m%ntheta), m%z_global(m%nz))
+        m%r_global     = m%r(1:m%nr)
+        m%theta_global = m%theta(1:m%ntheta)
+        m%z_global     = m%z(1:m%nz)
+        allocate(m%rf_global(0:m%nr), m%zf_global(0:m%nz))
+        m%rf_global = m%rf(0:m%nr)
+        m%zf_global = m%zf(0:m%nz)
+        allocate(m%vol_global(m%nr, m%ntheta, m%nz))
+        allocate(m%cell_type_global(m%nr, m%ntheta, m%nz))
+        m%vol_global       = m%vol(1:m%nr, 1:m%ntheta, 1:m%nz)
+        m%cell_type_global = m%cell_type(1:m%nr, 1:m%ntheta, 1:m%nz)
 
         ! Report
         print '(A,I6,A,I6,A,I6,A,I10)', ' [MESH] Cells: ', m%nr, ' x ', &
@@ -498,6 +525,10 @@ contains
         if (allocated(m%r_global))     deallocate(m%r_global)
         if (allocated(m%theta_global)) deallocate(m%theta_global)
         if (allocated(m%z_global))     deallocate(m%z_global)
+        if (allocated(m%rf_global))        deallocate(m%rf_global)
+        if (allocated(m%zf_global))        deallocate(m%zf_global)
+        if (allocated(m%vol_global))       deallocate(m%vol_global)
+        if (allocated(m%cell_type_global)) deallocate(m%cell_type_global)
     end subroutine mesh_destroy
 
 end module mod_mesh_3d

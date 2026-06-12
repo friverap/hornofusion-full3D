@@ -300,6 +300,10 @@ contains
                                 + aN(i,j,k) * phi(i,jp,k)
                         d_td(i-istart+1) = d_td(i-istart+1) + aB(i,j,k) * phi(i,j,k-1) + aT(i,j,k) * phi(i,j,k+1)
                     end do
+                    ! Couple segment endpoints to halo data (lagged); at
+                    ! physical boundaries aW/aE are zero so this is a no-op
+                    d_td(1)  = d_td(1)  + aW(istart,j,k) * phi(istart-1,j,k)
+                    d_td(nr) = d_td(nr) + aE(iend,j,k)   * phi(iend+1,j,k)
                     call tdma(a_td(1:nr), b_td(1:nr), c_td(1:nr), d_td(1:nr), x_td(1:nr), nr)
                     phi(istart:iend, j, k) = x_td(1:nr)
                 end do
@@ -320,6 +324,10 @@ contains
                         ! Add k-direction contributions
                         d_td(j-jstart+1) = d_td(j-jstart+1) + aB(i,j,k) * phi(i,j,k-1) + aT(i,j,k) * phi(i,j,k+1)
                     end do
+                    ! Couple segment endpoints to halo data (lagged): rank
+                    ! interfaces in parallel, periodic images in serial
+                    d_td(1)   = d_td(1)   + aS(i,jstart,k) * phi(i,jstart-1,k)
+                    d_td(nth) = d_td(nth) + aN(i,jend,k)   * phi(i,jend+1,k)
                     call tdma(a_td(1:nth), b_td(1:nth), c_td(1:nth), d_td(1:nth), x_td(1:nth), nth)
                     phi(i, jstart:jend, k) = x_td(1:nth)
                 end do
@@ -344,6 +352,10 @@ contains
                         ! Add r-direction contributions
                         d_td(k-kstart+1) = d_td(k-kstart+1) + aW(i,j,k) * phi(i-1,j,k) + aE(i,j,k) * phi(i+1,j,k)
                     end do
+                    ! Couple segment endpoints to halo data (lagged); at
+                    ! physical boundaries aB/aT are zero so this is a no-op
+                    d_td(1)  = d_td(1)  + aB(i,j,kstart) * phi(i,j,kstart-1)
+                    d_td(nz) = d_td(nz) + aT(i,j,kend)   * phi(i,j,kend+1)
                     call tdma(a_td(1:nz), b_td(1:nz), c_td(1:nz), d_td(1:nz), x_td(1:nz), nz)
                     phi(i, j, kstart:kend) = x_td(1:nz)
                 end do
@@ -420,24 +432,25 @@ contains
 
             ! Compute local residual
             residual = sqrt(res_sum / max(norm_sum, SMALL))
-            
+
             n_iter = iter
-            
-            ! Check convergence every few iterations (not every iter - too expensive!)
-            if (mod(iter, 10) == 0 .or. iter == max_iter) then
+
+            ! Exchange halos frequently: stale rank-boundary values degrade
+            ! convergence and can destabilize the sweep locally
+            if (m%is_parallel .and. mod(iter, SOR_HALO_EVERY) == 0) then
+                call mpi_exchange_halos_3d(phi, m%topo)
+            end if
+
+            ! Check convergence less often (each check costs two allreduces)
+            if (mod(iter, SOR_CHECK_EVERY) == 0 .or. iter == max_iter) then
                 ! Global reduction of residual
                 if (m%is_parallel) then
                     call mpi_allreduce_sum(res_sum, res_sum_global, m%topo)
                     call mpi_allreduce_sum(norm_sum, norm_sum_global, m%topo)
                     residual = sqrt(res_sum_global / max(norm_sum_global, SMALL))
                 end if
-                
+
                 if (residual < tol) exit
-                
-                ! Exchange halos when we check convergence
-                if (m%is_parallel) then
-                    call mpi_exchange_halos_3d(phi, m%topo)
-                end if
             end if
         end do
         

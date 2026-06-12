@@ -107,7 +107,7 @@ contains
                     ! Negligible phase fraction: trivial equation keeps vel = vel_old.
                     ! Prevents near-zero aP (= 0 * rho * vol / dt) from making
                     ! the TDMA diagonal singular.
-                    if (alpha_q(i,j,k) < 1.0e-6_dp) then
+                    if (alpha_q(i,j,k) < ALPHA_CUTOFF) then
                         aP(i,j,k) = 1.0_dp
                         Su(i,j,k) = vel_old(i,j,k)
                         cycle
@@ -228,8 +228,11 @@ contains
         ! Solve with MPI-aware TDMA
         call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, vel, m, cfg%max_inner_mom)
 
-        ! Under-relaxation
-        vel = cfg%alpha_u * vel + (1.0_dp - cfg%alpha_u) * vel_old
+        ! Under-relaxation (interior cells only: halo values were just received
+        ! from neighbor ranks and must not be blended with stale vel_old halos)
+        vel(istart:iend, jstart:jend, kstart:kend) = &
+            cfg%alpha_u * vel(istart:iend, jstart:jend, kstart:kend) + &
+            (1.0_dp - cfg%alpha_u) * vel_old(istart:iend, jstart:jend, kstart:kend)
 
         ! Store aP for Rhie-Chow
         select case (comp)

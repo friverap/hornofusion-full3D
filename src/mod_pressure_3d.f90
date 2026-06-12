@@ -71,7 +71,7 @@ contains
                     ! the pressure Poisson ill-conditioned and cause the SOR to
                     ! diverge to Inf → NaN in the residual.
                     ! Matches the guard in solve_momentum_component and solve_energy_3d.
-                    if (alpha_q(i,j,k) < 1.0e-6_dp) then
+                    if (alpha_q(i,j,k) < ALPHA_CUTOFF) then
                         aP(i,j,k) = 1.0_dp
                         Su(i,j,k) = 0.0_dp
                         cycle
@@ -146,26 +146,20 @@ contains
         ! Pressure BCs
         call apply_pressure_bc(aW, aE, aS, aN, aB, aT, aP, Su, m)
 
-        ! Fix reference pressure (avoid singular matrix)
-        ! Only fix on process that owns cell (1,1,1)
-        if (m%is_parallel) then
-            if (m%topo%iglobal_start == 1 .and. m%topo%jglobal_start == 1 .and. &
-                m%topo%kglobal_start == 1) then
-                if (m%cell_type(1,1,1) /= 0) then
-                    aP(1,1,1) = aP(1,1,1) * 1.0e10_dp
-                    Su(1,1,1) = 0.0_dp
-                end if
-            end if
-        else
-            if (m%cell_type(1,1,1) /= 0) then
-                aP(1,1,1) = aP(1,1,1) * 1.0e10_dp
-                Su(1,1,1) = 0.0_dp
-            end if
+        ! Fix reference pressure (avoid singular matrix).
+        ! Only the process owning global cell (1,1,1) anchors the level; if that
+        ! cell is inactive (bowl geometry), fall back to its first active cell.
+        if (.not. m%is_parallel .or. &
+            (m%topo%iglobal_start == 1 .and. m%topo%jglobal_start == 1 .and. &
+             m%topo%kglobal_start == 1)) then
+            call fix_pressure_reference(aP, Su, m, istart, iend, jstart, jend, &
+                                        kstart, kend)
         end if
 
         ! Solve with SOR (MPI-aware)
         call sor_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, sh%pp, m, &
-                        1.5_dp, cfg%max_inner_pres, 1.0e-5_dp, sor_res, n_iter_sor)
+                        SOR_OMEGA, cfg%max_inner_pres, SOR_TOL_PRESSURE, &
+                        sor_res, n_iter_sor)
         
         residual = sor_res
 
@@ -177,6 +171,31 @@ contains
 
         deallocate(aW, aE, aS, aN, aB, aT, aP, Su)
     end subroutine solve_pressure_correction
+
+    !---------------------------------------------------------------------------
+    ! Anchor the pressure level at the first active cell of the local block
+    ! using the big-coefficient method
+    !---------------------------------------------------------------------------
+    subroutine fix_pressure_reference(aP, Su, m, istart, iend, jstart, jend, &
+                                      kstart, kend)
+        real(dp), intent(inout)  :: aP(-1:,-1:,-1:), Su(-1:,-1:,-1:)
+        type(mesh_t), intent(in) :: m
+        integer, intent(in)      :: istart, iend, jstart, jend, kstart, kend
+
+        integer :: i, j, k
+
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) /= 0) then
+                        aP(i,j,k) = aP(i,j,k) * PREF_PENALTY
+                        Su(i,j,k) = 0.0_dp
+                        return
+                    end if
+                end do
+            end do
+        end do
+    end subroutine fix_pressure_reference
 
     !---------------------------------------------------------------------------
     ! Correct velocities using pressure correction gradient

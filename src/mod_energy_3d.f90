@@ -64,7 +64,7 @@ contains
 
                     ! Negligible phase fraction: trivial equation keeps T = T_old.
                     ! Prevents near-zero aP from making the TDMA diagonal singular.
-                    if (alpha_q(i,j,k) < 1.0e-6_dp) then
+                    if (alpha_q(i,j,k) < ALPHA_CUTOFF) then
                         aP(i,j,k) = 1.0_dp
                         Su(i,j,k) = T_old(i,j,k)
                         cycle
@@ -160,8 +160,11 @@ contains
         ! Solve with MPI-aware TDMA
         call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, ph%T, m, cfg%max_inner_mom)
 
-        ! Under-relaxation
-        ph%T = cfg%alpha_T * ph%T + (1.0_dp - cfg%alpha_T) * T_old
+        ! Under-relaxation (interior cells only: halo values were just received
+        ! from neighbor ranks and must not be blended with stale T_old halos)
+        ph%T(istart:iend, jstart:jend, kstart:kend) = &
+            cfg%alpha_T * ph%T(istart:iend, jstart:jend, kstart:kend) + &
+            (1.0_dp - cfg%alpha_T) * T_old(istart:iend, jstart:jend, kstart:kend)
 
         ! Residual
         residual = compute_residual_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, ph%T, m)

@@ -5,15 +5,45 @@
 ! emitted isotropically from the arc column. Each beam carries a fraction
 ! of the total radiative power and deposits it in the first solid/liquid
 ! cell it hits.
+!
+! Decomposition-invariant implementation:
+!   - The RNG is seeded with a FIXED seed (reproducible runs); every rank
+!     generates the same beam directions in the same order.
+!   - Beams are traced on the GLOBAL geometry (rf_global/zf_global, uniform
+!     global theta) using the globally-replicated alpha_s, so the absorption
+!     cell of each beam is identical on every rank and in serial.
+!   - Only the rank owning the absorption cell deposits the beam power.
 !===============================================================================
 module mod_arc_radiation_mc
     use mod_constants
     use mod_types_3d
+    use mod_parallel_utils
     implicit none
 
     integer, parameter :: N_BEAMS = 1000   ! beams per electrode per call
 
+    logical, save :: rng_seeded = .false.
+
 contains
+
+    !---------------------------------------------------------------------------
+    ! Seed the RNG deterministically (same sequence on every rank and run)
+    !---------------------------------------------------------------------------
+    subroutine ensure_rng_seeded()
+        integer :: n, i
+        integer, allocatable :: seed(:)
+
+        if (rng_seeded) return
+
+        call random_seed(size=n)
+        allocate(seed(n))
+        do i = 1, n
+            seed(i) = 104729 + 37 * i   ! arbitrary fixed values
+        end do
+        call random_seed(put=seed)
+        deallocate(seed)
+        rng_seeded = .true.
+    end subroutine ensure_rng_seeded
 
     subroutine distribute_arc_radiation_mc(elec, sol, sh, m, cfg, n_elec)
         type(electrode_t), intent(in)   :: elec(:)
@@ -29,13 +59,21 @@ contains
         real(dp) :: x, y, z_pos, r_pos, theta_pos
         real(dp) :: phi_rand, cos_theta, sin_theta
         real(dp) :: step_size, total_P_rad
-        integer  :: i_cell, j_cell, k_cell
+        integer  :: ig, jg, kg, il, jl, kl
         real(dp) :: rnd1, rnd2, rnd3
         integer  :: n_steps
+        logical  :: owned
+        real(dp), allocatable :: alpha_g(:,:,:)
         integer, parameter :: MAX_TRACE_STEPS = 50000
 
-        ! Use only interior cells (index 1:m%nr) to avoid zero-width halo cells
-        step_size = minval(m%dr(1:m%nr)) * 0.5_dp
+        call ensure_rng_seeded()
+
+        ! Globally-replicated alpha_s: every rank sees the same scrap surface
+        allocate(alpha_g(m%nr_g, m%nth_g, m%nz_g))
+        call gather_global_field(sol%alpha_s, alpha_g, m)
+
+        ! Step size from the GLOBAL minimum radial width (identical on all ranks)
+        step_size = minval(m%rf_global(1:m%nr_g) - m%rf_global(0:m%nr_g-1)) * 0.5_dp
         if (step_size < 1.0e-6_dp) step_size = 0.01_dp   ! absolute fallback
 
         do e = 1, n_elec
@@ -49,7 +87,7 @@ contains
             z0 = elec(e)%z_tip
 
             do beam = 1, N_BEAMS
-                ! Random direction (isotropic)
+                ! Random direction (isotropic) — same sequence on every rank
                 call random_number(rnd1)
                 call random_number(rnd2)
                 call random_number(rnd3)
@@ -62,7 +100,7 @@ contains
                 dy = sin_theta * sin(phi_rand)
                 dz = cos_theta
 
-                ! Trace beam
+                ! Trace beam on the global geometry
                 x = x0; y = y0; z_pos = z0
                 n_steps = 0
 
@@ -79,33 +117,37 @@ contains
                     if (.not. (r_pos <= cfg%R_shell)) exit trace
                     if (.not. (z_pos >= 0.0_dp .and. z_pos <= cfg%H_total)) exit trace
 
-                    ! Find cell indices
+                    ! Find GLOBAL cell indices
                     theta_pos = atan2(y, x)
                     if (theta_pos < 0.0_dp) theta_pos = theta_pos + TWO_PI
 
-                    call find_cell(r_pos, theta_pos, z_pos, m, i_cell, j_cell, k_cell)
-                    if (i_cell < 1 .or. k_cell < 1) exit trace
-                    if (m%cell_type(i_cell, j_cell, k_cell) == 0) exit trace
+                    call find_cell_global(r_pos, theta_pos, z_pos, m, ig, jg, kg)
+                    if (ig < 1 .or. kg < 1) exit trace
+                    if (m%cell_type_global(ig, jg, kg) == 0) exit trace
 
                     ! Check if beam hits solid or liquid
-                    if (sol%alpha_s(i_cell, j_cell, k_cell) > 0.1_dp .or. &
+                    if (alpha_g(ig, jg, kg) > 0.1_dp .or. &
                         z_pos < cfg%H_bowl + 0.5_dp) then
-                        ! Deposit energy
-                        sh%S_arc(i_cell, j_cell, k_cell) = &
-                            sh%S_arc(i_cell, j_cell, k_cell) + &
-                            P_rad_per_beam / (m%vol(i_cell, j_cell, k_cell) + SMALL)
+                        ! Deposit energy — only the owner of the cell writes
+                        call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
+                        if (owned) then
+                            sh%S_arc(il, jl, kl) = sh%S_arc(il, jl, kl) + &
+                                P_rad_per_beam / (m%vol_global(ig, jg, kg) + SMALL)
+                        end if
                         exit trace
                     end if
                 end do trace
             end do
         end do
 
+        deallocate(alpha_g)
+
     end subroutine distribute_arc_radiation_mc
 
     !---------------------------------------------------------------------------
-    ! Find cell indices from physical coordinates
+    ! Find GLOBAL cell indices from physical coordinates
     !---------------------------------------------------------------------------
-    subroutine find_cell(r, theta, z, m, ic, jc, kc)
+    subroutine find_cell_global(r, theta, z, m, ic, jc, kc)
         real(dp), intent(in)    :: r, theta, z
         type(mesh_t), intent(in) :: m
         integer, intent(out)    :: ic, jc, kc
@@ -114,21 +156,21 @@ contains
 
         ic = -1; jc = -1; kc = -1
 
-        do i = 1, m%nr
-            if (r <= m%rf(i)) then
+        do i = 1, m%nr_g
+            if (r <= m%rf_global(i)) then
                 ic = i; exit
             end if
         end do
         if (ic < 0) return
 
-        jc = int(theta / (TWO_PI / real(m%ntheta, dp))) + 1
-        jc = max(1, min(m%ntheta, jc))
+        jc = int(theta / (TWO_PI / real(m%nth_g, dp))) + 1
+        jc = max(1, min(m%nth_g, jc))
 
-        do i = 1, m%nz
-            if (z <= m%zf(i)) then
+        do i = 1, m%nz_g
+            if (z <= m%zf_global(i)) then
                 kc = i; exit
             end if
         end do
-    end subroutine find_cell
+    end subroutine find_cell_global
 
 end module mod_arc_radiation_mc

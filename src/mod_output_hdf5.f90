@@ -42,21 +42,27 @@ contains
         
         ! Initialize HDF5
         call h5open_f(error)
-        
+        call check_h5(error, 'h5open_f', rank)
+
         ! Create file access property list for MPI-IO
         call h5pcreate_f(H5P_FILE_ACCESS_F, plist_id, error)
+        call check_h5(error, 'h5pcreate_f(file access)', rank)
         if (m%is_parallel) then
             call h5pset_fapl_mpio_f(plist_id, m%topo%comm_cart, MPI_INFO_NULL, error)
+            call check_h5(error, 'h5pset_fapl_mpio_f', rank)
         end if
-        
+
         ! Create file
         call h5fcreate_f(filename, H5F_ACC_TRUNC_F, file_id, error, access_prp=plist_id)
+        call check_h5(error, 'h5fcreate_f: '//trim(filename), rank)
         call h5pclose_f(plist_id, error)
-        
+
         ! Create transfer property list for collective I/O
         call h5pcreate_f(H5P_DATASET_XFER_F, plist_xfer, error)
+        call check_h5(error, 'h5pcreate_f(xfer)', rank)
         if (m%is_parallel) then
             call h5pset_dxpl_mpio_f(plist_xfer, H5FD_MPIO_COLLECTIVE_F, error)
+            call check_h5(error, 'h5pset_dxpl_mpio_f', rank)
         end if
         
         ! Write mesh coordinates
@@ -71,6 +77,7 @@ contains
         ! Close
         call h5pclose_f(plist_xfer, error)
         call h5fclose_f(file_id, error)
+        call check_h5(error, 'h5fclose_f: '//trim(filename), rank)
         call h5close_f(error)
         
         if (rank == 0) then
@@ -244,15 +251,17 @@ contains
             ! Create dataset
             call h5dcreate_f(group_id, name, H5T_NATIVE_DOUBLE, &
                             dspace_global_id, dset_id, error)
-            
+            call check_h5(error, 'h5dcreate_f: '//name, m%topo%rank)
+
             ! Select hyperslab in file
             call h5sselect_hyperslab_f(dspace_global_id, H5S_SELECT_SET_F, &
                                        offset, dims_local, error)
-            
+
             ! Write collectively
             call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE, field_local, dims_local, error, &
                            mem_space_id=dspace_local_id, file_space_id=dspace_global_id, &
                            xfer_prp=plist_xfer)
+            call check_h5(error, 'h5dwrite_f: '//name, m%topo%rank)
             
             ! Close
             call h5sclose_f(dspace_local_id, error)
@@ -357,10 +366,8 @@ contains
         real(dp) :: m_s_total, m_s_local
         logical :: file_exists
         
-        ! Only rank 0 writes
-        if (m%is_parallel .and. m%topo%rank /= 0) return
-        
-        ! Compute total solid mass
+        ! Compute total solid mass — the reduction is collective, so ALL ranks
+        ! must execute it before any rank-0-only early return
         if (m%is_parallel) then
             m_s_local = sum(sol%m_s(m%topo%istart:m%topo%iend, &
                                     m%topo%jstart:m%topo%jend, &
@@ -369,7 +376,10 @@ contains
         else
             m_s_total = sum(sol%m_s(1:m%nr, 1:m%ntheta, 1:m%nz))
         end if
-        
+
+        ! Only rank 0 writes the file
+        if (m%is_parallel .and. m%topo%rank /= 0) return
+
         ! Open/create monitor file
         filename = trim(output_dir) // '/monitor.log'
         inquire(file=filename, exist=file_exists)
@@ -390,7 +400,24 @@ contains
             step, time, m_s_total, conv%res_cont, conv%res_ur, conv%res_energy, conv%n_outer
         
         close(iu)
-        
+
     end subroutine write_monitor_line
+
+    !---------------------------------------------------------------------------
+    ! Abort with a clear message if an HDF5 call failed
+    !---------------------------------------------------------------------------
+    subroutine check_h5(error, context, rank)
+        integer, intent(in) :: error
+        character(len=*), intent(in) :: context
+        integer, intent(in) :: rank
+
+        integer :: abort_err
+
+        if (error < 0) then
+            write(*,'(A,A,A,I0,A,I0)') '[HDF5] ERROR in ', trim(context), &
+                  ', code=', error, ', rank=', rank
+            call MPI_Abort(MPI_COMM_WORLD, 1, abort_err)
+        end if
+    end subroutine check_h5
 
 end module mod_output_hdf5

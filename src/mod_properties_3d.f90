@@ -33,7 +33,7 @@ contains
                     liq%mu_eff(i,j,k) = cfg%mu_l + sh%mu_t(i,j,k)
 
                     ! Gas: ideal gas approximation rho = rho_ref * T_ref / T
-                    if (gas%T(i,j,k) > 100.0_dp) then
+                    if (gas%T(i,j,k) > T_MIN_GAS) then
                         gas%rho(i,j,k) = cfg%rho_gas * cfg%T_ambient / gas%T(i,j,k)
                     else
                         gas%rho(i,j,k) = cfg%rho_gas

@@ -78,7 +78,7 @@ $(OBJDIR)/mod_types_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_mpi_topology.o
 
 $(OBJDIR)/mod_parallel_utils.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_config_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
-$(OBJDIR)/mod_mesh_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
+$(OBJDIR)/mod_mesh_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o
 $(OBJDIR)/mod_solver_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o
 $(OBJDIR)/mod_boundary_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_energy_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o
@@ -94,7 +94,7 @@ $(OBJDIR)/mod_solid_phase.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o 
 $(OBJDIR)/mod_arc_cassie_mayr.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o
 $(OBJDIR)/mod_slag_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o
 $(OBJDIR)/mod_electrode_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
-$(OBJDIR)/mod_arc_radiation_mc.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
+$(OBJDIR)/mod_arc_radiation_mc.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o
 $(OBJDIR)/mod_arc_impingement.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_lorentz_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_multiphase.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_momentum_3d.o $(OBJDIR)/mod_pressure_3d.o $(OBJDIR)/mod_energy_3d.o $(OBJDIR)/mod_continuity.o $(OBJDIR)/mod_drag_ergun.o $(OBJDIR)/mod_properties_3d.o $(OBJDIR)/mod_fields_3d.o

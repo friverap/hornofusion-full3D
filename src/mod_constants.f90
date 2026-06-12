@@ -54,6 +54,30 @@ module mod_constants
     real(dp), parameter :: LARGE = 1.0e+30_dp
     real(dp), parameter :: TOL_DEFAULT = 1.0e-6_dp
 
+    ! Phase-fraction cutoff below which a cell is treated as void of the phase.
+    ! Shared by momentum, energy, pressure and melting guards — must be the
+    ! same value everywhere or the liquid/gas interface becomes discontinuous.
+    real(dp), parameter :: ALPHA_CUTOFF = 1.0e-6_dp
+
+    ! Re-solidification explicit sub-step limiter (fraction of the full mass
+    ! transfer applied per timestep, CFL-like stabilization)
+    real(dp), parameter :: RESOLID_LIMITER = 0.1_dp
+
+    ! Pressure-reference "big coefficient" penalty (SIMPLE singular fix)
+    real(dp), parameter :: PREF_PENALTY = 1.0e10_dp
+
+    ! SOR pressure solver defaults
+    real(dp), parameter :: SOR_OMEGA        = 1.5_dp
+    real(dp), parameter :: SOR_TOL_PRESSURE = 1.0e-5_dp
+    integer,  parameter :: SOR_HALO_EVERY   = 2   ! halo exchange interval (iters)
+    integer,  parameter :: SOR_CHECK_EVERY  = 10  ! global residual check interval
+
+    ! Minimum gas temperature for the ideal-gas density update [K]
+    real(dp), parameter :: T_MIN_GAS = 100.0_dp
+
+    ! Minimum radius of the cylindrical mesh axis hole [m]
+    real(dp), parameter :: R_AXIS_MIN = 0.02_dp
+
     ! Ergun porous media defaults
     real(dp), parameter :: D_PARTICLE = 0.10_dp   ! m (characteristic scrap chunk size)
 
@@ -66,5 +90,10 @@ module mod_constants
     real(dp), parameter :: ARC_W     = 30.0_dp    ! W (cooling power) — calibrated
     real(dp), parameter :: ARC_SIGMA = 1.0e3_dp   ! S/m (ionized air conductivity)
     real(dp), parameter :: ARC_T_REF = 12000.0_dp ! K (reference arc temperature)
+
+    ! Arc length correlation (Eq. 3 of paper): l_a = (|V| - threshold) / gradient
+    real(dp), parameter :: ARC_VOLT_THRESHOLD = 40.0_dp  ! V (anode+cathode drop)
+    real(dp), parameter :: ARC_LENGTH_GRAD    = 11.5_dp  ! V/cm (column field gradient)
+    real(dp), parameter :: ARC_LENGTH_MIN     = 0.01_dp  ! m (minimum arc length)
 
 end module mod_constants

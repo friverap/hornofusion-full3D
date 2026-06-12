@@ -135,8 +135,8 @@ contains
 
         open(newunit=iu, file=trim(filename), status='old', iostat=ios)
         if (ios /= 0) then
-            print '(A,A)', ' [CONFIG] Cannot open: ', trim(filename)
-            return
+            print '(A,A)', ' [CONFIG] ERROR: cannot open config file: ', trim(filename)
+            stop 1
         end if
         print '(A,A)', ' [CONFIG] Reading: ', trim(filename)
 
@@ -163,79 +163,180 @@ contains
 
         select case (trim(key))
         ! Geometry
-        case ('R_shell');    read(val, *) cfg%R_shell
-        case ('H_total');    read(val, *) cfg%H_total
-        case ('H_bowl');     read(val, *) cfg%H_bowl
-        case ('R_bowl');     read(val, *) cfg%R_bowl
-        case ('R_pcd');      read(val, *) cfg%R_pcd
-        case ('R_elec');     read(val, *) cfg%R_elec
+        case ('R_shell');    call parse_real(val, key, cfg%R_shell)
+        case ('H_total');    call parse_real(val, key, cfg%H_total)
+        case ('H_bowl');     call parse_real(val, key, cfg%H_bowl)
+        case ('R_bowl');     call parse_real(val, key, cfg%R_bowl)
+        case ('R_pcd');      call parse_real(val, key, cfg%R_pcd)
+        case ('R_elec');     call parse_real(val, key, cfg%R_elec)
         ! Mesh
-        case ('nr');         read(val, *) cfg%nr
-        case ('ntheta');     read(val, *) cfg%ntheta
-        case ('nz');         read(val, *) cfg%nz
-        case ('stretch_r');  read(val, *) cfg%stretch_r
-        case ('stretch_z');  read(val, *) cfg%stretch_z
+        case ('nr');         call parse_int(val, key, cfg%nr)
+        case ('ntheta');     call parse_int(val, key, cfg%ntheta)
+        case ('nz');         call parse_int(val, key, cfg%nz)
+        case ('stretch_r');  call parse_real(val, key, cfg%stretch_r)
+        case ('stretch_z');  call parse_real(val, key, cfg%stretch_z)
         ! Time
-        case ('dt');         read(val, *) cfg%dt
-        case ('dt_min');     read(val, *) cfg%dt_min
-        case ('dt_max');     read(val, *) cfg%dt_max
-        case ('t_final');    read(val, *) cfg%t_final
-        case ('adaptive_dt'); cfg%adaptive_dt = (trim(val) == 'true' .or. trim(val) == '.true.')
+        case ('dt');         call parse_real(val, key, cfg%dt)
+        case ('dt_min');     call parse_real(val, key, cfg%dt_min)
+        case ('dt_max');     call parse_real(val, key, cfg%dt_max)
+        case ('t_final');    call parse_real(val, key, cfg%t_final)
+        case ('adaptive_dt'); cfg%adaptive_dt = parse_bool(val)
         ! SIMPLE
-        case ('max_outer');       read(val, *) cfg%max_outer
-        case ('max_inner_mom');   read(val, *) cfg%max_inner_mom
-        case ('max_inner_pres');  read(val, *) cfg%max_inner_pres
-        case ('alpha_u');    read(val, *) cfg%alpha_u
-        case ('alpha_p');    read(val, *) cfg%alpha_p
-        case ('alpha_T');    read(val, *) cfg%alpha_T
+        case ('max_outer');       call parse_int(val, key, cfg%max_outer)
+        case ('max_inner_mom');   call parse_int(val, key, cfg%max_inner_mom)
+        case ('max_inner_pres');  call parse_int(val, key, cfg%max_inner_pres)
+        case ('alpha_u');    call parse_real(val, key, cfg%alpha_u)
+        case ('alpha_p');    call parse_real(val, key, cfg%alpha_p)
+        case ('alpha_T');    call parse_real(val, key, cfg%alpha_T)
         ! Convergence
-        case ('tol_cont');   read(val, *) cfg%tol_cont
-        case ('tol_mom');    read(val, *) cfg%tol_mom
-        case ('tol_energy'); read(val, *) cfg%tol_energy
+        case ('tol_cont');   call parse_real(val, key, cfg%tol_cont)
+        case ('tol_mom');    call parse_real(val, key, cfg%tol_mom)
+        case ('tol_energy'); call parse_real(val, key, cfg%tol_energy)
         ! Material
-        case ('rho_steel');  read(val, *) cfg%rho_steel
-        case ('T_solidus');  read(val, *) cfg%T_solidus
-        case ('T_liquidus'); read(val, *) cfg%T_liquidus
-        case ('cp_s');       read(val, *) cfg%cp_s
-        case ('cp_l');       read(val, *) cfg%cp_l
-        case ('h_fusion');   read(val, *) cfg%h_fusion
-        case ('T_initial');  read(val, *) cfg%T_initial
-        case ('T_ambient');  read(val, *) cfg%T_ambient
+        case ('rho_steel');  call parse_real(val, key, cfg%rho_steel)
+        case ('T_solidus');  call parse_real(val, key, cfg%T_solidus)
+        case ('T_liquidus'); call parse_real(val, key, cfg%T_liquidus)
+        case ('cp_s');       call parse_real(val, key, cfg%cp_s)
+        case ('cp_l');       call parse_real(val, key, cfg%cp_l)
+        case ('h_fusion');   call parse_real(val, key, cfg%h_fusion)
+        case ('T_initial');  call parse_real(val, key, cfg%T_initial)
+        case ('T_ambient');  call parse_real(val, key, cfg%T_ambient)
         ! Physics flags
-        case ('solve_flow');    cfg%solve_flow = (trim(val) == 'true' .or. trim(val) == '.true.')
-        case ('solve_energy');  cfg%solve_energy = (trim(val) == 'true' .or. trim(val) == '.true.')
-        case ('solve_melting'); cfg%solve_melting = (trim(val) == 'true' .or. trim(val) == '.true.')
-        case ('solve_turb');    cfg%solve_turb = (trim(val) == 'true' .or. trim(val) == '.true.')
-        case ('solve_arc');     cfg%solve_arc = (trim(val) == 'true' .or. trim(val) == '.true.')
-        case ('solve_radiation'); cfg%solve_radiation = (trim(val) == 'true' .or. trim(val) == '.true.')
-        case ('solve_chemistry'); cfg%solve_chemistry = (trim(val) == 'true' .or. trim(val) == '.true.')
-        case ('solve_multiphase'); cfg%solve_multiphase = (trim(val) == 'true' .or. trim(val) == '.true.')
+        case ('solve_flow');       cfg%solve_flow = parse_bool(val)
+        case ('solve_energy');     cfg%solve_energy = parse_bool(val)
+        case ('solve_melting');    cfg%solve_melting = parse_bool(val)
+        case ('solve_turb');       cfg%solve_turb = parse_bool(val)
+        case ('solve_arc');        cfg%solve_arc = parse_bool(val)
+        case ('solve_radiation');  cfg%solve_radiation = parse_bool(val)
+        case ('solve_chemistry');  cfg%solve_chemistry = parse_bool(val)
+        case ('solve_multiphase'); cfg%solve_multiphase = parse_bool(val)
         ! Output
-        case ('output_freq');  read(val, *) cfg%output_freq
-        case ('monitor_freq'); read(val, *) cfg%monitor_freq
+        case ('output_freq');  call parse_int(val, key, cfg%output_freq)
+        case ('monitor_freq'); call parse_int(val, key, cfg%monitor_freq)
         case ('output_dir');   cfg%output_dir = trim(val)
         ! Bucket timing
-        case ('t_bucket2_charge'); read(val, *) cfg%t_bucket2_charge
+        case ('t_bucket2_charge'); call parse_real(val, key, cfg%t_bucket2_charge)
         ! Arc heat partition fractions
-        case ('frac_conv');  read(val, *) cfg%frac_conv
-        case ('frac_rad');   read(val, *) cfg%frac_rad
-        case ('frac_elec');  read(val, *) cfg%frac_elec
-        case ('arc_w');      read(val, *) cfg%arc_w
+        case ('frac_conv');  call parse_real(val, key, cfg%frac_conv)
+        case ('frac_rad');   call parse_real(val, key, cfg%frac_rad)
+        case ('frac_elec');  call parse_real(val, key, cfg%frac_elec)
+        case ('arc_w');      call parse_real(val, key, cfg%arc_w)
         ! Slag
-        case ('rho_slag');     read(val, *) cfg%rho_slag
-        case ('cp_slag');      read(val, *) cfg%cp_slag
-        case ('k_slag');       read(val, *) cfg%k_slag
-        case ('h_contact_sl'); read(val, *) cfg%h_contact_sl
-        case ('m_slag_init');  read(val, *) cfg%m_slag_init
-        case ('solve_slag');   cfg%solve_slag = (trim(val)=='true' .or. trim(val)=='.true.')
+        case ('rho_slag');     call parse_real(val, key, cfg%rho_slag)
+        case ('cp_slag');      call parse_real(val, key, cfg%cp_slag)
+        case ('k_slag');       call parse_real(val, key, cfg%k_slag)
+        case ('h_contact_sl'); call parse_real(val, key, cfg%h_contact_sl)
+        case ('m_slag_init');  call parse_real(val, key, cfg%m_slag_init)
+        case ('solve_slag');   cfg%solve_slag = parse_bool(val)
         ! Species transport
-        case ('solve_species');   cfg%solve_species = (trim(val)=='true' .or. trim(val)=='.true.')
-        case ('Sc_t_species');    read(val,*) cfg%Sc_t_species
-        case ('alpha_Y_species'); read(val,*) cfg%alpha_Y_species
+        case ('solve_species');   cfg%solve_species = parse_bool(val)
+        case ('Sc_t_species');    call parse_real(val, key, cfg%Sc_t_species)
+        case ('alpha_Y_species'); call parse_real(val, key, cfg%alpha_Y_species)
         case default
-            ! ignore unknown keys silently
+            print '(A,A,A)', ' [CONFIG] WARNING: unknown key "', trim(key), &
+                  '" ignored (check for typos)'
         end select
     end subroutine config_set_value
+
+    !---------------------------------------------------------------------------
+    ! Parsing helpers: report malformed values instead of crashing mid-read
+    !---------------------------------------------------------------------------
+    subroutine parse_real(val, key, x)
+        character(len=*), intent(in) :: val, key
+        real(dp), intent(inout) :: x
+
+        integer :: ios
+        real(dp) :: tmp
+
+        read(val, *, iostat=ios) tmp
+        if (ios /= 0) then
+            print '(5A)', ' [CONFIG] ERROR: invalid value "', trim(val), &
+                  '" for key "', trim(key), '"'
+            stop 1
+        end if
+        x = tmp
+    end subroutine parse_real
+
+    subroutine parse_int(val, key, n)
+        character(len=*), intent(in) :: val, key
+        integer, intent(inout) :: n
+
+        integer :: ios, tmp
+
+        read(val, *, iostat=ios) tmp
+        if (ios /= 0) then
+            print '(5A)', ' [CONFIG] ERROR: invalid value "', trim(val), &
+                  '" for key "', trim(key), '"'
+            stop 1
+        end if
+        n = tmp
+    end subroutine parse_int
+
+    pure function parse_bool(val) result(b)
+        character(len=*), intent(in) :: val
+        logical :: b
+
+        b = (trim(val) == 'true' .or. trim(val) == '.true.')
+    end function parse_bool
+
+    !---------------------------------------------------------------------------
+    ! Validate configuration ranges. Called before MPI init, so a plain stop
+    ! terminates every launched process with a clear message.
+    !---------------------------------------------------------------------------
+    subroutine config_validate(cfg)
+        type(config_t), intent(in) :: cfg
+
+        logical :: ok
+
+        ok = .true.
+
+        call require(cfg%nr >= 1 .and. cfg%ntheta >= 1 .and. cfg%nz >= 1, &
+                     'mesh dimensions nr/ntheta/nz must be >= 1', ok)
+        call require(cfg%dt > 0.0_dp, 'dt must be > 0', ok)
+        call require(cfg%dt_min > 0.0_dp .and. cfg%dt_min <= cfg%dt_max, &
+                     'requires 0 < dt_min <= dt_max', ok)
+        call require(cfg%t_final > 0.0_dp, 't_final must be > 0', ok)
+        call require(cfg%T_solidus < cfg%T_liquidus, &
+                     'T_solidus must be < T_liquidus', ok)
+        call require(cfg%alpha_u > 0.0_dp .and. cfg%alpha_u <= 1.0_dp, &
+                     'alpha_u must be in (0, 1]', ok)
+        call require(cfg%alpha_p > 0.0_dp .and. cfg%alpha_p <= 1.0_dp, &
+                     'alpha_p must be in (0, 1]', ok)
+        call require(cfg%alpha_T > 0.0_dp .and. cfg%alpha_T <= 1.0_dp, &
+                     'alpha_T must be in (0, 1]', ok)
+        call require(cfg%max_outer >= 1 .and. cfg%max_inner_mom >= 1 &
+                     .and. cfg%max_inner_pres >= 1, &
+                     'iteration limits must be >= 1', ok)
+        call require(cfg%tol_cont > 0.0_dp .and. cfg%tol_mom > 0.0_dp &
+                     .and. cfg%tol_energy > 0.0_dp, &
+                     'convergence tolerances must be > 0', ok)
+        call require(abs(cfg%frac_rad + cfg%frac_conv + cfg%frac_elec - 1.0_dp) &
+                     < 1.0e-6_dp, &
+                     'frac_rad + frac_conv + frac_elec must equal 1.0', ok)
+        call require(cfg%output_freq >= 1 .and. cfg%monitor_freq >= 1, &
+                     'output_freq and monitor_freq must be >= 1', ok)
+        call require(cfg%rho_steel > 0.0_dp .and. cfg%cp_s > 0.0_dp &
+                     .and. cfg%cp_l > 0.0_dp .and. cfg%h_fusion > 0.0_dp, &
+                     'material properties must be > 0', ok)
+        call require(cfg%R_shell > 0.0_dp .and. cfg%H_total > 0.0_dp, &
+                     'R_shell and H_total must be > 0', ok)
+
+        if (.not. ok) then
+            print *, ' [CONFIG] Aborting due to invalid configuration.'
+            stop 1
+        end if
+    end subroutine config_validate
+
+    subroutine require(cond, msg, ok)
+        logical, intent(in) :: cond
+        character(len=*), intent(in) :: msg
+        logical, intent(inout) :: ok
+
+        if (.not. cond) then
+            print '(A,A)', ' [CONFIG] ERROR: ', msg
+            ok = .false.
+        end if
+    end subroutine require
 
     subroutine config_print(cfg)
         type(config_t), intent(in) :: cfg
