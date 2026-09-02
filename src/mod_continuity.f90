@@ -18,9 +18,12 @@ module mod_continuity
 
 contains
 
-    subroutine solve_volume_fraction(liq, gas, sol, alpha_old, m, cfg)
+    subroutine solve_volume_fraction(liq, gas, sol, alpha_slag, alpha_old, m, cfg)
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
+        ! Fracción de escoria: participa en la restricción de volumen
+        ! (antes el gas se calculaba como 1-as-al ignorando la escoria)
+        real(dp), intent(in)         :: alpha_slag(-1:,-1:,-1:)
         ! alpha del PASO TEMPORAL anterior (liq_old%alpha). El término
         ! transitorio debe anclarse a él: usar el iterado actual aplicaría la
         ! fuente de fusión mdot una vez POR ITERACIÓN EXTERNA (masa líquida
@@ -112,12 +115,14 @@ contains
                     end if
 
                     a_pre = liq%alpha(i,j,k)
-                    liq%alpha(i,j,k) = max(0.0_dp, min(1.0_dp - sol%alpha_s(i,j,k), &
-                                                         liq%alpha(i,j,k)))
+                    liq%alpha(i,j,k) = max(0.0_dp, &
+                        min(1.0_dp - sol%alpha_s(i,j,k) - alpha_slag(i,j,k), &
+                            liq%alpha(i,j,k)))
                     ! Auditoría: masa neta quitada/añadida por el clipping
                     call audit_add(AUD_ALPHA_CLIP_MASS, &
                         (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k))
-                    gas%alpha(i,j,k) = 1.0_dp - sol%alpha_s(i,j,k) - liq%alpha(i,j,k)
+                    gas%alpha(i,j,k) = 1.0_dp - sol%alpha_s(i,j,k) &
+                                       - alpha_slag(i,j,k) - liq%alpha(i,j,k)
                     gas%alpha(i,j,k) = max(0.0_dp, gas%alpha(i,j,k))
                 end do
             end do

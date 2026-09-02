@@ -24,10 +24,11 @@ module mod_multiphase
 
 contains
 
-    subroutine multiphase_iteration(liq, gas, liq_old, gas_old, sol, sh, m, cfg, &
-                                     drag_coef, conv)
+    subroutine multiphase_iteration(liq, gas, liq_old, gas_old, sol, slag, &
+                                     sh, m, cfg, drag_coef, conv)
         type(phase_t), intent(inout) :: liq, gas, liq_old, gas_old
         type(solid_t), intent(inout) :: sol
+        type(slag_t),  intent(in)    :: slag
         type(shared_t), intent(inout) :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
@@ -74,7 +75,8 @@ contains
 
         ! Volume fraction update
         if (cfg%solve_multiphase) then
-            call solve_volume_fraction(liq, gas, sol, liq_old%alpha, m, cfg)
+            call solve_volume_fraction(liq, gas, sol, slag%alpha_sl, &
+                                       liq_old%alpha, m, cfg)
             ! Exchange after volume fraction update
             call phase_exchange_halos(liq, m)
             call phase_exchange_halos(gas, m)

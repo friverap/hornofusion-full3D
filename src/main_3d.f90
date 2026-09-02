@@ -273,8 +273,8 @@ program eaf_3d_simulator
 
             ! Multiphase SIMPLE iteration
             if (cfg%solve_flow .and. cfg%solve_multiphase) then
-                call multiphase_iteration(liq, gas, liq_old, gas_old, sol, sh, &
-                                          mesh, cfg, drag_coef, conv)
+                call multiphase_iteration(liq, gas, liq_old, gas_old, sol, slag, &
+                                          sh, mesh, cfg, drag_coef, conv)
             else if (cfg%solve_flow) then
                 call solve_momentum_3d(liq, liq_old, sh, mesh, cfg, liq%alpha, &
                                        drag_coef, .false., &
@@ -318,7 +318,7 @@ program eaf_3d_simulator
 
         ! Solid phase update (melting, collapse, interphase heat transfer)
         if (cfg%solve_melting) then
-            call update_solid_phase(sol, liq, gas, mesh, cfg, cfg%dt)
+            call update_solid_phase(sol, liq, gas, slag, mesh, cfg, cfg%dt)
         end if
 
         ! Slag layer update (buoyancy + energy exchange)
