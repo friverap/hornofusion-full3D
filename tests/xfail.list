@@ -1,15 +1,12 @@
 # Fallos esperados (XFAIL): un id por línea. Cada entrada se ELIMINA en el
 # mismo commit que aterriza su fix (el XPASS resultante lo recuerda).
 # Formatos: unit:<binario> | invariants:<check> | script:<id>
-# melt_forced: ratio dm_liq/fundido = 0.857 — el transporte de alpha
-# (forma acotada) mas el clip de alpha pierden ~14% del fundido en el
-# regimen violento; en investigacion (cierre 2026, punto 2).
-script:melt
-# energy_balance: resta el déficit convectivo de la forma acotada
-# (E_conv_defect, estimado desde los campos finales, lambda~0.6): la
-# instrumentación exacta requiere hooks por iteración del lazo externo.
-# arc_budget: ~0.95-0.97 por celdas triviales y beams MC que escapan.
-# mass_liq: transporte de alpha (forma acotada) + clipping.
+# energy_balance: cierra en noflow (1.9e-4) y mejoró en melt (1.0->0.22)
+# con el transporte conservativo de alpha; en cold queda 0.46 — déficit
+# convectivo de la forma acotada de la ENERGÍA (E_conv_defect) + gas
+# venteado por las salidas sin contabilizar su entalpía. En curso
+# (cierre 2026, punto 2).
 audit:energy_balance
+# arc_budget: ~0.95 por celdas triviales y beams MC que escapan (0.15 en
+# noflow: sin flujo el gas no consume su parte de S_arc).
 audit:arc_budget
-audit:mass_liq

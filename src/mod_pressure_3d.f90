@@ -66,6 +66,10 @@ module mod_pressure_3d
     ! elimina.
     real(dp), parameter :: P0_THERMO = 101325.0_dp
 
+    ! Velocidad del sonido del acero líquido [m/s] (compresibilidad
+    ! acústica de celdas líquido-puras en la diagonal del Poisson)
+    real(dp), parameter :: C_SOUND_LIQ = 4000.0_dp
+
 contains
 
     subroutine solve_pressure_correction(liq, gas, gas_T_old, sh, m, cfg, &
@@ -159,6 +163,13 @@ contains
         if (GAS_IN_POISSON .and. cfg%solve_multiphase) &
             call add_phase_contribution(gas)
 
+        ! NOTA (cierre 2026): NO añadir aquí la fuente de masa de fusión
+        ! del líquido (Su += mdot - rho*dalpha/dt). Se probó: realimenta
+        ! p con ganancia >1 (p crecía x50/paso hasta 1e35 en melt_forced,
+        ! con y sin cap). La conservación fusión->alpha->inventario ya es
+        ! EXACTA vía el transporte explícito de alpha (ratio 1.0000
+        ! medido); el gas desplazado por el fundido lo absorbe la
+        ! restricción de volumen + el término acústico.
         ! Compresibilidad del gas ideal (low-Mach):
         !   Su -= alpha_g*(rho(T_it)-rho(T_old))/dt*V   (expansión => Su
         ! sube => pp empuja flujo de salida). ACOTADA a COMP_SRC_CAP de la
@@ -208,6 +219,14 @@ contains
                             aP(i,j,k) = aP(i,j,k) + gas%alpha(i,j,k) * &
                                 gas%rho(i,j,k) / P0_THERMO * &
                                 m%vol(i,j,k) / cfg%dt
+                        end if
+                        ! Compresibilidad acústica del LÍQUIDO (física,
+                        ! c~4000 m/s): diagonal para celdas líquido-puras
+                        ! (sin gas no hay término acústico del gas y la
+                        ! compliance sola deja el nivel de p sin física)
+                        if (liq%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF) then
+                            aP(i,j,k) = aP(i,j,k) + liq%alpha(i,j,k) * &
+                                m%vol(i,j,k) / (C_SOUND_LIQ**2 * cfg%dt)
                         end if
                     end if
                 end do

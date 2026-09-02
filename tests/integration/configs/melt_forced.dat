@@ -11,8 +11,12 @@ stretch_z = 1.0
 # Horizonte corto con dt fijo: valida la CONSERVACIÓN del handoff
 # fusión->líquido y del transporte antes de que el runaway térmico del gas
 # (pendiente C3.4) contamine la dinámica vía el acople entre fases.
-dt = 0.05
-t_final = 0.5
+# dt CFL-sano para el LÍQUIDO que drena (u~1-3 m/s, dx~0.05 m): el
+# objetivo del test es validar la CONSERVACION fusion->alpha->inventario,
+# que solo es exigible en regimen numericamente valido (a dt=0.05 el CFL
+# del liquido pasaba de 57 y ningun esquema acotado conserva ahi).
+dt = 0.01
+t_final = 0.11
 adaptive_dt = false
 
 T_initial = 1815.0

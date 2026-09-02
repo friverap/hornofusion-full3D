@@ -279,6 +279,12 @@ program eaf_3d_simulator
         ! OUTER ITERATION LOOP (SIMPLE)
         !---------------------------------------------------------------
         
+        ! Fusión + colapso ANTES del SIMPLE; la transferencia interfase va
+        ! DESPUÉS de los solves de energía (ver notas en mod_solid_phase)
+        if (cfg%solve_melting) then
+            call update_solid_premelt(sol, liq, gas, slag, mesh, cfg, cfg%dt)
+        end if
+
         ! Initialize residuals to zero
         conv%res_ur = 0.0_dp
         conv%res_uth = 0.0_dp
@@ -349,9 +355,10 @@ program eaf_3d_simulator
             if (conv%converged) exit
         end do
 
-        ! Solid phase update (melting, collapse, interphase heat transfer)
+
+        ! Transferencia interfase (tras los solves de energía)
         if (cfg%solve_melting) then
-            call update_solid_phase(sol, liq, gas, slag, mesh, cfg, cfg%dt)
+            call update_solid_postenergy(sol, liq, gas, mesh, cfg)
         end if
 
         ! Slag layer update (buoyancy + energy exchange)

@@ -15,7 +15,12 @@ module mod_solid_phase
 
 contains
 
-    subroutine update_solid_phase(sol, liq, gas, slag, m, cfg, dt)
+    ! Fusión + colapso, ANTES del lazo SIMPLE (cierre 2026, punto 2): la
+    ! ecuación de alpha_l y la fuente de masa de la energía usan el mdot de
+    ! ESTE paso (antes el líquido recibía el fundido con un paso de
+    ! retraso: dm del último paso —el mayor, con fusión en rampa— nunca
+    ! estaba en el inventario del snapshot; ratio medido 0.857).
+    subroutine update_solid_premelt(sol, liq, gas, slag, m, cfg, dt)
         type(solid_t), intent(inout) :: sol
         type(phase_t), intent(inout) :: liq, gas
         type(slag_t),  intent(in)    :: slag
@@ -23,13 +28,7 @@ contains
         type(config_t), intent(in)   :: cfg
         real(dp), intent(in)         :: dt
 
-        ! Interphase heat transfer (heats solid, cools fluids)
-        call compute_interphase_heat(liq, gas, sol, m, cfg)
-
-        ! Melting / re-solidification
         call compute_melting(sol, liq, m, cfg, dt)
-
-        ! Scrap collapse
         call apply_scrap_collapse(sol, m, cfg)
 
         ! Restricción de volumen (C1.9, hallazgo 3.22b): fusión y colapso
@@ -37,7 +36,21 @@ contains
         ! en celdas vaciadas. El gas absorbe/cede el volumen sobrante.
         call enforce_volume_constraint(liq, gas, sol, slag, m)
 
-    end subroutine update_solid_phase
+    end subroutine update_solid_premelt
+
+    ! Transferencia interfase, DESPUÉS de los solves de energía: modifica
+    ! liq%T/gas%T directamente; correrla antes duplicaría el calor (el
+    ! sólido lo recibe pero la energía re-resuelve T desde liq_old sin
+    ! saber que el fluido lo cedió — medido: fusión 10x espuria).
+    subroutine update_solid_postenergy(sol, liq, gas, m, cfg)
+        type(solid_t), intent(inout) :: sol
+        type(phase_t), intent(inout) :: liq, gas
+        type(mesh_t), intent(in)     :: m
+        type(config_t), intent(in)   :: cfg
+
+        call compute_interphase_heat(liq, gas, sol, m, cfg)
+
+    end subroutine update_solid_postenergy
 
     !---------------------------------------------------------------------------
     subroutine enforce_volume_constraint(liq, gas, sol, slag, m)
