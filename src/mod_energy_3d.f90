@@ -196,11 +196,8 @@ contains
         ! Solve with MPI-aware TDMA
         call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, ph%T, m, cfg%max_inner_mom)
 
-        ! Under-relaxation (interior cells only: halo values were just received
-        ! from neighbor ranks and must not be blended with stale T_old halos)
-        ph%T(istart:iend, jstart:jend, kstart:kend) = &
-            cfg%alpha_T * ph%T(istart:iend, jstart:jend, kstart:kend) + &
-            (1.0_dp - cfg%alpha_T) * T_old(istart:iend, jstart:jend, kstart:kend)
+        ! (C2.1: sub-relajación en el lazo externo contra el iterado
+        ! anterior — ver multiphase_iteration/relax_field)
 
         ! Residual
         residual = compute_residual_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, ph%T, m)

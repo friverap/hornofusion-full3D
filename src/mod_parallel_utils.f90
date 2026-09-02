@@ -14,6 +14,27 @@ contains
     !---------------------------------------------------------------------------
     ! Get loop bounds for a given mesh (parallel or serial)
     !---------------------------------------------------------------------------
+    !---------------------------------------------------------------------------
+    ! Sub-relajación explícita contra el ITERADO EXTERNO anterior (C2.1).
+    ! Relajar contra el paso temporal anterior (lo que hacían los solvers)
+    ! hace que el punto fijo del lazo SIMPLE no satisfaga la ecuación
+    ! discreta: phi* = a*S(phi*) + (1-a)*phi_old solo si phi* = phi_old
+    ! (hallazgo 3.15). Solo celdas interiores (los halos vienen de vecinos).
+    !---------------------------------------------------------------------------
+    subroutine relax_field(phi, prev, alpha, m)
+        real(dp), intent(inout) :: phi(-1:,-1:,-1:)
+        real(dp), intent(in)    :: prev(-1:,-1:,-1:)
+        real(dp), intent(in)    :: alpha
+        type(mesh_t), intent(in) :: m
+
+        integer :: istart, iend, jstart, jend, kstart, kend
+
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        phi(istart:iend, jstart:jend, kstart:kend) = &
+            alpha * phi(istart:iend, jstart:jend, kstart:kend) + &
+            (1.0_dp - alpha) * prev(istart:iend, jstart:jend, kstart:kend)
+    end subroutine relax_field
+
     subroutine get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         type(mesh_t), intent(in) :: m
         integer, intent(out) :: istart, iend, jstart, jend, kstart, kend

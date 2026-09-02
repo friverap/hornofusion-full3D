@@ -39,6 +39,21 @@ contains
         real(dp) :: res_ur_g, res_uth_g, res_uz_g
         real(dp) :: res_cont, res_energy_l, res_energy_g
 
+        ! Copias del ITERADO externo anterior para la sub-relajación (C2.1).
+        ! Workspace persistente (save): se realoca solo si cambia el tamaño.
+        real(dp), allocatable, save :: p_lur(:,:,:), p_lth(:,:,:), p_luz(:,:,:)
+        real(dp), allocatable, save :: p_gur(:,:,:), p_gth(:,:,:), p_guz(:,:,:)
+        real(dp), allocatable, save :: p_lT(:,:,:), p_gT(:,:,:)
+
+        if (.not. allocated(p_lur)) then
+            allocate(p_lur, mold=liq%ur); allocate(p_lth, mold=liq%uth)
+            allocate(p_luz, mold=liq%uz); allocate(p_lT, mold=liq%T)
+            allocate(p_gur, mold=gas%ur); allocate(p_gth, mold=gas%uth)
+            allocate(p_guz, mold=gas%uz); allocate(p_gT, mold=gas%T)
+        end if
+        p_lur = liq%ur; p_lth = liq%uth; p_luz = liq%uz; p_lT = liq%T
+        p_gur = gas%ur; p_gth = gas%uth; p_guz = gas%uz; p_gT = gas%T
+
         ! Exchange halos before starting iteration
         call phase_exchange_halos(liq, m)
         call phase_exchange_halos(gas, m)
@@ -51,6 +66,9 @@ contains
         ! Liquid momentum
         call solve_momentum_3d(liq, liq_old, sh, m, cfg, liq%alpha, &
                                drag_coef, .false., res_ur_l, res_uth_l, res_uz_l)
+        call relax_field(liq%ur,  p_lur, cfg%alpha_u, m)
+        call relax_field(liq%uth, p_lth, cfg%alpha_u, m)
+        call relax_field(liq%uz,  p_luz, cfg%alpha_u, m)
 
         ! Exchange halos after momentum
         call phase_exchange_halos(liq, m)
@@ -62,7 +80,10 @@ contains
         ! actúa sobre la velocidad propia de cada fase.)
         call solve_momentum_3d(gas, gas_old, sh, m, cfg, gas%alpha, &
                                drag_coef, .true., res_ur_g, res_uth_g, res_uz_g)
-        
+        call relax_field(gas%ur,  p_gur, cfg%alpha_u, m)
+        call relax_field(gas%uth, p_gth, cfg%alpha_u, m)
+        call relax_field(gas%uz,  p_guz, cfg%alpha_u, m)
+
         ! Exchange halos after momentum
         call phase_exchange_halos(gas, m)
 
@@ -87,11 +108,13 @@ contains
             call solve_energy_3d(liq, liq_old%T, sh, m, cfg, liq%alpha, &
                                  gas%alpha, sol%mdot, sol%T_s, &
                                  .false., res_energy_l)
+            call relax_field(liq%T, p_lT, cfg%alpha_T, m)
             call phase_exchange_halos(liq, m)
 
             call solve_energy_3d(gas, gas_old%T, sh, m, cfg, gas%alpha, &
                                  liq%alpha, sol%mdot, sol%T_s, &
                                  .true., res_energy_g)
+            call relax_field(gas%T, p_gT, cfg%alpha_T, m)
             call phase_exchange_halos(gas, m)
         else
             res_energy_l = 0.0_dp

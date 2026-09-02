@@ -1,0 +1,34 @@
+# Test de convergencia del lazo externo (C2.1, hallazgo 3.15): con la
+# sub-relajación contra el iterado externo, el punto fijo SÍ satisface la
+# ecuación discreta y el lazo debe converger por debajo de las tolerancias
+# en menos de max_outer iteraciones (check_outer.py). Con la relajación
+# contra el paso temporal anterior, el residual quedaba clavado y siempre
+# se agotaban las max_outer.
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+
+dt = 0.5
+t_final = 5.0
+adaptive_dt = false
+
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = false
+solve_radiation = false
+solve_chemistry = false
+solve_arc = true
+solve_multiphase = true
+
+max_outer = 30
+max_inner_mom = 3
+max_inner_pres = 20
+tol_energy = 1e-3
+tol_cont = 1e-4
+tol_mom = 1e-4
+
+output_freq = 10
+monitor_freq = 1

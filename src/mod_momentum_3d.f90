@@ -248,11 +248,9 @@ contains
         ! Solve with MPI-aware TDMA
         call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, vel, m, cfg%max_inner_mom)
 
-        ! Under-relaxation (interior cells only: halo values were just received
-        ! from neighbor ranks and must not be blended with stale vel_old halos)
-        vel(istart:iend, jstart:jend, kstart:kend) = &
-            cfg%alpha_u * vel(istart:iend, jstart:jend, kstart:kend) + &
-            (1.0_dp - cfg%alpha_u) * vel_old(istart:iend, jstart:jend, kstart:kend)
+        ! (C2.1: la sub-relajación se hace en el LAZO EXTERNO contra el
+        ! iterado anterior — ver multiphase_iteration/relax_field. Relajar
+        ! aquí contra vel_old del paso temporal sesgaba el punto fijo.)
 
         ! Store aP for Rhie-Chow
         select case (comp)

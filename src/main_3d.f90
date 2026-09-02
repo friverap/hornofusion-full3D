@@ -67,6 +67,11 @@ program eaf_3d_simulator
     ! Coeficiente de drag de Ergun (implícito en aP; C1.4)
     real(dp), allocatable :: drag_coef(:,:,:)
 
+    ! Iterado externo anterior para sub-relajación en las ramas
+    ! no-multifase (C2.1; la rama multifase lo maneja multiphase_iteration)
+    real(dp), allocatable :: prev_ur(:,:,:), prev_uth(:,:,:)
+    real(dp), allocatable :: prev_uz(:,:,:), prev_T(:,:,:)
+
     ! Species transport old-timestep arrays
     real(dp), allocatable :: Y_CO_old(:,:,:), Y_CO2_old(:,:,:)
     real(dp) :: res_Y_CO, res_Y_CO2
@@ -120,6 +125,8 @@ program eaf_3d_simulator
 
     allocate(drag_coef, mold=liq%ur)
     drag_coef = 0.0_dp
+    allocate(prev_ur, mold=liq%ur); allocate(prev_uth, mold=liq%uth)
+    allocate(prev_uz, mold=liq%uz); allocate(prev_T, mold=liq%T)
 
     allocate(Y_CO_old,  mold=sh%Y_CO);  Y_CO_old  = 0.0_dp
     allocate(Y_CO2_old, mold=sh%Y_CO2); Y_CO2_old = 0.0_dp
@@ -276,9 +283,14 @@ program eaf_3d_simulator
                 call multiphase_iteration(liq, gas, liq_old, gas_old, sol, slag, &
                                           sh, mesh, cfg, drag_coef, conv)
             else if (cfg%solve_flow) then
+                prev_ur = liq%ur; prev_uth = liq%uth
+                prev_uz = liq%uz; prev_T = liq%T
                 call solve_momentum_3d(liq, liq_old, sh, mesh, cfg, liq%alpha, &
                                        drag_coef, .false., &
                                        conv%res_ur, conv%res_uth, conv%res_uz)
+                call relax_field(liq%ur,  prev_ur,  cfg%alpha_u, mesh)
+                call relax_field(liq%uth, prev_uth, cfg%alpha_u, mesh)
+                call relax_field(liq%uz,  prev_uz,  cfg%alpha_u, mesh)
                 ! Refresh halos (incl. aP_*) before Rhie-Chow in the pressure solve
                 call phase_exchange_halos(liq, mesh)
                 call solve_pressure_correction(liq, sh, mesh, cfg, liq%alpha, conv%res_cont)
@@ -286,12 +298,15 @@ program eaf_3d_simulator
                     call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, &
                                          gas%alpha, sol%mdot, sol%T_s, &
                                          .false., conv%res_energy)
+                    call relax_field(liq%T, prev_T, cfg%alpha_T, mesh)
                 end if
                 call update_properties(liq, gas, sh, mesh, cfg)
             else if (cfg%solve_energy) then
+                prev_T = liq%T
                 call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, &
                                      gas%alpha, sol%mdot, sol%T_s, &
                                      .false., conv%res_energy)
+                call relax_field(liq%T, prev_T, cfg%alpha_T, mesh)
                 conv%res_cont = 0.0_dp
             else
                 ! No physics enabled - mark as converged immediately

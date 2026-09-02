@@ -1,0 +1,928 @@
+{
+ "runs": {
+  "cold_10step_n1": {
+   "fields": {
+    "F_lorentz_r": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "F_lorentz_th": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "S_CO_src": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "S_arc": {
+     "max": 202119631.7364308,
+     "mean": 785977.8326125871,
+     "min": 0.0
+    },
+    "S_chem": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "T_gas": {
+     "max": 3243457.3845664915,
+     "mean": 116695.92850574228,
+     "min": 299.99953145843597
+    },
+    "T_liquid": {
+     "max": 300.0,
+     "mean": 300.0,
+     "min": 300.0
+    },
+    "T_slag": {
+     "max": 300.0,
+     "mean": 300.0,
+     "min": 300.0
+    },
+    "T_solid": {
+     "max": 321.53531254311474,
+     "mean": 301.1308499659299,
+     "min": 299.9995403483194
+    },
+    "Y_CO": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "Y_CO2": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_gas": {
+     "max": 1.0,
+     "mean": 0.4947916666666667,
+     "min": 0.0
+    },
+    "alpha_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_slag": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_solid": {
+     "max": 0.5,
+     "mean": 0.4375,
+     "min": 0.0
+    },
+    "epsilon": {
+     "max": 0.001,
+     "mean": 6.770861988781244e-05,
+     "min": 3.0736569824670396e-10
+    },
+    "mass_solid": {
+     "max": 316.8126686268252,
+     "mean": 145.35982771244485,
+     "min": 0.0
+    },
+    "pressure": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "tke": {
+     "max": 0.0001,
+     "mean": 6.771851855241091e-06,
+     "min": 1.0924927725666694e-09
+    },
+    "velocity_r_gas": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_r_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_th_gas": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_th_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_z_gas": {
+     "max": 0.0,
+     "mean": -0.20028230917241138,
+     "min": -13.210156692157538
+    },
+    "velocity_z_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    }
+   },
+   "final_step": 10,
+   "final_time": 5.0,
+   "n_snapshots": 3
+  },
+  "cold_10step_n4": {
+   "fields": {
+    "F_lorentz_r": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "F_lorentz_th": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "S_CO_src": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "S_arc": {
+     "max": 202119631.7364308,
+     "mean": 785977.8326125871,
+     "min": 0.0
+    },
+    "S_chem": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "T_gas": {
+     "max": 2869497.9167252467,
+     "mean": 100600.64224708239,
+     "min": 299.9995274954888
+    },
+    "T_liquid": {
+     "max": 300.0,
+     "mean": 300.0,
+     "min": 300.0
+    },
+    "T_slag": {
+     "max": 300.0,
+     "mean": 300.0,
+     "min": 300.0
+    },
+    "T_solid": {
+     "max": 321.53531159118165,
+     "mean": 301.12632710001475,
+     "min": 299.99953333381796
+    },
+    "Y_CO": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "Y_CO2": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_gas": {
+     "max": 1.0,
+     "mean": 0.4947916666666667,
+     "min": 0.0
+    },
+    "alpha_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_slag": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_solid": {
+     "max": 0.5,
+     "mean": 0.4375,
+     "min": 0.0
+    },
+    "epsilon": {
+     "max": 0.001,
+     "mean": 6.770861988781244e-05,
+     "min": 3.0736569824670396e-10
+    },
+    "mass_solid": {
+     "max": 316.8126686268252,
+     "mean": 145.35982771244485,
+     "min": 0.0
+    },
+    "pressure": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "tke": {
+     "max": 0.0001,
+     "mean": 6.771851855241091e-06,
+     "min": 1.0924927725666694e-09
+    },
+    "velocity_r_gas": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_r_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_th_gas": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_th_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_z_gas": {
+     "max": 0.0,
+     "mean": -0.1926062891910223,
+     "min": -12.49871204610281
+    },
+    "velocity_z_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    }
+   },
+   "final_step": 10,
+   "final_time": 5.0,
+   "n_snapshots": 3
+  },
+  "cold_10step_n8": {
+   "fields": {
+    "F_lorentz_r": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "F_lorentz_th": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "S_CO_src": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "S_arc": {
+     "max": 202119631.7364308,
+     "mean": 785977.8326125871,
+     "min": 0.0
+    },
+    "S_chem": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "T_gas": {
+     "max": 2448381.849015174,
+     "mean": 81785.07945507938,
+     "min": 299.9995204599817
+    },
+    "T_liquid": {
+     "max": 300.0,
+     "mean": 300.0,
+     "min": 300.0
+    },
+    "T_slag": {
+     "max": 300.0,
+     "mean": 300.0,
+     "min": 300.0
+    },
+    "T_solid": {
+     "max": 321.5353102000243,
+     "mean": 301.11992747802424,
+     "min": 299.99951529559087
+    },
+    "Y_CO": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "Y_CO2": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_gas": {
+     "max": 1.0,
+     "mean": 0.4947916666666667,
+     "min": 0.0
+    },
+    "alpha_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_slag": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_solid": {
+     "max": 0.5,
+     "mean": 0.4375,
+     "min": 0.0
+    },
+    "epsilon": {
+     "max": 0.001,
+     "mean": 6.770861988781244e-05,
+     "min": 3.0736569824670396e-10
+    },
+    "mass_solid": {
+     "max": 316.8126686268252,
+     "mean": 145.35982771244485,
+     "min": 0.0
+    },
+    "pressure": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "tke": {
+     "max": 0.0001,
+     "mean": 6.771851855241091e-06,
+     "min": 1.0924927725666694e-09
+    },
+    "velocity_r_gas": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_r_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_th_gas": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_th_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_z_gas": {
+     "max": 0.0,
+     "mean": -0.18279702899658082,
+     "min": -11.662826650531308
+    },
+    "velocity_z_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    }
+   },
+   "final_step": 10,
+   "final_time": 5.0,
+   "n_snapshots": 3
+  },
+  "melt_forced_n8": {
+   "fields": {
+    "F_lorentz_r": {
+     "max": 0.015377101086636414,
+     "mean": 7.566985194054338e-06,
+     "min": -0.009845476228019106
+    },
+    "F_lorentz_th": {
+     "max": 0.004646974924982191,
+     "mean": -1.3975670949652515e-05,
+     "min": -0.013303627788922138
+    },
+    "S_CO_src": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "S_arc": {
+     "max": 44437502.490934916,
+     "mean": 762306.0770572096,
+     "min": 0.0
+    },
+    "S_chem": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "T_gas": {
+     "max": 27386.954377849517,
+     "mean": 1656.4669926922268,
+     "min": 0.0026078851120992954
+    },
+    "T_liquid": {
+     "max": 1837.8223882224365,
+     "mean": 1593.7133542116349,
+     "min": 41.590519642220784
+    },
+    "T_slag": {
+     "max": 1815.0,
+     "mean": 1815.0,
+     "min": 1815.0
+    },
+    "T_solid": {
+     "max": 2473.273134068172,
+     "mean": 1787.5100560706476,
+     "min": 0.0042496595454260275
+    },
+    "Y_CO": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "Y_CO2": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_gas": {
+     "max": 1.0,
+     "mean": 0.5749600370860299,
+     "min": 0.0
+    },
+    "alpha_liquid": {
+     "max": 0.0017901409225332431,
+     "mean": 4.929681024624431e-05,
+     "min": 0.0
+    },
+    "alpha_slag": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_solid": {
+     "max": 0.4522512874557978,
+     "mean": 0.35728233277039045,
+     "min": 0.0
+    },
+    "epsilon": {
+     "max": 0.001,
+     "mean": 0.001,
+     "min": 0.001
+    },
+    "mass_solid": {
+     "max": 280.76155024793496,
+     "mean": 119.85302093399592,
+     "min": 0.0
+    },
+    "pressure": {
+     "max": 1.2622900860550914e+21,
+     "mean": 2.7657951714151965e+17,
+     "min": -5.604262163819734e+16
+    },
+    "tke": {
+     "max": 0.0001,
+     "mean": 0.00010000000000000002,
+     "min": 0.0001
+    },
+    "velocity_r_gas": {
+     "max": 4191713804.0216284,
+     "mean": -179223757.0887093,
+     "min": -37565537652.25837
+    },
+    "velocity_r_liquid": {
+     "max": 405304323170950.44,
+     "mean": -26644141399.027958,
+     "min": -471019777579451.44
+    },
+    "velocity_th_gas": {
+     "max": 2312961362.8715496,
+     "mean": -867469.3622147259,
+     "min": -3825820568.946397
+    },
+    "velocity_th_liquid": {
+     "max": 215994468582642.2,
+     "mean": 134020114582.8349,
+     "min": -25454705766206.953
+    },
+    "velocity_z_gas": {
+     "max": 4526671.886243584,
+     "mean": 1796.3724552012882,
+     "min": -6083688.197641928
+    },
+    "velocity_z_liquid": {
+     "max": 428123886860357.1,
+     "mean": 136083954072.34627,
+     "min": -24431070197087.336
+    }
+   },
+   "final_step": 20,
+   "final_time": 10.0,
+   "n_snapshots": 5
+  },
+  "noflow_energy_n1": {
+   "fields": {
+    "F_lorentz_r": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "F_lorentz_th": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "S_CO_src": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "S_arc": {
+     "max": 44437502.490934916,
+     "mean": 729175.2506860634,
+     "min": 0.0
+    },
+    "S_chem": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "T_gas": {
+     "max": 330.7044355431164,
+     "mean": 301.41084804462844,
+     "min": 300.0
+    },
+    "T_liquid": {
+     "max": 300.0,
+     "mean": 300.0,
+     "min": 300.0
+    },
+    "T_slag": {
+     "max": 300.0,
+     "mean": 300.0,
+     "min": 300.0
+    },
+    "T_solid": {
+     "max": 340.8539323382875,
+     "mean": 301.8055859350385,
+     "min": 299.99999999999994
+    },
+    "Y_CO": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "Y_CO2": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_gas": {
+     "max": 1.0,
+     "mean": 0.4947916666666667,
+     "min": 0.0
+    },
+    "alpha_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_slag": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_solid": {
+     "max": 0.5,
+     "mean": 0.4375,
+     "min": 0.0
+    },
+    "epsilon": {
+     "max": 0.001,
+     "mean": 0.001,
+     "min": 0.001
+    },
+    "mass_solid": {
+     "max": 316.8126686268252,
+     "mean": 145.35982771244485,
+     "min": 0.0
+    },
+    "pressure": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "tke": {
+     "max": 0.0001,
+     "mean": 0.00010000000000000002,
+     "min": 0.0001
+    },
+    "velocity_r_gas": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_r_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_th_gas": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_th_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_z_gas": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_z_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    }
+   },
+   "final_step": 20,
+   "final_time": 10.0,
+   "n_snapshots": 5
+  },
+  "outer_conv_n8": {
+   "fields": {
+    "F_lorentz_r": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "F_lorentz_th": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "S_CO_src": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "S_arc": {
+     "max": 202119631.7364308,
+     "mean": 785977.8326125871,
+     "min": 0.0
+    },
+    "S_chem": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "T_gas": {
+     "max": 6431916.477402368,
+     "mean": 262063.70070951583,
+     "min": 299.9999472967469
+    },
+    "T_liquid": {
+     "max": 300.0,
+     "mean": 300.0,
+     "min": 300.0
+    },
+    "T_slag": {
+     "max": 300.0,
+     "mean": 300.0,
+     "min": 300.0
+    },
+    "T_solid": {
+     "max": 321.5353153415389,
+     "mean": 301.301696126599,
+     "min": 299.9999403258316
+    },
+    "Y_CO": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "Y_CO2": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_gas": {
+     "max": 1.0,
+     "mean": 0.4947916666666667,
+     "min": 0.0
+    },
+    "alpha_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_slag": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_solid": {
+     "max": 0.5,
+     "mean": 0.4375,
+     "min": 0.0
+    },
+    "epsilon": {
+     "max": 0.001,
+     "mean": 0.001,
+     "min": 0.001
+    },
+    "mass_solid": {
+     "max": 316.8126686268252,
+     "mean": 145.35982771244485,
+     "min": 0.0
+    },
+    "pressure": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "tke": {
+     "max": 0.0001,
+     "mean": 0.00010000000000000002,
+     "min": 0.0001
+    },
+    "velocity_r_gas": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_r_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_th_gas": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_th_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_z_gas": {
+     "max": 0.0,
+     "mean": -0.2573560317959458,
+     "min": -19.932895176129552
+    },
+    "velocity_z_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    }
+   },
+   "final_step": 10,
+   "final_time": 5.0,
+   "n_snapshots": 2
+  },
+  "symmetry_3elec_n6": {
+   "fields": {
+    "F_lorentz_r": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "F_lorentz_th": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "S_CO_src": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "S_arc": {
+     "max": 74257487.03433153,
+     "mean": 765149.4644325351,
+     "min": 0.0
+    },
+    "S_chem": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "T_gas": {
+     "max": 2445828.699200514,
+     "mean": 85689.86247267433,
+     "min": 299.9995213630367
+    },
+    "T_liquid": {
+     "max": 300.0,
+     "mean": 300.0,
+     "min": 300.0
+    },
+    "T_slag": {
+     "max": 300.0,
+     "mean": 300.0,
+     "min": 300.0
+    },
+    "T_solid": {
+     "max": 323.0901270943008,
+     "mean": 301.33206804705605,
+     "min": 299.9995210948559
+    },
+    "Y_CO": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "Y_CO2": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_gas": {
+     "max": 1.0,
+     "mean": 0.4947916666666667,
+     "min": 0.0
+    },
+    "alpha_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_slag": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "alpha_solid": {
+     "max": 0.5,
+     "mean": 0.4375,
+     "min": 0.0
+    },
+    "epsilon": {
+     "max": 0.001,
+     "mean": 6.770861988781244e-05,
+     "min": 3.0736569824670396e-10
+    },
+    "mass_solid": {
+     "max": 316.8126686268252,
+     "mean": 145.35982771244485,
+     "min": 0.0
+    },
+    "pressure": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "tke": {
+     "max": 0.0001,
+     "mean": 6.771851855241091e-06,
+     "min": 1.0924927725666694e-09
+    },
+    "velocity_r_gas": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_r_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_th_gas": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_th_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    },
+    "velocity_z_gas": {
+     "max": 0.0,
+     "mean": -0.18448958743871902,
+     "min": -11.649064120107091
+    },
+    "velocity_z_liquid": {
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0
+    }
+   },
+   "final_step": 10,
+   "final_time": 5.0,
+   "n_snapshots": 3
+  }
+ }
+}

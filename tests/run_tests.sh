@@ -119,6 +119,7 @@ full | rebaseline)
     run_case melt_forced 8
     run_case noflow_energy 1
     run_case symmetry_3elec 6
+    run_case outer_conv 8
 
     for d in "$OUT"/cold_10step_n*; do
         check_invariants "$d" cold_10step
@@ -138,6 +139,8 @@ full | rebaseline)
         $PY $INT/check_symmetry.py "$OUT/symmetry_3elec_n6"
     run_script "melt" \
         $PY $INT/check_melt.py "$OUT/melt_forced_n8" --config "$CFG/melt_forced.dat"
+    run_script "outer_convergence" \
+        $PY $INT/check_outer.py "$OUT/outer_conv_n8" --max-outer 30
 
     if [ "$MODE" = "rebaseline" ]; then
         $PY $INT/metrics_snapshot.py "$OUT" --mode rebaseline \
