@@ -1,0 +1,31 @@
+# Test de fusión forzada: la chatarra se carga a 1815 K (> T_liquidus = 1809 K),
+# de modo que mdot > 0 desde el primer paso. Valida la cadena
+# fusión -> fracción volumétrica -> masa líquida (fixes 3.2 / 3.3).
+# Invariante objetivo: dm_liquido = -dm_solido (check_melt.py).
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+
+dt = 0.5
+t_final = 10.0
+adaptive_dt = false
+
+T_initial = 1815.0
+
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = false
+solve_radiation = false
+solve_chemistry = false
+solve_arc = true
+solve_multiphase = true
+
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 20
+
+output_freq = 5
+monitor_freq = 5

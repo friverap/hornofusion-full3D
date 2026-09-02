@@ -1,0 +1,31 @@
+# Test de simetría azimutal: carga uniforme + 3 electrodos a 120 grados.
+# Con ntheta múltiplo de 3, rotar la solución ntheta/3 celdas en theta debe
+# dejarla invariante (check_symmetry.py). Detecta la corrupción de métrica
+# en la costura theta=0 (hallazgo 3.7) y bugs de indexación azimutal.
+# NOTA: requiere n_beams = 0 (el MC nunca es simétrico); la clave se añade
+# al parser en C0.3.
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+
+dt = 0.5
+t_final = 5.0
+adaptive_dt = false
+
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = true
+solve_radiation = false
+solve_chemistry = false
+solve_arc = true
+solve_multiphase = true
+
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 20
+
+output_freq = 5
+monitor_freq = 5

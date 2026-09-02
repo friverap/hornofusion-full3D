@@ -123,5 +123,35 @@ $(OBJDIR)/main_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR
                       $(OBJDIR)/mod_input_profiles.o $(OBJDIR)/mod_parallel_utils.o
 
 clean:
-	rm -rf $(OBJDIR) $(BINDIR)
+	rm -rf $(OBJDIR) $(BINDIR) $(TESTBIN)
 	rm -f *.mod
+
+#------------------------------------------------------------------------------
+# Tests (ver tests/README.md)
+#   test-unit       : unit tests Fortran de kernels (tests/unit/*.f90)
+#   test-quick      : gate por commit (~1 min): corrida fría + invariantes
+#   test-full       : gate por etapa (~10 min): unit + matriz completa
+#   test-rebaseline : regenera el golden de métricas (STAGE=v1 make test-rebaseline)
+#------------------------------------------------------------------------------
+TESTBIN   = tests/bin
+UNIT_SRCS = $(wildcard tests/unit/*.f90)
+UNIT_BINS = $(patsubst tests/unit/%.f90, $(TESTBIN)/%, $(UNIT_SRCS))
+OBJS_LIB  = $(filter-out $(OBJDIR)/main_3d.o, $(OBJS))
+
+.PHONY: test-unit test-quick test-full test-rebaseline
+
+$(TESTBIN)/%: tests/unit/%.f90 $(OBJS)
+	@mkdir -p $(TESTBIN)
+	$(FC) $(FFLAGS) -I$(OBJDIR) -o $@ $< $(OBJS_LIB) $(HDF5_LIBS)
+
+test-unit: dirs $(UNIT_BINS)
+	@bash tests/run_unit.sh
+
+test-quick: all
+	@bash tests/run_tests.sh quick
+
+test-full: all test-unit
+	@bash tests/run_tests.sh full
+
+test-rebaseline: all
+	@bash tests/run_tests.sh rebaseline

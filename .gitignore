@@ -13,6 +13,10 @@ plots*/
 # Build artifacts
 obj/
 bin/
+
+# Test harness artifacts (los golden en tests/golden/ SÍ se versionan)
+tests/out/
+tests/bin/
 *.o
 *.mod
 *.smod

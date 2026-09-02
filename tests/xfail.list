@@ -1,0 +1,13 @@
+# Fallos esperados (XFAIL): un id por línea. Cada entrada se ELIMINA en el
+# mismo commit que aterriza su fix (el XPASS resultante lo recuerda).
+# Formatos: unit:<binario> | invariants:<check> | script:<id>
+unit:test_mesh_seam
+invariants:sum_alpha
+invariants:T_gas_bound
+script:decomposition_cold_n1
+script:decomposition_cold_n4
+script:symmetry
+# melt requiere C1.1 (ancla de alpha) Y C1.8 (energía de fusión): hoy el
+# líquido recién fundido se recongela por el crash de T_s (cp_s vs cp_eff)
+script:melt
+script:audit_energy

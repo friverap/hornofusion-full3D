@@ -1,0 +1,27 @@
+# Test de balance térmico sin flujo: arco + interfase + fusión, sin momentum.
+# Aísla la cadena de energía arco -> sólido para balances limpios en audit.csv.
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+
+dt = 0.5
+t_final = 10.0
+adaptive_dt = false
+
+solve_flow = false
+solve_energy = true
+solve_melting = true
+solve_turb = false
+solve_radiation = false
+solve_chemistry = false
+solve_arc = true
+solve_multiphase = false
+
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 20
+
+output_freq = 5
+monitor_freq = 5
