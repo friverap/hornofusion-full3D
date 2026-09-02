@@ -220,7 +220,7 @@ program eaf_3d_simulator
             end do
             call update_electrodes(elec, sol, mesh, cfg, cfg%dt)
             call distribute_arc_heat(elec, sh, sol, mesh, cfg, sol%alpha_s, N_ELECTRODES)
-            call distribute_arc_radiation_mc(elec, sol, sh, mesh, cfg, N_ELECTRODES)
+            call distribute_arc_radiation_mc(elec, sol, sh, mesh, cfg, N_ELECTRODES, step)
             call compute_arc_impingement(elec, sh, mesh, cfg, N_ELECTRODES)
             call compute_lorentz_force(elec, liq%alpha, sh, mesh, cfg, I_elec, N_ELECTRODES)
         end if

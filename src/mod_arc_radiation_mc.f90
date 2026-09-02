@@ -21,38 +21,36 @@ module mod_arc_radiation_mc
     use mod_audit, only: audit_add, AUD_MC_DEPOSIT
     implicit none
 
-    integer, parameter :: N_BEAMS = 1000   ! beams per electrode per call
-
-    logical, save :: rng_seeded = .false.
-
 contains
 
     !---------------------------------------------------------------------------
-    ! Seed the RNG deterministically (same sequence on every rank and run)
+    ! Reseed determinista POR PASO (C0.3): cada paso es función pura de
+    ! (step, campos), no de la historia de draws. Requisito para comparar
+    ! snapshots entre corridas/versiones y para la invarianza de
+    ! descomposición (misma secuencia en todos los ranks).
     !---------------------------------------------------------------------------
-    subroutine ensure_rng_seeded()
+    subroutine reseed_rng(step)
+        integer, intent(in) :: step
         integer :: n, i
         integer, allocatable :: seed(:)
-
-        if (rng_seeded) return
 
         call random_seed(size=n)
         allocate(seed(n))
         do i = 1, n
-            seed(i) = 104729 + 37 * i   ! arbitrary fixed values
+            seed(i) = 104729 + 37 * i + 7919 * step
         end do
         call random_seed(put=seed)
         deallocate(seed)
-        rng_seeded = .true.
-    end subroutine ensure_rng_seeded
+    end subroutine reseed_rng
 
-    subroutine distribute_arc_radiation_mc(elec, sol, sh, m, cfg, n_elec)
+    subroutine distribute_arc_radiation_mc(elec, sol, sh, m, cfg, n_elec, step)
         type(electrode_t), intent(in)   :: elec(:)
         type(solid_t), intent(in)       :: sol
         type(shared_t), intent(inout)   :: sh
         type(mesh_t), intent(in)        :: m
         type(config_t), intent(in)      :: cfg
         integer, intent(in)             :: n_elec
+        integer, intent(in)             :: step
 
         integer  :: e, beam
         real(dp) :: P_rad_per_beam
@@ -67,7 +65,9 @@ contains
         real(dp), allocatable :: alpha_g(:,:,:)
         integer, parameter :: MAX_TRACE_STEPS = 50000
 
-        call ensure_rng_seeded()
+        if (cfg%n_beams <= 0) return   ! MC apagado (n_beams = 0 en config)
+
+        call reseed_rng(step)
 
         ! Globally-replicated alpha_s: every rank sees the same scrap surface
         allocate(alpha_g(m%nr_g, m%nth_g, m%nz_g))
@@ -81,13 +81,13 @@ contains
             total_P_rad = elec(e)%arc_power * cfg%frac_rad * 0.5_dp
             if (total_P_rad < 1.0_dp) cycle
 
-            P_rad_per_beam = total_P_rad / real(N_BEAMS, dp)
+            P_rad_per_beam = total_P_rad / real(cfg%n_beams, dp)
 
             x0 = cfg%R_pcd * cos(elec(e)%theta_pos)
             y0 = cfg%R_pcd * sin(elec(e)%theta_pos)
             z0 = elec(e)%z_tip
 
-            do beam = 1, N_BEAMS
+            do beam = 1, cfg%n_beams
                 ! Random direction (isotropic) — same sequence on every rank
                 call random_number(rnd1)
                 call random_number(rnd2)

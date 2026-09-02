@@ -82,6 +82,7 @@ contains
         cfg%frac_rad      = 0.50_dp
         cfg%frac_conv     = 0.30_dp
         cfg%frac_elec     = 0.20_dp
+        cfg%n_beams       = 1000
 
         ! BCs
         cfg%T_ambient = 300.0_dp
@@ -223,6 +224,7 @@ contains
         case ('frac_rad');   call parse_real(val, key, cfg%frac_rad)
         case ('frac_elec');  call parse_real(val, key, cfg%frac_elec)
         case ('arc_w');      call parse_real(val, key, cfg%arc_w)
+        case ('n_beams');    call parse_int(val, key, cfg%n_beams)
         ! Slag
         case ('rho_slag');     call parse_real(val, key, cfg%rho_slag)
         case ('cp_slag');      call parse_real(val, key, cfg%cp_slag)

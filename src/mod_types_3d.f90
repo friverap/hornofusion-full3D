@@ -68,6 +68,7 @@ module mod_types_3d
         ! Output
         integer :: output_freq, monitor_freq
         integer :: audit_freq   ! frecuencia de audit.csv (pasos); 0 = off
+        integer :: n_beams      ! rayos MC por electrodo por paso; 0 = MC off
         character(len=256) :: output_dir
 
         ! Charge recipe

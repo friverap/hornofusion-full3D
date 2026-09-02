@@ -2,8 +2,7 @@
 # Con ntheta múltiplo de 3, rotar la solución ntheta/3 celdas en theta debe
 # dejarla invariante (check_symmetry.py). Detecta la corrupción de métrica
 # en la costura theta=0 (hallazgo 3.7) y bugs de indexación azimutal.
-# NOTA: requiere n_beams = 0 (el MC nunca es simétrico); la clave se añade
-# al parser en C0.3.
+# n_beams = 0: el MC (estocástico) nunca es simétrico; se apaga aquí.
 nr = 12
 ntheta = 24
 nz = 16
@@ -22,6 +21,7 @@ solve_radiation = false
 solve_chemistry = false
 solve_arc = true
 solve_multiphase = true
+n_beams = 0
 
 max_outer = 5
 max_inner_mom = 3
