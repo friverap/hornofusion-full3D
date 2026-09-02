@@ -272,17 +272,19 @@ program eaf_3d_simulator
                                           mesh, cfg, drag_coef, conv)
             else if (cfg%solve_flow) then
                 call solve_momentum_3d(liq, liq_old, sh, mesh, cfg, liq%alpha, &
-                                       drag_coef, &
+                                       drag_coef, .false., &
                                        conv%res_ur, conv%res_uth, conv%res_uz)
                 ! Refresh halos (incl. aP_*) before Rhie-Chow in the pressure solve
                 call phase_exchange_halos(liq, mesh)
                 call solve_pressure_correction(liq, sh, mesh, cfg, liq%alpha, conv%res_cont)
                 if (cfg%solve_energy) then
-                    call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, conv%res_energy)
+                    call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, &
+                                         .false., conv%res_energy)
                 end if
                 call update_properties(liq, gas, sh, mesh, cfg)
             else if (cfg%solve_energy) then
-                call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, conv%res_energy)
+                call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, &
+                                     .false., conv%res_energy)
                 conv%res_cont = 0.0_dp
             else
                 ! No physics enabled - mark as converged immediately

@@ -49,7 +49,7 @@ contains
 
         ! Liquid momentum
         call solve_momentum_3d(liq, liq_old, sh, m, cfg, liq%alpha, &
-                               drag_coef, res_ur_l, res_uth_l, res_uz_l)
+                               drag_coef, .false., res_ur_l, res_uth_l, res_uz_l)
 
         ! Exchange halos after momentum
         call phase_exchange_halos(liq, m)
@@ -60,7 +60,7 @@ contains
         ! proporcional a la velocidad del LÍQUIDO; implícito, el coeficiente
         ! actúa sobre la velocidad propia de cada fase.)
         call solve_momentum_3d(gas, gas_old, sh, m, cfg, gas%alpha, &
-                               drag_coef, res_ur_g, res_uth_g, res_uz_g)
+                               drag_coef, .true., res_ur_g, res_uth_g, res_uz_g)
         
         ! Exchange halos after momentum
         call phase_exchange_halos(gas, m)
@@ -82,10 +82,12 @@ contains
 
         ! Energy
         if (cfg%solve_energy) then
-            call solve_energy_3d(liq, liq_old%T, sh, m, cfg, liq%alpha, res_energy_l)
+            call solve_energy_3d(liq, liq_old%T, sh, m, cfg, liq%alpha, &
+                                 .false., res_energy_l)
             call phase_exchange_halos(liq, m)
-            
-            call solve_energy_3d(gas, gas_old%T, sh, m, cfg, gas%alpha, res_energy_g)
+
+            call solve_energy_3d(gas, gas_old%T, sh, m, cfg, gas%alpha, &
+                                 .true., res_energy_g)
             call phase_exchange_halos(gas, m)
         else
             res_energy_l = 0.0_dp

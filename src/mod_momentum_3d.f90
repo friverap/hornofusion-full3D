@@ -28,7 +28,7 @@ contains
     ! Solve all three momentum components for a single phase
     !---------------------------------------------------------------------------
     subroutine solve_momentum_3d(ph, ph_old, sh, m, cfg, alpha_q, &
-                                  drag_coef, res_ur, res_uth, res_uz)
+                                  drag_coef, is_gas, res_ur, res_uth, res_uz)
         type(phase_t), intent(inout) :: ph
         type(phase_t), intent(in)    :: ph_old
         type(shared_t), intent(in)   :: sh
@@ -37,17 +37,21 @@ contains
         real(dp), intent(in)         :: alpha_q(-1:,-1:,-1:)
         ! Coeficiente de Ergun (>=0), tratado IMPLÍCITO: aP += coef*vol (C1.4)
         real(dp), intent(in)         :: drag_coef(-1:,-1:,-1:)
+        ! Identidad de fase: el gas NO recibe Boussinesq (su rho(T) de gas
+        ! ideal ya aporta la flotabilidad; sumarle beta del acero la
+        ! duplicaba — hallazgo 3.13)
+        logical, intent(in)          :: is_gas
         real(dp), intent(out)        :: res_ur, res_uth, res_uz
 
         ! Solve each component
         call solve_momentum_component(ph%ur, ph_old%ur, ph, sh, m, cfg, &
-                                       alpha_q, drag_coef, 'ur', res_ur)
+                                       alpha_q, drag_coef, is_gas, 'ur', res_ur)
 
         call solve_momentum_component(ph%uth, ph_old%uth, ph, sh, m, cfg, &
-                                       alpha_q, drag_coef, 'uth', res_uth)
+                                       alpha_q, drag_coef, is_gas, 'uth', res_uth)
 
         call solve_momentum_component(ph%uz, ph_old%uz, ph, sh, m, cfg, &
-                                       alpha_q, drag_coef, 'uz', res_uz)
+                                       alpha_q, drag_coef, is_gas, 'uz', res_uz)
 
     end subroutine solve_momentum_3d
 
@@ -55,7 +59,7 @@ contains
     ! Single momentum component solver (MPI-aware)
     !---------------------------------------------------------------------------
     subroutine solve_momentum_component(vel, vel_old, ph, sh, m, cfg, &
-                                         alpha_q, drag_coef, comp, residual)
+                                         alpha_q, drag_coef, is_gas, comp, residual)
         real(dp), intent(inout)      :: vel(-1:,-1:,-1:)
         real(dp), intent(in)         :: vel_old(-1:,-1:,-1:)
         type(phase_t), intent(inout) :: ph
@@ -64,6 +68,7 @@ contains
         type(config_t), intent(in)   :: cfg
         real(dp), intent(in)         :: alpha_q(-1:,-1:,-1:)
         real(dp), intent(in)         :: drag_coef(-1:,-1:,-1:)
+        logical, intent(in)          :: is_gas
         character(len=*), intent(in) :: comp
         real(dp), intent(out)        :: residual
 
@@ -210,12 +215,16 @@ contains
                         else if (k == kend .and. kend > kstart) then
                             dp_dz = (sh%p(i,j,k) - sh%p(i,j,k-1)) / (m%z(k) - m%z(k-1))
                         end if
-                        ! Gravity + Boussinesq buoyancy + arc impingement
-                        ! Boussinesq: α_f * ρ * g * β * (T - T_ref)  (upward when T > T_ref)
+                        ! Gravity + arc impingement; Boussinesq SOLO líquido
+                        ! (rho constante): el gas ya tiene flotabilidad vía
+                        ! rho(T) de gas ideal (hallazgo 3.13)
                         src_extra = -alpha_f * ph%rho(i,j,k) * GRAVITY &
-                                  + alpha_f * ph%rho(i,j,k) * cfg%beta_expansion * GRAVITY &
-                                    * (ph%T(i,j,k) - cfg%T_ambient) &
                                   + sh%S_arc_mom(i,j,k)
+                        if (.not. is_gas) then
+                            src_extra = src_extra &
+                                  + alpha_f * ph%rho(i,j,k) * cfg%beta_expansion &
+                                    * GRAVITY * (ph%T(i,j,k) - cfg%T_ambient)
+                        end if
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
                                    + (-alpha_f * dp_dz + src_extra) * vol
                     end select

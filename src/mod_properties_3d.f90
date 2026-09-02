@@ -41,7 +41,11 @@ contains
                     gas%cp(i,j,k)  = cfg%cp_gas
                     gas%kth(i,j,k) = cfg%k_gas
                     gas%mu(i,j,k)  = cfg%mu_gas
-                    gas%mu_eff(i,j,k) = cfg%mu_gas + sh%mu_t(i,j,k)
+                    ! mu_t proviene del k-eps resuelto con rho del LÍQUIDO
+                    ! (7500 kg/m3): sumarlo al gas inflaba su viscosidad
+                    ! ~1e6x (hallazgo 3.12). El gas queda laminar hasta tener
+                    ! su propio modelo de turbulencia.
+                    gas%mu_eff(i,j,k) = cfg%mu_gas
                 end do
             end do
         end do

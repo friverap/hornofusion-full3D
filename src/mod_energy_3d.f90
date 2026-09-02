@@ -17,13 +17,18 @@ module mod_energy_3d
 
 contains
 
-    subroutine solve_energy_3d(ph, T_old, sh, m, cfg, alpha_q, residual)
+    subroutine solve_energy_3d(ph, T_old, sh, m, cfg, alpha_q, is_gas, residual)
         type(phase_t), intent(inout) :: ph
         real(dp), intent(in)         :: T_old(-1:,-1:,-1:)
         type(shared_t), intent(in)   :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
         real(dp), intent(in)         :: alpha_q(-1:,-1:,-1:)
+        ! Identidad de fase: el LÍQUIDO difunde con k_eff = k + cp*mu_t/Pr_t
+        ! (transporte térmico turbulento, hallazgo 3.12 — antes ausente
+        ! mientras momentum sí usaba mu_t); el gas usa su k molecular
+        ! (mu_t proviene del k-eps del líquido y no le aplica).
+        logical, intent(in)          :: is_gas
         real(dp), intent(out)        :: residual
 
         integer :: i, j, k, jm, jp
@@ -76,44 +81,38 @@ contains
                     Dw = 0.0_dp; De = 0.0_dp; Db = 0.0_dp; Dt = 0.0_dp
                     ! West face (i-1/2)
                     if (m%cell_type(i-1,j,k) /= 0) then
-                            k_f = 2.0_dp * ph%kth(i,j,k) * ph%kth(i-1,j,k) / &
-                                  max(ph%kth(i,j,k) + ph%kth(i-1,j,k), SMALL)
+                            k_f = harm(keff(i,j,k), keff(i-1,j,k))
                             Dw = alpha_f * k_f * m%Ar(i-1,j,k) / &
                                  (0.5_dp * (m%dr(i) + m%dr(i-1)))
                         end if
 
                     ! East face (i+1/2)
                     if (m%cell_type(i+1,j,k) /= 0) then
-                            k_f = 2.0_dp * ph%kth(i,j,k) * ph%kth(i+1,j,k) / &
-                                  max(ph%kth(i,j,k) + ph%kth(i+1,j,k), SMALL)
+                            k_f = harm(keff(i,j,k), keff(i+1,j,k))
                             De = alpha_f * k_f * m%Ar(i,j,k) / &
                                  (0.5_dp * (m%dr(i) + m%dr(i+1)))
                         end if
 
                     ! South face (j-1/2) in theta
-                    k_f = 2.0_dp * ph%kth(i,j,k) * ph%kth(i,jm,k) / &
-                          max(ph%kth(i,j,k) + ph%kth(i,jm,k), SMALL)
+                    k_f = harm(keff(i,j,k), keff(i,jm,k))
                     Ds = alpha_f * k_f * m%Ath(i,j,k) / &
                          (m%r(i) * 0.5_dp * (m%dtheta(j) + m%dtheta(jm)))
 
                     ! North face (j+1/2) in theta
-                    k_f = 2.0_dp * ph%kth(i,j,k) * ph%kth(i,jp,k) / &
-                          max(ph%kth(i,j,k) + ph%kth(i,jp,k), SMALL)
+                    k_f = harm(keff(i,j,k), keff(i,jp,k))
                     Dn = alpha_f * k_f * m%Ath(i,j,k) / &
                          (m%r(i) * 0.5_dp * (m%dtheta(j) + m%dtheta(jp)))
 
                     ! Bottom face (k-1/2)
                     if (m%cell_type(i,j,k-1) /= 0) then
-                            k_f = 2.0_dp * ph%kth(i,j,k) * ph%kth(i,j,k-1) / &
-                                  max(ph%kth(i,j,k) + ph%kth(i,j,k-1), SMALL)
+                            k_f = harm(keff(i,j,k), keff(i,j,k-1))
                             Db = alpha_f * k_f * m%Az(i,j,k-1) / &
                                  (0.5_dp * (m%dz(k) + m%dz(k-1)))
                         end if
 
                     ! Top face (k+1/2)
                     if (m%cell_type(i,j,k+1) /= 0) then
-                            k_f = 2.0_dp * ph%kth(i,j,k) * ph%kth(i,j,k+1) / &
-                                  max(ph%kth(i,j,k) + ph%kth(i,j,k+1), SMALL)
+                            k_f = harm(keff(i,j,k), keff(i,j,k+1))
                             Dt = alpha_f * k_f * m%Az(i,j,k) / &
                                  (0.5_dp * (m%dz(k) + m%dz(k+1)))
                         end if
@@ -170,6 +169,25 @@ contains
         residual = compute_residual_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, ph%T, m)
 
         deallocate(aW, aE, aS, aN, aB, aT, aP, Su)
+
+    contains
+
+        ! Conductividad efectiva del centro de celda: k + cp*mu_t/Pr_t para
+        ! el líquido (transporte turbulento); molecular para el gas
+        pure function keff(ii, jj, kk) result(kv)
+            integer, intent(in) :: ii, jj, kk
+            real(dp) :: kv
+            kv = ph%kth(ii,jj,kk)
+            if (.not. is_gas) then
+                kv = kv + ph%cp(ii,jj,kk) * sh%mu_t(ii,jj,kk) / PR_T
+            end if
+        end function keff
+
+        pure function harm(ka, kb) result(kf)
+            real(dp), intent(in) :: ka, kb
+            real(dp) :: kf
+            kf = 2.0_dp * ka * kb / max(ka + kb, SMALL)
+        end function harm
 
     end subroutine solve_energy_3d
 
