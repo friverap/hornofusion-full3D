@@ -73,6 +73,10 @@ DEFS = {
                        "interphase removal)"),
     "E_mass_liq": ("S", "Melting/freezing mass-source terms of the liquid "
                         "energy equation [J] (diagnostic)"),
+    "m_ecs_in": ("C", "Solid mass charged by the continuous feeder (ECS) "
+                      "[kg]"),
+    "E_ecs_in": ("C", "Enthalpy charged by the continuous feeder "
+                      "$\\sum dm\\, e_s(T_{charge})$ [J]"),
 }
 
 src = open(SRC).read()

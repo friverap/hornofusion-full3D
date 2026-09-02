@@ -46,6 +46,7 @@ program eaf_3d_simulator
     use mod_input_profiles
     use mod_audit
     use mod_timers
+    use mod_ecs_feed
     implicit none
 
     ! Main variables
@@ -59,6 +60,8 @@ program eaf_3d_simulator
     type(electrode_t)     :: elec(N_ELECTRODES)
     type(convergence_t)   :: conv
     type(elec_profile_t)  :: elec_prof
+    type(rate_profile_t)  :: ecs_prof
+    real(dp) :: mdot_ecs
 
     ! Time loop
     real(dp) :: time, V_elec, I_elec
@@ -146,6 +149,9 @@ program eaf_3d_simulator
     ! si no existe — C4.4: antes el archivo JAMÁS se leía) y perfil V/I
     call read_charge_recipe(cfg, 'input/charge_recipe.dat')
     call read_electrode_profile(elec_prof, 'input/electrode_profile.dat')
+    if (cfg%solve_ecs) then
+        call read_rate_profile(ecs_prof, cfg%ecs_profile_file, cfg%ecs_rate)
+    end if
 
     ! Create output directory (only rank 0), then synchronize so no rank
     ! tries to create the HDF5 file before the directory exists
@@ -219,6 +225,16 @@ program eaf_3d_simulator
             if (should_print(mesh)) then
                 print '(A,F10.1)', ' [MAIN] Second bucket charged at t=', time
             end if
+        end if
+
+        ! Cargador continuo ECS (E1): fuente de masa por banda
+        if (cfg%solve_ecs .and. time >= cfg%ecs_t_start .and. &
+            time <= cfg%ecs_t_stop) then
+            mdot_ecs = interpolate_rate(ecs_prof, time)
+            call ecs_feed(sol, gas, mesh, cfg, mdot_ecs, cfg%dt)
+            call solid_exchange_halos(sol, mesh)
+            if (mesh%is_parallel) &
+                call mpi_exchange_halos_3d(gas%alpha, mesh%topo)
         end if
 
         ! Update electrode V/I from profile

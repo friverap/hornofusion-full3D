@@ -32,6 +32,7 @@ SRCS = \
 	$(SRCDIR)/mod_continuity.f90 \
 	$(SRCDIR)/mod_melting_3d.f90 \
 	$(SRCDIR)/mod_scrap_collapse.f90 \
+	$(SRCDIR)/mod_ecs_feed.f90 \
 	$(SRCDIR)/mod_interphase_ht.f90 \
 	$(SRCDIR)/mod_solid_phase.f90 \
 	$(SRCDIR)/mod_arc_cassie_mayr.f90 \
@@ -112,7 +113,8 @@ $(OBJDIR)/mod_convergence_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d
 $(OBJDIR)/mod_input_profiles.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_fields_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_melting_3d.o
 $(OBJDIR)/mod_output_hdf5.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o
-$(OBJDIR)/main_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_timers.o \
+$(OBJDIR)/mod_ecs_feed.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_melting_3d.o $(OBJDIR)/mod_audit.o
+$(OBJDIR)/main_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_timers.o $(OBJDIR)/mod_ecs_feed.o \
                       $(OBJDIR)/mod_config_3d.o $(OBJDIR)/mod_mesh_3d.o $(OBJDIR)/mod_fields_3d.o \
                       $(OBJDIR)/mod_output_hdf5.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o \
                       $(OBJDIR)/mod_energy_3d.o $(OBJDIR)/mod_properties_3d.o $(OBJDIR)/mod_momentum_3d.o \
