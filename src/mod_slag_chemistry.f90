@@ -29,6 +29,7 @@ module mod_slag_chemistry
     use mod_audit, only: audit_add, AUD_FE_YIELD, AUD_FE_RETURN, &
                          AUD_SLAG_OX_E, AUD_SLAG_RED_E
     use mod_melting_3d, only: liquid_datum_offset
+    use mod_foam, only: xi_pretorius
     implicit none
 
     real(dp), parameter :: SMALL_SL = 1.0e-6_dp   ! (como mod_slag_3d)
@@ -62,6 +63,7 @@ contains
         real(dp) :: o2_rem, r_feo, dm_feo, dm_fe, dm_o2
         real(dp) :: vol, vol_b, q_rx, q_lim, e_fe, c0
         real(dp) :: r_red, dm_red, dm_c, dm_co
+        real(dp) :: b2, x_feo, j_co, h_foam, rho_co, dm_co_cell
 
         if (m%is_parallel) then
             istart = m%topo%istart; iend = m%topo%iend
@@ -81,6 +83,7 @@ contains
                     if (m%cell_type(i,j,k) == 0) cycle
                     if (slag%m_sl(i,j,k) <= SMALL_SL) cycle
                     vol = m%vol(i,j,k)
+                    dm_co_cell = 0.0_dp
 
                     !--------------------------------------------------------
                     ! E2.3: oxidación Fe + 1/2 O2 -> FeO (baño abajo)
@@ -175,6 +178,7 @@ contains
                             ! CO al gas (fuente de especies) y a la espuma
                             sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + &
                                 dm_co / (vol * cfg%dt)
+                            dm_co_cell = dm_co
                             call audit_add(AUD_FE_RETURN, dm_fe)
                             call audit_add(AUD_SLAG_RED_E, q_rx)
                         end if
@@ -185,6 +189,27 @@ contains
                         slag%T_sl(i,j,k) = max(300.0_dp, &
                             slag%E_sl(i,j,k) / (slag%m_sl(i,j,k) * &
                             cfg%cp_slag))
+                    end if
+
+                    !--------------------------------------------------------
+                    ! E2.5: espuma local (atributo óptico): H = xi * j_CO
+                    !--------------------------------------------------------
+                    if (slag%m_sl(i,j,k) > SMALL_SL) then
+                        b2 = slag%m_X(i,j,k,SL_CAO) / &
+                             max(slag%m_X(i,j,k,SL_SIO2), SMALL)
+                        x_feo = slag%m_X(i,j,k,SL_FEO) / slag%m_sl(i,j,k)
+                        ! dm_co de la reducción de ESTA celda este paso
+                        ! (0 si la rama no corrió)
+                        rho_co = 101325.0_dp * MW_CO_S / &
+                                 (R_GAS * max(slag%T_sl(i,j,k), 300.0_dp))
+                        j_co = dm_co_cell / (cfg%dt * rho_co * &
+                               max(m%Az(i,j,k), SMALL))
+                        h_foam = xi_pretorius(b2, x_feo, &
+                                 slag%T_sl(i,j,k)) * j_co
+                        slag%alpha_foam(i,j,k) = min(1.0_dp, &
+                            h_foam / max(m%dz(k), SMALL))
+                    else
+                        slag%alpha_foam(i,j,k) = 0.0_dp
                     end if
                 end do
             end do

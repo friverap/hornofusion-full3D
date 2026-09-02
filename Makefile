@@ -43,6 +43,7 @@ SRCS = \
 	$(SRCDIR)/mod_multiphase.f90 \
 	$(SRCDIR)/mod_turbulence_3d.f90 \
 	$(SRCDIR)/mod_radiation_do.f90 \
+	$(SRCDIR)/mod_foam.f90 \
 	$(SRCDIR)/mod_slag_chemistry.f90 \
 	$(SRCDIR)/mod_chemistry_carbon.f90 \
 	$(SRCDIR)/mod_species_transport.f90 \
@@ -114,7 +115,8 @@ $(OBJDIR)/mod_convergence_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d
 $(OBJDIR)/mod_input_profiles.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_fields_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_melting_3d.o
 $(OBJDIR)/mod_output_hdf5.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o
-$(OBJDIR)/mod_slag_chemistry.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_audit.o $(OBJDIR)/mod_melting_3d.o
+$(OBJDIR)/mod_foam.o: $(OBJDIR)/mod_constants.o
+$(OBJDIR)/mod_slag_chemistry.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_audit.o $(OBJDIR)/mod_melting_3d.o $(OBJDIR)/mod_foam.o
 $(OBJDIR)/mod_ecs_feed.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_melting_3d.o $(OBJDIR)/mod_audit.o
 $(OBJDIR)/main_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_timers.o $(OBJDIR)/mod_ecs_feed.o \
                       $(OBJDIR)/mod_config_3d.o $(OBJDIR)/mod_mesh_3d.o $(OBJDIR)/mod_fields_3d.o \
