@@ -120,6 +120,7 @@ contains
         ! ECS (E1): apagado por defecto (golden intacto)
         cfg%solve_ecs        = .false.
         cfg%charge_bucket1   = .true.
+        cfg%do_quadrature    = 4
         cfg%ecs_rate         = 0.0_dp
         cfg%ecs_profile_file = ''
         cfg%ecs_theta_center = PI
@@ -262,6 +263,7 @@ contains
         case ('carbon_frac');     call parse_real(val, key, cfg%carbon_frac)
         case ('solve_ecs');        cfg%solve_ecs = parse_bool(val)
         case ('charge_bucket1');   cfg%charge_bucket1 = parse_bool(val)
+        case ('do_quadrature');    call parse_int(val, key, cfg%do_quadrature)
         case ('ecs_rate');         call parse_real(val, key, cfg%ecs_rate)
         case ('ecs_profile_file'); cfg%ecs_profile_file = trim(val)
         case ('ecs_theta_center'); call parse_real(val, key, cfg%ecs_theta_center)
@@ -365,6 +367,9 @@ contains
                      'material properties must be > 0', ok)
         call require(cfg%R_shell > 0.0_dp .and. cfg%H_total > 0.0_dp, &
                      'R_shell and H_total must be > 0', ok)
+        call require(cfg%do_quadrature == 4 .or. cfg%do_quadrature == 6 &
+                     .or. cfg%do_quadrature == 8, &
+                     'do_quadrature must be 4, 6 or 8', ok)
         if (cfg%solve_ecs) then
             call require(cfg%ecs_vfrac > 0.0_dp .and. cfg%ecs_vfrac <= 1.0_dp, &
                          'ecs_vfrac must be in (0, 1]', ok)

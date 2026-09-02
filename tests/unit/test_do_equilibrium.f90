@@ -26,7 +26,8 @@ program test_do_equilibrium
     type(shared_t) :: sh
     real(dp), parameter :: T0 = 1500.0_dp
     real(dp) :: ref, worst
-    integer  :: i, j, k
+    integer  :: i, j, k, iq
+    integer, parameter :: NQS(3) = [4, 6, 8]
     logical  :: ok
 
     call config_set_defaults(cfg)
@@ -48,26 +49,37 @@ program test_do_equilibrium
     liq%T = T0; gas%T = T0
     sol%alpha_s = 0.0_dp; sol%T_s = T0; sol%m_s = 0.0_dp; sol%E_s = 0.0_dp
 
-    call solve_radiation_do(liq, gas, sol, sh, mesh, cfg)
-
+    ! C4.2: el equilibrio isotermo debe cumplirse en las TRES cuadraturas
     ref = 4.0_dp * 0.3_dp * STEFAN_BOLTZMANN * T0**4   ! 4*kappa_gas*sigma*T0^4
-    worst = 0.0_dp
-    do k = 1, mesh%nz
-        do j = 1, mesh%ntheta
-            do i = 1, mesh%nr
-                if (mesh%cell_type(i,j,k) == 0) cycle
-                worst = max(worst, abs(sh%S_rad(i,j,k)))
+    ok = .true.
+    do iq = 1, 3
+        cfg%do_quadrature = NQS(iq)
+        call solve_radiation_do(liq, gas, sol, sh, mesh, cfg)
+        worst = 0.0_dp
+        do k = 1, mesh%nz
+            do j = 1, mesh%ntheta
+                do i = 1, mesh%nr
+                    if (mesh%cell_type(i,j,k) == 0) cycle
+                    worst = max(worst, abs(sh%S_rad(i,j,k)))
+                end do
             end do
         end do
+        if (worst / ref >= 1.0e-9_dp) then
+            print '(A,I2,A,ES10.3)', '   FAIL S', NQS(iq), &
+                '  |S_rad|/4kσT⁴ = ', worst/ref
+            ok = .false.
+        else
+            print '(A,I2,A,ES10.3)', '   OK   S', NQS(iq), &
+                '  |S_rad|/4kσT⁴ = ', worst/ref
+        end if
     end do
 
     call mpi_finalize_topology(mesh%topo)
 
-    ok = worst / ref < 1.0e-9_dp
     if (ok) then
-        print '(A,ES10.3)', ' PASS test_do_equilibrium  |S_rad|/4kσT⁴ = ', worst/ref
+        print '(A)', ' PASS test_do_equilibrium (S4/S6/S8)'
     else
-        print '(A,ES10.3)', ' FAIL test_do_equilibrium  |S_rad|/4kσT⁴ = ', worst/ref
+        print '(A)', ' FAIL test_do_equilibrium'
         stop 1
     end if
 end program test_do_equilibrium

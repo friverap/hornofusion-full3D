@@ -38,7 +38,8 @@ module mod_radiation_do
     use mod_audit, only: audit_add, AUD_RAD_SOL, AUD_RAD_WALL
     implicit none
 
-    integer, parameter :: N_DIRECTIONS = 24
+    ! (C4.2: el número de direcciones ahora depende de cfg%do_quadrature;
+    !  ver n_quad_dirs. 24 = S4, el default histórico.)
     real(dp), parameter :: KAPPA_GAS = 0.3_dp    ! 1/m (gas absorption coefficient)
     real(dp), parameter :: KAPPA_SOLID = 10.0_dp ! 1/m (solid region)
     ! Barridos TDMA por dirección: ITERATIVOS hasta convergencia. Con un
@@ -113,8 +114,8 @@ contains
         sh%G_rad = 0.0_dp
         wall_net = 0.0_dp
 
-        do d = 1, N_DIRECTIONS
-            call get_s4_direction(d, sx, sy, sz, w_d)
+        do d = 1, n_quad_dirs(cfg%do_quadrature)
+            call get_sn_direction(cfg%do_quadrature, d, sx, sy, sz, w_d)
 
             aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
             aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
@@ -358,8 +359,12 @@ contains
                                         0.9261808_dp]
         integer,  parameter :: P6(3,6) = reshape([ &
             3,1,1, 1,3,1, 1,1,3, 2,2,1, 2,1,2, 1,2,2], [3,6])
-        real(dp), parameter :: W6(6) = [0.1761263_dp, 0.1761263_dp, &
+        ! pesos publicados, NORMALIZADOS a suma exacta 1 por octante
+        ! (las 7 cifras de tabla suman 1-2e-7; sin normalizar, el
+        ! equilibrio isotermo hereda ese residuo en G)
+        real(dp), parameter :: W6R(6) = [0.1761263_dp, 0.1761263_dp, &
             0.1761263_dp, 0.1572071_dp, 0.1572071_dp, 0.1572071_dp]
+        real(dp), parameter :: W6(6) = W6R / sum(W6R)
         ! S8 (LQ8)
         real(dp), parameter :: M8(4) = [0.2182179_dp, 0.5773503_dp, &
                                         0.7867958_dp, 0.9511897_dp]
@@ -367,9 +372,10 @@ contains
             4,1,1, 1,4,1, 1,1,4, &
             3,2,1, 3,1,2, 2,3,1, 1,3,2, 2,1,3, 1,2,3, &
             2,2,2], [3,10])
-        real(dp), parameter :: W8(10) = [0.1209877_dp, 0.1209877_dp, &
+        real(dp), parameter :: W8R(10) = [0.1209877_dp, 0.1209877_dp, &
             0.1209877_dp, 0.0907407_dp, 0.0907407_dp, 0.0907407_dp, &
             0.0907407_dp, 0.0907407_dp, 0.0907407_dp, 0.0925926_dp]
+        real(dp), parameter :: W8(10) = W8R / sum(W8R)
 
         integer :: octant, local_d, npts
         real(dp) :: s_mu, s_eta, s_xi
