@@ -35,7 +35,7 @@ module mod_radiation_do
     use mod_solver_3d, only: tdma_3d_mpi
     use mod_mpi_topology, only: mpi_allreduce_max
     use mod_melting_3d, only: solid_T_from_enthalpy, effective_cp
-    use mod_audit, only: audit_add, AUD_RAD_SOL, AUD_RAD_WALL
+    use mod_audit, only: audit_add, AUD_RAD_SOL, AUD_RAD_WALL, AUD_RAD_FOAM
     implicit none
 
     ! (C4.2: el número de direcciones ahora depende de cfg%do_quadrature;
@@ -48,17 +48,21 @@ module mod_radiation_do
     ! hasta 13% entre -n 1 y -n 8 (estructural, no roundoff). El criterio
     ! relativo global hace la intensidad invariante a la descomposición
     ! hasta RTE_SWEEP_TOL.
+    ! Coeficiente de absorción de la espuma [1/m] (calibrable en B6): la
+    ! espuma es ópticamente densa; O(10-100)
+    real(dp), parameter :: KAPPA_FOAM = 30.0_dp
     integer, parameter :: MAX_SWEEPS_RTE = 24
     real(dp), parameter :: RTE_SWEEP_TOL = 1.0e-10_dp
 
 contains
 
-    subroutine solve_radiation_do(liq, gas, sol, sh, m, cfg)
+    subroutine solve_radiation_do(liq, gas, sol, slag, sh, m, cfg)
         use mod_workspace, only: ensure_workspace, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su
         type(phase_t), intent(in)    :: liq, gas
         type(solid_t), intent(inout) :: sol
+        type(slag_t),  intent(inout) :: slag
         type(shared_t), intent(inout) :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
@@ -72,7 +76,8 @@ contains
         real(dp) :: sx, sy, sz, w_d
         real(dp) :: cw, ce, cs, cn, cb, ct
         real(dp) :: B_wall, wall_net, wall_net_step
-        real(dp) :: ks_a, T_s, dE_rate, denom, dE
+        real(dp) :: ks_a, kf_a, T_s, dE_rate, denom, dE
+        real(dp) :: t_sl_c, de_foam
         real(dp) :: w_l, w_g, B_fluid
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -94,7 +99,10 @@ contains
                     sh%kappa_f(i,j,k) = KAPPA_GAS * &
                         max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k))
                     ks_a = KAPPA_SOLID * sol%alpha_s(i,j,k)
-                    kmix(i,j,k) = sh%kappa_f(i,j,k) + ks_a
+                    ! Espuma (E2.6): absorbe/emite con T_sl; su absorción
+                    ! se deposita en E_sl (ver abajo)
+                    kf_a = KAPPA_FOAM * slag%alpha_foam(i,j,k)
+                    kmix(i,j,k) = sh%kappa_f(i,j,k) + ks_a + kf_a
 
                     ! Reparto de la emisión fluida por fase (mismos pesos que
                     ! el reparto de fuentes en energía)
@@ -105,7 +113,10 @@ contains
                               (w_l * liq%T(i,j,k)**4 + w_g * gas%T(i,j,k)**4)
                     Bmix(i,j,k) = (sh%kappa_f(i,j,k) * B_fluid + &
                                    ks_a * STEFAN_BOLTZMANN / PI * &
-                                   sol%T_s(i,j,k)**4) / max(kmix(i,j,k), SMALL)
+                                   sol%T_s(i,j,k)**4 + &
+                                   kf_a * STEFAN_BOLTZMANN / PI * &
+                                   max(slag%T_sl(i,j,k), 300.0_dp)**4) / &
+                                  max(kmix(i,j,k), SMALL)
                 end do
             end do
         end do
@@ -271,6 +282,41 @@ contains
                         sol%T_s(i,j,k) = solid_T_from_enthalpy( &
                             E_new / sol%m_s(i,j,k), cfg)
                         call audit_add(AUD_RAD_SOL, dE)
+                    end block
+                end do
+            end do
+        end do
+
+        ! ── Depósito a la ESPUMA/escoria (E2.6, espejo del sólido) ─────────
+        ! cp_slag constante => Newton puntual converge en 2 iteraciones
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (slag%m_sl(i,j,k) <= 1.0e-6_dp) cycle
+                    kf_a = KAPPA_FOAM * slag%alpha_foam(i,j,k)
+                    if (kf_a <= SMALL) cycle
+                    block
+                        real(dp) :: E0, E_new, fval, fprime
+                        integer  :: it
+                        E0 = slag%E_sl(i,j,k)
+                        E_new = E0
+                        do it = 1, 2
+                            t_sl_c = max(300.0_dp, E_new / &
+                                     (slag%m_sl(i,j,k) * cfg%cp_slag))
+                            fval = E_new - E0 - cfg%dt * kf_a * &
+                                   m%vol(i,j,k) * (sh%G_rad(i,j,k) - &
+                                   4.0_dp * STEFAN_BOLTZMANN * t_sl_c**4)
+                            fprime = 1.0_dp + cfg%dt * kf_a * m%vol(i,j,k) * &
+                                     16.0_dp * STEFAN_BOLTZMANN * t_sl_c**3 &
+                                     / (slag%m_sl(i,j,k) * cfg%cp_slag)
+                            E_new = E_new - fval / fprime
+                        end do
+                        de_foam = E_new - E0
+                        slag%E_sl(i,j,k) = E_new
+                        slag%T_sl(i,j,k) = max(300.0_dp, E_new / &
+                            (slag%m_sl(i,j,k) * cfg%cp_slag))
+                        call audit_add(AUD_RAD_FOAM, de_foam)
                     end block
                 end do
             end do

@@ -89,6 +89,8 @@ DEFS = {
                        "slag [J]"),
     "E_slag_red": ("C", "Endothermic heat of FeO+C$\\to$Fe+CO from the "
                         "slag [J]"),
+    "E_rad_foam": ("C", "DO radiation absorbed by the foam/slag layer "
+                        "[J]"),
 }
 
 src = open(SRC).read()

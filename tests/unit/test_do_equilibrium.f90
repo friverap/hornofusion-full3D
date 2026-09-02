@@ -23,6 +23,7 @@ program test_do_equilibrium
     type(mesh_t)   :: mesh
     type(phase_t)  :: liq, gas
     type(solid_t)  :: sol
+    type(slag_t)   :: slag
     type(shared_t) :: sh
     real(dp), parameter :: T0 = 1500.0_dp
     real(dp) :: ref, worst
@@ -42,6 +43,7 @@ program test_do_equilibrium
     call phase_allocate(liq, mesh)
     call phase_allocate(gas, mesh)
     call solid_allocate(sol, mesh)
+    call slag_allocate(slag, mesh)
     call shared_allocate(sh, mesh)
 
     ! Estado isotermo: gas puro a T0 (alpha_s = 0 -> sin depósito al sólido)
@@ -54,7 +56,7 @@ program test_do_equilibrium
     ok = .true.
     do iq = 1, 3
         cfg%do_quadrature = NQS(iq)
-        call solve_radiation_do(liq, gas, sol, sh, mesh, cfg)
+        call solve_radiation_do(liq, gas, sol, slag, sh, mesh, cfg)
         worst = 0.0_dp
         do k = 1, mesh%nz
             do j = 1, mesh%ntheta
@@ -74,10 +76,44 @@ program test_do_equilibrium
         end if
     end do
 
+    ! E2.6: recinto isotermo CON espuma a T0 => S_rad sigue ~0 y el
+    ! depósito neto a la escoria es ~0 (emisión y absorción de la espuma
+    ! consistentes en kmix/Bmix)
+    cfg%do_quadrature = 4
+    slag%m_sl(:, :, 5) = 100.0_dp
+    slag%alpha_sl(:, :, 5) = 0.3_dp
+    slag%alpha_foam(:, :, 5) = 0.8_dp
+    slag%T_sl = T0
+    slag%E_sl = slag%m_sl * cfg%cp_slag * T0
+    block
+        real(dp) :: e0, e1
+        e0 = sum(slag%E_sl(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz))
+        call solve_radiation_do(liq, gas, sol, slag, sh, mesh, cfg)
+        e1 = sum(slag%E_sl(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz))
+        worst = 0.0_dp
+        do k = 1, mesh%nz
+            do j = 1, mesh%ntheta
+                do i = 1, mesh%nr
+                    if (mesh%cell_type(i,j,k) == 0) cycle
+                    worst = max(worst, abs(sh%S_rad(i,j,k)))
+                end do
+            end do
+        end do
+        if (worst / ref >= 1.0e-9_dp .or. &
+            abs(e1 - e0) / max(e0, 1.0_dp) >= 1.0e-9_dp) then
+            print '(A,2ES10.3)', '   FAIL espuma isoterma: S_rad, dE_sl = ', &
+                worst/ref, abs(e1-e0)/e0
+            ok = .false.
+        else
+            print '(A,ES10.3)', '   OK   espuma isoterma  dE_sl/E = ', &
+                abs(e1-e0)/e0
+        end if
+    end block
+
     call mpi_finalize_topology(mesh%topo)
 
     if (ok) then
-        print '(A)', ' PASS test_do_equilibrium (S4/S6/S8)'
+        print '(A)', ' PASS test_do_equilibrium (S4/S6/S8 + espuma)'
     else
         print '(A)', ' FAIL test_do_equilibrium'
         stop 1

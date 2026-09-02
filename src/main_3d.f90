@@ -285,7 +285,7 @@ program eaf_3d_simulator
         ! Radiation (DO model)
         call timer_start(T_RAD)
         if (cfg%solve_radiation) then
-            call solve_radiation_do(liq, gas, sol, sh, mesh, cfg)
+            call solve_radiation_do(liq, gas, sol, slag, sh, mesh, cfg)
         end if
         call timer_stop(T_RAD)
 

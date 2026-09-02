@@ -67,7 +67,8 @@ def main():
                r.get("E_rad_sol", 0.0) + r.get("E_conv_defect", 0.0) -
                r.get("E_wall_conv", 0.0) + r.get("E_chem_sol", 0.0) +
                r.get("E_ecs_in", 0.0) + r.get("E_flux_in", 0.0) +
-               r.get("E_slag_ox", 0.0) - r.get("E_slag_red", 0.0)
+               r.get("E_slag_ox", 0.0) - r.get("E_slag_red", 0.0) +
+               r.get("E_rad_foam", 0.0)
                for r in steps)
     # (E_out_conv es DIAGNÓSTICO: la energía convectada a las celdas
     # outlet queda en su T — el déficit convectivo del hook ya incluye
