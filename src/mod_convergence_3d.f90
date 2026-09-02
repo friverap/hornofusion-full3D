@@ -95,7 +95,16 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
-                    dth_len = m%r(i) * m%dtheta(j)
+                    ! Escala azimutal acotada por el ancho radial local
+                    ! (cierre 2026, punto 3): junto al eje r*dtheta -> 0
+                    ! y dominaba el dt global (medido dt ~1-2 ms en el
+                    ! hito bore-in, >3 h de pared para 300 s). Las celdas
+                    ! theta del anillo interior son astillas del mismo
+                    ! vecindario físico (sus centros distan < dr) y el
+                    ! esquema es totalmente implícito: el CFL gobierna
+                    ! precisión del transporte, no estabilidad — la escala
+                    ! advectiva relevante no baja del ancho radial.
+                    dth_len = max(m%r(i) * m%dtheta(j), m%dr(i))
                     local = max(local, &
                         abs(liq%ur(i,j,k))/m%dr(i) + abs(liq%uth(i,j,k))/dth_len &
                         + abs(liq%uz(i,j,k))/m%dz(k), &
