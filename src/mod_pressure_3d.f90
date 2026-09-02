@@ -70,6 +70,13 @@ module mod_pressure_3d
     ! acústica de celdas líquido-puras en la diagonal del Poisson)
     real(dp), parameter :: C_SOUND_LIQ = 4000.0_dp
 
+    ! Cota física de la presión hidrodinámica: en un EAF nada sostiene
+    ! más de ~20 atm (el baño ~1.5e5 Pa; Darcy del lecho ~1e5-1e6 Pa).
+    ! El clamp corta el círculo p->u->div->p en regímenes rotos (fusión
+    ! forzada sintética: p medida 1e10-1e13 sin él) sin tocar la física
+    ! sana (los campos reales quedan órdenes por debajo).
+    real(dp), parameter :: P_HYDRO_CAP = 2.0e6_dp
+
 contains
 
     subroutine solve_pressure_correction(liq, gas, gas_T_old, sh, m, cfg, &
@@ -254,8 +261,9 @@ contains
         if (GAS_IN_POISSON .and. cfg%solve_multiphase) &
             call correct_velocities(gas, sh, m, gas%alpha)
 
-        ! Correct pressure
+        ! Correct pressure (con cota física, ver P_HYDRO_CAP)
         sh%p = sh%p + cfg%alpha_p * sh%pp
+        sh%p = max(-P_HYDRO_CAP, min(P_HYDRO_CAP, sh%p))
 
         deallocate(gpr, gpth, gpz)
 

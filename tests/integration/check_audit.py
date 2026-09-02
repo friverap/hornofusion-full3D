@@ -49,25 +49,44 @@ def main():
     print(f"[audit] {args.rundir} ({len(steps)} pasos)")
 
     def total_E(r):
-        return r["E_liq"] + r["E_gas"] + r["E_sol"] + r["E_slag"]
+        return r["E_liq"] + r["E_sol"] + r["E_slag"]
 
     # -- energy_balance ------------------------------------------------------
-    dE = total_E(last) - total_E(first)
+    # dE del GAS: integral por paso del calor absorbido por su ecuación
+    # (E_gas_abs; la forma T con rho(T) no tiene inventario de estado
+    # consistente cuando la masa advecta). Fallback al inventario log si
+    # la columna no existe (audits viejos).
+    if "E_gas_abs" in last:
+        dE_gas = sum(r["E_gas_abs"] for r in steps)
+    else:
+        dE_gas = last["E_gas"] - first["E_gas"]
+    dE = total_E(last) - total_E(first) + dE_gas
     E_in = sum(r["E_src_liq_arc"] + r["E_src_liq_rad"] + r["E_src_liq_chem"] +
                r["E_src_gas_arc"] + r["E_src_gas_rad"] + r["E_src_gas_chem"] +
                r["E_arc_direct_sol"] + r.get("E_slag_intercept", 0.0) +
                r.get("E_rad_sol", 0.0) + r.get("E_conv_defect", 0.0) -
                r.get("E_wall_conv", 0.0) + r.get("E_chem_sol", 0.0)
                for r in steps)
-    scale = max(abs(dE), abs(E_in), 1.0)
+    # (E_out_conv es DIAGNÓSTICO: la energía convectada a las celdas
+    # outlet queda en su T — el déficit convectivo del hook ya incluye
+    # esas caras; restarla doble-contaba: gap medido == E_out_conv.)
+    # Escala del balance: el THROUGHPUT bruto, no el neto (en fusión el
+    # handoff sólido->líquido mueve ~1e10-1e11 J que casi se cancelan en
+    # dE; juzgar el descuadre contra el neto haría fallar un balance al
+    # 0.2% del flujo real). El residuo dominante es (err masa alpha)*C0.
+    E_gross = sum(abs(r.get("E_melt_from_solid", 0.0)) for r in steps)
+    scale = max(abs(dE), abs(E_in), E_gross, 1.0)
     err = abs(dE - E_in) / scale
     chk.report("energy_balance", err <= args.etol,
                f"dE={dE:.4e} J, E_iny={E_in:.4e} J, err rel={err:.3e} "
                f"(tol {args.etol})")
 
     # -- arc_budget ----------------------------------------------------------
+    # E_mc_lost: beams que escapan por techo/paredes — pérdida física
+    # CONTABILIZADA (el presupuesto exige saber a dónde va cada J)
     E_arc_in = sum(r["E_src_liq_arc"] + r["E_src_gas_arc"] +
-                   r["E_arc_direct_sol"] + r.get("E_slag_intercept", 0.0)
+                   r["E_arc_direct_sol"] + r.get("E_slag_intercept", 0.0) +
+                   r.get("E_mc_lost", 0.0)
                    for r in steps)
     E_arc_avail = sum(r["P_arc"] * r["dt"] for r in steps)
     if E_arc_avail > 1.0:

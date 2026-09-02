@@ -30,6 +30,9 @@ solve_chemistry = false
 solve_arc = true
 solve_multiphase = true
 
+# Relajación clásica de SIMPLE (alpha_p ~ 1.1 - alpha_u): con el default
+# 0.7 el lazo P-V multifase diverge en fusión (p->1e13 medido)
+alpha_p = 0.3
 max_outer = 5
 max_inner_mom = 3
 max_inner_pres = 200  # Poisson de dominio completo con el gas (low-Mach)

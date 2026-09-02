@@ -18,11 +18,11 @@ SRCS = \
 	$(SRCDIR)/mod_parallel_utils.f90 \
 	$(SRCDIR)/mod_workspace.f90 \
 	$(SRCDIR)/mod_face_flux.f90 \
+	$(SRCDIR)/mod_boundary_3d.f90 \
 	$(SRCDIR)/mod_audit.f90 \
 	$(SRCDIR)/mod_config_3d.f90 \
 	$(SRCDIR)/mod_mesh_3d.f90 \
 	$(SRCDIR)/mod_solver_3d.f90 \
-	$(SRCDIR)/mod_boundary_3d.f90 \
 	$(SRCDIR)/mod_energy_3d.f90 \
 	$(SRCDIR)/mod_properties_3d.f90 \
 	$(SRCDIR)/mod_momentum_3d.f90 \
@@ -79,14 +79,14 @@ $(OBJDIR)/mod_mpi_topology.o: $(OBJDIR)/mod_constants.o
 $(OBJDIR)/mod_types_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_mpi_topology.o
 
 $(OBJDIR)/mod_parallel_utils.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
-$(OBJDIR)/mod_audit.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o
+$(OBJDIR)/mod_audit.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_boundary_3d.o
 $(OBJDIR)/mod_workspace.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_face_flux.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_config_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_mesh_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o
 $(OBJDIR)/mod_solver_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o
 $(OBJDIR)/mod_boundary_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
-$(OBJDIR)/mod_energy_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o
+$(OBJDIR)/mod_energy_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o $(OBJDIR)/mod_audit.o
 $(OBJDIR)/mod_properties_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_momentum_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o
 $(OBJDIR)/mod_pressure_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_workspace.o

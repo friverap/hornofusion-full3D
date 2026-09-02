@@ -21,7 +21,7 @@ module mod_arc_radiation_mc
     use mod_constants
     use mod_types_3d
     use mod_parallel_utils
-    use mod_audit, only: audit_add, AUD_MC_DEPOSIT
+    use mod_audit, only: audit_add, AUD_MC_DEPOSIT, AUD_MC_LOST
     implicit none
 
 contains
@@ -121,9 +121,17 @@ contains
                 x = x0; y = y0; z_pos = z0
                 n_steps = 0
 
+                ! Beams que escapan (fuera del dominio, celda inactiva o
+                ! MAX_TRACE) se AUDITAN como E_mc_lost: radiación del arco
+                ! que sale por techo/paredes — pérdida física conocida que
+                ! antes dejaba el presupuesto del arco en ~0.95 sin causa
+                ! visible. Solo el rank que traza el beam lo cuenta.
                 trace: do
                     n_steps = n_steps + 1
-                    if (n_steps > MAX_TRACE_STEPS) exit trace   ! safety guard
+                    if (n_steps > MAX_TRACE_STEPS) then
+                        call audit_add(AUD_MC_LOST, P_rad_per_beam * cfg%dt)
+                        exit trace
+                    end if
 
                     x = x + dx * step_size
                     y = y + dy * step_size
@@ -131,16 +139,28 @@ contains
 
                     ! Check bounds - use .not.(<=) to correctly handle NaN
                     r_pos = sqrt(x**2 + y**2)
-                    if (.not. (r_pos <= cfg%R_shell)) exit trace
-                    if (.not. (z_pos >= 0.0_dp .and. z_pos <= cfg%H_total)) exit trace
+                    if (.not. (r_pos <= cfg%R_shell)) then
+                        call audit_add(AUD_MC_LOST, P_rad_per_beam * cfg%dt)
+                        exit trace
+                    end if
+                    if (.not. (z_pos >= 0.0_dp .and. z_pos <= cfg%H_total)) then
+                        call audit_add(AUD_MC_LOST, P_rad_per_beam * cfg%dt)
+                        exit trace
+                    end if
 
                     ! Find GLOBAL cell indices
                     theta_pos = atan2(y, x)
                     if (theta_pos < 0.0_dp) theta_pos = theta_pos + TWO_PI
 
                     call find_cell_global(r_pos, theta_pos, z_pos, m, ig, jg, kg)
-                    if (ig < 1 .or. kg < 1) exit trace
-                    if (m%cell_type_global(ig, jg, kg) == 0) exit trace
+                    if (ig < 1 .or. kg < 1) then
+                        call audit_add(AUD_MC_LOST, P_rad_per_beam * cfg%dt)
+                        exit trace
+                    end if
+                    if (m%cell_type_global(ig, jg, kg) == 0) then
+                        call audit_add(AUD_MC_LOST, P_rad_per_beam * cfg%dt)
+                        exit trace
+                    end if
 
                     ! Check if beam hits solid or liquid
                     if (alpha_g(ig, jg, kg) > 0.1_dp .or. &

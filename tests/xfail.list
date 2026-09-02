@@ -1,12 +1,7 @@
 # Fallos esperados (XFAIL): un id por línea. Cada entrada se ELIMINA en el
 # mismo commit que aterriza su fix (el XPASS resultante lo recuerda).
 # Formatos: unit:<binario> | invariants:<check> | script:<id>
-# energy_balance: cierra en noflow (1.9e-4) y mejoró en melt (1.0->0.22)
-# con el transporte conservativo de alpha; en cold queda 0.46 — déficit
-# convectivo de la forma acotada de la ENERGÍA (E_conv_defect) + gas
-# venteado por las salidas sin contabilizar su entalpía. En curso
-# (cierre 2026, punto 2).
-audit:energy_balance
-# arc_budget: ~0.95 por celdas triviales y beams MC que escapan (0.15 en
-# noflow: sin flujo el gas no consume su parte de S_arc).
-audit:arc_budget
+# arc_budget SOLO en noflow: sin flujo, el gas (85% en la columna del
+# arco) no consume su parte de S_arc — limitación de diseño del test,
+# no un bug (con flujo el presupuesto cierra a 1.0000).
+audit_noflow:arc_budget

@@ -136,7 +136,13 @@ full | rebaseline)
     fi
     check_audit_if_present "$OUT/melt_forced_n8"
     check_invariants "$OUT/noflow_energy_n1" noflow_energy
-    check_audit_if_present "$OUT/noflow_energy_n1"
+    # noflow: xfail propio (arc_budget no aplica sin flujo — el gas no
+    # consume su parte de S_arc por diseño del test)
+    if ! $PY $INT/check_audit.py "$OUT/noflow_energy_n1" \
+            --xfail "$(xfail_ids audit),$(xfail_ids audit_noflow)"; then
+        echo ">> FAIL audit en noflow_energy_n1"
+        note_fail
+    fi
     check_invariants "$OUT/symmetry_3elec_n6" symmetry_3elec
 
     run_script "decomposition_cold_n1" \

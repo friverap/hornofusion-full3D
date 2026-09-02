@@ -327,8 +327,11 @@ program eaf_3d_simulator
                 call update_properties(liq, gas, sh, mesh, cfg)
             else if (cfg%solve_energy) then
                 prev_T = liq%T
+                ! alpha_other = 0: sin energía del gas, el líquido es el
+                ! único consumidor de S_arc/S_chem/radiación (w_src = 1);
+                ! con gas%alpha se perdía ~85% del arco (budget 0.154)
                 call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, &
-                                     gas%alpha, sol%mdot, sol%T_s, &
+                                     K_zero, sol%mdot, sol%T_s, &
                                      .false., conv%res_energy)
                 call relax_field(liq%T, prev_T, cfg%alpha_T, mesh)
                 ! Propiedades tambien sin flujo: rho_gas(T) debe seguir a T
@@ -371,7 +374,7 @@ program eaf_3d_simulator
         ! Las integrales de fuente se acumulan CADA paso; la línea CSV se
         ! escribe cada audit_freq pasos y cubre todo el intervalo.
         if (cfg%audit_freq > 0) then
-            call audit_accumulate(liq, gas, sh, mesh, cfg)
+            call audit_accumulate(liq, gas, gas_old%T, sh, mesh, cfg)
             if (mod(step, cfg%audit_freq) == 0) then
                 call audit_write_step(liq, gas, sol, slag, sh, elec, mesh, &
                                       cfg, step, time)

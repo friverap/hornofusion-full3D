@@ -14,6 +14,7 @@ module mod_energy_3d
     use mod_boundary_3d
     use mod_parallel_utils
     use mod_face_flux
+    use mod_audit, only: audit_set_energy
     implicit none
 
 contains
@@ -234,15 +235,30 @@ contains
         ! Apply boundary conditions
         call apply_scalar_bc(aW, aE, aS, aN, aB, aT, aP, Su, m, cfg%T_ambient)
 
-        ! Solve with MPI-aware TDMA
-        call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, ph%T, m, cfg%max_inner_mom)
+        ! Residual del ITERADO ENTRANTE (semántica correcta del lazo
+        ! externo, cierre 2026): mide si el campo QUE QUEDA EN PIE satisface
+        ! la ecuación. El residual del campo recién resuelto (post-TDMA) es
+        ! siempre ~0 y declaraba convergencia en 1 outer mientras el campo
+        ! relajado solo aplicaba alpha_T (~70%) del solve — 29% de las
+        ! fuentes de energía se perdía por paso (medido: era exactamente el
+        ! hueco del balance).
+        residual = compute_residual_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, &
+                                           ph%T, m)
+
+        ! Solve with MPI-aware TDMA (Tpre = iterado del ensamblado, para
+        ! reconstruir la linearización de Newton en el hook de auditoría)
+        block
+            real(dp), allocatable :: Tpre(:,:,:)
+            allocate(Tpre, mold=ph%T)
+            Tpre = ph%T
+            call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, ph%T, m, &
+                             cfg%max_inner_mom)
+            call energy_audit_hook(Tpre)
+            deallocate(Tpre)
+        end block
 
         ! (C2.1: sub-relajación en el lazo externo contra el iterado
         ! anterior — ver multiphase_iteration/relax_field)
-
-        ! Residual
-        residual = compute_residual_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, ph%T, m)
-
 
     contains
 
@@ -262,6 +278,86 @@ contains
             real(dp) :: kf
             kf = 2.0_dp * ka * kb / max(ka + kb, SMALL)
         end function harm
+
+
+        !-------------------------------------------------------------------
+        ! Hook de auditoría (cierre 2026): términos EXACTOS del enunciado
+        ! discreto de ESTA llamada, con los arrays ensamblados y la
+        ! linearización de Newton evaluada en el iterado del ensamblado
+        ! (T_it = max(Tpre,200)). La última iteración externa del paso
+        ! sobrescribe (audit_set_energy) — es la solución que queda en pie.
+        !-------------------------------------------------------------------
+        subroutine energy_audit_hook(Tpre)
+            real(dp), intent(in) :: Tpre(-1:,-1:,-1:)
+
+            integer  :: ii, jj, kk
+            real(dp) :: s_abs, s_arc, s_rad, s_chem, s_conv, s_wall, s_mass
+            real(dp) :: ww, Tit, rcv, apw, vv, ee
+
+            s_abs=0.0_dp; s_arc=0.0_dp; s_rad=0.0_dp; s_chem=0.0_dp
+            s_conv=0.0_dp; s_wall=0.0_dp; s_mass=0.0_dp
+            do kk = kstart, kend
+                do jj = jstart, jend
+                    do ii = istart, iend
+                        if (m%cell_type(ii,jj,kk) == 0) cycle
+                        if (alpha_q(ii,jj,kk) < ALPHA_CUTOFF) cycle
+                        vv  = m%vol(ii,jj,kk)
+                        rcv = max(alpha_q(ii,jj,kk), SMALL) * &
+                              ph%rho(ii,jj,kk) * ph%cp(ii,jj,kk) * vv / cfg%dt
+                        ww  = alpha_q(ii,jj,kk) / (alpha_q(ii,jj,kk) + &
+                              alpha_other(ii,jj,kk) + SMALL)
+                        Tit = max(Tpre(ii,jj,kk), 200.0_dp)
+                        s_abs = s_abs + rcv * (ph%T(ii,jj,kk) - &
+                                T_old(ii,jj,kk)) * cfg%dt
+                        s_arc = s_arc + sh%S_arc(ii,jj,kk) * ww * vv * cfg%dt
+                        s_chem = s_chem + sh%S_chem(ii,jj,kk) * ww * vv * cfg%dt
+                        s_rad = s_rad + ww * sh%kappa_f(ii,jj,kk) * vv * &
+                                (sh%G_rad(ii,jj,kk) + STEFAN_BOLTZMANN * &
+                                 (12.0_dp * Tit**4 - 16.0_dp * Tit**3 * &
+                                  ph%T(ii,jj,kk))) * cfg%dt
+                        ! Convección+difusión del enunciado acotado (la
+                        ! difusión telescopa; el residuo es el déficit
+                        ! convectivo). Signo: contribución a E_in = -esto.
+                        s_conv = s_conv + cfg%dt * ( &
+                              aW(ii,jj,kk)*(ph%T(ii,jj,kk)-ph%T(ii-1,jj,kk)) &
+                            + aE(ii,jj,kk)*(ph%T(ii,jj,kk)-ph%T(ii+1,jj,kk)) &
+                            + aS(ii,jj,kk)*(ph%T(ii,jj,kk)-ph%T(ii,jj-1,kk)) &
+                            + aN(ii,jj,kk)*(ph%T(ii,jj,kk)-ph%T(ii,jj+1,kk)) &
+                            + aB(ii,jj,kk)*(ph%T(ii,jj,kk)-ph%T(ii,jj,kk-1)) &
+                            + aT(ii,jj,kk)*(ph%T(ii,jj,kk)-ph%T(ii,jj,kk+1)) )
+                        if (cfg%h_wall > 0.0_dp) then
+                            apw = 0.0_dp
+                            if (m%cell_type(ii-1,jj,kk) == 0) apw = apw + m%Ar(ii-1,jj,kk)
+                            if (m%cell_type(ii+1,jj,kk) == 0) apw = apw + m%Ar(ii,jj,kk)
+                            if (m%cell_type(ii,jj-1,kk) == 0) apw = apw + m%Ath(ii,jj,kk)
+                            if (m%cell_type(ii,jj+1,kk) == 0) apw = apw + m%Ath(ii,jj,kk)
+                            if (m%cell_type(ii,jj,kk-1) == 0) apw = apw + m%Az(ii,jj,kk-1)
+                            if (m%cell_type(ii,jj,kk+1) == 0) apw = apw + m%Az(ii,jj,kk)
+                            apw = apw * cfg%h_wall * max(alpha_q(ii,jj,kk), SMALL)
+                            s_wall = s_wall + apw * (ph%T(ii,jj,kk) - &
+                                     cfg%T_wall) * cfg%dt
+                        end if
+                        if (.not. is_gas) then
+                            if (mdot(ii,jj,kk) > 0.0_dp) then
+                                s_mass = s_mass + mdot(ii,jj,kk) * &
+                                    ph%cp(ii,jj,kk) * (T_src(ii,jj,kk) - &
+                                    ph%T(ii,jj,kk)) * cfg%dt
+                            else if (mdot(ii,jj,kk) < 0.0_dp) then
+                                ee = min(cfg%cp_s * cfg%T_solidus, &
+                                     ph%cp(ii,jj,kk) * T_old(ii,jj,kk) + C0_datum)
+                                s_mass = s_mass + cfg%dt * ( &
+                                    - mdot(ii,jj,kk) * (ph%cp(ii,jj,kk) * &
+                                      T_old(ii,jj,kk) + C0_datum - ee) &
+                                    + mdot(ii,jj,kk) * ph%cp(ii,jj,kk) * &
+                                      ph%T(ii,jj,kk) )
+                            end if
+                        end if
+                    end do
+                end do
+            end do
+            call audit_set_energy(is_gas, s_abs, s_arc, s_rad, s_chem, &
+                                  -s_conv, s_wall, s_mass)
+        end subroutine energy_audit_hook
 
     end subroutine solve_energy_3d
 

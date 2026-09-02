@@ -30,6 +30,8 @@ module mod_continuity
     use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS
     implicit none
 
+    logical, save :: fallback_warned = .false.
+
 contains
 
     subroutine solve_volume_fraction(liq, gas, sol, alpha_slag, alpha_old, m, cfg)
@@ -49,7 +51,7 @@ contains
         integer :: istart, iend, jstart, jend, kstart, kend
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: cfl_loc, cfl_max, cfl_glob, dt_sub, a_pre, flux_net
-        integer, parameter :: N_SUB_MAX = 64
+        integer, parameter :: N_SUB_MAX = 128
         real(dp), allocatable :: a_new(:,:,:)
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -79,6 +81,13 @@ contains
         end if
         n_sub = max(1, ceiling(cfl_glob / 0.9_dp))
         if (n_sub > N_SUB_MAX) then
+            if (.not. fallback_warned .and. .not. m%is_parallel .or. &
+                (.not. fallback_warned .and. m%topo%rank == 0)) then
+                print '(A,F8.1,A)', ' [ALPHA] AVISO: CFL liquido ', cfl_glob, &
+                    ' > sub-pasable; fallback implicito acotado (defecto de' &
+                    // ' masa NO auditado — regimen numericamente invalido)'
+                fallback_warned = .true.
+            end if
             ! Régimen roto/brutal (CFL > ~57): el explícito ya no puede
             ! garantizar monotonía. Fallback al implícito ACOTADO (estable
             ! incondicional; su defecto de masa alpha*dF queda medido por

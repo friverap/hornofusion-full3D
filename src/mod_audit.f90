@@ -24,14 +24,16 @@ module mod_audit
     use mod_mpi_topology, only: mpi_allreduce_sum
     use mod_parallel_utils, only: get_loop_bounds
     use mod_face_flux, only: face_mass_fluxes
+    use mod_boundary_3d, only: physical_boundary_flags
     implicit none
     private
 
     public :: audit_init, audit_write_step, audit_add, audit_accumulate
+    public :: audit_set_energy
     public :: AUD_ARC_DIRECT, AUD_ARC_DISCARD, AUD_MC_DEPOSIT
     public :: AUD_ALPHA_CLIP_MASS, AUD_MELT_MASS, AUD_RESOLID_MASS
     public :: AUD_MELT_E_SOLID, AUD_SLAG_INTERCEPT
-    public :: AUD_RAD_SOL, AUD_RAD_WALL, AUD_CHEM_SOL
+    public :: AUD_RAD_SOL, AUD_RAD_WALL, AUD_CHEM_SOL, AUD_MC_LOST
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -45,7 +47,8 @@ module mod_audit
     integer, parameter :: AUD_RAD_SOL         = 9  ! J radiativos depositados en el sólido
     integer, parameter :: AUD_RAD_WALL        = 10 ! J radiativos netos perdidos a paredes
     integer, parameter :: AUD_CHEM_SOL        = 11 ! J de oxidación primaria al sólido
-    integer, parameter :: N_AUD = 11
+    integer, parameter :: AUD_MC_LOST         = 12 ! J de beams MC que escapan del dominio
+    integer, parameter :: N_AUD = 12
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -53,10 +56,32 @@ module mod_audit
     ! subrepresentaba las columnas de fuente ~audit_freq veces (medido en el
     ! hito bore-in con audit_freq=10; los contadores acc() siempre fueron
     ! completos). audit_accumulate se llama CADA paso desde main.
-    real(dp), save :: srcacc(9:16) = 0.0_dp
+    real(dp), save :: srcacc(9:19) = 0.0_dp
+
+    ! Términos EXACTOS del enunciado discreto de la energía, reportados por
+    ! solve_energy_3d en cada llamada (hook; la última iteración externa
+    ! del paso SOBRESCRIBE — es la que queda en pie). Índice 1=líquido,
+    ! 2=gas; columnas: absorbed, arc, rad, chem, conv_def, wall, mass.
+    ! Es la instrumentación 'por iteración' que el xfail de energy_balance
+    ! siempre pidió: el espejo post-hoc no puede reproducir la
+    ! linearización de Newton de la radiación (T_it del ensamblado).
+    real(dp), save :: eeq(2,7) = 0.0_dp
     character(len=320), save :: audit_path = ''
 
 contains
+
+    !---------------------------------------------------------------------------
+    subroutine audit_set_energy(is_gas, absorbed, e_arc, e_rad, e_chem, &
+                                e_conv, e_wall, e_mass)
+        logical, intent(in)  :: is_gas
+        real(dp), intent(in) :: absorbed, e_arc, e_rad, e_chem
+        real(dp), intent(in) :: e_conv, e_wall, e_mass
+        integer :: q
+        q = merge(2, 1, is_gas)
+        eeq(q,1) = absorbed; eeq(q,2) = e_arc; eeq(q,3) = e_rad
+        eeq(q,4) = e_chem;   eeq(q,5) = e_conv; eeq(q,6) = e_wall
+        eeq(q,7) = e_mass
+    end subroutine audit_set_energy
 
     !---------------------------------------------------------------------------
     subroutine audit_add(id, val)
@@ -93,7 +118,7 @@ contains
                 'E_arc_direct_sol,E_arc_discarded,E_mc_deposit,' // &
                 'm_melted,m_resolid,E_melt_from_solid,m_alpha_clip,' // &
                 'E_slag_intercept,E_rad_sol,E_rad_wall,E_conv_defect,' // &
-                'E_wall_conv,E_chem_sol'
+                'E_wall_conv,E_chem_sol,E_mc_lost,E_out_conv,E_gas_abs,E_mass_liq'
             close(iu)
         end if
         acc = 0.0_dp
@@ -123,7 +148,7 @@ contains
         ! déficit global = Sum dF_neto*cp*T — la entalpía de pluma que el
         ! operador no entrega; físicamente ~ el off-gas no ventilado)
         ! 16: pérdida convectiva a paredes Robin (C3.1), sum alpha*h*A*(T-Tw)
-        integer, parameter :: NSUM = 16
+        integer, parameter :: NSUM = 19
         real(dp) :: s(NSUM), s_glob(NSUM), a(N_AUD)
         real(dp) :: vol, P_arc, C0_datum
         integer  :: i, j, k, n, iu
@@ -174,7 +199,7 @@ contains
 
         ! Las integrales de fuente (columnas 9..16) las acumula
         ! audit_accumulate CADA paso; aquí solo se recogen
-        s(9:16) = srcacc(9:16)
+        s(9:19) = srcacc(9:19)
 
         ! Reducción global (contadores locales + sumas de celda)
         if (m%is_parallel) then
@@ -199,7 +224,7 @@ contains
         if (is_writer(m)) then
             open(newunit=iu, file=trim(audit_path), status='old', &
                  action='write', position='append')
-            write(iu, '(I0,A,ES16.9,A,ES16.9,28(A,ES16.9))') &
+            write(iu, '(I0,A,ES16.9,A,ES16.9,32(A,ES16.9))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &
@@ -212,7 +237,9 @@ contains
                 ',', a(AUD_MELT_E_SOLID), ',', a(AUD_ALPHA_CLIP_MASS), &
                 ',', a(AUD_SLAG_INTERCEPT), &
                 ',', a(AUD_RAD_SOL), ',', a(AUD_RAD_WALL), &
-                ',', s_glob(15), ',', s_glob(16), ',', a(AUD_CHEM_SOL)
+                ',', s_glob(15), ',', s_glob(16), ',', a(AUD_CHEM_SOL), &
+                ',', a(AUD_MC_LOST), ',', s_glob(17), ',', s_glob(18), &
+                ',', s_glob(19)
             close(iu)
         end if
     end subroutine audit_write_step
@@ -224,8 +251,16 @@ contains
     ! después de resolver la física y ANTES de adapt_timestep (usa cfg%dt
     ! del paso corrido). Local al rank; se reduce al escribir.
     !---------------------------------------------------------------------------
-    subroutine audit_accumulate(liq, gas, sh, m, cfg)
+    subroutine audit_accumulate(liq, gas, gas_T_old, sh, m, cfg)
         type(phase_t), intent(in)  :: liq, gas
+        ! T del gas al INICIO del paso: medida integral del calor absorbido
+        ! por la ecuación del gas (forma T con rho(T)): E_gas_abs +=
+        ! alpha*rho(T)*cp*(T - T_old)*V. Con EOS rho~1/T el inventario de
+        ! estado alpha*rho*cp*T es CONSTANTE bajo calentamiento puro, y la
+        ! forma log deja de valer cuando la masa ADVECTA (low-Mach): la
+        ! única medida consistente con el esquema es esta integral por
+        ! paso (el balance la usa en lugar de dE_gas de estado).
+        real(dp), intent(in)       :: gas_T_old(-1:,-1:,-1:)
         type(shared_t), intent(in) :: sh
         type(mesh_t), intent(in)   :: m
         type(config_t), intent(in) :: cfg
@@ -235,8 +270,11 @@ contains
         integer  :: i, j, k
         integer  :: istart, iend, jstart, jend, kstart, kend
         logical  :: liq_energy_on, gas_energy_on
+        logical  :: at_rmin_aud, at_rmax_aud, at_zmin_aud, at_zmax_aud
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        call physical_boundary_flags(m, at_rmin_aud, at_rmax_aud, &
+                                     at_zmin_aud, at_zmax_aud)
         liq_energy_on = cfg%solve_energy
         gas_energy_on = cfg%solve_energy .and. cfg%solve_flow .and. &
                         cfg%solve_multiphase
@@ -246,73 +284,76 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     vol = m%vol(i,j,k)
-                    src_dt = vol * cfg%dt
-                    w_l = liq%alpha(i,j,k) / &
-                          (liq%alpha(i,j,k) + gas%alpha(i,j,k) + SMALL)
-                    w_g = gas%alpha(i,j,k) / &
-                          (liq%alpha(i,j,k) + gas%alpha(i,j,k) + SMALL)
-                    if (liq_energy_on .and. &
-                        liq%alpha(i,j,k) >= ALPHA_CUTOFF) then
-                        srcacc(9)  = srcacc(9)  + sh%S_arc(i,j,k) * w_l * src_dt
-                        ! Radiación (C3.4): neto k_f*(G - 4 sigma T_fase^4),
-                        ! evaluado con la T actual de la fase (espejo de la
-                        ! linearización de solve_energy_3d)
-                        srcacc(10) = srcacc(10) + sh%kappa_f(i,j,k) * &
-                                (sh%G_rad(i,j,k) &
-                                - 4.0_dp * STEFAN_BOLTZMANN * liq%T(i,j,k)**4) &
-                                * w_l * src_dt
-                        srcacc(11) = srcacc(11) + sh%S_chem(i,j,k) * w_l * src_dt
+                    src_dt = vol * cfg%dt   ! (hooks: ver audit_set_energy)
+                    if (gas_energy_on .and. &
+                        gas%alpha(i,j,k) >= ALPHA_CUTOFF) then
+                        ! Calor absorbido por el gas en el PASO completo
+                        ! (medida alpha*rho(T)*cp*dT, consistente con la
+                        ! ecuación en forma T; incluye la remoción explícita
+                        ! de la interfase, que ocurre tras el solve)
+                        srcacc(18) = srcacc(18) + gas%alpha(i,j,k) * &
+                            gas%rho(i,j,k) * gas%cp(i,j,k) * &
+                            (gas%T(i,j,k) - gas_T_old(i,j,k)) * vol
                     end if
-                    ! Pérdida Robin a paredes (espejo de solve_energy_3d)
-                    if (cfg%h_wall > 0.0_dp .and. cfg%solve_energy) then
+
+                    ! Entalpía del gas venteado por las salidas del techo.
+                    ! Las celdas outlet tienen fila IDENTIDAD en el Poisson
+                    ! (Dirichlet pp=0): su divergencia no está controlada y
+                    ! son el SUMIDERO del dominio — la masa/entalpía que les
+                    ! entra por las caras 'desaparece' ahí (no por la cara
+                    ! superior, cuyo flujo es 0 contra el halo inactivo).
+                    ! Se contabiliza la entalpía convectiva NETA que entra.
+                    if (gas_energy_on .and. k == m%nz .and. at_zmax_aud) then
                         block
-                            real(dp) :: Awall
-                            Awall = 0.0_dp
-                            if (m%cell_type(i-1,j,k) == 0) Awall = Awall + m%Ar(i-1,j,k)
-                            if (m%cell_type(i+1,j,k) == 0) Awall = Awall + m%Ar(i,j,k)
-                            if (m%cell_type(i,j-1,k) == 0) Awall = Awall + m%Ath(i,j,k)
-                            if (m%cell_type(i,j+1,k) == 0) Awall = Awall + m%Ath(i,j,k)
-                            if (m%cell_type(i,j,k-1) == 0) Awall = Awall + m%Az(i,j,k-1)
-                            if (m%cell_type(i,j,k+1) == 0) Awall = Awall + m%Az(i,j,k)
-                            if (liq%alpha(i,j,k) >= ALPHA_CUTOFF) &
-                                srcacc(16) = srcacc(16) + cfg%h_wall * Awall * &
-                                        liq%alpha(i,j,k) * &
-                                        (liq%T(i,j,k) - cfg%T_wall) * cfg%dt
-                            if (gas_energy_on .and. gas%alpha(i,j,k) >= ALPHA_CUTOFF) &
-                                srcacc(16) = srcacc(16) + cfg%h_wall * Awall * &
-                                        gas%alpha(i,j,k) * &
-                                        (gas%T(i,j,k) - cfg%T_wall) * cfg%dt
+                            integer :: e
+                            logical :: is_out
+                            real(dp) :: ein
+                            is_out = .false.
+                            do e = 1, N_ELECTRODES
+                                if (m%is_electrode(i,j,k,e)) is_out = .true.
+                            end do
+                            if (is_out) then
+                                call face_mass_fluxes(gas%alpha, gas%rho, &
+                                    gas%ur, gas%uth, gas%uz, m, i, j, k, &
+                                    Fw, Fe, Fs, Fn, Fb, Ft)
+                                ein = ( max(Fw,0.0_dp)*gas%T(i-1,j,k) &
+                                      - max(-Fw,0.0_dp)*gas%T(i,j,k)  &
+                                      - max(Fe,0.0_dp)*gas%T(i,j,k)   &
+                                      + max(-Fe,0.0_dp)*gas%T(i+1,j,k) &
+                                      + max(Fs,0.0_dp)*gas%T(i,j-1,k) &
+                                      - max(-Fs,0.0_dp)*gas%T(i,j,k)  &
+                                      - max(Fn,0.0_dp)*gas%T(i,j,k)   &
+                                      + max(-Fn,0.0_dp)*gas%T(i,j+1,k) &
+                                      + max(Fb,0.0_dp)*gas%T(i,j,k-1) &
+                                      - max(-Fb,0.0_dp)*gas%T(i,j,k)  &
+                                      - max(Ft,0.0_dp)*gas%T(i,j,k)   &
+                                      + max(-Ft,0.0_dp)*gas%T(i,j,k+1) ) * &
+                                      gas%cp(i,j,k)
+                                srcacc(17) = srcacc(17) + ein * cfg%dt
+                            end if
                         end block
                     end if
 
-                    ! Déficit conservativo (evaluado con los campos finales)
-                    if (cfg%solve_flow .and. cfg%solve_energy) then
-                        call face_mass_fluxes(liq%alpha, liq%rho, liq%ur, &
-                            liq%uth, liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
-                        dfl = (Fe - Fw) + (Fn - Fs) + (Ft - Fb)
-                        srcacc(15) = srcacc(15) + dfl * liq%cp(i,j,k) * &
-                                     liq%T(i,j,k) * cfg%dt
-                        if (gas_energy_on) then
-                            call face_mass_fluxes(gas%alpha, gas%rho, gas%ur, &
-                                gas%uth, gas%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
-                            dfg = (Fe - Fw) + (Fn - Fs) + (Ft - Fb)
-                            srcacc(15) = srcacc(15) + dfg * gas%cp(i,j,k) * &
-                                         gas%T(i,j,k) * cfg%dt
-                        end if
-                    end if
-
-                    if (gas_energy_on .and. &
-                        gas%alpha(i,j,k) >= ALPHA_CUTOFF) then
-                        srcacc(12) = srcacc(12) + sh%S_arc(i,j,k) * w_g * src_dt
-                        srcacc(13) = srcacc(13) + sh%kappa_f(i,j,k) * &
-                                (sh%G_rad(i,j,k) &
-                                - 4.0_dp * STEFAN_BOLTZMANN * gas%T(i,j,k)**4) &
-                                * w_g * src_dt
-                        srcacc(14) = srcacc(14) + sh%S_chem(i,j,k) * w_g * src_dt
-                    end if
                 end do
             end do
         end do
+
+        ! Volcar los términos exactos del hook del solver (última outer del
+        ! paso) y resetear para el siguiente paso. La remoción explícita de
+        ! la interfase (post-energía) queda capturada por los INVENTARIOS.
+        srcacc(9)  = srcacc(9)  + eeq(1,2)   ! liq arc
+        srcacc(10) = srcacc(10) + eeq(1,3)   ! liq rad
+        srcacc(11) = srcacc(11) + eeq(1,4)   ! liq chem
+        srcacc(12) = srcacc(12) + eeq(2,2)   ! gas arc
+        srcacc(13) = srcacc(13) + eeq(2,3)   ! gas rad
+        srcacc(14) = srcacc(14) + eeq(2,4)   ! gas chem
+        srcacc(15) = srcacc(15) + eeq(1,5) + eeq(2,5)   ! conv defect
+        srcacc(16) = srcacc(16) + eeq(1,6) + eeq(2,6)   ! wall
+        ! (eeq(:,1) = absorbed del hook: diagnóstico; el absorbed del GAS
+        ! para el balance es la integral post-paso de abajo, que incluye la
+        ! remoción explícita de la interfase)
+        srcacc(19) = srcacc(19) + eeq(1,7)   ! liq mass terms (fusión)
+        eeq = 0.0_dp
     end subroutine audit_accumulate
 
     !---------------------------------------------------------------------------
