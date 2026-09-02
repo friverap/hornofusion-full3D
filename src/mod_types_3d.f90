@@ -94,7 +94,21 @@ module mod_types_3d
 
         ! Species transport (CO/CO2)
         logical  :: solve_species     ! Enable CO/CO2 transport
-        real(dp) :: carbon_frac       ! fracción de C en la carga [-] (C3.3)
+        real(dp) :: carbon_frac
+        ! Cargador continuo ECS (E1): banda de entrada en la periferia
+        logical  :: solve_ecs
+        real(dp) :: ecs_rate            ! kg/s (si no hay perfil)
+        character(len=256) :: ecs_profile_file
+        real(dp) :: ecs_theta_center    ! rad
+        real(dp) :: ecs_theta_width     ! rad
+        real(dp) :: ecs_r_inner         ! m (banda: r >= ecs_r_inner)
+        real(dp) :: ecs_vfrac           ! fraccion solida objetivo de la pila
+        real(dp) :: ecs_T_charge        ! K
+        real(dp) :: ecs_carbon_frac     ! kg C / kg carga
+        real(dp) :: ecs_t_start, ecs_t_stop
+        ! v2 (reservadas, sin uso aun): caudal acoplado a potencia
+        character(len=16) :: ecs_mode   ! 'table' | 'coupled'
+        real(dp) :: ecs_k_power, ecs_total_mass       ! fracción de C en la carga [-] (C3.3)
         real(dp) :: Sc_t_species      ! Turbulent Schmidt number [-]  default 0.7
         real(dp) :: alpha_Y_species   ! Under-relaxation for Y   [-]  default 0.5
     end type config_t

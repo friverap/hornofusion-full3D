@@ -19,6 +19,15 @@ module mod_input_profiles
         real(dp) :: current(MAX_PROFILE_POINTS)
     end type elec_profile_t
 
+    ! Perfil tabulado genérico valor(t) (E1.1): caudal del cargador
+    ! continuo, adiciones de cal/carbón, etc. Formato de archivo:
+    ! dos columnas "t valor" con # comentarios, como electrode_profile.
+    type :: rate_profile_t
+        integer  :: n_points = 0
+        real(dp) :: time(MAX_PROFILE_POINTS)
+        real(dp) :: value(MAX_PROFILE_POINTS)
+    end type rate_profile_t
+
 contains
 
     subroutine read_electrode_profile(prof, filename)
@@ -65,6 +74,78 @@ contains
 
         print '(A,I5,A)', ' [INPUT] Loaded electrode profile: ', prof%n_points, ' points'
     end subroutine read_electrode_profile
+
+    !---------------------------------------------------------------------------
+    ! Perfil genérico valor(t): lector con fallback a valor constante
+    !---------------------------------------------------------------------------
+    subroutine read_rate_profile(prof, filename, default_value)
+        type(rate_profile_t), intent(out) :: prof
+        character(len=*), intent(in)      :: filename
+        real(dp), intent(in)              :: default_value
+
+        integer :: iu, ios, n
+        real(dp) :: t, v
+        character(len=512) :: line
+
+        prof%n_points = 0
+        if (len_trim(filename) > 0) then
+            open(newunit=iu, file=trim(filename), status='old', iostat=ios)
+            if (ios == 0) then
+                n = 0
+                do
+                    read(iu, '(A)', iostat=ios) line
+                    if (ios /= 0) exit
+                    line = adjustl(line)
+                    if (len_trim(line) == 0) cycle
+                    if (line(1:1) == '#' .or. line(1:1) == '!') cycle
+                    read(line, *, iostat=ios) t, v
+                    if (ios /= 0) cycle
+                    n = n + 1
+                    if (n > MAX_PROFILE_POINTS) exit
+                    prof%time(n) = t
+                    prof%value(n) = v
+                end do
+                close(iu)
+                prof%n_points = n
+            end if
+        end if
+
+        if (prof%n_points == 0) then
+            ! Constante: dos puntos con el valor por defecto
+            prof%n_points = 2
+            prof%time(1) = 0.0_dp;   prof%value(1) = default_value
+            prof%time(2) = 1.0e30_dp; prof%value(2) = default_value
+        else
+            print '(A,I5,A,A)', ' [INPUT] Loaded rate profile: ', &
+                prof%n_points, ' points from ', trim(filename)
+        end if
+    end subroutine read_rate_profile
+
+    pure function interpolate_rate(prof, time) result(v)
+        type(rate_profile_t), intent(in) :: prof
+        real(dp), intent(in)             :: time
+        real(dp) :: v, frac
+        integer  :: i
+
+        if (prof%n_points <= 0) then
+            v = 0.0_dp; return
+        end if
+        if (time <= prof%time(1)) then
+            v = prof%value(1); return
+        end if
+        if (time >= prof%time(prof%n_points)) then
+            v = prof%value(prof%n_points); return
+        end if
+        do i = 1, prof%n_points - 1
+            if (time >= prof%time(i) .and. time < prof%time(i+1)) then
+                frac = (time - prof%time(i)) / &
+                       (prof%time(i+1) - prof%time(i) + SMALL)
+                v = prof%value(i) + frac * (prof%value(i+1) - prof%value(i))
+                return
+            end if
+        end do
+        v = prof%value(prof%n_points)
+    end function interpolate_rate
 
     subroutine interpolate_profile(prof, time, voltage, current)
         type(elec_profile_t), intent(in) :: prof

@@ -117,6 +117,21 @@ contains
         ! Species transport (CO/CO2)
         cfg%solve_species   = .false.
         cfg%carbon_frac     = 0.005_dp
+        ! ECS (E1): apagado por defecto (golden intacto)
+        cfg%solve_ecs        = .false.
+        cfg%ecs_rate         = 0.0_dp
+        cfg%ecs_profile_file = ''
+        cfg%ecs_theta_center = PI
+        cfg%ecs_theta_width  = PI / 6.0_dp
+        cfg%ecs_r_inner      = 2.8_dp
+        cfg%ecs_vfrac        = 0.5_dp
+        cfg%ecs_T_charge     = 300.0_dp
+        cfg%ecs_carbon_frac  = 0.005_dp
+        cfg%ecs_t_start      = 0.0_dp
+        cfg%ecs_t_stop       = 1.0e30_dp
+        cfg%ecs_mode         = 'table'
+        cfg%ecs_k_power      = 0.0_dp
+        cfg%ecs_total_mass   = 0.0_dp
         cfg%Sc_t_species    = 0.7_dp
         cfg%alpha_Y_species = 0.5_dp
 
@@ -244,6 +259,20 @@ contains
         ! Species transport
         case ('solve_species');   cfg%solve_species = parse_bool(val)
         case ('carbon_frac');     call parse_real(val, key, cfg%carbon_frac)
+        case ('solve_ecs');        cfg%solve_ecs = parse_bool(val)
+        case ('ecs_rate');         call parse_real(val, key, cfg%ecs_rate)
+        case ('ecs_profile_file'); cfg%ecs_profile_file = trim(val)
+        case ('ecs_theta_center'); call parse_real(val, key, cfg%ecs_theta_center)
+        case ('ecs_theta_width');  call parse_real(val, key, cfg%ecs_theta_width)
+        case ('ecs_r_inner');      call parse_real(val, key, cfg%ecs_r_inner)
+        case ('ecs_vfrac');        call parse_real(val, key, cfg%ecs_vfrac)
+        case ('ecs_T_charge');     call parse_real(val, key, cfg%ecs_T_charge)
+        case ('ecs_carbon_frac');  call parse_real(val, key, cfg%ecs_carbon_frac)
+        case ('ecs_t_start');      call parse_real(val, key, cfg%ecs_t_start)
+        case ('ecs_t_stop');       call parse_real(val, key, cfg%ecs_t_stop)
+        case ('ecs_mode');         cfg%ecs_mode = trim(val)
+        case ('ecs_k_power');      call parse_real(val, key, cfg%ecs_k_power)
+        case ('ecs_total_mass');   call parse_real(val, key, cfg%ecs_total_mass)
         case ('Sc_t_species');    call parse_real(val, key, cfg%Sc_t_species)
         case ('alpha_Y_species'); call parse_real(val, key, cfg%alpha_Y_species)
         case default
@@ -334,6 +363,21 @@ contains
                      'material properties must be > 0', ok)
         call require(cfg%R_shell > 0.0_dp .and. cfg%H_total > 0.0_dp, &
                      'R_shell and H_total must be > 0', ok)
+        if (cfg%solve_ecs) then
+            call require(cfg%ecs_vfrac > 0.0_dp .and. cfg%ecs_vfrac <= 1.0_dp, &
+                         'ecs_vfrac must be in (0, 1]', ok)
+            call require(cfg%ecs_theta_width > 0.0_dp, &
+                         'ecs_theta_width must be > 0', ok)
+            call require(cfg%ecs_r_inner < cfg%R_shell, &
+                         'ecs_r_inner must be < R_shell', ok)
+            call require(cfg%ecs_rate >= 0.0_dp, &
+                         'ecs_rate must be >= 0', ok)
+            call require(cfg%ecs_T_charge > 0.0_dp, &
+                         'ecs_T_charge must be > 0', ok)
+            call require(trim(cfg%ecs_mode) == 'table' .or. &
+                         trim(cfg%ecs_mode) == 'coupled', &
+                         "ecs_mode must be 'table' or 'coupled'", ok)
+        end if
 
         if (.not. ok) then
             print *, ' [CONFIG] Aborting due to invalid configuration.'
