@@ -117,6 +117,7 @@ contains
 
         ! Species transport (CO/CO2)
         cfg%solve_species   = .false.
+        cfg%carbon_frac     = 0.005_dp
         cfg%Sc_t_species    = 0.7_dp
         cfg%alpha_Y_species = 0.5_dp
 
@@ -240,6 +241,7 @@ contains
         case ('solve_slag');   cfg%solve_slag = parse_bool(val)
         ! Species transport
         case ('solve_species');   cfg%solve_species = parse_bool(val)
+        case ('carbon_frac');     call parse_real(val, key, cfg%carbon_frac)
         case ('Sc_t_species');    call parse_real(val, key, cfg%Sc_t_species)
         case ('alpha_Y_species'); call parse_real(val, key, cfg%alpha_Y_species)
         case default

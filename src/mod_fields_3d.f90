@@ -131,13 +131,14 @@ contains
         j1 = -1; j2 = m%ntheta + 2
         k1 = -1; k2 = m%nz + 2
 
-        allocate(sol%alpha_s(i1:i2, j1:j2, k1:k2), sol%m_s(i1:i2, j1:j2, k1:k2), &
+        allocate(sol%m_C(i1:i2, j1:j2, k1:k2), &
+                 sol%alpha_s(i1:i2, j1:j2, k1:k2), sol%m_s(i1:i2, j1:j2, k1:k2), &
                  sol%T_s(i1:i2, j1:j2, k1:k2), sol%E_s(i1:i2, j1:j2, k1:k2), &
                  sol%layer_id(i1:i2, j1:j2, k1:k2), sol%mdot(i1:i2, j1:j2, k1:k2), &
                  stat=ierr)
         call check_alloc(ierr, 'solid fields')
 
-        sol%alpha_s = 0.0_dp; sol%m_s = 0.0_dp; sol%T_s = 0.0_dp
+        sol%alpha_s = 0.0_dp; sol%m_s = 0.0_dp; sol%m_C = 0.0_dp; sol%T_s = 0.0_dp
         sol%E_s = 0.0_dp; sol%layer_id = 0; sol%mdot = 0.0_dp
     end subroutine solid_allocate
     
@@ -176,6 +177,7 @@ contains
         if (allocated(sol%E_s))      deallocate(sol%E_s)
         if (allocated(sol%layer_id)) deallocate(sol%layer_id)
         if (allocated(sol%mdot))     deallocate(sol%mdot)
+        if (allocated(sol%m_C))      deallocate(sol%m_C)
     end subroutine solid_destroy
 
     !---------------------------------------------------------------------------
@@ -252,6 +254,7 @@ contains
                  sh%S_arc_mom(i1:i2, j1:j2, k1:k2), sh%F_lorentz_r(i1:i2, j1:j2, k1:k2), &
                  sh%F_lorentz_th(i1:i2, j1:j2, k1:k2), sh%S_rad(i1:i2, j1:j2, k1:k2), &
                  sh%G_rad(i1:i2, j1:j2, k1:k2), sh%kappa_f(i1:i2, j1:j2, k1:k2), &
+                 sh%Y_O2(i1:i2, j1:j2, k1:k2), sh%S_O2_src(i1:i2, j1:j2, k1:k2), &
                  sh%S_chem(i1:i2, j1:j2, k1:k2), sh%Y_CO(i1:i2, j1:j2, k1:k2), &
                  sh%Y_CO2(i1:i2, j1:j2, k1:k2), sh%S_CO_src(i1:i2, j1:j2, k1:k2), &
                  sh%S_CO2_src(i1:i2, j1:j2, k1:k2), stat=ierr)
@@ -262,6 +265,8 @@ contains
         sh%F_lorentz_r = 0.0_dp; sh%F_lorentz_th = 0.0_dp
         sh%S_rad = 0.0_dp; sh%S_chem = 0.0_dp
         sh%G_rad = 0.0_dp; sh%kappa_f = 0.0_dp
+        sh%Y_O2 = 0.232_dp   ! aire; se agota (sin ingreso modelado)
+        sh%S_O2_src = 0.0_dp
         sh%Y_CO = 0.0_dp; sh%Y_CO2 = 0.0_dp
         sh%S_CO_src = 0.0_dp; sh%S_CO2_src = 0.0_dp
     end subroutine shared_allocate
@@ -310,6 +315,8 @@ contains
         if (allocated(sh%F_lorentz_th))  deallocate(sh%F_lorentz_th)
         if (allocated(sh%S_rad))         deallocate(sh%S_rad)
         if (allocated(sh%G_rad))         deallocate(sh%G_rad)
+        if (allocated(sh%Y_O2))          deallocate(sh%Y_O2)
+        if (allocated(sh%S_O2_src))      deallocate(sh%S_O2_src)
         if (allocated(sh%kappa_f))       deallocate(sh%kappa_f)
         if (allocated(sh%S_chem))        deallocate(sh%S_chem)
         if (allocated(sh%Y_CO))          deallocate(sh%Y_CO)
@@ -503,6 +510,7 @@ contains
                                     ! (incluye latente si T_initial > T_solidus)
                                     sol%E_s(i,j,k) = sol%m_s(i,j,k) * &
                                         solid_enthalpy(cfg%T_initial, cfg)
+                                    sol%m_C(i,j,k) = cfg%carbon_frac * sol%m_s(i,j,k)
                                     sol%layer_id(i,j,k) = n
                                     gas%alpha(i,j,k) = 1.0_dp - vfrac
                                 end if

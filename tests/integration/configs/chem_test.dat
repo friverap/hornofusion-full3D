@@ -1,0 +1,36 @@
+# Test de química conservativa (C3.3): oxidación C->CO->CO2 con O2 finito.
+# TEMPERATURAS CONGELADAS (energía/fusión/radiación off): aísla la
+# estequiometría de la química del agujero de inventario del gas ideal
+# (con rho(T), la masa de gas 'desaparece' al calentarse — documentado).
+# Chatarra fija a 1300 K (Maahs activa) y gas a 900 K (secundaria activa).
+# check_chem.py verifica conservación elemental de O y estequiometría.
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+
+dt = 0.5
+t_final = 10.0
+adaptive_dt = false
+
+T_initial = 1300.0
+T_ambient = 900.0
+carbon_frac = 0.02
+
+solve_flow = false
+solve_energy = false
+solve_melting = false
+solve_turb = false
+solve_radiation = false
+solve_chemistry = true
+solve_species = true
+solve_arc = false
+solve_multiphase = false
+
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 20
+
+output_freq = 10
+monitor_freq = 5

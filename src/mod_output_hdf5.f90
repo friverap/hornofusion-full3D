@@ -199,6 +199,7 @@ contains
         call write_3d_field(group_id, 'G_rad', sh%G_rad, m, plist_xfer)
         call write_3d_field(group_id, 'F_lorentz_r', sh%F_lorentz_r, m, plist_xfer)
         call write_3d_field(group_id, 'F_lorentz_th', sh%F_lorentz_th, m, plist_xfer)
+        call write_3d_field(group_id, 'Y_O2',     sh%Y_O2,     m, plist_xfer)
         call write_3d_field(group_id, 'Y_CO',     sh%Y_CO,     m, plist_xfer)
         call write_3d_field(group_id, 'Y_CO2',    sh%Y_CO2,    m, plist_xfer)
         call write_3d_field(group_id, 'S_CO_src', sh%S_CO_src, m, plist_xfer)

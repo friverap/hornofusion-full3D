@@ -126,6 +126,11 @@ contains
                         ! sólido restante conserva su temperatura y el líquido
                         ! recibe la masa a T_in = T_s (solve_energy_3d).
                         ! Conservación EXACTA: e_l(T_s) = e_s(T_s) para T>=T_liq.
+                        ! El carbono del inventario acompaña al fundido
+                        ! proporcionalmente (C3.3; se disuelve en el baño y
+                        ! sale del inventario oxidable de superficie)
+                        sol%m_C(i,j,k) = sol%m_C(i,j,k) * &
+                            max(0.0_dp, 1.0_dp - dm / sol%m_s(i,j,k))
                         sol%m_s(i,j,k) = sol%m_s(i,j,k) - dm
                         sol%E_s(i,j,k) = sol%E_s(i,j,k) - dm * e_spec
                         call audit_add(AUD_MELT_MASS, dm)

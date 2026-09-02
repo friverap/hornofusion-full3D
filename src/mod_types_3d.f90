@@ -94,6 +94,7 @@ module mod_types_3d
 
         ! Species transport (CO/CO2)
         logical  :: solve_species     ! Enable CO/CO2 transport
+        real(dp) :: carbon_frac       ! fracción de C en la carga [-] (C3.3)
         real(dp) :: Sc_t_species      ! Turbulent Schmidt number [-]  default 0.7
         real(dp) :: alpha_Y_species   ! Under-relaxation for Y   [-]  default 0.5
     end type config_t
@@ -185,7 +186,8 @@ module mod_types_3d
         real(dp), allocatable :: T_s(:,:,:)       ! Solid temperature [K]
         real(dp), allocatable :: E_s(:,:,:)       ! Solid energy per cell [J]
         integer,  allocatable :: layer_id(:,:,:)  ! Which charge layer
-        real(dp), allocatable :: mdot(:,:,:)      ! Melting rate [kg/s]
+        real(dp), allocatable :: mdot(:,:,:)
+        real(dp), allocatable :: m_C(:,:,:)   ! inventario de carbono [kg] (C3.3)      ! Melting rate [kg/s]
     end type solid_t
 
     !---------------------------------------------------------------------------
@@ -230,6 +232,8 @@ module mod_types_3d
         real(dp), allocatable :: S_chem(:,:,:)
 
         ! Gas species mass fractions and volumetric source terms
+        real(dp), allocatable :: Y_O2(:,:,:)      ! fracción másica O2 (C3.3)
+        real(dp), allocatable :: S_O2_src(:,:,:)  ! fuente neta O2 [kg/(m3 s)]
         real(dp), allocatable :: Y_CO(:,:,:)       ! CO mass fraction         [-]
         real(dp), allocatable :: Y_CO2(:,:,:)      ! CO2 mass fraction        [-]
         real(dp), allocatable :: S_CO_src(:,:,:)   ! CO net source            [kg/(m3·s)]

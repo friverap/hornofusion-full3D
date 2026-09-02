@@ -85,9 +85,12 @@ def main():
               f"{out_max:.1f} arco_max={in_max:.1f} K")
 
         yco, yco2 = fields["Y_CO"], fields["Y_CO2"]
+        yo2 = fields.get("Y_O2", np.zeros_like(yco))
         viol = max(-float(np.nanmin(yco)), -float(np.nanmin(yco2)),
+                   -float(np.nanmin(yo2)),
                    float(np.nanmax(yco)) - 1.0, float(np.nanmax(yco2)) - 1.0,
-                   float(np.nanmax(yco + yco2)) - 1.0)
+                   float(np.nanmax(yo2)) - 1.0,
+                   float(np.nanmax(yco + yco2 + yo2)) - 1.0)
         track("Y_bounds", viol, f"step {step}")
 
         viol = max(-float(np.nanmin(fields["tke"])),

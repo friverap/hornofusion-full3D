@@ -75,8 +75,8 @@ program eaf_3d_simulator
     real(dp), allocatable :: K_zero(:,:,:)
 
     ! Species transport old-timestep arrays
-    real(dp), allocatable :: Y_CO_old(:,:,:), Y_CO2_old(:,:,:)
-    real(dp) :: res_Y_CO, res_Y_CO2
+    real(dp), allocatable :: Y_CO_old(:,:,:), Y_CO2_old(:,:,:), Y_O2_old(:,:,:)
+    real(dp) :: res_Y_CO, res_Y_CO2, res_Y_O2
 
     ! Config and input files
     character(len=256) :: config_file
@@ -133,6 +133,7 @@ program eaf_3d_simulator
 
     allocate(Y_CO_old,  mold=sh%Y_CO);  Y_CO_old  = 0.0_dp
     allocate(Y_CO2_old, mold=sh%Y_CO2); Y_CO2_old = 0.0_dp
+    allocate(Y_O2_old,  mold=sh%Y_O2);  Y_O2_old  = 0.0_dp
 
     ! Initialize all fields
     call fields_initialize_all(liq, gas, sol, slag, sh, mesh, cfg)
@@ -252,11 +253,14 @@ program eaf_3d_simulator
         if (cfg%solve_species) then
             Y_CO_old  = sh%Y_CO
             Y_CO2_old = sh%Y_CO2
+            Y_O2_old  = sh%Y_O2
             call solve_species_3d(gas, sh%Y_CO,  Y_CO_old,  sh%S_CO_src,  mesh, cfg, res_Y_CO)
             call solve_species_3d(gas, sh%Y_CO2, Y_CO2_old, sh%S_CO2_src, mesh, cfg, res_Y_CO2)
+            call solve_species_3d(gas, sh%Y_O2,  Y_O2_old,  sh%S_O2_src,  mesh, cfg, res_Y_O2)
             if (mesh%is_parallel) then
                 call mpi_exchange_halos_3d(sh%Y_CO,  mesh%topo)
                 call mpi_exchange_halos_3d(sh%Y_CO2, mesh%topo)
+                call mpi_exchange_halos_3d(sh%Y_O2,  mesh%topo)
             end if
         end if
 
@@ -310,6 +314,9 @@ program eaf_3d_simulator
                                      gas%alpha, sol%mdot, sol%T_s, &
                                      .false., conv%res_energy)
                 call relax_field(liq%T, prev_T, cfg%alpha_T, mesh)
+                ! Propiedades tambien sin flujo: rho_gas(T) debe seguir a T
+                ! (antes quedaba congelada en el valor inicial en esta rama)
+                call update_properties(liq, gas, sh, mesh, cfg)
                 conv%res_cont = 0.0_dp
             else
                 ! No physics enabled - mark as converged immediately
@@ -398,7 +405,7 @@ program eaf_3d_simulator
     call shared_destroy(sh)
     call mesh_destroy(mesh)
     deallocate(drag_coef)
-    deallocate(Y_CO_old, Y_CO2_old)
+    deallocate(Y_CO_old, Y_CO2_old, Y_O2_old)
 
     if (should_print(mesh)) then
         print *, '  Resources freed. Done.'

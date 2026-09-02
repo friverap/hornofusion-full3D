@@ -33,16 +33,19 @@ contains
         real(dp) :: m_falling, E_falling
         integer  :: lid_falling
         real(dp), allocatable :: m_g(:,:,:), E_g(:,:,:), a_g(:,:,:), T_g(:,:,:)
+        real(dp), allocatable :: mc_g(:,:,:)
         integer,  allocatable :: lid_g(:,:,:)
 
         allocate(m_g(m%nr_g, m%nth_g, m%nz_g), E_g(m%nr_g, m%nth_g, m%nz_g))
         allocate(a_g(m%nr_g, m%nth_g, m%nz_g), T_g(m%nr_g, m%nth_g, m%nz_g))
         allocate(lid_g(m%nr_g, m%nth_g, m%nz_g))
+        allocate(mc_g(m%nr_g, m%nth_g, m%nz_g))
 
         call gather_global_field(sol%m_s, m_g, m)
         call gather_global_field(sol%E_s, E_g, m)
         call gather_global_field(sol%alpha_s, a_g, m)
         call gather_global_field(sol%T_s, T_g, m)
+        call gather_global_field(sol%m_C, mc_g, m)
         call gather_global_field_int(sol%layer_id, lid_g, m)
 
         do j = 1, m%nth_g
@@ -73,6 +76,8 @@ contains
                     lid_falling = lid_g(i,j,k)
 
                     ! Remove from source
+                    mc_g(i,j,k_dest) = mc_g(i,j,k_dest) + mc_g(i,j,k)
+                    mc_g(i,j,k) = 0.0_dp
                     m_g(i,j,k) = 0.0_dp
                     E_g(i,j,k) = 0.0_dp
                     a_g(i,j,k) = 0.0_dp
@@ -109,11 +114,12 @@ contains
                     sol%alpha_s(il,jl,kl)  = a_g(i,j,k)
                     sol%T_s(il,jl,kl)      = T_g(i,j,k)
                     sol%layer_id(il,jl,kl) = lid_g(i,j,k)
+                    sol%m_C(il,jl,kl)      = mc_g(i,j,k)
                 end do
             end do
         end do
 
-        deallocate(m_g, E_g, a_g, T_g, lid_g)
+        deallocate(m_g, E_g, a_g, T_g, lid_g, mc_g)
 
     end subroutine apply_scrap_collapse
 
