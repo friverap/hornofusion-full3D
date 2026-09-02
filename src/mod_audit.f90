@@ -13,7 +13,10 @@
 !
 ! Los módulos de física reportan sus clips/transferencias vía audit_add();
 ! los contadores son locales al rank y se reducen (allreduce) al escribir.
-! Semántica de columnas de contadores: acumulado desde la línea anterior.
+! Semántica de columnas: TODAS las columnas acumulativas (contadores acc()
+! e integrales de fuente srcacc()) acumulan desde la línea anterior — con
+! audit_freq>1 cubren TODOS los pasos del intervalo (audit_accumulate corre
+! cada paso). Los inventarios son instantáneos al paso escrito.
 !===============================================================================
 module mod_audit
     use mod_constants
@@ -24,7 +27,7 @@ module mod_audit
     implicit none
     private
 
-    public :: audit_init, audit_write_step, audit_add
+    public :: audit_init, audit_write_step, audit_add, audit_accumulate
     public :: AUD_ARC_DIRECT, AUD_ARC_DISCARD, AUD_MC_DEPOSIT
     public :: AUD_ALPHA_CLIP_MASS, AUD_MELT_MASS, AUD_RESOLID_MASS
     public :: AUD_MELT_E_SOLID, AUD_SLAG_INTERCEPT
@@ -45,6 +48,12 @@ module mod_audit
     integer, parameter :: N_AUD = 11
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
+    ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
+    ! esquema de columnas): con audit_freq>1, evaluarlas solo al escribir
+    ! subrepresentaba las columnas de fuente ~audit_freq veces (medido en el
+    ! hito bore-in con audit_freq=10; los contadores acc() siempre fueron
+    ! completos). audit_accumulate se llama CADA paso desde main.
+    real(dp), save :: srcacc(9:16) = 0.0_dp
     character(len=320), save :: audit_path = ''
 
 contains
@@ -116,8 +125,7 @@ contains
         ! 16: pérdida convectiva a paredes Robin (C3.1), sum alpha*h*A*(T-Tw)
         integer, parameter :: NSUM = 16
         real(dp) :: s(NSUM), s_glob(NSUM), a(N_AUD)
-        real(dp) :: vol, src_dt, P_arc, w_l, w_g, C0_datum
-        real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, dfl, dfg
+        real(dp) :: vol, P_arc, C0_datum
         integer  :: i, j, k, n, iu
         integer  :: istart, iend, jstart, jend, kstart, kend
         logical  :: liq_energy_on, gas_energy_on
@@ -160,70 +168,13 @@ contains
                     s(7) = s(7) + sol%E_s(i,j,k)
                     s(8) = s(8) + slag%E_sl(i,j,k)
 
-                    ! Fuentes tal como las recibe cada ecuación de energía
-                    ! (mismo guard de fase Y mismo peso w = alpha_q/(al+ag)
-                    ! que solve_energy_3d, C1.7)
-                    src_dt = vol * cfg%dt
-                    w_l = liq%alpha(i,j,k) / &
-                          (liq%alpha(i,j,k) + gas%alpha(i,j,k) + SMALL)
-                    w_g = gas%alpha(i,j,k) / &
-                          (liq%alpha(i,j,k) + gas%alpha(i,j,k) + SMALL)
-                    if (liq_energy_on .and. &
-                        liq%alpha(i,j,k) >= ALPHA_CUTOFF) then
-                        s(9)  = s(9)  + sh%S_arc(i,j,k)  * w_l * src_dt
-                        ! Radiación (C3.4): neto k_f*(G - 4 sigma T_fase^4),
-                        ! evaluado con la T actual de la fase (espejo de la
-                        ! linearización de solve_energy_3d)
-                        s(10) = s(10) + sh%kappa_f(i,j,k) * (sh%G_rad(i,j,k) &
-                                - 4.0_dp * STEFAN_BOLTZMANN * liq%T(i,j,k)**4) &
-                                * w_l * src_dt
-                        s(11) = s(11) + sh%S_chem(i,j,k) * w_l * src_dt
-                    end if
-                    ! Pérdida Robin a paredes (espejo de solve_energy_3d)
-                    if (cfg%h_wall > 0.0_dp .and. cfg%solve_energy) then
-                        block
-                            real(dp) :: Awall
-                            Awall = 0.0_dp
-                            if (m%cell_type(i-1,j,k) == 0) Awall = Awall + m%Ar(i-1,j,k)
-                            if (m%cell_type(i+1,j,k) == 0) Awall = Awall + m%Ar(i,j,k)
-                            if (m%cell_type(i,j-1,k) == 0) Awall = Awall + m%Ath(i,j,k)
-                            if (m%cell_type(i,j+1,k) == 0) Awall = Awall + m%Ath(i,j,k)
-                            if (m%cell_type(i,j,k-1) == 0) Awall = Awall + m%Az(i,j,k-1)
-                            if (m%cell_type(i,j,k+1) == 0) Awall = Awall + m%Az(i,j,k)
-                            if (liq%alpha(i,j,k) >= ALPHA_CUTOFF) &
-                                s(16) = s(16) + cfg%h_wall * Awall * liq%alpha(i,j,k) * &
-                                        (liq%T(i,j,k) - cfg%T_wall) * cfg%dt
-                            if (gas_energy_on .and. gas%alpha(i,j,k) >= ALPHA_CUTOFF) &
-                                s(16) = s(16) + cfg%h_wall * Awall * gas%alpha(i,j,k) * &
-                                        (gas%T(i,j,k) - cfg%T_wall) * cfg%dt
-                        end block
-                    end if
-
-                    ! Déficit conservativo (evaluado con los campos finales)
-                    if (cfg%solve_flow .and. cfg%solve_energy) then
-                        call face_mass_fluxes(liq%alpha, liq%rho, liq%ur, &
-                            liq%uth, liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
-                        dfl = (Fe - Fw) + (Fn - Fs) + (Ft - Fb)
-                        s(15) = s(15) + dfl * liq%cp(i,j,k) * liq%T(i,j,k) * cfg%dt
-                        if (gas_energy_on) then
-                            call face_mass_fluxes(gas%alpha, gas%rho, gas%ur, &
-                                gas%uth, gas%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
-                            dfg = (Fe - Fw) + (Fn - Fs) + (Ft - Fb)
-                            s(15) = s(15) + dfg * gas%cp(i,j,k) * gas%T(i,j,k) * cfg%dt
-                        end if
-                    end if
-
-                    if (gas_energy_on .and. &
-                        gas%alpha(i,j,k) >= ALPHA_CUTOFF) then
-                        s(12) = s(12) + sh%S_arc(i,j,k)  * w_g * src_dt
-                        s(13) = s(13) + sh%kappa_f(i,j,k) * (sh%G_rad(i,j,k) &
-                                - 4.0_dp * STEFAN_BOLTZMANN * gas%T(i,j,k)**4) &
-                                * w_g * src_dt
-                        s(14) = s(14) + sh%S_chem(i,j,k) * w_g * src_dt
-                    end if
                 end do
             end do
         end do
+
+        ! Las integrales de fuente (columnas 9..16) las acumula
+        ! audit_accumulate CADA paso; aquí solo se recogen
+        s(9:16) = srcacc(9:16)
 
         ! Reducción global (contadores locales + sumas de celda)
         if (m%is_parallel) then
@@ -238,6 +189,7 @@ contains
             a = acc
         end if
         acc = 0.0_dp
+        srcacc = 0.0_dp
 
         P_arc = 0.0_dp
         do n = 1, size(elec)
@@ -264,6 +216,104 @@ contains
             close(iu)
         end if
     end subroutine audit_write_step
+
+    !---------------------------------------------------------------------------
+    ! Integrales de fuente del PASO (columnas 9..16): fuentes tal como las
+    ! recibe cada ecuación de energía (mismo guard de fase y mismo peso
+    ! w = alpha_q/(al+ag) que solve_energy_3d, C1.7). Llamar CADA paso,
+    ! después de resolver la física y ANTES de adapt_timestep (usa cfg%dt
+    ! del paso corrido). Local al rank; se reduce al escribir.
+    !---------------------------------------------------------------------------
+    subroutine audit_accumulate(liq, gas, sh, m, cfg)
+        type(phase_t), intent(in)  :: liq, gas
+        type(shared_t), intent(in) :: sh
+        type(mesh_t), intent(in)   :: m
+        type(config_t), intent(in) :: cfg
+
+        real(dp) :: vol, src_dt, w_l, w_g
+        real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, dfl, dfg
+        integer  :: i, j, k
+        integer  :: istart, iend, jstart, jend, kstart, kend
+        logical  :: liq_energy_on, gas_energy_on
+
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        liq_energy_on = cfg%solve_energy
+        gas_energy_on = cfg%solve_energy .and. cfg%solve_flow .and. &
+                        cfg%solve_multiphase
+
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    vol = m%vol(i,j,k)
+                    src_dt = vol * cfg%dt
+                    w_l = liq%alpha(i,j,k) / &
+                          (liq%alpha(i,j,k) + gas%alpha(i,j,k) + SMALL)
+                    w_g = gas%alpha(i,j,k) / &
+                          (liq%alpha(i,j,k) + gas%alpha(i,j,k) + SMALL)
+                    if (liq_energy_on .and. &
+                        liq%alpha(i,j,k) >= ALPHA_CUTOFF) then
+                        srcacc(9)  = srcacc(9)  + sh%S_arc(i,j,k) * w_l * src_dt
+                        ! Radiación (C3.4): neto k_f*(G - 4 sigma T_fase^4),
+                        ! evaluado con la T actual de la fase (espejo de la
+                        ! linearización de solve_energy_3d)
+                        srcacc(10) = srcacc(10) + sh%kappa_f(i,j,k) * &
+                                (sh%G_rad(i,j,k) &
+                                - 4.0_dp * STEFAN_BOLTZMANN * liq%T(i,j,k)**4) &
+                                * w_l * src_dt
+                        srcacc(11) = srcacc(11) + sh%S_chem(i,j,k) * w_l * src_dt
+                    end if
+                    ! Pérdida Robin a paredes (espejo de solve_energy_3d)
+                    if (cfg%h_wall > 0.0_dp .and. cfg%solve_energy) then
+                        block
+                            real(dp) :: Awall
+                            Awall = 0.0_dp
+                            if (m%cell_type(i-1,j,k) == 0) Awall = Awall + m%Ar(i-1,j,k)
+                            if (m%cell_type(i+1,j,k) == 0) Awall = Awall + m%Ar(i,j,k)
+                            if (m%cell_type(i,j-1,k) == 0) Awall = Awall + m%Ath(i,j,k)
+                            if (m%cell_type(i,j+1,k) == 0) Awall = Awall + m%Ath(i,j,k)
+                            if (m%cell_type(i,j,k-1) == 0) Awall = Awall + m%Az(i,j,k-1)
+                            if (m%cell_type(i,j,k+1) == 0) Awall = Awall + m%Az(i,j,k)
+                            if (liq%alpha(i,j,k) >= ALPHA_CUTOFF) &
+                                srcacc(16) = srcacc(16) + cfg%h_wall * Awall * &
+                                        liq%alpha(i,j,k) * &
+                                        (liq%T(i,j,k) - cfg%T_wall) * cfg%dt
+                            if (gas_energy_on .and. gas%alpha(i,j,k) >= ALPHA_CUTOFF) &
+                                srcacc(16) = srcacc(16) + cfg%h_wall * Awall * &
+                                        gas%alpha(i,j,k) * &
+                                        (gas%T(i,j,k) - cfg%T_wall) * cfg%dt
+                        end block
+                    end if
+
+                    ! Déficit conservativo (evaluado con los campos finales)
+                    if (cfg%solve_flow .and. cfg%solve_energy) then
+                        call face_mass_fluxes(liq%alpha, liq%rho, liq%ur, &
+                            liq%uth, liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                        dfl = (Fe - Fw) + (Fn - Fs) + (Ft - Fb)
+                        srcacc(15) = srcacc(15) + dfl * liq%cp(i,j,k) * &
+                                     liq%T(i,j,k) * cfg%dt
+                        if (gas_energy_on) then
+                            call face_mass_fluxes(gas%alpha, gas%rho, gas%ur, &
+                                gas%uth, gas%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                            dfg = (Fe - Fw) + (Fn - Fs) + (Ft - Fb)
+                            srcacc(15) = srcacc(15) + dfg * gas%cp(i,j,k) * &
+                                         gas%T(i,j,k) * cfg%dt
+                        end if
+                    end if
+
+                    if (gas_energy_on .and. &
+                        gas%alpha(i,j,k) >= ALPHA_CUTOFF) then
+                        srcacc(12) = srcacc(12) + sh%S_arc(i,j,k) * w_g * src_dt
+                        srcacc(13) = srcacc(13) + sh%kappa_f(i,j,k) * &
+                                (sh%G_rad(i,j,k) &
+                                - 4.0_dp * STEFAN_BOLTZMANN * gas%T(i,j,k)**4) &
+                                * w_g * src_dt
+                        srcacc(14) = srcacc(14) + sh%S_chem(i,j,k) * w_g * src_dt
+                    end if
+                end do
+            end do
+        end do
+    end subroutine audit_accumulate
 
     !---------------------------------------------------------------------------
     logical function is_writer(m)

@@ -360,8 +360,11 @@ program eaf_3d_simulator
             call slag_exchange_halos(slag, mesh)
         end if
 
-        ! Auditoría de balances (antes de adaptar dt: usa el dt del paso)
+        ! Auditoría de balances (antes de adaptar dt: usa el dt del paso).
+        ! Las integrales de fuente se acumulan CADA paso; la línea CSV se
+        ! escribe cada audit_freq pasos y cubre todo el intervalo.
         if (cfg%audit_freq > 0) then
+            call audit_accumulate(liq, gas, sh, mesh, cfg)
             if (mod(step, cfg%audit_freq) == 0) then
                 call audit_write_step(liq, gas, sol, slag, sh, elec, mesh, &
                                       cfg, step, time)
