@@ -99,6 +99,9 @@ module mod_types_3d
         logical  :: solve_ecs
         logical  :: charge_bucket1   ! false: arranca vacio (tests ECS)
         integer  :: do_quadrature    ! 4|6|8 (S_N level-symmetric; C4.2)
+        ! Acople low-Mach del gas (S4: comparables por config)
+        logical  :: gas_in_poisson
+        logical  :: gas_compressibility
         real(dp) :: ecs_rate            ! kg/s (si no hay perfil)
         character(len=256) :: ecs_profile_file
         real(dp) :: ecs_theta_center    ! rad

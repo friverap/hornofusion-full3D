@@ -121,6 +121,8 @@ contains
         cfg%solve_ecs        = .false.
         cfg%charge_bucket1   = .true.
         cfg%do_quadrature    = 4
+        cfg%gas_in_poisson      = .true.
+        cfg%gas_compressibility = .true.
         cfg%ecs_rate         = 0.0_dp
         cfg%ecs_profile_file = ''
         cfg%ecs_theta_center = PI
@@ -264,6 +266,8 @@ contains
         case ('solve_ecs');        cfg%solve_ecs = parse_bool(val)
         case ('charge_bucket1');   cfg%charge_bucket1 = parse_bool(val)
         case ('do_quadrature');    call parse_int(val, key, cfg%do_quadrature)
+        case ('gas_in_poisson');      cfg%gas_in_poisson = parse_bool(val)
+        case ('gas_compressibility'); cfg%gas_compressibility = parse_bool(val)
         case ('ecs_rate');         call parse_real(val, key, cfg%ecs_rate)
         case ('ecs_profile_file'); cfg%ecs_profile_file = trim(val)
         case ('ecs_theta_center'); call parse_real(val, key, cfg%ecs_theta_center)

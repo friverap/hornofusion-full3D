@@ -35,8 +35,9 @@ module mod_pressure_3d
     ! el gas participa del Poisson de mezcla y su expansión térmica entra
     ! como fuente de masa acotada. Requiere gas con momentum resuelto
     ! (solve_multiphase); ver notas en solve_pressure_correction.
-    logical, parameter :: GAS_IN_POISSON      = .true.
-    logical, parameter :: GAS_COMPRESSIBILITY = .true.
+    ! (S4 del roadmap del paper: ahora claves de config
+    !  gas_in_poisson / gas_compressibility, defaults .true. — el estudio
+    !  con/sin acople low-Mach se corre por campaña sin recompilar)
 
     ! Compliance diagonal simétrica aP *= (1+eps): regulariza los bolsones
     ! aislados (p.ej. líquido encerrado en chatarra densa cuyos vecinos
@@ -167,7 +168,7 @@ contains
         call add_phase_contribution(liq)
         ! Gas en el Poisson SOLO con multifase: sin gas momentum resuelto,
         ! sus aP_u* valen 0 y d_f = V/SMALL revienta los coeficientes.
-        if (GAS_IN_POISSON .and. cfg%solve_multiphase) &
+        if (cfg%gas_in_poisson .and. cfg%solve_multiphase) &
             call add_phase_contribution(gas)
 
         ! NOTA (cierre 2026): NO añadir aquí la fuente de masa de fusión
@@ -184,7 +185,7 @@ contains
         ! siguientes (rho sigue a T, la demanda se re-emite sola).
         ! Aproximación: alpha_g fijo en el término temporal (el cambio de
         ! alpha por fusión/colapso es de segundo orden aquí).
-        if (GAS_COMPRESSIBILITY .and. cfg%solve_multiphase) then
+        if (cfg%gas_compressibility .and. cfg%solve_multiphase) then
         block
             real(dp) :: src, cap
             do k = kstart, kend
@@ -221,7 +222,7 @@ contains
                                      aN(i,j,k) + aB(i,j,k) + aT(i,j,k)) * &
                                     (1.0_dp + PP_COMPLIANCE)
                         ! Término acústico low-Mach (ver P0_THERMO arriba)
-                        if (GAS_COMPRESSIBILITY .and. cfg%solve_multiphase &
+                        if (cfg%gas_compressibility .and. cfg%solve_multiphase &
                             .and. gas%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF) then
                             aP(i,j,k) = aP(i,j,k) + gas%alpha(i,j,k) * &
                                 gas%rho(i,j,k) / P0_THERMO * &
@@ -258,7 +259,7 @@ contains
         residual = cg_res
 
         call correct_velocities(liq, sh, m, liq%alpha)
-        if (GAS_IN_POISSON .and. cfg%solve_multiphase) &
+        if (cfg%gas_in_poisson .and. cfg%solve_multiphase) &
             call correct_velocities(gas, sh, m, gas%alpha)
 
         ! Correct pressure (con cota física, ver P_HYDRO_CAP)
