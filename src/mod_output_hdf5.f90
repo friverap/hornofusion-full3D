@@ -189,6 +189,26 @@ contains
         ! Write slag phase
         call write_3d_field(group_id, 'alpha_slag', slag%alpha_sl, m, plist_xfer)
         call write_3d_field(group_id, 'T_slag',     slag%T_sl,     m, plist_xfer)
+        ! Componentes de escoria (E2.1): fracciones diagnósticas X = m_X/m_sl
+        block
+            real(dp), allocatable :: xdiag(:,:,:)
+            integer :: c
+            character(len=6), parameter :: XNAME(N_SLAG_COMP) = &
+                ['X_FeO ', 'X_CaO ', 'X_SiO2', 'X_MgO ', 'X_C   ']
+            allocate(xdiag, mold=slag%m_sl)
+            do c = 1, N_SLAG_COMP
+                where (slag%m_sl > 1.0e-12_dp)
+                    xdiag = slag%m_X(:,:,:,c) / slag%m_sl
+                elsewhere
+                    xdiag = 0.0_dp
+                end where
+                call write_3d_field(group_id, trim(XNAME(c)), xdiag, m, &
+                                    plist_xfer)
+            end do
+            deallocate(xdiag)
+        end block
+        call write_3d_field(group_id, 'alpha_foam', slag%alpha_foam, m, &
+                            plist_xfer)
         
         ! Write shared fields
         call write_3d_field(group_id, 'pressure', sh%p, m, plist_xfer)

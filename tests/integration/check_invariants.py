@@ -97,10 +97,24 @@ def main():
                    -float(np.nanmin(fields["epsilon"])))
         track("turb_positive", viol, f"step {step}")
 
+        # componentes de escoria (E2.1): sum X_c <= 1 y X_c >= 0 donde hay
+        # escoria (los datasets X_* existen desde E2.1; si no, se omite)
+        if "X_FeO" in fields:
+            xs = sum(fields[k] for k in
+                     ("X_FeO", "X_CaO", "X_SiO2", "X_MgO", "X_C"))
+            xmin = min(float(np.nanmin(fields[k])) for k in
+                       ("X_FeO", "X_CaO", "X_SiO2", "X_MgO", "X_C"))
+            viol = max(float(np.nanmax(xs)) - 1.0, -xmin)
+            track("slag_comp", viol, f"step {step}: max sum X = "
+                                     f"{np.nanmax(xs):.6f}")
+
     print(f"  ({len(files)} snapshots)")
     order = ["nan", "alpha_bounds", "sum_alpha", "T_liquid_bound",
-             "T_solid_bound", "T_gas_bound", "Y_bounds", "turb_positive"]
+             "T_solid_bound", "T_gas_bound", "Y_bounds", "turb_positive",
+             "slag_comp"]
     for cid in order:
+        if cid not in worst:
+            continue
         val, detail = worst[cid]
         chk.report(cid, val <= TOL if cid == "nan" else val <= TOL, detail)
     chk.exit()

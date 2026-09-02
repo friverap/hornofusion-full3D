@@ -1,0 +1,9 @@
+{
+  "template": "input/config_300s_borein.dat",
+  "outdir":   "campaigns/s4",
+  "nprocs":   8,
+  "runs": [
+    {"name": "lowmach_on",  "overrides": {"t_final": 60.0, "audit_freq": 1, "output_freq": 2000}},
+    {"name": "lowmach_off", "overrides": {"t_final": 60.0, "audit_freq": 1, "output_freq": 2000, "gas_in_poisson": "false", "gas_compressibility": "false"}}
+  ]
+}

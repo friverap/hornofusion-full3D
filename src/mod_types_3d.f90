@@ -102,6 +102,9 @@ module mod_types_3d
         ! Acople low-Mach del gas (S4: comparables por config)
         logical  :: gas_in_poisson
         logical  :: gas_compressibility
+        ! Composición inicial de la escoria (E2.1; fracciones másicas)
+        real(dp) :: slag_x_feo_init, slag_x_cao_init
+        real(dp) :: slag_x_sio2_init, slag_x_mgo_init
         real(dp) :: ecs_rate            ! kg/s (si no hay perfil)
         character(len=256) :: ecs_profile_file
         real(dp) :: ecs_theta_center    ! rad
@@ -212,11 +215,26 @@ module mod_types_3d
     !---------------------------------------------------------------------------
     ! Slag phase (pseudo-phase tracked by buoyancy, no full N-S)
     !---------------------------------------------------------------------------
+    ! Componentes de la escoria (E2.1): inventarios de MASA por celda.
+    ! El resto inerte = m_sl - sum(m_X). SL_C = carbón retenido en la
+    ! escoria (reactivo de la reducción FeO + C).
+    integer, parameter :: SL_FEO = 1, SL_CAO = 2, SL_SIO2 = 3
+    integer, parameter :: SL_MGO = 4, SL_C = 5
+    integer, parameter :: N_SLAG_COMP = 5
+
     type :: slag_t
         real(dp), allocatable :: alpha_sl(:,:,:)  ! Slag volume fraction  [-]
         real(dp), allocatable :: m_sl(:,:,:)      ! Slag mass per cell    [kg]
         real(dp), allocatable :: T_sl(:,:,:)      ! Slag temperature      [K]
         real(dp), allocatable :: E_sl(:,:,:)      ! Slag internal energy  [J]
+        ! Masa por componente [kg] (4D: última dimensión = componente;
+        ! pasar SOLO rebanadas m_X(:,:,:,c) — contiguas — a dummies con
+        ! halos, nunca rebanar una dimensión no-final)
+        real(dp), allocatable :: m_X(:,:,:,:)
+        ! Cobertura de espuma [0..1]: atributo ÓPTICO/geométrico de la
+        ! capa. NO participa en la restricción de volumen (sum alpha = 1)
+        ! ni tiene masa propia; solo atenúa arco/radiación (E2.5-E2.6).
+        real(dp), allocatable :: alpha_foam(:,:,:)
     end type slag_t
 
     !---------------------------------------------------------------------------

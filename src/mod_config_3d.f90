@@ -123,6 +123,12 @@ contains
         cfg%do_quadrature    = 4
         cfg%gas_in_poisson      = .true.
         cfg%gas_compressibility = .true.
+        ! composición típica de escoria EAF (ventana de Pretorius; la
+        ! Radiografía FCEL02 reporta FeO mediana 26.8% en 2022)
+        cfg%slag_x_feo_init  = 0.25_dp
+        cfg%slag_x_cao_init  = 0.35_dp
+        cfg%slag_x_sio2_init = 0.16_dp
+        cfg%slag_x_mgo_init  = 0.08_dp
         cfg%ecs_rate         = 0.0_dp
         cfg%ecs_profile_file = ''
         cfg%ecs_theta_center = PI
@@ -268,6 +274,10 @@ contains
         case ('do_quadrature');    call parse_int(val, key, cfg%do_quadrature)
         case ('gas_in_poisson');      cfg%gas_in_poisson = parse_bool(val)
         case ('gas_compressibility'); cfg%gas_compressibility = parse_bool(val)
+        case ('slag_x_feo_init');  call parse_real(val, key, cfg%slag_x_feo_init)
+        case ('slag_x_cao_init');  call parse_real(val, key, cfg%slag_x_cao_init)
+        case ('slag_x_sio2_init'); call parse_real(val, key, cfg%slag_x_sio2_init)
+        case ('slag_x_mgo_init');  call parse_real(val, key, cfg%slag_x_mgo_init)
         case ('ecs_rate');         call parse_real(val, key, cfg%ecs_rate)
         case ('ecs_profile_file'); cfg%ecs_profile_file = trim(val)
         case ('ecs_theta_center'); call parse_real(val, key, cfg%ecs_theta_center)

@@ -195,11 +195,14 @@ contains
 
         allocate(slag%alpha_sl(i1:i2, j1:j2, k1:k2), slag%m_sl(i1:i2, j1:j2, k1:k2), &
                  slag%T_sl(i1:i2, j1:j2, k1:k2), slag%E_sl(i1:i2, j1:j2, k1:k2), &
+                 slag%m_X(i1:i2, j1:j2, k1:k2, N_SLAG_COMP), &
+                 slag%alpha_foam(i1:i2, j1:j2, k1:k2), &
                  stat=ierr)
         call check_alloc(ierr, 'slag fields')
 
         slag%alpha_sl = 0.0_dp; slag%m_sl = 0.0_dp
         slag%T_sl = 0.0_dp; slag%E_sl = 0.0_dp
+        slag%m_X = 0.0_dp; slag%alpha_foam = 0.0_dp
     end subroutine slag_allocate
 
     !---------------------------------------------------------------------------
@@ -209,7 +212,7 @@ contains
         type(slag_t), intent(inout) :: slag
         type(mesh_t), intent(in)    :: m
 
-        integer :: nth
+        integer :: nth, c
 
         nth = m%ntheta
 
@@ -218,11 +221,19 @@ contains
             call mpi_exchange_halos_3d(slag%m_sl,     m%topo)
             call mpi_exchange_halos_3d(slag%T_sl,     m%topo)
             call mpi_exchange_halos_3d(slag%E_sl,     m%topo)
+            do c = 1, N_SLAG_COMP
+                call mpi_exchange_halos_3d(slag%m_X(:,:,:,c), m%topo)
+            end do
+            call mpi_exchange_halos_3d(slag%alpha_foam, m%topo)
         else
             call fill_periodic_theta(slag%alpha_sl, nth)
             call fill_periodic_theta(slag%m_sl,     nth)
             call fill_periodic_theta(slag%T_sl,     nth)
             call fill_periodic_theta(slag%E_sl,     nth)
+            do c = 1, N_SLAG_COMP
+                call fill_periodic_theta(slag%m_X(:,:,:,c), nth)
+            end do
+            call fill_periodic_theta(slag%alpha_foam, nth)
         end if
     end subroutine slag_exchange_halos
 
@@ -233,6 +244,8 @@ contains
         if (allocated(slag%m_sl))     deallocate(slag%m_sl)
         if (allocated(slag%T_sl))     deallocate(slag%T_sl)
         if (allocated(slag%E_sl))     deallocate(slag%E_sl)
+        if (allocated(slag%m_X))      deallocate(slag%m_X)
+        if (allocated(slag%alpha_foam)) deallocate(slag%alpha_foam)
     end subroutine slag_destroy
 
     !---------------------------------------------------------------------------

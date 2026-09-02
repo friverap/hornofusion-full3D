@@ -1,0 +1,17 @@
+{
+  "template": "tests/integration/configs/cold_10step.dat",
+  "outdir":   "campaigns/f2",
+  "nprocs":   8,
+  "runs": [
+    {"name": "c2_dt20", "overrides": {"dt": 0.02,  "t_final": 0.16}},
+    {"name": "c2_dt10", "overrides": {"dt": 0.01,  "t_final": 0.16}},
+    {"name": "c2_dt05", "overrides": {"dt": 0.005, "t_final": 0.16}},
+    {"name": "c3_tol3", "overrides": {"max_outer": 400, "tol_energy": 1e-3, "tol_mom": 1e-3, "tol_cont": 1e-3, "max_inner_pres": 400}},
+    {"name": "c3_tol4", "overrides": {"max_outer": 400, "tol_energy": 1e-4, "tol_mom": 1e-4, "tol_cont": 1e-4, "max_inner_pres": 400}},
+    {"name": "c3_tol5", "overrides": {"max_outer": 400, "tol_energy": 1e-5, "tol_mom": 1e-5, "tol_cont": 1e-5, "max_inner_pres": 400}},
+    {"name": "c3_tol6", "overrides": {"max_outer": 400, "tol_energy": 1e-6, "tol_mom": 1e-6, "tol_cont": 1e-6, "max_inner_pres": 400}},
+    {"name": "c3_tol7", "overrides": {"max_outer": 400, "tol_energy": 1e-7, "tol_mom": 1e-7, "tol_cont": 1e-7, "max_inner_pres": 400}},
+    {"name": "c3_tol8", "overrides": {"max_outer": 400, "tol_energy": 1e-8, "tol_mom": 1e-8, "tol_cont": 1e-8, "max_inner_pres": 400}},
+    {"name": "c3_tol9", "overrides": {"max_outer": 400, "tol_energy": 1e-9, "tol_mom": 1e-9, "tol_cont": 1e-9, "max_inner_pres": 400}}
+  ]
+}

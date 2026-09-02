@@ -144,6 +144,20 @@ contains
             vol_global = vol_global * scale_fac
         end if
 
+        ! Composición inicial (E2.1): fracciones de config aplicadas a la
+        ! masa final de cada celda (el resto queda como inerte)
+        do k_local = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (slag%m_sl(i,j,k_local) < SMALL_SL) cycle
+                    slag%m_X(i,j,k_local,SL_FEO)  = cfg%slag_x_feo_init  * slag%m_sl(i,j,k_local)
+                    slag%m_X(i,j,k_local,SL_CAO)  = cfg%slag_x_cao_init  * slag%m_sl(i,j,k_local)
+                    slag%m_X(i,j,k_local,SL_SIO2) = cfg%slag_x_sio2_init * slag%m_sl(i,j,k_local)
+                    slag%m_X(i,j,k_local,SL_MGO)  = cfg%slag_x_mgo_init  * slag%m_sl(i,j,k_local)
+                end do
+            end do
+        end do
+
         if (.not. m%is_parallel .or. m%topo%rank == 0) then
             print '(A,ES10.3,A,ES10.3,A)', &
                 ' [SLAG] Initialized: V_slag=', vol_global, &
@@ -261,11 +275,16 @@ contains
                         slag%m_sl(i,j,k+1)     = slag%m_sl(i,j,k+1)  + slag%m_sl(i,j,k)  * frac_ratio
                         slag%E_sl(i,j,k+1)     = slag%E_sl(i,j,k+1)  + slag%E_sl(i,j,k)  * frac_ratio
                         slag%alpha_sl(i,j,k+1) = slag%alpha_sl(i,j,k+1) + frac_new
+                        ! Componentes: viajan CON la masa (mismo frac_ratio
+                        ! => conservación exacta por componente, E2.1)
+                        slag%m_X(i,j,k+1,:) = slag%m_X(i,j,k+1,:) &
+                                            + slag%m_X(i,j,k,:) * frac_ratio
 
                         ! Remove from k
                         slag%m_sl(i,j,k)     = slag%m_sl(i,j,k)  * (1.0_dp - frac_ratio)
                         slag%E_sl(i,j,k)     = slag%E_sl(i,j,k)  * (1.0_dp - frac_ratio)
                         slag%alpha_sl(i,j,k) = slag%alpha_sl(i,j,k) - frac_new
+                        slag%m_X(i,j,k,:)    = slag%m_X(i,j,k,:) * (1.0_dp - frac_ratio)
 
                         ! Gas compensates volume
                         gas%alpha(i,j,k)   = min(1.0_dp, gas%alpha(i,j,k)   + frac_new)
@@ -273,10 +292,19 @@ contains
 
                         ! Clear nearly-empty cell k
                         if (slag%alpha_sl(i,j,k) < SMALL_SL) then
+                            ! Los residuos de componentes NO se descartan:
+                            ! suben con el resto (conservación)
+                            slag%m_X(i,j,k+1,:) = slag%m_X(i,j,k+1,:) &
+                                                + slag%m_X(i,j,k,:)
+                            slag%m_sl(i,j,k+1)  = slag%m_sl(i,j,k+1) &
+                                                + slag%m_sl(i,j,k)
+                            slag%E_sl(i,j,k+1)  = slag%E_sl(i,j,k+1) &
+                                                + slag%E_sl(i,j,k)
                             slag%alpha_sl(i,j,k) = 0.0_dp
                             slag%m_sl(i,j,k)     = 0.0_dp
                             slag%E_sl(i,j,k)     = 0.0_dp
                             slag%T_sl(i,j,k)     = 0.0_dp
+                            slag%m_X(i,j,k,:)    = 0.0_dp
                         end if
                     end do
                 end do

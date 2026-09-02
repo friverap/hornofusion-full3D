@@ -1,0 +1,40 @@
+# Test de regresión frío: 10 pasos, malla pequeña, física de flujo completa.
+# Equivale a input/config_small_test.dat pero con dt fijo (determinismo).
+# mdot = 0 en toda la corrida (T inicial = 300 K): NO cubre fusión.
+# El runner añade output_dir al final (la última clave gana).
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+
+# dt CFL-sano (~2 con u_gas~5 m/s y dtheta*r~0.04 m): con el gas activo
+# en el Poisson (low-Mach 2026), dt=0.5 era CFL~400 — regimen caotico no
+# testeable por invarianza.
+dt = 0.02
+t_final = 0.2
+adaptive_dt = false
+
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = true
+solve_radiation = true
+solve_chemistry = false
+solve_arc = true
+solve_multiphase = true
+
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 200  # Poisson de dominio completo con el gas (low-Mach)
+
+output_freq = 5
+monitor_freq = 5
+
+# --- overrides de la campana ---
+output_dir = /Users/frariv/Horno/hornofusion-full3D/campaigns/f2/c3_tol4
+max_outer = 400
+tol_energy = 0.0001
+tol_mom = 0.0001
+tol_cont = 0.0001
+max_inner_pres = 400
