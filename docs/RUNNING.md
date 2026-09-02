@@ -23,6 +23,22 @@ make debug        # -O0 -g -fbacktrace (depuración con GDB/LLDB)
 make clean        # elimina obj/ y bin/
 ```
 
+### Targets de test (roadmap 2026; detalles en tests/README.md)
+
+```bash
+make test-quick   # gate por commit (~1 min): corrida fría -n 8 + invariantes
+                  # + balances de audit.csv + métricas vs golden
+make test-full    # gate por etapa (~5-10 min): unit + matriz {configs}x{-n}
+                  # + fusión + simetría 120° + química + convergencia externa
+make test-unit    # unit tests Fortran (TDMA, malla, entalpía, flujos de cara,
+                  # equilibrio DO, receta de carga)
+STAGE=vN make test-rebaseline   # regenerar tests/golden/metrics_vN.json tras
+                                # un cambio numérico INTENCIONAL y explicado
+```
+
+Los fallos esperados viven en `tests/xfail.list`, cada uno con su causa raíz;
+se eliminan en el mismo commit que su fix.
+
 El compilador es `mpif90` (GFortran + MPI wrappers). Flags actuales:
 
 ```makefile
