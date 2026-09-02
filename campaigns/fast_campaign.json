@@ -1,0 +1,13 @@
+{
+  "template": "tests/integration/configs/cold_10step.dat",
+  "outdir":   "campaigns/fast",
+  "nprocs":   8,
+  "runs": [
+    {"name": "c2_dt20", "overrides": {"dt": 0.02,  "t_final": 0.16, "n_beams": 0, "max_outer": 80, "tol_energy": 1e-8, "tol_mom": 1e-8, "tol_cont": 1e-8, "max_inner_pres": 400}},
+    {"name": "c2_dt10", "overrides": {"dt": 0.01,  "t_final": 0.16, "n_beams": 0, "max_outer": 80, "tol_energy": 1e-8, "tol_mom": 1e-8, "tol_cont": 1e-8, "max_inner_pres": 400}},
+    {"name": "c2_dt05", "overrides": {"dt": 0.005, "t_final": 0.16, "n_beams": 0, "max_outer": 80, "tol_energy": 1e-8, "tol_mom": 1e-8, "tol_cont": 1e-8, "max_inner_pres": 400}},
+    {"name": "c4_s4",   "overrides": {"do_quadrature": 4}},
+    {"name": "c4_s6",   "overrides": {"do_quadrature": 6}},
+    {"name": "c4_s8",   "overrides": {"do_quadrature": 8}}
+  ]
+}

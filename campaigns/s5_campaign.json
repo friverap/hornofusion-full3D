@@ -1,0 +1,15 @@
+{
+  "template": "input/config_300s_borein.dat",
+  "outdir":   "campaigns/s5",
+  "nprocs":   8,
+  "runs": [
+    {"name": "base",        "overrides": {"t_final": 120.0, "audit_freq": 5, "output_freq": 5000}},
+    {"name": "beams_1e2",   "overrides": {"t_final": 120.0, "audit_freq": 5, "output_freq": 5000, "n_beams": 100}},
+    {"name": "beams_1e4",   "overrides": {"t_final": 120.0, "audit_freq": 5, "output_freq": 5000, "n_beams": 10000}},
+    {"name": "dpart_low",   "overrides": {"t_final": 120.0, "audit_freq": 5, "output_freq": 5000, "d_particle": 0.025}},
+    {"name": "dpart_high",  "overrides": {"t_final": 120.0, "audit_freq": 5, "output_freq": 5000, "d_particle": 0.075}},
+    {"name": "cfrac_2x",    "overrides": {"t_final": 120.0, "audit_freq": 5, "output_freq": 5000, "carbon_frac": 0.01}},
+    {"name": "frad_low",    "overrides": {"t_final": 120.0, "audit_freq": 5, "output_freq": 5000, "frac_rad": 0.4, "frac_conv": 0.4, "frac_elec": 0.2}},
+    {"name": "frad_high",   "overrides": {"t_final": 120.0, "audit_freq": 5, "output_freq": 5000, "frac_rad": 0.6, "frac_conv": 0.2, "frac_elec": 0.2}}
+  ]
+}
