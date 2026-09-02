@@ -35,9 +35,14 @@ contains
         real(dp) :: mu_eff, rho_f, vol, rho_vol_dt
         real(dp) :: dur_dr, dur_dz, duth_dr, duth_dz, duz_dr, duz_dz
         real(dp) :: dur_dth, duz_dth, S2
+        logical  :: at_rmin, at_rmax, at_zmin, at_zmax
+        logical  :: interior_z
 
         ! Get loop bounds
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        ! Gradientes centrales también en interfaces de rank (halos válidos);
+        ! solo se degradan a cero en frontera FÍSICA (hallazgo 3.6)
+        call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
         ! Allocate with halos
         allocate(aW, mold=sh%tke)
@@ -79,7 +84,9 @@ contains
                               (m%r(i) * (m%theta(jp) - m%theta(jm) + merge(TWO_PI, 0.0_dp, jp < jm)))
                     duz_dth = (liq%uz(i,jp,k) - liq%uz(i,jm,k)) / &
                               (m%r(i) * (m%theta(jp) - m%theta(jm) + merge(TWO_PI, 0.0_dp, jp < jm)))
-                    if (k > 1 .and. k < kend) then
+                    interior_z = (k > kstart .or. .not. at_zmin) .and. &
+                                 (k < kend   .or. .not. at_zmax)
+                    if (interior_z) then
                         dur_dz = (liq%ur(i,j,k+1) - liq%ur(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
                         duth_dz = (liq%uth(i,j,k+1) - liq%uth(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
                         duz_dz = (liq%uz(i,j,k+1) - liq%uz(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
@@ -115,25 +122,24 @@ contains
                     mu_eff = liq%mu(i,j,k) + sh%mu_t(i,j,k) / SIGMA_K
 
                     ! Diffusion
+                    ! Enlaces de difusión también en interfaces de rank
+                    ! (halos válidos); en frontera física los anula
+                    ! apply_scalar_bc (hallazgo 3.6)
                     Dw=0; De=0; Ds=0; Dn=0; Db=0; Dt_d=0
-                    if (i>1) then
-                        if (m%cell_type(i-1,j,k)/=0) &
-                            Dw = mu_eff * m%Ar(i-1,j,k) / (0.5_dp*(m%dr(i)+m%dr(i-1)))
-                    end if
-                    if (i < iend) then
-                        if (m%cell_type(i+1,j,k)/=0) &
-                            De = mu_eff * m%Ar(i,j,k) / (0.5_dp*(m%dr(i)+m%dr(i+1)))
-                    end if
+                    if ((i > istart .or. .not. at_rmin) .and. &
+                        m%cell_type(i-1,j,k) /= 0) &
+                        Dw = mu_eff * m%Ar(i-1,j,k) / (0.5_dp*(m%dr(i)+m%dr(i-1)))
+                    if ((i < iend .or. .not. at_rmax) .and. &
+                        m%cell_type(i+1,j,k) /= 0) &
+                        De = mu_eff * m%Ar(i,j,k) / (0.5_dp*(m%dr(i)+m%dr(i+1)))
                     Ds = mu_eff * m%Ath(i,j,k) / (m%r(i)*0.5_dp*(m%dtheta(j)+m%dtheta(jm)))
                     Dn = mu_eff * m%Ath(i,j,k) / (m%r(i)*0.5_dp*(m%dtheta(j)+m%dtheta(jp)))
-                    if (k>1) then
-                        if (m%cell_type(i,j,k-1)/=0) &
-                            Db = mu_eff * m%Az(i,j,k-1) / (0.5_dp*(m%dz(k)+m%dz(k-1)))
-                    end if
-                    if (k < kend) then
-                        if (m%cell_type(i,j,k+1)/=0) &
-                            Dt_d = mu_eff * m%Az(i,j,k) / (0.5_dp*(m%dz(k)+m%dz(k+1)))
-                    end if
+                    if ((k > kstart .or. .not. at_zmin) .and. &
+                        m%cell_type(i,j,k-1) /= 0) &
+                        Db = mu_eff * m%Az(i,j,k-1) / (0.5_dp*(m%dz(k)+m%dz(k-1)))
+                    if ((k < kend .or. .not. at_zmax) .and. &
+                        m%cell_type(i,j,k+1) /= 0) &
+                        Dt_d = mu_eff * m%Az(i,j,k) / (0.5_dp*(m%dz(k)+m%dz(k+1)))
 
                     ! Convection (upwind)
                     Fw=0; Fe=0; Fs=0; Fn=0; Fb=0; Ft_f=0
@@ -142,7 +148,8 @@ contains
                     Fs = rho_f * liq%uth(i,j,k) * m%Ath(i,j,k) / m%r(i)
                     Fn = Fs
                     Fb = rho_f * liq%uz(i,j,k) * m%Az(i,j,k-1)
-                    if (k < kend) Ft_f = rho_f * liq%uz(i,j,k) * m%Az(i,j,k)
+                    if (k < kend .or. .not. at_zmax) &
+                        Ft_f = rho_f * liq%uz(i,j,k) * m%Az(i,j,k)
 
                     aW(i,j,k) = Dw + max(Fw,0.0_dp)
                     aE(i,j,k) = De + max(-Fe,0.0_dp)
@@ -185,25 +192,24 @@ contains
                     rho_vol_dt = rho_f * vol / dt
                     mu_eff = liq%mu(i,j,k) + sh%mu_t(i,j,k) / SIGMA_EPS
 
+                    ! Enlaces de difusión también en interfaces de rank
+                    ! (halos válidos); en frontera física los anula
+                    ! apply_scalar_bc (hallazgo 3.6)
                     Dw=0; De=0; Ds=0; Dn=0; Db=0; Dt_d=0
-                    if (i>1) then
-                        if (m%cell_type(i-1,j,k)/=0) &
-                            Dw = mu_eff * m%Ar(i-1,j,k) / (0.5_dp*(m%dr(i)+m%dr(i-1)))
-                    end if
-                    if (i < iend) then
-                        if (m%cell_type(i+1,j,k)/=0) &
-                            De = mu_eff * m%Ar(i,j,k) / (0.5_dp*(m%dr(i)+m%dr(i+1)))
-                    end if
+                    if ((i > istart .or. .not. at_rmin) .and. &
+                        m%cell_type(i-1,j,k) /= 0) &
+                        Dw = mu_eff * m%Ar(i-1,j,k) / (0.5_dp*(m%dr(i)+m%dr(i-1)))
+                    if ((i < iend .or. .not. at_rmax) .and. &
+                        m%cell_type(i+1,j,k) /= 0) &
+                        De = mu_eff * m%Ar(i,j,k) / (0.5_dp*(m%dr(i)+m%dr(i+1)))
                     Ds = mu_eff * m%Ath(i,j,k) / (m%r(i)*0.5_dp*(m%dtheta(j)+m%dtheta(jm)))
                     Dn = mu_eff * m%Ath(i,j,k) / (m%r(i)*0.5_dp*(m%dtheta(j)+m%dtheta(jp)))
-                    if (k>1) then
-                        if (m%cell_type(i,j,k-1)/=0) &
-                            Db = mu_eff * m%Az(i,j,k-1) / (0.5_dp*(m%dz(k)+m%dz(k-1)))
-                    end if
-                    if (k < kend) then
-                        if (m%cell_type(i,j,k+1)/=0) &
-                            Dt_d = mu_eff * m%Az(i,j,k) / (0.5_dp*(m%dz(k)+m%dz(k+1)))
-                    end if
+                    if ((k > kstart .or. .not. at_zmin) .and. &
+                        m%cell_type(i,j,k-1) /= 0) &
+                        Db = mu_eff * m%Az(i,j,k-1) / (0.5_dp*(m%dz(k)+m%dz(k-1)))
+                    if ((k < kend .or. .not. at_zmax) .and. &
+                        m%cell_type(i,j,k+1) /= 0) &
+                        Dt_d = mu_eff * m%Az(i,j,k) / (0.5_dp*(m%dz(k)+m%dz(k+1)))
 
                     Fw=0; Fe=0; Fs=0; Fn=0; Fb=0; Ft_f=0
                     Fw = rho_f*liq%ur(i,j,k)*m%Ar(i-1,j,k)
@@ -211,7 +217,8 @@ contains
                     Fs = rho_f*liq%uth(i,j,k)*m%Ath(i,j,k)/m%r(i)
                     Fn = Fs
                     Fb = rho_f*liq%uz(i,j,k)*m%Az(i,j,k-1)
-                    if (k < kend) Ft_f = rho_f*liq%uz(i,j,k)*m%Az(i,j,k)
+                    if (k < kend .or. .not. at_zmax) &
+                        Ft_f = rho_f*liq%uz(i,j,k)*m%Az(i,j,k)
 
                     aW(i,j,k) = Dw + max(Fw,0.0_dp)
                     aE(i,j,k) = De + max(-Fe,0.0_dp)

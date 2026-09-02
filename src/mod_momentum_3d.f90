@@ -75,9 +75,11 @@ contains
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: mu_f, vol, alpha_f, rho_vol_dt
         real(dp) :: dp_dr, dp_dth, dp_dz, src_extra
+        logical  :: at_rmin, at_rmax, at_zmin, at_zmax
 
         ! Get loop bounds
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
         ! Allocate coefficient arrays (with same dimensions as fields)
         allocate(aW, mold=vel)
@@ -195,7 +197,10 @@ contains
                                    + (-alpha_f * dp_dth + src_extra) * vol
 
                     case ('uz')
-                        if (k > 1 .and. k < kend) then
+                        ! Central salvo en frontera FÍSICA; en interfaces de
+                        ! rank el halo de p es válido (hallazgo 3.6)
+                        if ((k > kstart .or. .not. at_zmin) .and. &
+                            (k < kend   .or. .not. at_zmax)) then
                             dp_dz = (sh%p(i,j,k+1) - sh%p(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
                         else if (k == kstart .and. kend > kstart) then
                             dp_dz = (sh%p(i,j,k+1) - sh%p(i,j,k)) / (m%z(k+1) - m%z(k))

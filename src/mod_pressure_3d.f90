@@ -38,9 +38,11 @@ contains
         real(dp) :: alpha_f, rho_f
         integer  :: n_iter_sor
         real(dp) :: sor_res
+        logical  :: at_rmin, at_rmax, at_zmin, at_zmax
 
         ! Get loop bounds
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
         ! Allocate with halos
         allocate(aW, mold=sh%pp)
@@ -123,12 +125,16 @@ contains
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
                                + aB(i,j,k) + aT(i,j,k)
 
-                    ! Mass source (continuity imbalance)
+                    ! Mass source (continuity imbalance).
+                    ! Los flujos en los extremos LOCALES usan halos: solo se
+                    ! omiten en fronteras FÍSICAS (hallazgo 3.6: omitirlos en
+                    ! interfaces de rank hacía el resultado dependiente del
+                    ! número de procesos).
                     Su(i,j,k) = 0.0_dp
                     ! Radial fluxes
                     if (i > 1) Su(i,j,k) = Su(i,j,k) + &
                         alpha_f * rho_f * ph%ur(i,j,k) * m%Ar(i-1,j,k)
-                    if (i < iend) Su(i,j,k) = Su(i,j,k) - &
+                    if (i < iend .or. .not. at_rmax) Su(i,j,k) = Su(i,j,k) - &
                         alpha_f * rho_f * ph%ur(i+1,j,k) * m%Ar(i,j,k)
                     ! Theta fluxes
                     Su(i,j,k) = Su(i,j,k) + &
@@ -137,7 +143,7 @@ contains
                     ! Axial fluxes
                     Su(i,j,k) = Su(i,j,k) + &
                         alpha_f * rho_f * ph%uz(i,j,k) * m%Az(i,j,k-1)
-                    if (k < kend) Su(i,j,k) = Su(i,j,k) - &
+                    if (k < kend .or. .not. at_zmax) Su(i,j,k) = Su(i,j,k) - &
                         alpha_f * rho_f * ph%uz(i,j,k+1) * m%Az(i,j,k)
                 end do
             end do
@@ -208,8 +214,15 @@ contains
         integer :: i, j, k, jm, jp
         integer :: istart, iend, jstart, jend, kstart, kend
         real(dp) :: d_coeff
+        logical  :: at_rmin, at_rmax, at_zmin, at_zmax
+        logical  :: skip_r, skip_z
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        ! Correcciones omitidas SOLO en fronteras físicas; en interfaces de
+        ! rank se usan los halos de pp (hallazgo 3.6: antes u_z jamás se
+        ! corregía en los planos de interfaz -> masa no conservada y
+        ! resultados dependientes del número de procesos)
+        call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
         do k = kstart, kend
             do j = jstart, jend
@@ -220,7 +233,9 @@ contains
                     if (m%cell_type(i,j,k) == 0) cycle
 
                     ! u_r correction
-                    if (i > 1 .and. i < iend .and. abs(ph%aP_ur(i,j,k)) > SMALL) then
+                    skip_r = (i == istart .and. at_rmin) .or. &
+                             (i == iend   .and. at_rmax)
+                    if (.not. skip_r .and. abs(ph%aP_ur(i,j,k)) > SMALL) then
                         d_coeff = m%vol(i,j,k) / ph%aP_ur(i,j,k)
                         ph%ur(i,j,k) = ph%ur(i,j,k) - d_coeff * &
                             (sh%pp(i+1,j,k) - sh%pp(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
@@ -236,7 +251,9 @@ contains
                     end if
 
                     ! u_z correction
-                    if (k > 1 .and. k < kend .and. abs(ph%aP_uz(i,j,k)) > SMALL) then
+                    skip_z = (k == kstart .and. at_zmin) .or. &
+                             (k == kend   .and. at_zmax)
+                    if (.not. skip_z .and. abs(ph%aP_uz(i,j,k)) > SMALL) then
                         d_coeff = m%vol(i,j,k) / ph%aP_uz(i,j,k)
                         ph%uz(i,j,k) = ph%uz(i,j,k) - d_coeff * &
                             (sh%pp(i,j,k+1) - sh%pp(i,j,k-1)) / (m%z(k+1) - m%z(k-1))

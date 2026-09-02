@@ -4,6 +4,14 @@
 ! At each time step, scan columns (for each r,theta):
 !   If a cell has alpha_s > 0 but cell below has alpha_s = 0 (void),
 !   the solid "falls" -- redistribute mass downward conservatively.
+!
+! Implementación invariante a la descomposición (C1.2, hallazgo 3.6): el
+! colapso es una operación de COLUMNA GLOBAL en z, pero z está descompuesta
+! en MPI; operar solo sobre el rango local impedía que la chatarra cayera a
+! través de las interfaces de rank (medido: 528 celdas colapsadas en -n 1
+! vs 336 en -n 8). Igual que distribute_arc_heat: se replican los campos
+! del sólido globalmente, se colapsa sobre la malla GLOBAL en el mismo
+! orden que en serial, y cada rank escribe de vuelta solo sus celdas.
 !===============================================================================
 module mod_scrap_collapse
     use mod_constants
@@ -19,67 +27,92 @@ contains
         type(config_t), intent(in)   :: cfg
 
         integer :: i, j, k, k_below, k_dest
-        real(dp) :: m_falling, E_falling, T_falling
+        integer :: il, jl, kl
+        logical :: owned
+        real(dp) :: m_falling, E_falling
         integer  :: lid_falling
-        logical  :: did_collapse
+        real(dp), allocatable :: m_g(:,:,:), E_g(:,:,:), a_g(:,:,:), T_g(:,:,:)
+        integer,  allocatable :: lid_g(:,:,:)
 
-        did_collapse = .false.
+        allocate(m_g(m%nr_g, m%nth_g, m%nz_g), E_g(m%nr_g, m%nth_g, m%nz_g))
+        allocate(a_g(m%nr_g, m%nth_g, m%nz_g), T_g(m%nr_g, m%nth_g, m%nz_g))
+        allocate(lid_g(m%nr_g, m%nth_g, m%nz_g))
 
-        do j = 1, m%ntheta
-            do i = 1, m%nr
+        call gather_global_field(sol%m_s, m_g, m)
+        call gather_global_field(sol%E_s, E_g, m)
+        call gather_global_field(sol%alpha_s, a_g, m)
+        call gather_global_field(sol%T_s, T_g, m)
+        call gather_global_field_int(sol%layer_id, lid_g, m)
+
+        do j = 1, m%nth_g
+            do i = 1, m%nr_g
                 ! Sweep top-to-bottom: if cell has solid and cell below is empty, drop
-                do k = m%nz, 2, -1
-                    if (m%cell_type(i,j,k) == 0) cycle
-                    if (sol%alpha_s(i,j,k) < 1.0e-6_dp) cycle
+                do k = m%nz_g, 2, -1
+                    if (m%cell_type_global(i,j,k) == 0) cycle
+                    if (a_g(i,j,k) < 1.0e-6_dp) cycle
 
                     k_below = k - 1
 
                     ! Find lowest empty cell below this one
-                    if (m%cell_type(i,j,k_below) == 0) cycle
-                    if (sol%alpha_s(i,j,k_below) > 0.01_dp) cycle
+                    if (m%cell_type_global(i,j,k_below) == 0) cycle
+                    if (a_g(i,j,k_below) > 0.01_dp) cycle
 
                     ! Solid has void below -- it falls
                     ! Find destination: lowest empty cell in column
                     k_dest = k_below
                     do while (k_dest > 1)
-                        if (m%cell_type(i,j,k_dest-1) == 0) exit
-                        if (sol%alpha_s(i,j,k_dest-1) > 0.01_dp) exit
+                        if (m%cell_type_global(i,j,k_dest-1) == 0) exit
+                        if (a_g(i,j,k_dest-1) > 0.01_dp) exit
                         k_dest = k_dest - 1
                     end do
 
                     ! Transfer solid mass from k to k_dest
-                    m_falling   = sol%m_s(i,j,k)
-                    E_falling   = sol%E_s(i,j,k)
-                    T_falling   = sol%T_s(i,j,k)
-                    lid_falling = sol%layer_id(i,j,k)
+                    m_falling   = m_g(i,j,k)
+                    E_falling   = E_g(i,j,k)
+                    lid_falling = lid_g(i,j,k)
 
                     ! Remove from source
-                    sol%m_s(i,j,k) = 0.0_dp
-                    sol%E_s(i,j,k) = 0.0_dp
-                    sol%alpha_s(i,j,k) = 0.0_dp
-                    sol%layer_id(i,j,k) = 0
+                    m_g(i,j,k) = 0.0_dp
+                    E_g(i,j,k) = 0.0_dp
+                    a_g(i,j,k) = 0.0_dp
+                    lid_g(i,j,k) = 0
 
                     ! Add to destination (merge with existing if any)
-                    sol%m_s(i,j,k_dest)     = sol%m_s(i,j,k_dest) + m_falling
-                    sol%E_s(i,j,k_dest)     = sol%E_s(i,j,k_dest) + E_falling
-                    sol%layer_id(i,j,k_dest) = lid_falling
+                    m_g(i,j,k_dest)   = m_g(i,j,k_dest) + m_falling
+                    E_g(i,j,k_dest)   = E_g(i,j,k_dest) + E_falling
+                    lid_g(i,j,k_dest) = lid_falling
 
                     ! Recompute alpha_s and T_s
-                    if (m%vol(i,j,k_dest) > SMALL) then
-                        sol%alpha_s(i,j,k_dest) = sol%m_s(i,j,k_dest) / &
-                                                    (cfg%rho_steel * m%vol(i,j,k_dest))
+                    if (m%vol_global(i,j,k_dest) > SMALL) then
+                        a_g(i,j,k_dest) = m_g(i,j,k_dest) / &
+                                          (cfg%rho_steel * m%vol_global(i,j,k_dest))
                     end if
-                    sol%alpha_s(i,j,k_dest) = min(1.0_dp, sol%alpha_s(i,j,k_dest))
+                    a_g(i,j,k_dest) = min(1.0_dp, a_g(i,j,k_dest))
 
-                    if (sol%m_s(i,j,k_dest) > SMALL) then
-                        sol%T_s(i,j,k_dest) = sol%E_s(i,j,k_dest) / &
-                                               (sol%m_s(i,j,k_dest) * cfg%cp_s)
+                    if (m_g(i,j,k_dest) > SMALL) then
+                        T_g(i,j,k_dest) = E_g(i,j,k_dest) / &
+                                          (m_g(i,j,k_dest) * cfg%cp_s)
                     end if
-
-                    did_collapse = .true.
                 end do
             end do
         end do
+
+        ! Write back: solo las celdas propias de este rank
+        do k = 1, m%nz_g
+            do j = 1, m%nth_g
+                do i = 1, m%nr_g
+                    call global_to_local(m, i, j, k, il, jl, kl, owned)
+                    if (.not. owned) cycle
+                    sol%m_s(il,jl,kl)      = m_g(i,j,k)
+                    sol%E_s(il,jl,kl)      = E_g(i,j,k)
+                    sol%alpha_s(il,jl,kl)  = a_g(i,j,k)
+                    sol%T_s(il,jl,kl)      = T_g(i,j,k)
+                    sol%layer_id(il,jl,kl) = lid_g(i,j,k)
+                end do
+            end do
+        end do
+
+        deallocate(m_g, E_g, a_g, T_g, lid_g)
 
     end subroutine apply_scrap_collapse
 
