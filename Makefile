@@ -16,6 +16,7 @@ SRCS = \
 	$(SRCDIR)/mod_mpi_topology.f90 \
 	$(SRCDIR)/mod_types_3d.f90 \
 	$(SRCDIR)/mod_parallel_utils.f90 \
+	$(SRCDIR)/mod_timers.f90 \
 	$(SRCDIR)/mod_workspace.f90 \
 	$(SRCDIR)/mod_face_flux.f90 \
 	$(SRCDIR)/mod_boundary_3d.f90 \
@@ -80,6 +81,7 @@ $(OBJDIR)/mod_types_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_mpi_topology.o
 
 $(OBJDIR)/mod_parallel_utils.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_audit.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_boundary_3d.o
+$(OBJDIR)/mod_timers.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o
 $(OBJDIR)/mod_workspace.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_face_flux.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_config_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
@@ -110,7 +112,7 @@ $(OBJDIR)/mod_convergence_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d
 $(OBJDIR)/mod_input_profiles.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_fields_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_melting_3d.o
 $(OBJDIR)/mod_output_hdf5.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o
-$(OBJDIR)/main_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o \
+$(OBJDIR)/main_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_timers.o \
                       $(OBJDIR)/mod_config_3d.o $(OBJDIR)/mod_mesh_3d.o $(OBJDIR)/mod_fields_3d.o \
                       $(OBJDIR)/mod_output_hdf5.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o \
                       $(OBJDIR)/mod_energy_3d.o $(OBJDIR)/mod_properties_3d.o $(OBJDIR)/mod_momentum_3d.o \

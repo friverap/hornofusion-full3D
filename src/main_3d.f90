@@ -45,6 +45,7 @@ program eaf_3d_simulator
     use mod_convergence_3d
     use mod_input_profiles
     use mod_audit
+    use mod_timers
     implicit none
 
     ! Main variables
@@ -224,6 +225,7 @@ program eaf_3d_simulator
         call interpolate_profile(elec_prof, time, V_elec, I_elec)
 
         ! Update arc model
+        call timer_start(T_ARC)
         if (cfg%solve_arc) then
             do e = 1, N_ELECTRODES
                 call update_arc_resistance(elec(e), V_elec, I_elec, cfg, cfg%dt)
@@ -249,13 +251,17 @@ program eaf_3d_simulator
                 call slag_intercept_arc(slag, sh, mesh, cfg)
             end if
         end if
+        call timer_stop(T_ARC)
 
         ! Radiation (DO model)
+        call timer_start(T_RAD)
         if (cfg%solve_radiation) then
             call solve_radiation_do(liq, gas, sol, sh, mesh, cfg)
         end if
+        call timer_stop(T_RAD)
 
         ! Chemistry
+        call timer_start(T_CHEM)
         if (cfg%solve_chemistry) then
             call compute_carbon_oxidation(sol, gas, sh, mesh, cfg)
         end if
@@ -274,6 +280,7 @@ program eaf_3d_simulator
                 call mpi_exchange_halos_3d(sh%Y_O2,  mesh%topo)
             end if
         end if
+        call timer_stop(T_CHEM)
 
         !---------------------------------------------------------------
         ! OUTER ITERATION LOOP (SIMPLE)
@@ -281,9 +288,11 @@ program eaf_3d_simulator
         
         ! Fusión + colapso ANTES del SIMPLE; la transferencia interfase va
         ! DESPUÉS de los solves de energía (ver notas en mod_solid_phase)
+        call timer_start(T_SOLID)
         if (cfg%solve_melting) then
             call update_solid_premelt(sol, liq, gas, slag, mesh, cfg, cfg%dt)
         end if
+        call timer_stop(T_SOLID)
 
         ! Initialize residuals to zero
         conv%res_ur = 0.0_dp
@@ -295,6 +304,7 @@ program eaf_3d_simulator
         conv%res_eps = 0.0_dp
         conv%converged = .false.
         
+        call timer_start(T_SIMPLE)
         do outer = 1, cfg%max_outer
 
             ! Ergun drag coefficient from solid
@@ -357,22 +367,27 @@ program eaf_3d_simulator
             ! acotado por el do; la convergencia REAL gobierna el dt)
             if (conv%converged) exit
         end do
-
+        call timer_stop(T_SIMPLE)
 
         ! Transferencia interfase (tras los solves de energía)
+        call timer_start(T_SOLID)
         if (cfg%solve_melting) then
             call update_solid_postenergy(sol, liq, gas, mesh, cfg)
         end if
+        call timer_stop(T_SOLID)
 
         ! Slag layer update (buoyancy + energy exchange)
+        call timer_start(T_SLAG)
         if (cfg%solve_slag) then
             call update_slag(slag, liq, gas, sh, mesh, cfg, cfg%dt)
             call slag_exchange_halos(slag, mesh)
         end if
+        call timer_stop(T_SLAG)
 
         ! Auditoría de balances (antes de adaptar dt: usa el dt del paso).
         ! Las integrales de fuente se acumulan CADA paso; la línea CSV se
         ! escribe cada audit_freq pasos y cubre todo el intervalo.
+        call timer_start(T_IO)
         if (cfg%audit_freq > 0) then
             call audit_accumulate(liq, gas, gas_old%T, sh, mesh, cfg)
             if (mod(step, cfg%audit_freq) == 0) then
@@ -380,6 +395,7 @@ program eaf_3d_simulator
                                       cfg, step, time)
             end if
         end if
+        call timer_stop(T_IO)
 
         ! Adaptive time stepping (criterio CFL + convergencia real; C3.2)
         call adapt_timestep(cfg%dt, conv, &
@@ -398,7 +414,9 @@ program eaf_3d_simulator
         end if
 
         if (mod(step, cfg%output_freq) == 0) then
+            call timer_start(T_IO)
             call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, step, time, cfg%output_dir)
+            call timer_stop(T_IO)
         end if
         
         if (should_print(mesh)) then
@@ -436,6 +454,8 @@ program eaf_3d_simulator
     end if
 
     ! Finalize MPI (must be the last MPI-related action)
+    call timer_report(mesh)
+
     call mpi_finalize_topology(mesh%topo)
 
 contains
