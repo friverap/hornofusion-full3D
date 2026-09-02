@@ -18,9 +18,14 @@ module mod_continuity
 
 contains
 
-    subroutine solve_volume_fraction(liq, gas, sol, m, cfg)
+    subroutine solve_volume_fraction(liq, gas, sol, alpha_old, m, cfg)
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
+        ! alpha del PASO TEMPORAL anterior (liq_old%alpha). El término
+        ! transitorio debe anclarse a él: usar el iterado actual aplicaría la
+        ! fuente de fusión mdot una vez POR ITERACIÓN EXTERNA (masa líquida
+        ! multiplicada ~max_outer veces por paso). Hallazgo 3.2.
+        real(dp), intent(in)         :: alpha_old(-1:,-1:,-1:)
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
 
@@ -79,7 +84,7 @@ contains
                     ! Source: transient + melting rate
                     ! sol%mdot is [kg/s] per cell (= dm/dt); vol_dt*alpha is also [kg/s].
                     ! Do NOT multiply by vol — that would give wrong units [kg*m^3/s].
-                    Su(i,j,k) = vol_dt * liq%alpha(i,j,k) + sol%mdot(i,j,k)
+                    Su(i,j,k) = vol_dt * alpha_old(i,j,k) + sol%mdot(i,j,k)
 
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
                                + aB(i,j,k) + aT(i,j,k) + vol_dt &

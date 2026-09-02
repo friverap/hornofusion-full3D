@@ -73,7 +73,7 @@ contains
 
         ! Volume fraction update
         if (cfg%solve_multiphase) then
-            call solve_volume_fraction(liq, gas, sol, m, cfg)
+            call solve_volume_fraction(liq, gas, sol, liq_old%alpha, m, cfg)
             ! Exchange after volume fraction update
             call phase_exchange_halos(liq, m)
             call phase_exchange_halos(gas, m)
