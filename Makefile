@@ -17,6 +17,7 @@ SRCS = \
 	$(SRCDIR)/mod_types_3d.f90 \
 	$(SRCDIR)/mod_parallel_utils.f90 \
 	$(SRCDIR)/mod_audit.f90 \
+	$(SRCDIR)/mod_face_flux.f90 \
 	$(SRCDIR)/mod_config_3d.f90 \
 	$(SRCDIR)/mod_mesh_3d.f90 \
 	$(SRCDIR)/mod_solver_3d.f90 \
@@ -79,16 +80,17 @@ $(OBJDIR)/mod_types_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_mpi_topology.o
 
 $(OBJDIR)/mod_parallel_utils.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_audit.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_parallel_utils.o
+$(OBJDIR)/mod_face_flux.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_config_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_mesh_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o
 $(OBJDIR)/mod_solver_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o
 $(OBJDIR)/mod_boundary_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
-$(OBJDIR)/mod_energy_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o
+$(OBJDIR)/mod_energy_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o
 $(OBJDIR)/mod_properties_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
-$(OBJDIR)/mod_momentum_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o
+$(OBJDIR)/mod_momentum_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o
 $(OBJDIR)/mod_pressure_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o
 $(OBJDIR)/mod_drag_ergun.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
-$(OBJDIR)/mod_continuity.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_audit.o
+$(OBJDIR)/mod_continuity.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_audit.o $(OBJDIR)/mod_face_flux.o
 $(OBJDIR)/mod_melting_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_audit.o
 $(OBJDIR)/mod_scrap_collapse.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_melting_3d.o
 $(OBJDIR)/mod_interphase_ht.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_melting_3d.o
@@ -100,11 +102,10 @@ $(OBJDIR)/mod_arc_radiation_mc.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_
 $(OBJDIR)/mod_arc_impingement.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_lorentz_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_multiphase.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_momentum_3d.o $(OBJDIR)/mod_pressure_3d.o $(OBJDIR)/mod_energy_3d.o $(OBJDIR)/mod_continuity.o $(OBJDIR)/mod_drag_ergun.o $(OBJDIR)/mod_properties_3d.o $(OBJDIR)/mod_fields_3d.o
-$(OBJDIR)/mod_turbulence_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o
+$(OBJDIR)/mod_turbulence_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o
 $(OBJDIR)/mod_radiation_do.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o
 $(OBJDIR)/mod_chemistry_carbon.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o
-$(OBJDIR)/mod_species_transport.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o \
-    $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o
+$(OBJDIR)/mod_species_transport.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o
 $(OBJDIR)/mod_convergence_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o
 $(OBJDIR)/mod_input_profiles.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_fields_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_melting_3d.o

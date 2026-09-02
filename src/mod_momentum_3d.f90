@@ -20,6 +20,7 @@ module mod_momentum_3d
     use mod_solver_3d
     use mod_boundary_3d
     use mod_parallel_utils
+    use mod_face_flux
     implicit none
 
 contains
@@ -27,10 +28,15 @@ contains
     !---------------------------------------------------------------------------
     ! Solve all three momentum components for a single phase
     !---------------------------------------------------------------------------
-    subroutine solve_momentum_3d(ph, ph_old, sh, m, cfg, alpha_q, &
-                                  drag_coef, is_gas, res_ur, res_uth, res_uz)
+    subroutine solve_momentum_3d(ph, ph_old, ph_other, Kexch, sh, m, cfg, &
+                                  alpha_q, drag_coef, is_gas, &
+                                  res_ur, res_uth, res_uz)
         type(phase_t), intent(inout) :: ph
         type(phase_t), intent(in)    :: ph_old
+        ! Otra fase fluida + coeficiente de intercambio de momentum K [kg/(m3 s)]
+        ! (C2.4): aP += K*vol, Su += K*u_otra*vol — implícito y simétrico.
+        type(phase_t), intent(in)    :: ph_other
+        real(dp), intent(in)         :: Kexch(-1:,-1:,-1:)
         type(shared_t), intent(in)   :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
@@ -44,13 +50,16 @@ contains
         real(dp), intent(out)        :: res_ur, res_uth, res_uz
 
         ! Solve each component
-        call solve_momentum_component(ph%ur, ph_old%ur, ph, sh, m, cfg, &
+        call solve_momentum_component(ph%ur, ph_old%ur, ph_other%ur, Kexch, &
+                                       ph, sh, m, cfg, &
                                        alpha_q, drag_coef, is_gas, 'ur', res_ur)
 
-        call solve_momentum_component(ph%uth, ph_old%uth, ph, sh, m, cfg, &
+        call solve_momentum_component(ph%uth, ph_old%uth, ph_other%uth, Kexch, &
+                                       ph, sh, m, cfg, &
                                        alpha_q, drag_coef, is_gas, 'uth', res_uth)
 
-        call solve_momentum_component(ph%uz, ph_old%uz, ph, sh, m, cfg, &
+        call solve_momentum_component(ph%uz, ph_old%uz, ph_other%uz, Kexch, &
+                                       ph, sh, m, cfg, &
                                        alpha_q, drag_coef, is_gas, 'uz', res_uz)
 
     end subroutine solve_momentum_3d
@@ -58,10 +67,13 @@ contains
     !---------------------------------------------------------------------------
     ! Single momentum component solver (MPI-aware)
     !---------------------------------------------------------------------------
-    subroutine solve_momentum_component(vel, vel_old, ph, sh, m, cfg, &
+    subroutine solve_momentum_component(vel, vel_old, vel_other, Kexch, &
+                                         ph, sh, m, cfg, &
                                          alpha_q, drag_coef, is_gas, comp, residual)
         real(dp), intent(inout)      :: vel(-1:,-1:,-1:)
         real(dp), intent(in)         :: vel_old(-1:,-1:,-1:)
+        real(dp), intent(in)         :: vel_other(-1:,-1:,-1:)
+        real(dp), intent(in)         :: Kexch(-1:,-1:,-1:)
         type(phase_t), intent(inout) :: ph
         type(shared_t), intent(in)   :: sh
         type(mesh_t), intent(in)     :: m
@@ -79,7 +91,7 @@ contains
         real(dp) :: Dw, De, Ds, Dn, Db, Dt
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: mu_f, vol, alpha_f, rho_vol_dt
-        real(dp) :: dp_dr, dp_dth, dp_dz, src_extra
+        real(dp) :: dp_dr, dp_dth, dp_dz, src_extra, aP_extra
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
 
         ! Get loop bounds
@@ -111,12 +123,13 @@ contains
                     vol = m%vol(i,j,k)
                     alpha_f = max(alpha_q(i,j,k), SMALL)
 
-                    ! Negligible phase fraction: trivial equation keeps vel = vel_old.
-                    ! Prevents near-zero aP (= 0 * rho * vol / dt) from making
-                    ! the TDMA diagonal singular.
-                    if (alpha_q(i,j,k) < ALPHA_CUTOFF) then
+                    ! Fase por debajo del umbral hidrodinámico: velocidad 0
+                    ! (C2.2, ALPHA_FLOW_CUTOFF; antes vel=vel_old con umbral
+                    ! 1e-6 dejaba celdas casi vacías con aP diminuto en el
+                    ! acople de presión)
+                    if (alpha_q(i,j,k) < ALPHA_FLOW_CUTOFF) then
                         aP(i,j,k) = 1.0_dp
-                        Su(i,j,k) = vel_old(i,j,k)
+                        Su(i,j,k) = 0.0_dp
                         cycle
                     end if
 
@@ -154,15 +167,9 @@ contains
                             Dt = alpha_f * mu_f * m%Az(i,j,k) / (0.5_dp*(m%dz(k)+m%dz(k+1)))
                         end if
 
-                    ! Convective fluxes
-                    Fw = 0.0_dp; Fe = 0.0_dp; Fs = 0.0_dp; Fn = 0.0_dp
-                    Fb = 0.0_dp; Ft = 0.0_dp
-                    Fw = alpha_f * ph%rho(i,j,k) * ph%ur(i,j,k) * m%Ar(i-1,j,k)
-                    Fe = alpha_f * ph%rho(i,j,k) * ph%ur(i,j,k) * m%Ar(i,j,k)
-                    Fs = alpha_f * ph%rho(i,j,k) * ph%uth(i,j,k) * m%Ath(i,j,k) / m%r(i)
-                    Fn = Fs
-                    Fb = alpha_f * ph%rho(i,j,k) * ph%uz(i,j,k) * m%Az(i,j,k-1)
-                    Ft = alpha_f * ph%rho(i,j,k) * ph%uz(i,j,k) * m%Az(i,j,k)
+                    ! Flujos convectivos de cara únicos (C2.2)
+                    call face_mass_fluxes(alpha_q, ph%rho, ph%ur, ph%uth, &
+                        ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
 
                     ! Upwind coefficients
                     aW(i,j,k) = Dw + max( Fw, 0.0_dp)
@@ -175,6 +182,7 @@ contains
                     ! Pressure gradient and extra cylindrical sources
                     dp_dr = 0.0_dp; dp_dth = 0.0_dp; dp_dz = 0.0_dp
                     src_extra = 0.0_dp
+                    aP_extra = 0.0_dp
 
                     select case (comp)
                     case ('ur')
@@ -198,8 +206,16 @@ contains
                         ! ÍNDICES, y jp=j+1 > jm=j-1 siempre)
                         dp_dth = (sh%p(i,jp,k) - sh%p(i,jm,k)) / &
                                  (m%r(i) * (m%theta(jp) - m%theta(jm)))
-                        ! Coriolis: -rho*u_r*u_th/r  +  Lorentz theta-stirring
-                        src_extra = -alpha_f * ph%rho(i,j,k) * ph%ur(i,j,k) * ph%uth(i,j,k) / m%r(i) &
+                        ! Coriolis -rho*ur*uth/r, LINEAL en uth: linearización
+                        ! de Patankar — implícito (aP_extra) cuando el
+                        ! coeficiente es positivo. Explícito cerraba el lazo de
+                        ! realimentación con el término centrífugo
+                        ! (uth^2/r -> ur -> ur*uth/r) y las velocidades
+                        ! divergían (medido |u| -> 1e14).
+                        aP_extra = alpha_f * ph%rho(i,j,k) * &
+                                   max(ph%ur(i,j,k), 0.0_dp) / m%r(i) * vol
+                        src_extra = -alpha_f * ph%rho(i,j,k) * &
+                                    min(ph%ur(i,j,k), 0.0_dp) * ph%uth(i,j,k) / m%r(i) &
                                   + sh%F_lorentz_th(i,j,k)
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
                                    + (-alpha_f * dp_dth + src_extra) * vol
@@ -232,12 +248,14 @@ contains
                     ! Central coefficient (drag de Ergun IMPLÍCITO: coef*vol —
                     ! incondicionalmente estable, mismo punto fijo que la
                     ! versión explícita divergente; hallazgo 3.11)
+                    ! Intercambio de momentum entre fases (C2.4), implícito
+                    Su(i,j,k) = Su(i,j,k) + Kexch(i,j,k) * vel_other(i,j,k) * vol
+
+                    ! Forma ACOTADA de Patankar (sin dF; ver mod_energy)
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
                                + aB(i,j,k) + aT(i,j,k) + rho_vol_dt &
-                               + drag_coef(i,j,k) * vol &
-                               + max(-Fw, 0.0_dp) + max(Fe, 0.0_dp) &
-                               + max(-Fs, 0.0_dp) + max(Fn, 0.0_dp) &
-                               + max(-Fb, 0.0_dp) + max(Ft, 0.0_dp)
+                               + drag_coef(i,j,k) * vol + aP_extra &
+                               + Kexch(i,j,k) * vol
                 end do
             end do
         end do

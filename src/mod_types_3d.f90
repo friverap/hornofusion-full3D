@@ -33,6 +33,7 @@ module mod_types_3d
 
         ! Time
         real(dp) :: dt, dt_min, dt_max, t_final
+        real(dp) :: cfl_max      ! límite CFL para dt adaptativo (C3.2)
         logical  :: adaptive_dt
 
         ! SIMPLE

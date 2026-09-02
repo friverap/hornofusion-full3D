@@ -71,6 +71,8 @@ program eaf_3d_simulator
     ! no-multifase (C2.1; la rama multifase lo maneja multiphase_iteration)
     real(dp), allocatable :: prev_ur(:,:,:), prev_uth(:,:,:)
     real(dp), allocatable :: prev_uz(:,:,:), prev_T(:,:,:)
+    ! Kexch nulo para la rama monofásica
+    real(dp), allocatable :: K_zero(:,:,:)
 
     ! Species transport old-timestep arrays
     real(dp), allocatable :: Y_CO_old(:,:,:), Y_CO2_old(:,:,:)
@@ -127,6 +129,7 @@ program eaf_3d_simulator
     drag_coef = 0.0_dp
     allocate(prev_ur, mold=liq%ur); allocate(prev_uth, mold=liq%uth)
     allocate(prev_uz, mold=liq%uz); allocate(prev_T, mold=liq%T)
+    allocate(K_zero, mold=liq%ur); K_zero = 0.0_dp
 
     allocate(Y_CO_old,  mold=sh%Y_CO);  Y_CO_old  = 0.0_dp
     allocate(Y_CO2_old, mold=sh%Y_CO2); Y_CO2_old = 0.0_dp
@@ -285,15 +288,15 @@ program eaf_3d_simulator
             else if (cfg%solve_flow) then
                 prev_ur = liq%ur; prev_uth = liq%uth
                 prev_uz = liq%uz; prev_T = liq%T
-                call solve_momentum_3d(liq, liq_old, sh, mesh, cfg, liq%alpha, &
-                                       drag_coef, .false., &
+                call solve_momentum_3d(liq, liq_old, gas, K_zero, sh, mesh, &
+                                       cfg, liq%alpha, drag_coef, .false., &
                                        conv%res_ur, conv%res_uth, conv%res_uz)
                 call relax_field(liq%ur,  prev_ur,  cfg%alpha_u, mesh)
                 call relax_field(liq%uth, prev_uth, cfg%alpha_u, mesh)
                 call relax_field(liq%uz,  prev_uz,  cfg%alpha_u, mesh)
                 ! Refresh halos (incl. aP_*) before Rhie-Chow in the pressure solve
                 call phase_exchange_halos(liq, mesh)
-                call solve_pressure_correction(liq, sh, mesh, cfg, liq%alpha, conv%res_cont)
+                call solve_pressure_correction(liq, gas, gas%T, sh, mesh, cfg, conv%res_cont)
                 if (cfg%solve_energy) then
                     call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, &
                                          gas%alpha, sol%mdot, sol%T_s, &
@@ -323,11 +326,8 @@ program eaf_3d_simulator
             conv%n_outer = outer
             conv%converged = check_convergence(conv, cfg)
             
-            ! Safety: force convergence after max_outer to avoid infinite loops
-            if (outer == cfg%max_outer) then
-                conv%converged = .true.
-            end if
-            
+            ! (C3.2: ya NO se fuerza converged en max_outer — el lazo está
+            ! acotado por el do; la convergencia REAL gobierna el dt)
             if (conv%converged) exit
         end do
 
@@ -350,8 +350,9 @@ program eaf_3d_simulator
             end if
         end if
 
-        ! Adaptive time stepping
-        call adapt_timestep(cfg%dt, conv, cfg)
+        ! Adaptive time stepping (criterio CFL + convergencia real; C3.2)
+        call adapt_timestep(cfg%dt, conv, &
+                            compute_cfl_rate(liq, gas, mesh), cfg)
 
         !---------------------------------------------------------------
         ! OUTPUT (HDF5 parallel)

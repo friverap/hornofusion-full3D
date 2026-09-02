@@ -13,6 +13,7 @@ module mod_energy_3d
     use mod_solver_3d
     use mod_boundary_3d
     use mod_parallel_utils
+    use mod_face_flux
     implicit none
 
 contains
@@ -137,12 +138,9 @@ contains
                     Fb = 0.0_dp; Ft = 0.0_dp
 
                     if (cfg%solve_flow) then
-                        Fw = alpha_f * rho_f * ph%ur(i,j,k) * m%Ar(i-1,j,k)
-                        Fe = alpha_f * rho_f * ph%ur(i,j,k) * m%Ar(i,j,k)
-                        Fs = alpha_f * rho_f * ph%uth(i,j,k) * m%Ath(i,j,k) / m%r(i)
-                        Fn = Fs
-                        Fb = alpha_f * rho_f * ph%uz(i,j,k) * m%Az(i,j,k-1)
-                        Ft = alpha_f * rho_f * ph%uz(i,j,k) * m%Az(i,j,k)
+                        ! Flujos de cara únicos y conservativos (C2.2)
+                        call face_mass_fluxes(alpha_q, ph%rho, ph%ur, &
+                            ph%uth, ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
                     end if
 
                     ! Upwind: a_nb = D + max(F, 0) or D + max(-F, 0)
@@ -160,12 +158,17 @@ contains
                                + (sh%S_arc(i,j,k) + sh%S_rad(i,j,k) &
                                   + sh%S_chem(i,j,k)) * w_src * vol
 
-                    ! Central coefficient
+                    ! Central coefficient — forma ACOTADA de Patankar:
+                    ! aP = Sum(a_nb) + transitorio (se resta la continuidad
+                    ! discreta x T_P). Garantiza T convexa/acotada siempre;
+                    ! el error de conservación asociado (T x residuo de
+                    ! continuidad) lo mide el audit. La forma original
+                    ! sumaba entradas Y salidas (sumidero artificial ~caudal,
+                    ! C2.2); la conservativa (+dF neto) pierde el acotamiento
+                    ! cuando la continuidad no está convergida (medido
+                    ! T -> +-1e9).
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
-                               + aB(i,j,k) + aT(i,j,k) + rho_cp_vol_dt &
-                               + max(-Fw, 0.0_dp) + max(Fe, 0.0_dp) &
-                               + max(-Fs, 0.0_dp) + max(Fn, 0.0_dp) &
-                               + max(-Fb, 0.0_dp) + max(Ft, 0.0_dp)
+                               + aB(i,j,k) + aT(i,j,k) + rho_cp_vol_dt
 
                     ! Fuente de masa por fusión/solidificación (C1.8, líquido)
                     if (.not. is_gas) then
@@ -177,13 +180,15 @@ contains
                             aP(i,j,k) = aP(i,j,k) + mdot(i,j,k) * ph%cp(i,j,k)
                         else if (mdot(i,j,k) < 0.0_dp) then
                             ! Sumidero a T_P (upwind: aP += |mdot|*cp) más el
-                            ! latente liberado e_l(T_old) - e_s(T_solidus)
-                            ! entregado al líquido (evita la congelación
-                            ! retroalimentada del hallazgo 3.3)
+                            ! latente liberado e_l(T_old) - e_entry >= 0
+                            ! entregado al líquido, con el MISMO e_entry que
+                            ! usa compute_melting (min con e_s(T_solidus)
+                            ! garantiza fuente no negativa)
                             aP(i,j,k) = aP(i,j,k) - mdot(i,j,k) * ph%cp(i,j,k)
                             Su(i,j,k) = Su(i,j,k) - mdot(i,j,k) * &
-                                        (ph%cp(i,j,k) * T_old(i,j,k) + C0_datum &
-                                         - cfg%cp_s * cfg%T_solidus)
+                                (ph%cp(i,j,k) * T_old(i,j,k) + C0_datum &
+                                 - min(cfg%cp_s * cfg%T_solidus, &
+                                       ph%cp(i,j,k) * T_old(i,j,k) + C0_datum))
                         end if
                     end if
                 end do

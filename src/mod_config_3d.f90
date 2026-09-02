@@ -33,6 +33,7 @@ contains
         cfg%dt_max  = 1.0_dp
         cfg%t_final = 5040.0_dp
         cfg%adaptive_dt = .true.
+        cfg%cfl_max = 2.0_dp
 
         ! SIMPLE
         cfg%max_outer     = 20
@@ -183,6 +184,7 @@ contains
         case ('dt_max');     call parse_real(val, key, cfg%dt_max)
         case ('t_final');    call parse_real(val, key, cfg%t_final)
         case ('adaptive_dt'); cfg%adaptive_dt = parse_bool(val)
+        case ('cfl_max');    call parse_real(val, key, cfg%cfl_max)
         ! SIMPLE
         case ('max_outer');       call parse_int(val, key, cfg%max_outer)
         case ('max_inner_mom');   call parse_int(val, key, cfg%max_inner_mom)

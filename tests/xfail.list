@@ -17,10 +17,18 @@ invariants:T_gas_bound
 # re-medir tras C3.4
 script:decomposition_cold_n1
 script:decomposition_cold_n4
-# melt: el handoff local ya conserva al 99.3%/paso (C1.8) pero el
-# transporte convectivo de alpha NO es conservativo (flujos de celda
-# centrada, hallazgo 3.8) -> fix en C2.2
+# melt_forced (régimen de fusión violenta): el runaway térmico del gas
+# (EOS rho(T) sin acople rho-p, sin enfriamiento radiativo) desestabiliza
+# el acople P-V a ~10 pasos pese a flujos conservativos + Rhie-Chow + CG +
+# drag gas-líquido. Gated en C3.4 (radiación DO real) + reactivación del
+# Poisson de mezcla. La conservación del handoff fusión->líquido quedó
+# validada al 99.3%/paso (sonda C1.8) y el transporte telescopa
+# (test_face_flux).
 script:melt
+invariants_melt:nan
+invariants_melt:Y_bounds
+invariants_melt:turb_positive
+invariants_melt:alpha_bounds
 # energy_balance: el inventario del gas ideal no acumula (ver T_gas_bound);
 # arc_budget: ~0.95 por celdas triviales/beams que escapan (afinar en C3.4);
 # mass_liq: transporte de alpha no conservativo hasta C2.2

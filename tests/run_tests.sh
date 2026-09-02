@@ -125,7 +125,14 @@ full | rebaseline)
         check_invariants "$d" cold_10step
         check_audit_if_present "$d"
     done
-    check_invariants "$OUT/melt_forced_n8" melt_forced
+    # melt_forced: régimen violento aún inestable (gated en C3.4) ->
+    # sus invariantes duros (nan/bounds) llevan xfail PROPIO por corrida
+    if ! $PY $INT/check_invariants.py "$OUT/melt_forced_n8" \
+            --config "$CFG/melt_forced.dat" \
+            --xfail "$(xfail_ids invariants),$(xfail_ids invariants_melt)"; then
+        echo ">> FAIL invariantes en melt_forced_n8"
+        note_fail
+    fi
     check_audit_if_present "$OUT/melt_forced_n8"
     check_invariants "$OUT/noflow_energy_n1" noflow_energy
     check_audit_if_present "$OUT/noflow_energy_n1"

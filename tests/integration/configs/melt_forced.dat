@@ -8,8 +8,11 @@ nz = 16
 stretch_r = 1.0
 stretch_z = 1.0
 
-dt = 0.5
-t_final = 10.0
+# Horizonte corto con dt fijo: valida la CONSERVACIÓN del handoff
+# fusión->líquido y del transporte antes de que el runaway térmico del gas
+# (pendiente C3.4) contamine la dinámica vía el acople entre fases.
+dt = 0.05
+t_final = 0.5
 adaptive_dt = false
 
 T_initial = 1815.0
@@ -27,5 +30,5 @@ max_outer = 5
 max_inner_mom = 3
 max_inner_pres = 20
 
-output_freq = 5
+output_freq = 1
 monitor_freq = 5

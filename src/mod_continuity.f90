@@ -13,6 +13,7 @@ module mod_continuity
     use mod_types_3d
     use mod_solver_3d
     use mod_parallel_utils
+    use mod_face_flux
     use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS
     implicit none
 
@@ -67,15 +68,9 @@ contains
                     rho_f = liq%rho(i,j,k)
                     vol_dt = rho_f * vol / cfg%dt
 
-                    ! Upwind convective fluxes (using liquid velocity)
-                    Fw = 0.0_dp; Fe = 0.0_dp; Fs = 0.0_dp; Fn = 0.0_dp
-                    Fb = 0.0_dp; Ft = 0.0_dp
-                    Fw = rho_f * liq%ur(i,j,k) * m%Ar(i-1,j,k)
-                    Fe = rho_f * liq%ur(i,j,k) * m%Ar(i,j,k)
-                    Fs = rho_f * liq%uth(i,j,k) * m%Ath(i,j,k) / m%r(i)
-                    Fn = Fs
-                    Fb = rho_f * liq%uz(i,j,k) * m%Az(i,j,k-1)
-                    Ft = rho_f * liq%uz(i,j,k) * m%Az(i,j,k)
+                    ! Flujos de cara únicos y conservativos (C2.2)
+                    call face_mass_fluxes_noalpha(liq%rho, liq%ur, liq%uth, &
+                        liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
 
                     aW(i,j,k) = max( Fw, 0.0_dp)
                     aE(i,j,k) = max(-Fe, 0.0_dp)
@@ -89,17 +84,21 @@ contains
                     ! Do NOT multiply by vol — that would give wrong units [kg*m^3/s].
                     Su(i,j,k) = vol_dt * alpha_old(i,j,k) + sol%mdot(i,j,k)
 
+                    ! Forma ACOTADA de Patankar (sin dF): alpha queda convexa
+                    ! y estable; el error de conservación asociado (alpha x
+                    ! residuo de continuidad) lo mide el audit (mass_liq).
+                    ! La forma conservativa (+dF) perdía la dominancia
+                    ! diagonal donde div(u)<0 y el TDMA producía basura.
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
-                               + aB(i,j,k) + aT(i,j,k) + vol_dt &
-                               + max(-Fw,0.0_dp) + max(Fe,0.0_dp) &
-                               + max(-Fs,0.0_dp) + max(Fn,0.0_dp) &
-                               + max(-Fb,0.0_dp) + max(Ft,0.0_dp)
+                               + aB(i,j,k) + aT(i,j,k) + vol_dt
                 end do
             end do
         end do
 
         ! Solve for liquid alpha with MPI-aware solver
-        call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, liq%alpha, m, 3)
+        call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, liq%alpha, m, 10)
+        call mpi_exchange_halos_3d(liq%alpha, m%topo)
+
 
         ! Under-relax
         ! (alpha is bounded, no separate under-relaxation, just clip)

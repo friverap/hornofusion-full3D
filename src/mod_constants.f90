@@ -55,9 +55,17 @@ module mod_constants
     real(dp), parameter :: TOL_DEFAULT = 1.0e-6_dp
 
     ! Phase-fraction cutoff below which a cell is treated as void of the phase.
-    ! Shared by momentum, energy, pressure and melting guards — must be the
-    ! same value everywhere or the liquid/gas interface becomes discontinuous.
+    ! Shared by energy, species and melting guards.
     real(dp), parameter :: ALPHA_CUTOFF = 1.0e-6_dp
+
+    ! Umbral HIDRODINÁMICO (C2.2): por debajo, la fase no participa del
+    ! acople momentum-presión (velocidad 0, sin corrección, enlace d nulo).
+    ! Con el umbral de 1e-6, las celdas del frente de fusión (alpha~1e-3)
+    ! tenían aP ~ alpha*rho*V/dt diminuto -> d = V/aP enorme -> Poisson en
+    ! tablero de ajedrez (p oscilando +-1e5 Pa entre vecinas) y correcciones
+    ! de velocidad de ~1e4 m/s que divergían a 1e14. La masa fundida sigue
+    ! acumulándose vía la ecuación de alpha hasta cruzar el umbral.
+    real(dp), parameter :: ALPHA_FLOW_CUTOFF = 1.0e-2_dp
 
     ! Re-solidification explicit sub-step limiter (fraction of the full mass
     ! transfer applied per timestep, CFL-like stabilization)
@@ -90,6 +98,14 @@ module mod_constants
     real(dp), parameter :: ARC_W     = 30.0_dp    ! W (cooling power) — calibrated
     real(dp), parameter :: ARC_SIGMA = 1.0e3_dp   ! S/m (ionized air conductivity)
     real(dp), parameter :: ARC_T_REF = 12000.0_dp ! K (reference arc temperature)
+
+    ! Acople de momentum gas-líquido (C2.4): K = a_l*a_g*rho_l/TAU_LG,
+    ! implícito y simétrico en ambas fases. Sin él, el líquido disperso en
+    ! gas (niebla del frente de fusión) quedaba en caída libre sin arrastre
+    ! y el acople P-V divergía (medido p -> 1e84 en tablero de ajedrez).
+    ! TAU_LG es un tiempo de relajación de régimen disperso (placeholder
+    ! de una correlación de arrastre de gotas).
+    real(dp), parameter :: TAU_LG = 0.01_dp   ! s
 
     ! Reparto del presupuesto radiativo del arco (C1.6): fracción de
     ! P_total*frac_rad que se distribuye vía Monte Carlo; el resto se

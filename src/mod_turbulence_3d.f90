@@ -14,6 +14,7 @@ module mod_turbulence_3d
     use mod_solver_3d
     use mod_boundary_3d
     use mod_parallel_utils
+    use mod_face_flux
     implicit none
 
 contains
@@ -141,15 +142,10 @@ contains
                         m%cell_type(i,j,k+1) /= 0) &
                         Dt_d = mu_eff * m%Az(i,j,k) / (0.5_dp*(m%dz(k)+m%dz(k+1)))
 
-                    ! Convection (upwind)
-                    Fw=0; Fe=0; Fs=0; Fn=0; Fb=0; Ft_f=0
-                    Fw = rho_f * liq%ur(i,j,k) * m%Ar(i-1,j,k)
-                    Fe = rho_f * liq%ur(i,j,k) * m%Ar(i,j,k)
-                    Fs = rho_f * liq%uth(i,j,k) * m%Ath(i,j,k) / m%r(i)
-                    Fn = Fs
-                    Fb = rho_f * liq%uz(i,j,k) * m%Az(i,j,k-1)
-                    if (k < kend .or. .not. at_zmax) &
-                        Ft_f = rho_f * liq%uz(i,j,k) * m%Az(i,j,k)
+                    ! Flujos convectivos de cara únicos (C2.2; el helper
+                    ! enmascara caras contra celdas inactivas/frontera)
+                    call face_mass_fluxes_noalpha(liq%rho, liq%ur, liq%uth, &
+                        liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft_f)
 
                     aW(i,j,k) = Dw + max(Fw,0.0_dp)
                     aE(i,j,k) = De + max(-Fe,0.0_dp)
@@ -160,11 +156,9 @@ contains
 
                     ! Source: G_k + transient - rho*epsilon (linearized)
                     Su(i,j,k) = rho_vol_dt * tke_old(i,j,k) + Gk(i,j,k) * vol
+                    ! Forma ACOTADA de Patankar (sin dF; ver mod_energy)
                     aP(i,j,k) = aW(i,j,k)+aE(i,j,k)+aS(i,j,k)+aN(i,j,k)+aB(i,j,k)+aT(i,j,k) &
-                               + rho_vol_dt + rho_f * eps_old(i,j,k) * vol / (tke_old(i,j,k)+SMALL) &
-                               + max(-Fw,0.0_dp)+max(Fe,0.0_dp) &
-                               + max(-Fs,0.0_dp)+max(Fn,0.0_dp) &
-                               + max(-Fb,0.0_dp)+max(Ft_f,0.0_dp)
+                               + rho_vol_dt + rho_f * eps_old(i,j,k) * vol / (tke_old(i,j,k)+SMALL)
                 end do
             end do
         end do
@@ -211,14 +205,8 @@ contains
                         m%cell_type(i,j,k+1) /= 0) &
                         Dt_d = mu_eff * m%Az(i,j,k) / (0.5_dp*(m%dz(k)+m%dz(k+1)))
 
-                    Fw=0; Fe=0; Fs=0; Fn=0; Fb=0; Ft_f=0
-                    Fw = rho_f*liq%ur(i,j,k)*m%Ar(i-1,j,k)
-                    Fe = rho_f*liq%ur(i,j,k)*m%Ar(i,j,k)
-                    Fs = rho_f*liq%uth(i,j,k)*m%Ath(i,j,k)/m%r(i)
-                    Fn = Fs
-                    Fb = rho_f*liq%uz(i,j,k)*m%Az(i,j,k-1)
-                    if (k < kend .or. .not. at_zmax) &
-                        Ft_f = rho_f*liq%uz(i,j,k)*m%Az(i,j,k)
+                    call face_mass_fluxes_noalpha(liq%rho, liq%ur, liq%uth, &
+                        liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft_f)
 
                     aW(i,j,k) = Dw + max(Fw,0.0_dp)
                     aE(i,j,k) = De + max(-Fe,0.0_dp)
@@ -231,10 +219,7 @@ contains
                                + C1_EPS * eps_old(i,j,k) / (tke_old(i,j,k)+SMALL) * Gk(i,j,k) * vol
                     aP(i,j,k) = aW(i,j,k)+aE(i,j,k)+aS(i,j,k)+aN(i,j,k)+aB(i,j,k)+aT(i,j,k) &
                                + rho_vol_dt &
-                               + C2_EPS * rho_f * eps_old(i,j,k) * vol / (tke_old(i,j,k)+SMALL) &
-                               + max(-Fw,0.0_dp)+max(Fe,0.0_dp) &
-                               + max(-Fs,0.0_dp)+max(Fn,0.0_dp) &
-                               + max(-Fb,0.0_dp)+max(Ft_f,0.0_dp)
+                               + C2_EPS * rho_f * eps_old(i,j,k) * vol / (tke_old(i,j,k)+SMALL)
 
                     Dw=0; De=0; Ds=0; Dn=0; Db=0; Dt_d=0
                 end do

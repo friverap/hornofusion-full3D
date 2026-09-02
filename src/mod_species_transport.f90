@@ -14,6 +14,7 @@ module mod_species_transport
     use mod_solver_3d
     use mod_boundary_3d
     use mod_parallel_utils
+    use mod_face_flux
     implicit none
 
 contains
@@ -116,12 +117,9 @@ contains
                     Fb = 0.0_dp; Ft = 0.0_dp
 
                     if (cfg%solve_flow) then
-                        Fw = alpha_f * rho_f * gas%ur(i,j,k)  * m%Ar(i-1,j,k)
-                        Fe = alpha_f * rho_f * gas%ur(i,j,k)  * m%Ar(i,j,k)
-                        Fs = alpha_f * rho_f * gas%uth(i,j,k) * m%Ath(i,j,k) / m%r(i)
-                        Fn = Fs
-                        Fb = alpha_f * rho_f * gas%uz(i,j,k)  * m%Az(i,j,k-1)
-                        Ft = alpha_f * rho_f * gas%uz(i,j,k)  * m%Az(i,j,k)
+                        ! Flujos de cara únicos y conservativos (C2.2)
+                        call face_mass_fluxes(gas%alpha, gas%rho, gas%ur, &
+                            gas%uth, gas%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
                     end if
 
                     ! Upwind coefficients
@@ -136,11 +134,9 @@ contains
                     Su(i,j,k) = rho_Y_vol_dt * Y_old(i,j,k) + S_net(i,j,k) * vol
 
                     ! Central coefficient
+                    ! Forma ACOTADA de Patankar (sin dF; ver mod_energy)
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
-                               + aB(i,j,k) + aT(i,j,k) + rho_Y_vol_dt             &
-                               + max(-Fw, 0.0_dp) + max(Fe, 0.0_dp)               &
-                               + max(-Fs, 0.0_dp) + max(Fn, 0.0_dp)               &
-                               + max(-Fb, 0.0_dp) + max(Ft, 0.0_dp)
+                               + aB(i,j,k) + aT(i,j,k) + rho_Y_vol_dt
                 end do
             end do
         end do

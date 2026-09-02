@@ -149,11 +149,18 @@ contains
                         dm = max(dm, 0.0_dp) * RESOLID_LIMITER
 
                         sol%mdot(i,j,k) = -dm / dt
-                        ! El congelado entra al sólido a T_solidus; el latente
-                        ! liberado (e_l(T_l) - e_s(T_sol)) calienta al líquido
-                        ! vía el término de masa de solve_energy_3d.
+                        ! El congelado entra al sólido con
+                        !   e_entry = min(e_s(T_solidus), e_l(T_l))
+                        ! y el latente liberado e_l(T_l) - e_entry >= 0
+                        ! calienta al líquido (término de masa de
+                        ! solve_energy_3d, mismo e_entry). El min garantiza
+                        ! fuente NO NEGATIVA: entrar siempre a T_solidus
+                        ! producía fuentes negativas para T_l < 1334 K y
+                        ! empujaba T_liquid bajo cero.
                         sol%m_s(i,j,k) = sol%m_s(i,j,k) + dm
-                        sol%E_s(i,j,k) = sol%E_s(i,j,k) + dm * cfg%cp_s * cfg%T_solidus
+                        sol%E_s(i,j,k) = sol%E_s(i,j,k) + dm * &
+                            min(cfg%cp_s * cfg%T_solidus, &
+                                cfg%cp_l * T_l + liquid_datum_offset(cfg))
                         call audit_add(AUD_RESOLID_MASS, dm)
 
                         if (m%vol(i,j,k) > SMALL) then

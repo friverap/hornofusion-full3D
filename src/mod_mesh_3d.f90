@@ -220,7 +220,28 @@ contains
               
         ! Exchange cell_type halos
         call mpi_exchange_halos_3d_int(m%cell_type, m%topo)
-        
+
+        ! Halos más allá de una frontera FÍSICA: inactivos (C2.2). El marcado
+        ! geométrico deja tipo 1 en los halos del techo (z > H_total) y del
+        ! eje (r < R_AXIS_MIN), lo que permitía flujos de cara espurios a
+        ! través de paredes impermeables.
+        block
+            logical :: at_rmin_b, at_rmax_b, at_zmin_b, at_zmax_b
+            if (m%is_parallel) then
+                at_rmin_b = (m%topo%coords(1) == 0)
+                at_rmax_b = (m%topo%coords(1) == m%topo%npr - 1)
+                at_zmin_b = (m%topo%coords(3) == 0)
+                at_zmax_b = (m%topo%coords(3) == m%topo%npz - 1)
+            else
+                at_rmin_b = .true.; at_rmax_b = .true.
+                at_zmin_b = .true.; at_zmax_b = .true.
+            end if
+            if (at_rmin_b) m%cell_type(-1:0, :, :) = 0
+            if (at_rmax_b) m%cell_type(m%nr+1:m%nr+2, :, :) = 0
+            if (at_zmin_b) m%cell_type(:, :, -1:0) = 0
+            if (at_zmax_b) m%cell_type(:, :, m%nz+1:m%nz+2) = 0
+        end block
+
     end subroutine mesh_generate_parallel
 
     !---------------------------------------------------------------------------

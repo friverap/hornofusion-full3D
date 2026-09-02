@@ -44,6 +44,13 @@ contains
         real(dp), allocatable, save :: p_lur(:,:,:), p_lth(:,:,:), p_luz(:,:,:)
         real(dp), allocatable, save :: p_gur(:,:,:), p_gth(:,:,:), p_guz(:,:,:)
         real(dp), allocatable, save :: p_lT(:,:,:), p_gT(:,:,:)
+        ! Coeficiente de intercambio de momentum gas-líquido (C2.4)
+        real(dp), allocatable, save :: Kexch(:,:,:)
+        integer :: i, j, k
+
+        if (.not. allocated(Kexch)) then
+            allocate(Kexch, mold=liq%ur); Kexch = 0.0_dp
+        end if
 
         if (.not. allocated(p_lur)) then
             allocate(p_lur, mold=liq%ur); allocate(p_lth, mold=liq%uth)
@@ -63,8 +70,19 @@ contains
         ! Compute Ergun drag coefficient from solid (Picard con |v| del líquido)
         call compute_ergun_drag(liq, sol, m, cfg, drag_coef)
 
+        ! Coeficiente de intercambio gas-líquido: K = a_l*a_g*rho_l/TAU_LG
+        ! (régimen disperso; ver mod_constants::TAU_LG)
+        do k = lbound(Kexch,3)+2, ubound(Kexch,3)-2
+            do j = lbound(Kexch,2)+2, ubound(Kexch,2)-2
+                do i = lbound(Kexch,1)+2, ubound(Kexch,1)-2
+                    Kexch(i,j,k) = liq%alpha(i,j,k) * gas%alpha(i,j,k) * &
+                                   liq%rho(i,j,k) / TAU_LG
+                end do
+            end do
+        end do
+
         ! Liquid momentum
-        call solve_momentum_3d(liq, liq_old, sh, m, cfg, liq%alpha, &
+        call solve_momentum_3d(liq, liq_old, gas, Kexch, sh, m, cfg, liq%alpha, &
                                drag_coef, .false., res_ur_l, res_uth_l, res_uz_l)
         call relax_field(liq%ur,  p_lur, cfg%alpha_u, m)
         call relax_field(liq%uth, p_lth, cfg%alpha_u, m)
@@ -78,7 +96,7 @@ contains
         ! Nota: la versión explícita anterior aplicaba al gas una FUERZA
         ! proporcional a la velocidad del LÍQUIDO; implícito, el coeficiente
         ! actúa sobre la velocidad propia de cada fase.)
-        call solve_momentum_3d(gas, gas_old, sh, m, cfg, gas%alpha, &
+        call solve_momentum_3d(gas, gas_old, liq, Kexch, sh, m, cfg, gas%alpha, &
                                drag_coef, .true., res_ur_g, res_uth_g, res_uz_g)
         call relax_field(gas%ur,  p_gur, cfg%alpha_u, m)
         call relax_field(gas%uth, p_gth, cfg%alpha_u, m)
@@ -87,12 +105,14 @@ contains
         ! Exchange halos after momentum
         call phase_exchange_halos(gas, m)
 
-        ! Pressure correction (uses liquid as primary phase)
-        call solve_pressure_correction(liq, sh, m, cfg, liq%alpha, res_cont)
-        
+        ! Pressure correction de MEZCLA: ambas fases contribuyen y ambas
+        ! se corrigen (C2.4)
+        call solve_pressure_correction(liq, gas, gas_old%T, sh, m, cfg, res_cont)
+
         ! Exchange halos after pressure
         call shared_exchange_halos(sh, m)
         call phase_exchange_halos(liq, m)
+        call phase_exchange_halos(gas, m)
 
         ! Volume fraction update
         if (cfg%solve_multiphase) then

@@ -187,11 +187,27 @@ contains
         integer :: i, j, k, nr, nth, nz, e
         logical :: is_outlet
         logical :: at_rmin, at_rmax, at_zmin, at_zmax
+        logical, allocatable :: out_mask(:,:,:)
 
         nr  = m%nr
         nth = m%ntheta
         nz  = m%nz
         call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
+
+        ! Máscara de celdas de salida (Dirichlet pp=0) para plegar los
+        ! enlaces de sus vecinas y mantener la matriz SIMÉTRICA (requisito
+        ! del CG; el valor 0 no aporta a Su, así que el plegado es exacto)
+        allocate(out_mask(-1:nr+2, -1:nth+2, -1:nz+2))
+        out_mask = .false.
+        if (at_zmax) then
+            do j = 1, nth
+                do i = 1, nr
+                    do e = 1, N_ELECTRODES
+                        if (m%is_electrode(i,j,nz,e)) out_mask(i,j,nz) = .true.
+                    end do
+                end do
+            end do
+        end if
 
         do k = 1, nz
             do j = 1, nth
@@ -211,10 +227,7 @@ contains
 
                     ! Top: check if outlet (electrode holes)
                     if (k == nz .and. at_zmax) then
-                        is_outlet = .false.
-                        do e = 1, N_ELECTRODES
-                            if (m%is_electrode(i,j,k,e)) is_outlet = .true.
-                        end do
+                        is_outlet = out_mask(i,j,k)
                         if (is_outlet) then
                             ! Dirichlet p' = 0 at outlet: fix the cell value,
                             ! which also anchors the pressure level
@@ -242,9 +255,20 @@ contains
                     if (k < nz) then
                         if (m%cell_type(i,j,k+1) == 0) aT(i,j,k) = 0.0_dp
                     end if
+
+                    ! Plegado Dirichlet: enlaces hacia celdas de salida a 0
+                    ! (pp=0 allí; aP conserva el término -> exacto y simétrico)
+                    if (out_mask(i-1,j,k)) aW(i,j,k) = 0.0_dp
+                    if (out_mask(i+1,j,k)) aE(i,j,k) = 0.0_dp
+                    if (out_mask(i,j-1,k)) aS(i,j,k) = 0.0_dp
+                    if (out_mask(i,j+1,k)) aN(i,j,k) = 0.0_dp
+                    if (out_mask(i,j,k-1)) aB(i,j,k) = 0.0_dp
+                    if (out_mask(i,j,k+1)) aT(i,j,k) = 0.0_dp
                 end do
             end do
         end do
+
+        deallocate(out_mask)
 
     end subroutine apply_pressure_bc
 

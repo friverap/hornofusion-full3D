@@ -470,6 +470,149 @@ contains
     end subroutine sor_3d_mpi
 
     !---------------------------------------------------------------------------
+    ! Gradiente conjugado precondicionado (Jacobi) para el Poisson de presión
+    ! (C4.3, adelantado en la Etapa 2). Requiere matriz SIMÉTRICA: los
+    ! coeficientes de cara del Laplaciano compacto (C2.3) lo son por
+    ! construcción, con los Dirichlet de salida PLEGADOS (enlaces hacia esas
+    ! celdas a 0; su valor pp=0 no aporta a Su).
+    !
+    ! Sustituye al SOR omega=1.5 para presión: en paralelo (halos retardados
+    ! cada 2 iteraciones) el SOR DIVERGÍA más allá de ~20 iteraciones
+    ! (medido p -> 1e34) y su guard reseteaba el residual a 0 enmascarándolo.
+    !---------------------------------------------------------------------------
+    subroutine cg_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, phi, m, &
+                         max_iter, tol, residual, n_iter)
+        real(dp), intent(in)     :: aW(-1:,-1:,-1:), aE(-1:,-1:,-1:)
+        real(dp), intent(in)     :: aS(-1:,-1:,-1:), aN(-1:,-1:,-1:)
+        real(dp), intent(in)     :: aB(-1:,-1:,-1:), aT(-1:,-1:,-1:)
+        real(dp), intent(in)     :: aP(-1:,-1:,-1:), Su(-1:,-1:,-1:)
+        real(dp), intent(inout)  :: phi(-1:,-1:,-1:)
+        type(mesh_t), intent(in) :: m
+        integer, intent(in)      :: max_iter
+        real(dp), intent(in)     :: tol
+        real(dp), intent(out)    :: residual
+        integer, intent(out)     :: n_iter
+
+        real(dp), allocatable :: r(:,:,:), z(:,:,:), pv(:,:,:), q(:,:,:)
+        real(dp) :: rz, rz_new, pq, alpha_cg, beta_cg, bnorm, rnorm
+        integer  :: iter
+        integer  :: istart, iend, jstart, jend, kstart, kend
+
+        call bounds(m, istart, iend, jstart, jend, kstart, kend)
+
+        allocate(r, mold=phi); allocate(z, mold=phi)
+        allocate(pv, mold=phi); allocate(q, mold=phi)
+        r = 0.0_dp; z = 0.0_dp; pv = 0.0_dp; q = 0.0_dp
+
+        ! r = Su - A*phi
+        call matvec(phi, q)
+        r(istart:iend, jstart:jend, kstart:kend) = &
+            Su(istart:iend, jstart:jend, kstart:kend) - &
+            q(istart:iend, jstart:jend, kstart:kend)
+
+        bnorm = sqrt(dot(Su, Su))
+        if (bnorm < SMALL) then
+            residual = 0.0_dp
+            n_iter = 0
+            deallocate(r, z, pv, q)
+            return
+        end if
+
+        z(istart:iend, jstart:jend, kstart:kend) = &
+            r(istart:iend, jstart:jend, kstart:kend) / &
+            max(abs(aP(istart:iend, jstart:jend, kstart:kend)), SMALL)
+        pv = z
+        rz = dot(r, z)
+
+        residual = sqrt(dot(r, r)) / bnorm
+        n_iter = 0
+
+        do iter = 1, max_iter
+            call matvec(pv, q)
+            pq = dot(pv, q)
+            if (abs(pq) < SMALL) exit
+            alpha_cg = rz / pq
+
+            phi(istart:iend, jstart:jend, kstart:kend) = &
+                phi(istart:iend, jstart:jend, kstart:kend) + &
+                alpha_cg * pv(istart:iend, jstart:jend, kstart:kend)
+            r(istart:iend, jstart:jend, kstart:kend) = &
+                r(istart:iend, jstart:jend, kstart:kend) - &
+                alpha_cg * q(istart:iend, jstart:jend, kstart:kend)
+
+            rnorm = sqrt(dot(r, r))
+            residual = rnorm / bnorm
+            n_iter = iter
+            if (residual < tol) exit
+
+            z(istart:iend, jstart:jend, kstart:kend) = &
+                r(istart:iend, jstart:jend, kstart:kend) / &
+                max(abs(aP(istart:iend, jstart:jend, kstart:kend)), SMALL)
+            rz_new = dot(r, z)
+            beta_cg = rz_new / max(rz, SMALL)
+            rz = rz_new
+            pv(istart:iend, jstart:jend, kstart:kend) = &
+                z(istart:iend, jstart:jend, kstart:kend) + &
+                beta_cg * pv(istart:iend, jstart:jend, kstart:kend)
+        end do
+
+        ! Halos de phi coherentes para las correcciones posteriores
+        if (m%is_parallel) call mpi_exchange_halos_3d(phi, m%topo)
+
+        deallocate(r, z, pv, q)
+
+    contains
+
+        subroutine bounds(mm, i1, i2, j1, j2, k1, k2)
+            type(mesh_t), intent(in) :: mm
+            integer, intent(out) :: i1, i2, j1, j2, k1, k2
+            if (mm%is_parallel) then
+                i1 = mm%topo%istart; i2 = mm%topo%iend
+                j1 = mm%topo%jstart; j2 = mm%topo%jend
+                k1 = mm%topo%kstart; k2 = mm%topo%kend
+            else
+                i1 = 1; i2 = mm%nr
+                j1 = 1; j2 = mm%ntheta
+                k1 = 1; k2 = mm%nz
+            end if
+        end subroutine bounds
+
+        ! y = A*x  (con intercambio de halos de x; theta periódica en serial)
+        subroutine matvec(x, y)
+            real(dp), intent(inout) :: x(-1:,-1:,-1:)
+            real(dp), intent(out)   :: y(-1:,-1:,-1:)
+            integer :: i, j, k
+
+            call mpi_exchange_halos_3d(x, m%topo)
+            y = 0.0_dp
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        y(i,j,k) = aP(i,j,k) * x(i,j,k) &
+                                 - aW(i,j,k) * x(i-1,j,k) - aE(i,j,k) * x(i+1,j,k) &
+                                 - aS(i,j,k) * x(i,j-1,k) - aN(i,j,k) * x(i,j+1,k) &
+                                 - aB(i,j,k) * x(i,j,k-1) - aT(i,j,k) * x(i,j,k+1)
+                    end do
+                end do
+            end do
+        end subroutine matvec
+
+        real(dp) function dot(a, b)
+            real(dp), intent(in) :: a(-1:,-1:,-1:), b(-1:,-1:,-1:)
+            real(dp) :: local, glob
+            local = sum(a(istart:iend, jstart:jend, kstart:kend) * &
+                        b(istart:iend, jstart:jend, kstart:kend))
+            if (m%is_parallel) then
+                call mpi_allreduce_sum(local, glob, m%topo)
+                dot = glob
+            else
+                dot = local
+            end if
+        end function dot
+
+    end subroutine cg_3d_mpi
+
+    !---------------------------------------------------------------------------
     ! 3D residual computation with MPI
     !---------------------------------------------------------------------------
     function compute_residual_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, phi, m) result(res)
