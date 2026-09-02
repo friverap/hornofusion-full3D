@@ -17,6 +17,7 @@ module mod_scrap_collapse
     use mod_constants
     use mod_types_3d
     use mod_parallel_utils
+    use mod_melting_3d, only: solid_T_from_enthalpy
     implicit none
 
 contains
@@ -90,8 +91,8 @@ contains
                     a_g(i,j,k_dest) = min(1.0_dp, a_g(i,j,k_dest))
 
                     if (m_g(i,j,k_dest) > SMALL) then
-                        T_g(i,j,k_dest) = E_g(i,j,k_dest) / &
-                                          (m_g(i,j,k_dest) * cfg%cp_s)
+                        T_g(i,j,k_dest) = solid_T_from_enthalpy( &
+                            E_g(i,j,k_dest) / m_g(i,j,k_dest), cfg)
                     end if
                 end do
             end do

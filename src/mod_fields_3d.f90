@@ -7,6 +7,7 @@ module mod_fields_3d
     use mod_constants
     use mod_types_3d
     use mod_mpi_topology
+    use mod_melting_3d, only: solid_enthalpy
     implicit none
 
 contains
@@ -494,7 +495,10 @@ contains
                                     sol%alpha_s(i,j,k) = vfrac
                                     sol%m_s(i,j,k) = cfg%rho_steel * vfrac * m%vol(i,j,k)
                                     sol%T_s(i,j,k) = cfg%T_initial
-                                    sol%E_s(i,j,k) = sol%m_s(i,j,k) * cfg%cp_s * cfg%T_initial
+                                    ! Entalpía consistente con la función única
+                                    ! (incluye latente si T_initial > T_solidus)
+                                    sol%E_s(i,j,k) = sol%m_s(i,j,k) * &
+                                        solid_enthalpy(cfg%T_initial, cfg)
                                     sol%layer_id(i,j,k) = n
                                     gas%alpha(i,j,k) = 1.0_dp - vfrac
                                 end if

@@ -2,6 +2,13 @@
 # mismo commit que aterriza su fix (el XPASS resultante lo recuerda).
 # Formatos: unit:<binario> | invariants:<check> | script:<id>
 invariants:sum_alpha
+# T_liquid: enfriamiento espurio (min ~120 K) por el flujo de salida FALSO
+# de la convección de celda centrada (aP tiene términos de outflow sin
+# contraparte conservativa) -> hallazgo 3.8, fix en C2.2
+invariants:T_liquid_bound
+# T_solid: bajo el arco puede rebasar 4000 K vía HT con gas en runaway;
+# re-evaluar umbral tras C3.4
+invariants:T_solid_bound
 # T_gas runaway estructural post-C1.7: el inventario del gas ideal
 # (rho(T)*cp*T = const) no acumula energía y no hay enfriamiento radiativo
 # real (S_RAD_LIMIT neutraliza el DO) ni salida de entalpía -> fix C3.4
@@ -11,12 +18,13 @@ invariants:T_gas_bound
 # re-medir tras C3.4
 script:decomposition_cold_n1
 script:decomposition_cold_n4
-# melt requiere C1.8 (energía de fusión): el líquido recién fundido se
-# recongela por el crash de T_s (cp_s vs cp_eff)
+# melt: el handoff local ya conserva al 99.3%/paso (C1.8) pero el
+# transporte convectivo de alpha NO es conservativo (flujos de celda
+# centrada, hallazgo 3.8) -> fix en C2.2
 script:melt
 # energy_balance: el inventario del gas ideal no acumula (ver T_gas_bound);
 # arc_budget: ~0.95 por celdas triviales/beams que escapan (afinar en C3.4);
-# mass_liq hasta C1.8
+# mass_liq: transporte de alpha no conservativo hasta C2.2
 audit:energy_balance
 audit:arc_budget
 audit:mass_liq

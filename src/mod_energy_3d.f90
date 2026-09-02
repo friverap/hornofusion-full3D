@@ -18,7 +18,7 @@ module mod_energy_3d
 contains
 
     subroutine solve_energy_3d(ph, T_old, sh, m, cfg, alpha_q, alpha_other, &
-                               is_gas, residual)
+                               mdot, T_src, is_gas, residual)
         type(phase_t), intent(inout) :: ph
         real(dp), intent(in)         :: T_old(-1:,-1:,-1:)
         type(shared_t), intent(in)   :: sh
@@ -30,6 +30,11 @@ contains
         ! Antes cada fase recibía el 100% de cada fuente: donde ambas
         ! superaban el cutoff la potencia se DUPLICABA (hallazgo 3.1b).
         real(dp), intent(in)         :: alpha_other(-1:,-1:,-1:)
+        ! Fuente de masa por fusión/solidificación (C1.8, solo líquido):
+        ! mdot>0 la masa fundida entra a T_src (temperatura del sólido);
+        ! mdot<0 sumidero a T_P + liberación del latente al líquido.
+        real(dp), intent(in)         :: mdot(-1:,-1:,-1:)
+        real(dp), intent(in)         :: T_src(-1:,-1:,-1:)
         ! Identidad de fase: el LÍQUIDO difunde con k_eff = k + cp*mu_t/Pr_t
         ! (transporte térmico turbulento, hallazgo 3.12 — antes ausente
         ! mientras momentum sí usaba mu_t); el gas usa su k molecular
@@ -44,10 +49,13 @@ contains
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: Dw, De, Ds, Dn, Db, Dt
         real(dp) :: rho_f, k_f, vol, rho_cp_vol_dt
-        real(dp) :: alpha_f, w_src
+        real(dp) :: alpha_f, w_src, C0_datum
 
         ! Get loop bounds
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+
+        ! Dato común de entalpía: e_l(T) = cp_l*T + C0 (ver mod_melting_3d)
+        C0_datum = (cfg%cp_s - cfg%cp_l) * cfg%T_liquidus + cfg%h_fusion
 
         ! Allocate with halos
         allocate(aW, mold=ph%T)
@@ -158,6 +166,26 @@ contains
                                + max(-Fw, 0.0_dp) + max(Fe, 0.0_dp) &
                                + max(-Fs, 0.0_dp) + max(Fn, 0.0_dp) &
                                + max(-Fb, 0.0_dp) + max(Ft, 0.0_dp)
+
+                    ! Fuente de masa por fusión/solidificación (C1.8, líquido)
+                    if (.not. is_gas) then
+                        if (mdot(i,j,k) > 0.0_dp) then
+                            ! Fundido entra a T_src: Su += mdot*cp*T_in,
+                            ! aP += mdot*cp (la masa nueva trae su propia T)
+                            Su(i,j,k) = Su(i,j,k) + mdot(i,j,k) * &
+                                        ph%cp(i,j,k) * T_src(i,j,k)
+                            aP(i,j,k) = aP(i,j,k) + mdot(i,j,k) * ph%cp(i,j,k)
+                        else if (mdot(i,j,k) < 0.0_dp) then
+                            ! Sumidero a T_P (upwind: aP += |mdot|*cp) más el
+                            ! latente liberado e_l(T_old) - e_s(T_solidus)
+                            ! entregado al líquido (evita la congelación
+                            ! retroalimentada del hallazgo 3.3)
+                            aP(i,j,k) = aP(i,j,k) - mdot(i,j,k) * ph%cp(i,j,k)
+                            Su(i,j,k) = Su(i,j,k) - mdot(i,j,k) * &
+                                        (ph%cp(i,j,k) * T_old(i,j,k) + C0_datum &
+                                         - cfg%cp_s * cfg%T_solidus)
+                        end if
+                    end if
                 end do
             end do
         end do

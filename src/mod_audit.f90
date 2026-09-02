@@ -105,7 +105,7 @@ contains
         ! sums: 1-8 inventarios, 9-14 fuentes por fase (arc, rad, chem)
         integer, parameter :: NSUM = 14
         real(dp) :: s(NSUM), s_glob(NSUM), a(N_AUD)
-        real(dp) :: vol, src_dt, P_arc, w_l, w_g
+        real(dp) :: vol, src_dt, P_arc, w_l, w_g, C0_datum
         integer  :: i, j, k, n, iu
         integer  :: istart, iend, jstart, jend, kstart, kend
         logical  :: liq_energy_on, gas_energy_on
@@ -115,6 +115,11 @@ contains
         liq_energy_on = cfg%solve_energy
         gas_energy_on = cfg%solve_energy .and. cfg%solve_flow .and. &
                         cfg%solve_multiphase
+
+        ! Dato común de entalpía (C1.8): el inventario del líquido se mide
+        ! como m*(cp_l*T + C0) para que la transferencia sólido<->líquido
+        ! por fusión cierre exactamente (C0 = e_s(T_liq) - cp_l*T_liq)
+        C0_datum = (cfg%cp_s - cfg%cp_l) * cfg%T_liquidus + cfg%h_fusion
 
         s = 0.0_dp
         do k = kstart, kend
@@ -129,7 +134,7 @@ contains
                     s(4) = s(4) + slag%m_sl(i,j,k)
 
                     s(5) = s(5) + liq%alpha(i,j,k) * liq%rho(i,j,k) * &
-                                  liq%cp(i,j,k) * liq%T(i,j,k) * vol
+                                  (liq%cp(i,j,k) * liq%T(i,j,k) + C0_datum) * vol
                     s(6) = s(6) + gas%alpha(i,j,k) * gas%rho(i,j,k) * &
                                   gas%cp(i,j,k) * gas%T(i,j,k) * vol
                     s(7) = s(7) + sol%E_s(i,j,k)

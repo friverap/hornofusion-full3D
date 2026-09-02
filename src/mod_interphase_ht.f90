@@ -12,6 +12,7 @@
 module mod_interphase_ht
     use mod_constants
     use mod_types_3d
+    use mod_melting_3d, only: solid_T_from_enthalpy
     implicit none
 
     real(dp), parameter :: T_TRANSITION = 1373.0_dp  ! K
@@ -30,7 +31,7 @@ contains
         real(dp) :: T_g, T_l, T_s, alpha_s, d_s
         real(dp) :: vmag_g, Re_gs, Pr_g, h_gs, h_ls
         real(dp) :: Q_gs, Q_ls, Q_total
-        real(dp) :: A_sv, eps_s, Q_lim
+        real(dp) :: A_sv, eps_s, Q_lim, Q_lim_sol
 
         d_s = cfg%d_particle
 
@@ -66,10 +67,15 @@ contains
                         end if
 
                         Q_gs = h_gs * A_sv * (T_g - T_s) * m%vol(i,j,k)
-                        ! Clamp Q_gs: gas cannot overshoot T_s in one explicit step
+                        ! Clamp por AMBOS lados: ni el gas ni el sólido pueden
+                        ! rebasar la T del otro en un paso explícito. El clamp
+                        ! solo-fluido dejaba dispararse T_s en celdas casi
+                        ! fundidas (m_s pequeña): medido T_s = 66000 K.
                         Q_lim = gas%alpha(i,j,k) * gas%rho(i,j,k) * gas%cp(i,j,k) * &
                                 m%vol(i,j,k) * abs(T_g - T_s) / cfg%dt
-                        Q_gs = sign(min(abs(Q_gs), Q_lim), Q_gs)
+                        Q_lim_sol = sol%m_s(i,j,k) * cfg%cp_s * &
+                                    abs(T_g - T_s) / cfg%dt
+                        Q_gs = sign(min(abs(Q_gs), Q_lim, Q_lim_sol), Q_gs)
                     end if
 
                     ! Liquid-solid heat transfer (Ranz-Marshall)
@@ -77,10 +83,12 @@ contains
                     if (liq%alpha(i,j,k) > 1.0e-6_dp) then
                         h_ls = (liq%kth(i,j,k) / d_s) * 6.0_dp
                         Q_ls = h_ls * A_sv * (T_l - T_s) * m%vol(i,j,k)
-                        ! Clamp Q_ls: liquid cannot overshoot T_s in one explicit step
+                        ! Clamp por ambos lados (ver Q_gs)
                         Q_lim = liq%alpha(i,j,k) * liq%rho(i,j,k) * liq%cp(i,j,k) * &
                                 m%vol(i,j,k) * abs(T_l - T_s) / cfg%dt
-                        Q_ls = sign(min(abs(Q_ls), Q_lim), Q_ls)
+                        Q_lim_sol = sol%m_s(i,j,k) * cfg%cp_s * &
+                                    abs(T_l - T_s) / cfg%dt
+                        Q_ls = sign(min(abs(Q_ls), Q_lim, Q_lim_sol), Q_ls)
                     end if
 
                     Q_total = Q_gs + Q_ls
@@ -88,9 +96,11 @@ contains
                     ! Apply heat to solid energy balance
                     sol%E_s(i,j,k) = sol%E_s(i,j,k) + Q_total * cfg%dt
 
-                    ! Update solid temperature
+                    ! Update solid temperature (función de entalpía ÚNICA, C1.8:
+                    ! antes E/(m*cp_s) chocaba con el cp_eff de la fusión)
                     if (sol%m_s(i,j,k) > SMALL) then
-                        sol%T_s(i,j,k) = sol%E_s(i,j,k) / (sol%m_s(i,j,k) * cfg%cp_s)
+                        sol%T_s(i,j,k) = solid_T_from_enthalpy( &
+                            sol%E_s(i,j,k) / sol%m_s(i,j,k), cfg)
                     end if
 
                     ! Corresponding heat removal from fluid phases

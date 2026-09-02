@@ -13,6 +13,7 @@ module mod_arc_cassie_mayr
     use mod_types_3d
     use mod_parallel_utils
     use mod_audit, only: audit_add, AUD_ARC_DIRECT, AUD_ARC_DISCARD
+    use mod_melting_3d, only: solid_T_from_enthalpy
     implicit none
 
 contains
@@ -272,8 +273,8 @@ contains
                                 end if
                                 call audit_add(AUD_ARC_DIRECT, Q_rad)
                                 sol%E_s(il,jl,kl) = sol%E_s(il,jl,kl) + Q_rad
-                                sol%T_s(il,jl,kl) = sol%E_s(il,jl,kl) / &
-                                                    (sol%m_s(il,jl,kl) * cfg%cp_s)
+                                sol%T_s(il,jl,kl) = solid_T_from_enthalpy( &
+                                    sol%E_s(il,jl,kl) / sol%m_s(il,jl,kl), cfg)
                             end if
                         end do
                     end do

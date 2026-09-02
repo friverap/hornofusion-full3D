@@ -284,12 +284,14 @@ program eaf_3d_simulator
                 call solve_pressure_correction(liq, sh, mesh, cfg, liq%alpha, conv%res_cont)
                 if (cfg%solve_energy) then
                     call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, &
-                                         gas%alpha, .false., conv%res_energy)
+                                         gas%alpha, sol%mdot, sol%T_s, &
+                                         .false., conv%res_energy)
                 end if
                 call update_properties(liq, gas, sh, mesh, cfg)
             else if (cfg%solve_energy) then
                 call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, &
-                                     gas%alpha, .false., conv%res_energy)
+                                     gas%alpha, sol%mdot, sol%T_s, &
+                                     .false., conv%res_energy)
                 conv%res_cont = 0.0_dp
             else
                 ! No physics enabled - mark as converged immediately
