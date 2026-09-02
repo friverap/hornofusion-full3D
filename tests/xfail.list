@@ -10,4 +10,8 @@ script:symmetry
 # melt requiere C1.1 (ancla de alpha) Y C1.8 (energía de fusión): hoy el
 # líquido recién fundido se recongela por el crash de T_s (cp_s vs cp_eff)
 script:melt
-script:audit_energy
+# balances de audit.csv: energía hasta C1.6/C1.7 (doble conteo + MC extra),
+# masa líquida hasta C1.1
+audit:energy_balance
+audit:arc_budget
+audit:mass_liq

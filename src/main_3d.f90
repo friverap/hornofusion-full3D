@@ -45,6 +45,7 @@ program eaf_3d_simulator
     use mod_species_transport
     use mod_convergence_3d
     use mod_input_profiles
+    use mod_audit
     implicit none
 
     ! Main variables
@@ -163,6 +164,11 @@ program eaf_3d_simulator
 
     ! Write initial state (t=0, step=0)
     call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, 0, 0.0_dp, cfg%output_dir)
+
+    ! Auditoría de balances: encabezado + línea del estado inicial
+    if (cfg%audit_freq > 0) then
+        call audit_init(liq, gas, sol, slag, sh, elec, mesh, cfg)
+    end if
 
     !===================================================================
     ! TIME LOOP
@@ -313,6 +319,14 @@ program eaf_3d_simulator
         if (cfg%solve_slag) then
             call update_slag(slag, liq, gas, sh, mesh, cfg, cfg%dt)
             call slag_exchange_halos(slag, mesh)
+        end if
+
+        ! Auditoría de balances (antes de adaptar dt: usa el dt del paso)
+        if (cfg%audit_freq > 0) then
+            if (mod(step, cfg%audit_freq) == 0) then
+                call audit_write_step(liq, gas, sol, slag, sh, elec, mesh, &
+                                      cfg, step, time)
+            end if
         end if
 
         ! Adaptive time stepping

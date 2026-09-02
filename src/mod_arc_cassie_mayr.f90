@@ -12,6 +12,7 @@ module mod_arc_cassie_mayr
     use mod_constants
     use mod_types_3d
     use mod_parallel_utils
+    use mod_audit, only: audit_add, AUD_ARC_DIRECT, AUD_ARC_DISCARD
     implicit none
 
 contains
@@ -244,7 +245,11 @@ contains
                                         m%vol_global(ig,jg,kg) * cfg%dt
                                 ! Stability guard: limit ΔT_s to DT_RAD_MAX per step.
                                 Q_rad_lim = DT_RAD_MAX * sol%m_s(il,jl,kl) * cfg%cp_s
+                                ! Auditoría: energía descartada por el cap (hallazgo 3.1d)
+                                call audit_add(AUD_ARC_DISCARD, &
+                                               max(Q_rad - Q_rad_lim, 0.0_dp))
                                 Q_rad = min(Q_rad, Q_rad_lim)
+                                call audit_add(AUD_ARC_DIRECT, Q_rad)
                                 sol%E_s(il,jl,kl) = sol%E_s(il,jl,kl) + Q_rad
                                 sol%T_s(il,jl,kl) = sol%E_s(il,jl,kl) / &
                                                     (sol%m_s(il,jl,kl) * cfg%cp_s)

@@ -14,6 +14,8 @@ module mod_melting_3d
     use mod_constants
     use mod_types_3d
     use mod_parallel_utils
+    use mod_audit, only: audit_add, AUD_MELT_MASS, AUD_RESOLID_MASS, &
+                         AUD_MELT_E_SOLID
     implicit none
 
 contains
@@ -64,6 +66,10 @@ contains
                         ! Derivation: T_s_new = T_s - dm*h_fus/((m_s-dm)*cp_eff)  < T_s ✓
                         sol%E_s(i,j,k) = sol%E_s(i,j,k) - sol%mdot(i,j,k) * dt &
                                         * (cfg%h_fusion + cp_eff * T_s)
+                        ! Auditoría: masa fundida y energía retirada del sólido
+                        call audit_add(AUD_MELT_MASS, sol%mdot(i,j,k) * dt)
+                        call audit_add(AUD_MELT_E_SOLID, sol%mdot(i,j,k) * dt &
+                                        * (cfg%h_fusion + cp_eff * T_s))
 
                         ! Update solid volume fraction
                         if (m%vol(i,j,k) > SMALL) then
@@ -86,6 +92,8 @@ contains
                         sol%mdot(i,j,k) = -dm / dt
                         sol%m_s(i,j,k) = sol%m_s(i,j,k) + dm
                         sol%E_s(i,j,k) = sol%E_s(i,j,k) + dm * cfg%cp_s * cfg%T_solidus
+                        ! Auditoría: masa re-solidificada
+                        call audit_add(AUD_RESOLID_MASS, dm)
 
                         if (m%vol(i,j,k) > SMALL) then
                             sol%alpha_s(i,j,k) = sol%m_s(i,j,k) / &

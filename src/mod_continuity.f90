@@ -13,6 +13,7 @@ module mod_continuity
     use mod_types_3d
     use mod_solver_3d
     use mod_parallel_utils
+    use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS
     implicit none
 
 contains
@@ -28,7 +29,7 @@ contains
         real(dp), allocatable :: aW(:,:,:), aE(:,:,:), aS(:,:,:), aN(:,:,:)
         real(dp), allocatable :: aB(:,:,:), aT(:,:,:), aP(:,:,:), Su(:,:,:)
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
-        real(dp) :: rho_f, vol, vol_dt
+        real(dp) :: rho_f, vol, vol_dt, a_pre
 
         ! Get loop bounds
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -105,8 +106,12 @@ contains
                         cycle
                     end if
 
+                    a_pre = liq%alpha(i,j,k)
                     liq%alpha(i,j,k) = max(0.0_dp, min(1.0_dp - sol%alpha_s(i,j,k), &
                                                          liq%alpha(i,j,k)))
+                    ! Auditoría: masa neta quitada/añadida por el clipping
+                    call audit_add(AUD_ALPHA_CLIP_MASS, &
+                        (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k))
                     gas%alpha(i,j,k) = 1.0_dp - sol%alpha_s(i,j,k) - liq%alpha(i,j,k)
                     gas%alpha(i,j,k) = max(0.0_dp, gas%alpha(i,j,k))
                 end do

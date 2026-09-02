@@ -88,8 +88,11 @@ check_invariants() {  # <rundir> <config_name>
 }
 
 check_audit_if_present() {  # <rundir>
-    if [ -f "$1/audit.csv" ] && [ -f "$INT/check_audit.py" ]; then
-        run_script "audit_energy" $PY $INT/check_audit.py "$1"
+    if [ -f "$1/audit.csv" ]; then
+        if ! $PY $INT/check_audit.py "$1" --xfail "$(xfail_ids audit)"; then
+            echo ">> FAIL auditoría en $1"
+            note_fail
+        fi
     fi
 }
 

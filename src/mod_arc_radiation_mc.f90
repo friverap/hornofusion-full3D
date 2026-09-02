@@ -18,6 +18,7 @@ module mod_arc_radiation_mc
     use mod_constants
     use mod_types_3d
     use mod_parallel_utils
+    use mod_audit, only: audit_add, AUD_MC_DEPOSIT
     implicit none
 
     integer, parameter :: N_BEAMS = 1000   ! beams per electrode per call
@@ -133,6 +134,8 @@ contains
                         if (owned) then
                             sh%S_arc(il, jl, kl) = sh%S_arc(il, jl, kl) + &
                                 P_rad_per_beam / (m%vol_global(ig, jg, kg) + SMALL)
+                            ! Auditoría: energía inyectada por el MC este paso
+                            call audit_add(AUD_MC_DEPOSIT, P_rad_per_beam * cfg%dt)
                         end if
                         exit trace
                     end if

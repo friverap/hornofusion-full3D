@@ -100,6 +100,7 @@ contains
         ! Output
         cfg%output_freq  = 100
         cfg%monitor_freq = 10
+        cfg%audit_freq   = 1
         cfg%output_dir   = 'output'
 
         ! Slag
@@ -213,6 +214,7 @@ contains
         ! Output
         case ('output_freq');  call parse_int(val, key, cfg%output_freq)
         case ('monitor_freq'); call parse_int(val, key, cfg%monitor_freq)
+        case ('audit_freq');   call parse_int(val, key, cfg%audit_freq)
         case ('output_dir');   cfg%output_dir = trim(val)
         ! Bucket timing
         case ('t_bucket2_charge'); call parse_real(val, key, cfg%t_bucket2_charge)
