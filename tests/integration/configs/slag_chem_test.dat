@@ -28,7 +28,10 @@ solve_flow = false
 solve_energy = false
 solve_melting = false
 solve_turb = false
-solve_radiation = false
+# radiación ON (E2.7): cubre el acople espuma<->DO en integración (el
+# deposito E_rad_foam entra al balance); los checks son de conservación
+# elemental y no dependen de la T exacta
+solve_radiation = true
 solve_chemistry = true
 solve_species = true
 solve_arc = false
