@@ -320,33 +320,85 @@ contains
     subroutine get_s4_direction(d, mu, eta, xi, w)
         integer, intent(in)   :: d
         real(dp), intent(out) :: mu, eta, xi, w
+        call get_sn_direction(4, d, mu, eta, xi, w)
+    end subroutine get_s4_direction
 
-        real(dp), parameter :: a1 = 0.2958759_dp
-        real(dp), parameter :: a2 = 0.9082483_dp
-        real(dp), parameter :: w1 = 0.5235987755982988_dp  ! pi/6
+    !---------------------------------------------------------------------------
+    ! Cuadraturas level-symmetric LQ_N (C4, roadmap del paper).
+    ! Tablas de Lewis & Miller (1984, Tabla 4-1): niveles mu y pesos por
+    ! punto normalizados a 1 por octante (peso del punto = w * pi/2, de
+    ! modo que Sum_total = 4*pi). El unit test test_sn_weights verifica
+    ! los momentos 0/1/2 contra errores de transcripción.
+    !   S4: 24 direcciones (3 puntos/octante, 1 clase de peso)
+    !   S6: 48 (6 puntos/octante, 2 clases)  S8: 80 (10 puntos, 3 clases)
+    ! El orden de puntos de S4 reproduce BIT-idéntico la secuencia
+    ! histórica del código (niveles (2,1,1),(1,2,1),(1,1,2)).
+    !---------------------------------------------------------------------------
+    pure function n_quad_dirs(nq) result(n)
+        integer, intent(in) :: nq
+        integer :: n
+        select case (nq)
+        case (4);  n = 24
+        case (6);  n = 48
+        case (8);  n = 80
+        case default; n = 24
+        end select
+    end function n_quad_dirs
 
-        integer :: octant, local_d
+    subroutine get_sn_direction(nq, d, mu, eta, xi, w)
+        integer, intent(in)   :: nq, d
+        real(dp), intent(out) :: mu, eta, xi, w
+
+        ! S4 (reproduce el histórico: w = pi/6 por punto)
+        real(dp), parameter :: M4(2) = [0.2958759_dp, 0.9082483_dp]
+        integer,  parameter :: P4(3,3) = reshape([2,1,1, 1,2,1, 1,1,2], [3,3])
+        real(dp), parameter :: W4(3) = [1.0_dp, 1.0_dp, 1.0_dp] / 3.0_dp
+        ! S6 (LQ6)
+        real(dp), parameter :: M6(3) = [0.2666355_dp, 0.6815076_dp, &
+                                        0.9261808_dp]
+        integer,  parameter :: P6(3,6) = reshape([ &
+            3,1,1, 1,3,1, 1,1,3, 2,2,1, 2,1,2, 1,2,2], [3,6])
+        real(dp), parameter :: W6(6) = [0.1761263_dp, 0.1761263_dp, &
+            0.1761263_dp, 0.1572071_dp, 0.1572071_dp, 0.1572071_dp]
+        ! S8 (LQ8)
+        real(dp), parameter :: M8(4) = [0.2182179_dp, 0.5773503_dp, &
+                                        0.7867958_dp, 0.9511897_dp]
+        integer,  parameter :: P8(3,10) = reshape([ &
+            4,1,1, 1,4,1, 1,1,4, &
+            3,2,1, 3,1,2, 2,3,1, 1,3,2, 2,1,3, 1,2,3, &
+            2,2,2], [3,10])
+        real(dp), parameter :: W8(10) = [0.1209877_dp, 0.1209877_dp, &
+            0.1209877_dp, 0.0907407_dp, 0.0907407_dp, 0.0907407_dp, &
+            0.0907407_dp, 0.0907407_dp, 0.0907407_dp, 0.0925926_dp]
+
+        integer :: octant, local_d, npts
         real(dp) :: s_mu, s_eta, s_xi
 
-        ! 24 directions = 8 octants x 3 permutations
-        octant  = (d - 1) / 3 + 1
-        local_d = mod(d - 1, 3) + 1
+        npts = n_quad_dirs(nq) / 8
+        octant  = (d - 1) / npts + 1
+        local_d = mod(d - 1, npts) + 1
 
-        ! Signs for each octant
         s_mu  = merge(1.0_dp, -1.0_dp, mod(octant-1, 2) == 0)
         s_eta = merge(1.0_dp, -1.0_dp, mod((octant-1)/2, 2) == 0)
         s_xi  = merge(1.0_dp, -1.0_dp, mod((octant-1)/4, 2) == 0)
 
-        select case (local_d)
-        case (1)
-            mu = s_mu * a2; eta = s_eta * a1; xi = s_xi * a1
-        case (2)
-            mu = s_mu * a1; eta = s_eta * a2; xi = s_xi * a1
-        case (3)
-            mu = s_mu * a1; eta = s_eta * a1; xi = s_xi * a2
+        select case (nq)
+        case (6)
+            mu  = s_mu  * M6(P6(1,local_d))
+            eta = s_eta * M6(P6(2,local_d))
+            xi  = s_xi  * M6(P6(3,local_d))
+            w   = W6(local_d) * (0.5_dp * PI)
+        case (8)
+            mu  = s_mu  * M8(P8(1,local_d))
+            eta = s_eta * M8(P8(2,local_d))
+            xi  = s_xi  * M8(P8(3,local_d))
+            w   = W8(local_d) * (0.5_dp * PI)
+        case default   ! 4
+            mu  = s_mu  * M4(P4(1,local_d))
+            eta = s_eta * M4(P4(2,local_d))
+            xi  = s_xi  * M4(P4(3,local_d))
+            w   = W4(local_d) * (0.5_dp * PI)
         end select
-
-        w = w1
-    end subroutine get_s4_direction
+    end subroutine get_sn_direction
 
 end module mod_radiation_do
