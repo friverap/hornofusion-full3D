@@ -33,6 +33,7 @@ module mod_radiation_do
     use mod_types_3d
     use mod_parallel_utils
     use mod_solver_3d, only: tdma_3d_mpi
+    use mod_mpi_topology, only: mpi_allreduce_max
     use mod_melting_3d, only: solid_T_from_enthalpy, effective_cp
     use mod_audit, only: audit_add, AUD_RAD_SOL, AUD_RAD_WALL
     implicit none
@@ -40,7 +41,14 @@ module mod_radiation_do
     integer, parameter :: N_DIRECTIONS = 24
     real(dp), parameter :: KAPPA_GAS = 0.3_dp    ! 1/m (gas absorption coefficient)
     real(dp), parameter :: KAPPA_SOLID = 10.0_dp ! 1/m (solid region)
-    integer, parameter :: N_SWEEPS_RTE = 2       ! sweeps TDMA por dirección
+    ! Barridos TDMA por dirección: ITERATIVOS hasta convergencia. Con un
+    ! número fijo (=2) la información radiativa solo cruzaba 2 interfaces
+    ! de rank por dirección (interfaces retardadas del TDMA): G_rad difería
+    ! hasta 13% entre -n 1 y -n 8 (estructural, no roundoff). El criterio
+    ! relativo global hace la intensidad invariante a la descomposición
+    ! hasta RTE_SWEEP_TOL.
+    integer, parameter :: MAX_SWEEPS_RTE = 24
+    real(dp), parameter :: RTE_SWEEP_TOL = 1.0e-10_dp
 
 contains
 
@@ -57,6 +65,9 @@ contains
         integer  :: i, j, k, d
         integer  :: istart, iend, jstart, jend, kstart, kend
         real(dp), allocatable :: Irad(:,:,:), Bmix(:,:,:), kmix(:,:,:)
+        real(dp), allocatable :: Iprev(:,:,:)
+        real(dp) :: dmax, dmax_g, inorm, inorm_g
+        integer  :: isw
         real(dp) :: sx, sy, sz, w_d
         real(dp) :: cw, ce, cs, cn, cb, ct
         real(dp) :: B_wall, wall_net, wall_net_step
@@ -67,7 +78,7 @@ contains
 
         call ensure_workspace(m)
         allocate(Irad, mold=sh%G_rad); allocate(Bmix, mold=sh%G_rad)
-        allocate(kmix, mold=sh%G_rad)
+        allocate(kmix, mold=sh%G_rad); allocate(Iprev, mold=sh%G_rad)
 
         B_wall = STEFAN_BOLTZMANN * cfg%T_wall**4 / PI
 
@@ -166,10 +177,23 @@ contains
                 end do
             end do
 
-            ! Guess inicial cerca del equilibrio → converge en pocos sweeps
+            ! Guess inicial cerca del equilibrio; barrer hasta convergencia
+            ! global (ver nota de MAX_SWEEPS_RTE)
             Irad = Bmix
-            call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, Irad, m, &
-                             N_SWEEPS_RTE)
+            do isw = 1, MAX_SWEEPS_RTE
+                Iprev = Irad
+                call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, Irad, m, 1)
+                dmax = maxval(abs(Irad(istart:iend, jstart:jend, kstart:kend) &
+                            - Iprev(istart:iend, jstart:jend, kstart:kend)))
+                inorm = maxval(abs(Irad(istart:iend, jstart:jend, kstart:kend)))
+                if (m%is_parallel) then
+                    call mpi_allreduce_max(dmax, dmax_g, m%topo)
+                    call mpi_allreduce_max(inorm, inorm_g, m%topo)
+                else
+                    dmax_g = dmax; inorm_g = inorm
+                end if
+                if (dmax_g <= RTE_SWEEP_TOL * max(inorm_g, SMALL)) exit
+            end do
 
             ! Acumular G y el flujo neto a paredes (diagnóstico de auditoría)
             wall_net_step = 0.0_dp
@@ -266,7 +290,7 @@ contains
             end do
         end do
 
-        deallocate(Irad, Bmix, kmix)
+        deallocate(Irad, Bmix, kmix, Iprev)
 
     contains
 

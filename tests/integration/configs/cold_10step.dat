@@ -8,8 +8,11 @@ nz = 16
 stretch_r = 1.0
 stretch_z = 1.0
 
-dt = 0.5
-t_final = 5.0
+# dt CFL-sano (~2 con u_gas~5 m/s y dtheta*r~0.04 m): con el gas activo
+# en el Poisson (low-Mach 2026), dt=0.5 era CFL~400 — regimen caotico no
+# testeable por invarianza.
+dt = 0.02
+t_final = 0.2
 adaptive_dt = false
 
 solve_flow = true
@@ -23,7 +26,7 @@ solve_multiphase = true
 
 max_outer = 5
 max_inner_mom = 3
-max_inner_pres = 20
+max_inner_pres = 200  # Poisson de dominio completo con el gas (low-Mach)
 
 output_freq = 5
 monitor_freq = 5

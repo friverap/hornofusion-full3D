@@ -31,9 +31,40 @@ module mod_pressure_3d
     use mod_mpi_topology, only: mpi_exchange_halos_3d
     implicit none
 
-    ! Ver notas en solve_pressure_correction
-    logical, parameter :: GAS_IN_POISSON      = .false.
-    logical, parameter :: GAS_COMPRESSIBILITY = .false.
+    ! Acople P-V del gas, formulación low-Mach (cierre 2026, punto 1):
+    ! el gas participa del Poisson de mezcla y su expansión térmica entra
+    ! como fuente de masa acotada. Requiere gas con momentum resuelto
+    ! (solve_multiphase); ver notas en solve_pressure_correction.
+    logical, parameter :: GAS_IN_POISSON      = .true.
+    logical, parameter :: GAS_COMPRESSIBILITY = .true.
+
+    ! Compliance diagonal simétrica aP *= (1+eps): regulariza los bolsones
+    ! aislados (p.ej. líquido encerrado en chatarra densa cuyos vecinos
+    ! están bajo ALPHA_FLOW_CUTOFF en ambas fases => bloque Neumann puro
+    ! singular). Físicamente es una compresibilidad débil del medio: el
+    ! desbalance de masa del bolsón sube su nivel de presión en vez de
+    ! hacer estallar el CG. Simétrica en theta y entre descomposiciones —
+    ! reemplaza al ancla big-coefficient (cuyo hoyuelo en la celda (1,1,1)
+    ! rompía la simetría 120° con el gas activo).
+    real(dp), parameter :: PP_COMPLIANCE = 1.0e-6_dp
+
+    ! Cap de la fuente de compresibilidad: no se puede exigir ventear más
+    ! de esta fracción de la masa de gas de la celda por paso. Sin cap,
+    ! celdas que doblan T en un paso (encendido del arco) pedían purgar
+    ! >50% de su masa instantáneamente => NaN medidos en -n 1/-n 4.
+    real(dp), parameter :: COMP_SRC_CAP = 0.2_dp
+
+    ! Término acústico low-Mach: rho(p,T) = rho(T)*(1 + p'/P0) aporta
+    ! d(alpha*rho)/dp' * V/dt = alpha*rho/P0 * V/dt a la DIAGONAL del
+    ! Poisson. Acota la respuesta de pp (los picos se absorben como
+    ! compresión física del gas en vez de exigir velocidades imposibles) y
+    ! es la pieza que faltaba para que el lazo externo converja a CFL alto:
+    ! sin él, n1/n4 divergían (p -> 2e9 Pa) mientras n8 encontraba el
+    ! cuasi-estado por suerte de barrido. La corrección de densidad
+    ! asociada (~pp/P0 ~ 1%) se DESCARTA tras el paso — aproximación
+    ! documentada, pequeña frente al agujero EOS (~70%) que este acople
+    ! elimina.
+    real(dp), parameter :: P0_THERMO = 101325.0_dp
 
 contains
 
@@ -123,37 +154,36 @@ contains
         ! expansión es absorbible por el Poisson)
         !-----------------------------------------------------------------------
         call add_phase_contribution(liq)
-        ! GAS GATED (conclusión del punto C2.4): el acople P-V de una fase
-        ! con EOS rho(T) vía proyección incompresible es estructuralmente
-        ! marginal — tres inestabilidades independientes trazadas a él
-        ! (fuente de compresibilidad: NaN en -n1/-n4; acumulación a 30
-        ! iteraciones externas: NaN en outer_conv; interacción con el ancla:
-        ! asimetría 0.98). Requiere formulación compresible low-Mach
-        ! (rho(p,T) + ecuación de presión con término temporal). El gas
-        ! recibe drag interfase (Kexch) y su expansión queda como residuo
-        ! de continuidad medible (res_cont).
-        if (GAS_IN_POISSON) call add_phase_contribution(gas)
+        ! Gas en el Poisson SOLO con multifase: sin gas momentum resuelto,
+        ! sus aP_u* valen 0 y d_f = V/SMALL revienta los coeficientes.
+        if (GAS_IN_POISSON .and. cfg%solve_multiphase) &
+            call add_phase_contribution(gas)
 
-        ! Compresibilidad del gas ideal (C2.4):
-        !   Su -= alpha_g*(rho(T)-rho(T_old))/dt*V
-        ! GATED: marginalmente estable — con ella, cold_10step diverge en
-        ! -n 1 y -n 4 (NaN en presión) aunque -n 8 corre. Requiere acople
-        ! rho-p real (EOS) o sub-relajación propia; reevaluar con C4.3
-        ! multigrid. Sin ella el Poisson trata al gas como incompresible y
-        ! la expansión térmica queda como residuo de continuidad medible.
-        if (GAS_COMPRESSIBILITY) then
-        do k = kstart, kend
-            do j = jstart, jend
-                do i = istart, iend
-                    if (m%cell_type(i,j,k) == 0) cycle
-                    if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
-                    Su(i,j,k) = Su(i,j,k) - gas%alpha(i,j,k) * m%vol(i,j,k) &
-                        / cfg%dt * (gas%rho(i,j,k) &
-                        - cfg%rho_gas * cfg%T_ambient &
-                          / max(gas_T_old(i,j,k), T_MIN_GAS))
+        ! Compresibilidad del gas ideal (low-Mach):
+        !   Su -= alpha_g*(rho(T_it)-rho(T_old))/dt*V   (expansión => Su
+        ! sube => pp empuja flujo de salida). ACOTADA a COMP_SRC_CAP de la
+        ! masa de gas de la celda por paso: el exceso queda para los pasos
+        ! siguientes (rho sigue a T, la demanda se re-emite sola).
+        ! Aproximación: alpha_g fijo en el término temporal (el cambio de
+        ! alpha por fusión/colapso es de segundo orden aquí).
+        if (GAS_COMPRESSIBILITY .and. cfg%solve_multiphase) then
+        block
+            real(dp) :: src, cap
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        if (m%cell_type(i,j,k) == 0) cycle
+                        if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
+                        src = gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
+                              (gas%rho(i,j,k) - cfg%rho_gas * cfg%T_ambient &
+                               / max(gas_T_old(i,j,k), T_MIN_GAS))
+                        cap = COMP_SRC_CAP * gas%alpha(i,j,k) * &
+                              gas%rho(i,j,k) * m%vol(i,j,k) / cfg%dt
+                        Su(i,j,k) = Su(i,j,k) - max(-cap, min(cap, src))
+                    end do
                 end do
             end do
-        end do
+        end block
         end if
 
         ! Celdas activas sin contribución de ninguna fase: triviales
@@ -168,8 +198,17 @@ contains
                         aB(i,j,k) = 0.0_dp; aT(i,j,k) = 0.0_dp
                         aP(i,j,k) = 1.0_dp; Su(i,j,k) = 0.0_dp
                     else
-                        aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + &
-                                    aN(i,j,k) + aB(i,j,k) + aT(i,j,k)
+                        ! Compliance: ver nota de PP_COMPLIANCE arriba
+                        aP(i,j,k) = (aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + &
+                                     aN(i,j,k) + aB(i,j,k) + aT(i,j,k)) * &
+                                    (1.0_dp + PP_COMPLIANCE)
+                        ! Término acústico low-Mach (ver P0_THERMO arriba)
+                        if (GAS_COMPRESSIBILITY .and. cfg%solve_multiphase &
+                            .and. gas%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF) then
+                            aP(i,j,k) = aP(i,j,k) + gas%alpha(i,j,k) * &
+                                gas%rho(i,j,k) / P0_THERMO * &
+                                m%vol(i,j,k) / cfg%dt
+                        end if
                     end if
                 end do
             end do
@@ -178,17 +217,10 @@ contains
         ! Pressure BCs
         call apply_pressure_bc(aW, aE, aS, aN, aB, aT, aP, Su, m)
 
-        ! Ancla de nivel de presión: NECESARIA con el Poisson solo-líquido
-        ! (la región del baño no toca los Dirichlet de las salidas del techo
-        ! -> bloque Neumann singular sin ella). Nota: si se reactiva el gas
-        ! (GAS_IN_POISSON), el ancla debe reemplazarse por proyección del
-        ! promedio: su hoyuelo en theta=0 rompe la simetría azimutal del gas.
-        if (.not. m%is_parallel .or. &
-            (m%topo%iglobal_start == 1 .and. m%topo%jglobal_start == 1 .and. &
-             m%topo%kglobal_start == 1)) then
-            call fix_pressure_reference(aP, Su, m, istart, iend, jstart, jend, &
-                                        kstart, kend)
-        end if
+        ! (El ancla big-coefficient fue retirada: con el gas en el Poisson
+        ! todo el dominio activo conecta a los Dirichlet del techo y la
+        ! compliance regulariza los bolsones aislados. El hoyuelo del ancla
+        ! en la celda (1,1,1) rompía la simetría 120°.)
 
         ! Solve con CG precondicionado Jacobi (C4.3 adelantado: el SOR
         ! omega=1.5 con halos retardados divergía; la matriz de cara
@@ -199,9 +231,9 @@ contains
 
         residual = cg_res
 
-        ! Correct velocities (gas gated, ver nota arriba)
         call correct_velocities(liq, sh, m, liq%alpha)
-        if (GAS_IN_POISSON) call correct_velocities(gas, sh, m, gas%alpha)
+        if (GAS_IN_POISSON .and. cfg%solve_multiphase) &
+            call correct_velocities(gas, sh, m, gas%alpha)
 
         ! Correct pressure
         sh%p = sh%p + cfg%alpha_p * sh%pp
@@ -325,31 +357,6 @@ contains
         end function link
 
     end subroutine solve_pressure_correction
-
-    !---------------------------------------------------------------------------
-    ! Anchor the pressure level at the first active cell of the local block
-    ! using the big-coefficient method
-    !---------------------------------------------------------------------------
-    subroutine fix_pressure_reference(aP, Su, m, istart, iend, jstart, jend, &
-                                      kstart, kend)
-        real(dp), intent(inout)  :: aP(-1:,-1:,-1:), Su(-1:,-1:,-1:)
-        type(mesh_t), intent(in) :: m
-        integer, intent(in)      :: istart, iend, jstart, jend, kstart, kend
-
-        integer :: i, j, k
-
-        do k = kstart, kend
-            do j = jstart, jend
-                do i = istart, iend
-                    if (m%cell_type(i,j,k) /= 0) then
-                        aP(i,j,k) = aP(i,j,k) * PREF_PENALTY
-                        Su(i,j,k) = 0.0_dp
-                        return
-                    end if
-                end do
-            end do
-        end do
-    end subroutine fix_pressure_reference
 
     !---------------------------------------------------------------------------
     ! Correct velocities using pressure correction gradient (esténcil central

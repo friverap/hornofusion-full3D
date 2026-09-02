@@ -1,33 +1,10 @@
 # Fallos esperados (XFAIL): un id por línea. Cada entrada se ELIMINA en el
 # mismo commit que aterriza su fix (el XPASS resultante lo recuerda).
 # Formatos: unit:<binario> | invariants:<check> | script:<id>
-# T_liquid: enfriamiento espurio (min ~120 K) por el flujo de salida FALSO
-# de la convección de celda centrada (aP tiene términos de outflow sin
-# contraparte conservativa) -> hallazgo 3.8, fix en C2.2
-invariants:T_liquid_bound
-# T_solid: bajo el arco puede rebasar 4000 K vía HT con gas en runaway;
-# re-evaluar umbral tras C3.4
-invariants:T_solid_bound
-# T_gas: domado por el DO real (C3.4; máx ~3000-6000 K vs 1e6 antes) pero
-# symmetry_3elec corre sin radiación (cuadratura) y ahí aún puede rebasar
-invariants:T_gas_bound
-# lag de interfaz TDMA/SOR amplificado por el runaway de T_gas (solo
-# T_gas/uz_gas difieren; sólido/líquido/presión/especies son idénticos);
-# re-medir tras C3.4
-script:decomposition_cold_n1
-script:decomposition_cold_n4
-# melt_forced (régimen de fusión violenta): el runaway térmico del gas
-# (EOS rho(T) sin acople rho-p, sin enfriamiento radiativo) desestabiliza
-# el acople P-V a ~10 pasos pese a flujos conservativos + Rhie-Chow + CG +
-# drag gas-líquido. Gated en C3.4 (radiación DO real) + reactivación del
-# Poisson de mezcla. La conservación del handoff fusión->líquido quedó
-# validada al 99.3%/paso (sonda C1.8) y el transporte telescopa
-# (test_face_flux).
+# melt_forced: ratio dm_liq/fundido = 0.857 — el transporte de alpha
+# (forma acotada) mas el clip de alpha pierden ~14% del fundido en el
+# regimen violento; en investigacion (cierre 2026, punto 2).
 script:melt
-invariants_melt:nan
-invariants_melt:Y_bounds
-invariants_melt:turb_positive
-invariants_melt:alpha_bounds
 # energy_balance: resta el déficit convectivo de la forma acotada
 # (E_conv_defect, estimado desde los campos finales, lambda~0.6): la
 # instrumentación exacta requiere hooks por iteración del lazo externo.

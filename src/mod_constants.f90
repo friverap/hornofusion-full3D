@@ -72,7 +72,6 @@ module mod_constants
     real(dp), parameter :: RESOLID_LIMITER = 0.1_dp
 
     ! Pressure-reference "big coefficient" penalty (SIMPLE singular fix)
-    real(dp), parameter :: PREF_PENALTY = 1.0e10_dp
 
     ! SOR pressure solver defaults
     real(dp), parameter :: SOR_OMEGA        = 1.5_dp

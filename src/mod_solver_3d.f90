@@ -437,7 +437,8 @@ contains
 
             ! Exchange halos frequently: stale rank-boundary values degrade
             ! convergence and can destabilize the sweep locally
-            if (m%is_parallel .and. mod(iter, SOR_HALO_EVERY) == 0) then
+            if (mod(iter, SOR_HALO_EVERY) == 0) then
+                ! incondicional: en serial copia la periodicidad theta
                 call mpi_exchange_halos_3d(phi, m%topo)
             end if
 
@@ -455,7 +456,8 @@ contains
         end do
         
         ! Final halo exchange and residual computation to ensure consistency
-        if (m%is_parallel) then
+        ! (incondicional: la copia periódica theta también aplica en serial)
+        if (.true.) then
             call mpi_exchange_halos_3d(phi, m%topo)
             call mpi_allreduce_sum(res_sum, res_sum_global, m%topo)
             call mpi_allreduce_sum(norm_sum, norm_sum_global, m%topo)
@@ -556,8 +558,13 @@ contains
                 beta_cg * pv(istart:iend, jstart:jend, kstart:kend)
         end do
 
-        ! Halos de phi coherentes para las correcciones posteriores
-        if (m%is_parallel) call mpi_exchange_halos_3d(phi, m%topo)
+        ! Halos de phi coherentes para las correcciones posteriores.
+        ! INCONDICIONAL: en serial hace la copia periódica en theta — con
+        ! el guard is_parallel, pp(:,0,:) y pp(:,nth+1,:) quedaban en 0 y
+        ! correct_velocities inyectaba desbalance de masa en la costura
+        ! cada paso (p crecía linealmente hasta ~1e19, medido en -n 1 con
+        ! el gas en el Poisson).
+        call mpi_exchange_halos_3d(phi, m%topo)
 
         deallocate(r, z, pv, q)
 

@@ -21,7 +21,7 @@ solve_multiphase = false
 
 max_outer = 5
 max_inner_mom = 3
-max_inner_pres = 20
+max_inner_pres = 200  # Poisson de dominio completo con el gas (low-Mach)
 
 output_freq = 5
 monitor_freq = 5

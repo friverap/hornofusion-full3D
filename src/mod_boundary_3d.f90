@@ -198,10 +198,14 @@ contains
         ! enlaces de sus vecinas y mantener la matriz SIMÉTRICA (requisito
         ! del CG; el valor 0 no aporta a Su, así que el plegado es exacto)
         allocate(out_mask(-1:nr+2, -1:nth+2, -1:nz+2))
+        ! Incluye HALOS: is_electrode está marcado también en halos, y sin
+        ! esto el plegado Dirichlet se saltaba a los vecinos de salidas al
+        ! otro lado de una costura de rank (o de la costura periódica
+        ! theta=0 en serial) — asimetría medible del plegado.
         out_mask = .false.
         if (at_zmax) then
-            do j = 1, nth
-                do i = 1, nr
+            do j = -1, nth+2
+                do i = -1, nr+2
                     do e = 1, N_ELECTRODES
                         if (m%is_electrode(i,j,nz,e)) out_mask(i,j,nz) = .true.
                     end do

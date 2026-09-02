@@ -10,8 +10,10 @@ nz = 16
 stretch_r = 1.0
 stretch_z = 1.0
 
-dt = 0.5
-t_final = 5.0
+# dt CFL-sano: la convergencia del lazo externo en <30 outers es
+# exigible a CFL~2; a CFL~400 el acople P-V del gas no cierra.
+dt = 0.02
+t_final = 0.2
 adaptive_dt = false
 
 solve_flow = true
@@ -25,7 +27,7 @@ solve_multiphase = true
 
 max_outer = 30
 max_inner_mom = 3
-max_inner_pres = 20
+max_inner_pres = 200  # Poisson de dominio completo con el gas (low-Mach)
 tol_energy = 1e-3
 # res_cont tiene un piso fisico: la expansion termica del gas que la
 # aproximacion incompresible no ventila (compresibilidad gated). El test
