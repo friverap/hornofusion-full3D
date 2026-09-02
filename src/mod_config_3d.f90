@@ -129,6 +129,12 @@ contains
         cfg%slag_x_cao_init  = 0.35_dp
         cfg%slag_x_sio2_init = 0.16_dp
         cfg%slag_x_mgo_init  = 0.08_dp
+        cfg%cal_rate         = 0.0_dp
+        cfg%cal_profile_file = ''
+        cfg%cal_frac_cao     = 0.75_dp   ! cal sidérgica/dolomítica típica
+        cfg%cal_frac_mgo     = 0.20_dp
+        cfg%carbon_inj_rate  = 0.0_dp
+        cfg%carbon_inj_profile_file = ''
         cfg%ecs_rate         = 0.0_dp
         cfg%ecs_profile_file = ''
         cfg%ecs_theta_center = PI
@@ -278,6 +284,12 @@ contains
         case ('slag_x_cao_init');  call parse_real(val, key, cfg%slag_x_cao_init)
         case ('slag_x_sio2_init'); call parse_real(val, key, cfg%slag_x_sio2_init)
         case ('slag_x_mgo_init');  call parse_real(val, key, cfg%slag_x_mgo_init)
+        case ('cal_rate');         call parse_real(val, key, cfg%cal_rate)
+        case ('cal_profile_file'); cfg%cal_profile_file = trim(val)
+        case ('cal_frac_cao');     call parse_real(val, key, cfg%cal_frac_cao)
+        case ('cal_frac_mgo');     call parse_real(val, key, cfg%cal_frac_mgo)
+        case ('carbon_inj_rate');  call parse_real(val, key, cfg%carbon_inj_rate)
+        case ('carbon_inj_profile_file'); cfg%carbon_inj_profile_file = trim(val)
         case ('ecs_rate');         call parse_real(val, key, cfg%ecs_rate)
         case ('ecs_profile_file'); cfg%ecs_profile_file = trim(val)
         case ('ecs_theta_center'); call parse_real(val, key, cfg%ecs_theta_center)

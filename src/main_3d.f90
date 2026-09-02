@@ -60,7 +60,7 @@ program eaf_3d_simulator
     type(electrode_t)     :: elec(N_ELECTRODES)
     type(convergence_t)   :: conv
     type(elec_profile_t)  :: elec_prof
-    type(rate_profile_t)  :: ecs_prof
+    type(rate_profile_t)  :: ecs_prof, cal_prof, cinj_prof
     real(dp) :: mdot_ecs
 
     ! Time loop
@@ -151,6 +151,11 @@ program eaf_3d_simulator
     call read_electrode_profile(elec_prof, 'input/electrode_profile.dat')
     if (cfg%solve_ecs) then
         call read_rate_profile(ecs_prof, cfg%ecs_profile_file, cfg%ecs_rate)
+    end if
+    if (cfg%solve_slag) then
+        call read_rate_profile(cal_prof, cfg%cal_profile_file, cfg%cal_rate)
+        call read_rate_profile(cinj_prof, cfg%carbon_inj_profile_file, &
+                               cfg%carbon_inj_rate)
     end if
 
     ! Create output directory (only rank 0), then synchronize so no rank
@@ -397,9 +402,12 @@ program eaf_3d_simulator
         end if
         call timer_stop(T_SOLID)
 
-        ! Slag layer update (buoyancy + energy exchange)
+        ! Slag layer update (adiciones + buoyancy + energy exchange)
         call timer_start(T_SLAG)
         if (cfg%solve_slag) then
+            call slag_additions(slag, mesh, cfg, &
+                interpolate_rate(cal_prof, time), &
+                interpolate_rate(cinj_prof, time), cfg%dt)
             call update_slag(slag, liq, gas, sh, mesh, cfg, cfg%dt)
             call slag_exchange_halos(slag, mesh)
         end if

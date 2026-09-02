@@ -77,6 +77,10 @@ DEFS = {
                       "[kg]"),
     "E_ecs_in": ("C", "Enthalpy charged by the continuous feeder "
                       "$\\sum dm\\, e_s(T_{charge})$ [J]"),
+    "m_flux_in": ("C", "Lime/dololime/injected-carbon mass added to the "
+                       "slag [kg]"),
+    "E_flux_in": ("C", "Sensible enthalpy of slag additions (enter at "
+                       "ambient temperature) [J]"),
 }
 
 src = open(SRC).read()

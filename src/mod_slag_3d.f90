@@ -12,6 +12,7 @@ module mod_slag_3d
     use mod_constants
     use mod_types_3d
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_allreduce_sum
+    use mod_audit, only: audit_add, AUD_FLUX_MASS, AUD_FLUX_E
     use mod_audit, only: audit_add, AUD_SLAG_INTERCEPT
     implicit none
 
@@ -217,6 +218,76 @@ contains
     !---------------------------------------------------------------------------
     ! Timestep update: buoyancy settling + energy exchange
     !---------------------------------------------------------------------------
+    !---------------------------------------------------------------------------
+    ! Adiciones a la escoria (E2.2): cal/dolomita (CaO+MgO) y carbón
+    ! inyectado (SL_C). Reparto MPI-invariante proporcional a la masa de
+    ! escoria de cada celda (dm_cell = dm * m_sl_cell / m_sl_global, una
+    ! allreduce). Entran a T_ambient: entalpía sensible auditada
+    ! (AUD_FLUX_MASS / AUD_FLUX_E, columnas m_flux_in / E_flux_in).
+    !---------------------------------------------------------------------------
+    subroutine slag_additions(slag, m, cfg, mdot_cal, mdot_cinj, dt)
+        type(slag_t), intent(inout) :: slag
+        type(mesh_t), intent(in)    :: m
+        type(config_t), intent(in)  :: cfg
+        real(dp), intent(in)        :: mdot_cal, mdot_cinj, dt
+
+        integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
+        real(dp) :: msl_loc, msl_glob, w, dm_cal, dm_c, dm_cell, de
+
+        if (mdot_cal <= 0.0_dp .and. mdot_cinj <= 0.0_dp) return
+
+        if (m%is_parallel) then
+            istart = m%topo%istart; iend = m%topo%iend
+            jstart = m%topo%jstart; jend = m%topo%jend
+            kstart = m%topo%kstart; kend = m%topo%kend
+        else
+            istart = 1; iend = m%nr
+            jstart = 1; jend = m%ntheta
+            kstart = 1; kend = m%nz
+        end if
+
+        msl_loc = 0.0_dp
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    msl_loc = msl_loc + slag%m_sl(i,j,k)
+                end do
+            end do
+        end do
+        if (m%is_parallel) then
+            call mpi_allreduce_sum(msl_loc, msl_glob, m%topo)
+        else
+            msl_glob = msl_loc
+        end if
+        if (msl_glob <= SMALL_SL) return   ! sin capa donde depositar
+
+        dm_cal = mdot_cal  * dt
+        dm_c   = mdot_cinj * dt
+
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (slag%m_sl(i,j,k) <= SMALL_SL) cycle
+                    w = slag%m_sl(i,j,k) / msl_glob
+                    dm_cell = (dm_cal + dm_c) * w
+                    slag%m_X(i,j,k,SL_CAO) = slag%m_X(i,j,k,SL_CAO) + &
+                        dm_cal * w * cfg%cal_frac_cao
+                    slag%m_X(i,j,k,SL_MGO) = slag%m_X(i,j,k,SL_MGO) + &
+                        dm_cal * w * cfg%cal_frac_mgo
+                    ! el resto de la cal (impurezas) queda como inerte
+                    slag%m_X(i,j,k,SL_C)   = slag%m_X(i,j,k,SL_C) + dm_c * w
+                    slag%m_sl(i,j,k) = slag%m_sl(i,j,k) + dm_cell
+                    de = dm_cell * cfg%cp_slag * cfg%T_ambient
+                    slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + de
+                    call audit_add(AUD_FLUX_MASS, dm_cell)
+                    call audit_add(AUD_FLUX_E, de)
+                end do
+            end do
+        end do
+    end subroutine slag_additions
+
     subroutine update_slag(slag, liq, gas, sh, m, cfg, dt)
         type(slag_t),  intent(inout) :: slag
         type(phase_t), intent(inout) :: liq, gas

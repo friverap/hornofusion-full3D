@@ -1,0 +1,10 @@
+{
+  "template": "tests/integration/configs/cold_10step.dat",
+  "outdir":   "campaigns/c2det",
+  "nprocs":   8,
+  "runs": [
+    {"name": "c2_dt20", "overrides": {"dt": 0.02,  "t_final": 0.16, "n_beams": 0}},
+    {"name": "c2_dt10", "overrides": {"dt": 0.01,  "t_final": 0.16, "n_beams": 0}},
+    {"name": "c2_dt05", "overrides": {"dt": 0.005, "t_final": 0.16, "n_beams": 0}}
+  ]
+}

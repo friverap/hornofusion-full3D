@@ -105,6 +105,12 @@ module mod_types_3d
         ! Composición inicial de la escoria (E2.1; fracciones másicas)
         real(dp) :: slag_x_feo_init, slag_x_cao_init
         real(dp) :: slag_x_sio2_init, slag_x_mgo_init
+        ! Adiciones a la escoria (E2.2): cal/dolomita y carbón inyectado
+        real(dp) :: cal_rate               ! kg/s (si no hay perfil)
+        character(len=256) :: cal_profile_file
+        real(dp) :: cal_frac_cao, cal_frac_mgo
+        real(dp) :: carbon_inj_rate        ! kg/s a la escoria (SL_C)
+        character(len=256) :: carbon_inj_profile_file
         real(dp) :: ecs_rate            ! kg/s (si no hay perfil)
         character(len=256) :: ecs_profile_file
         real(dp) :: ecs_theta_center    ! rad
