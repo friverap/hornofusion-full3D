@@ -105,7 +105,7 @@ contains
         ! sums: 1-8 inventarios, 9-14 fuentes por fase (arc, rad, chem)
         integer, parameter :: NSUM = 14
         real(dp) :: s(NSUM), s_glob(NSUM), a(N_AUD)
-        real(dp) :: vol, src_dt, P_arc
+        real(dp) :: vol, src_dt, P_arc, w_l, w_g
         integer  :: i, j, k, n, iu
         integer  :: istart, iend, jstart, jend, kstart, kend
         logical  :: liq_energy_on, gas_energy_on
@@ -136,19 +136,24 @@ contains
                     s(8) = s(8) + slag%E_sl(i,j,k)
 
                     ! Fuentes tal como las recibe cada ecuación de energía
-                    ! (mismo guard de fase que solve_energy_3d)
+                    ! (mismo guard de fase Y mismo peso w = alpha_q/(al+ag)
+                    ! que solve_energy_3d, C1.7)
                     src_dt = vol * cfg%dt
+                    w_l = liq%alpha(i,j,k) / &
+                          (liq%alpha(i,j,k) + gas%alpha(i,j,k) + SMALL)
+                    w_g = gas%alpha(i,j,k) / &
+                          (liq%alpha(i,j,k) + gas%alpha(i,j,k) + SMALL)
                     if (liq_energy_on .and. &
                         liq%alpha(i,j,k) >= ALPHA_CUTOFF) then
-                        s(9)  = s(9)  + sh%S_arc(i,j,k)  * src_dt
-                        s(10) = s(10) + sh%S_rad(i,j,k)  * src_dt
-                        s(11) = s(11) + sh%S_chem(i,j,k) * src_dt
+                        s(9)  = s(9)  + sh%S_arc(i,j,k)  * w_l * src_dt
+                        s(10) = s(10) + sh%S_rad(i,j,k)  * w_l * src_dt
+                        s(11) = s(11) + sh%S_chem(i,j,k) * w_l * src_dt
                     end if
                     if (gas_energy_on .and. &
                         gas%alpha(i,j,k) >= ALPHA_CUTOFF) then
-                        s(12) = s(12) + sh%S_arc(i,j,k)  * src_dt
-                        s(13) = s(13) + sh%S_rad(i,j,k)  * src_dt
-                        s(14) = s(14) + sh%S_chem(i,j,k) * src_dt
+                        s(12) = s(12) + sh%S_arc(i,j,k)  * w_g * src_dt
+                        s(13) = s(13) + sh%S_rad(i,j,k)  * w_g * src_dt
+                        s(14) = s(14) + sh%S_chem(i,j,k) * w_g * src_dt
                     end if
                 end do
             end do

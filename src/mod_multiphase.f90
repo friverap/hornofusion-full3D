@@ -83,11 +83,11 @@ contains
         ! Energy
         if (cfg%solve_energy) then
             call solve_energy_3d(liq, liq_old%T, sh, m, cfg, liq%alpha, &
-                                 .false., res_energy_l)
+                                 gas%alpha, .false., res_energy_l)
             call phase_exchange_halos(liq, m)
 
             call solve_energy_3d(gas, gas_old%T, sh, m, cfg, gas%alpha, &
-                                 .true., res_energy_g)
+                                 liq%alpha, .true., res_energy_g)
             call phase_exchange_halos(gas, m)
         else
             res_energy_l = 0.0_dp

@@ -17,13 +17,19 @@ module mod_energy_3d
 
 contains
 
-    subroutine solve_energy_3d(ph, T_old, sh, m, cfg, alpha_q, is_gas, residual)
+    subroutine solve_energy_3d(ph, T_old, sh, m, cfg, alpha_q, alpha_other, &
+                               is_gas, residual)
         type(phase_t), intent(inout) :: ph
         real(dp), intent(in)         :: T_old(-1:,-1:,-1:)
         type(shared_t), intent(in)   :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
         real(dp), intent(in)         :: alpha_q(-1:,-1:,-1:)
+        ! Fracción de la OTRA fase fluida: las fuentes volumétricas (S_arc,
+        ! S_rad, S_chem) se reparten por peso w = alpha_q/(alpha_l+alpha_g).
+        ! Antes cada fase recibía el 100% de cada fuente: donde ambas
+        ! superaban el cutoff la potencia se DUPLICABA (hallazgo 3.1b).
+        real(dp), intent(in)         :: alpha_other(-1:,-1:,-1:)
         ! Identidad de fase: el LÍQUIDO difunde con k_eff = k + cp*mu_t/Pr_t
         ! (transporte térmico turbulento, hallazgo 3.12 — antes ausente
         ! mientras momentum sí usaba mu_t); el gas usa su k molecular
@@ -38,7 +44,7 @@ contains
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: Dw, De, Ds, Dn, Db, Dt
         real(dp) :: rho_f, k_f, vol, rho_cp_vol_dt
-        real(dp) :: alpha_f
+        real(dp) :: alpha_f, w_src
 
         ! Get loop bounds
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -139,9 +145,12 @@ contains
                     aB(i,j,k) = Db + max( Fb, 0.0_dp)
                     aT(i,j,k) = Dt + max(-Ft, 0.0_dp)
 
-                    ! Source: transient + heat sources
+                    ! Source: transient + heat sources ponderadas por fase
+                    w_src = alpha_q(i,j,k) / &
+                            (alpha_q(i,j,k) + alpha_other(i,j,k) + SMALL)
                     Su(i,j,k) = rho_cp_vol_dt * T_old(i,j,k) &
-                               + (sh%S_arc(i,j,k) + sh%S_rad(i,j,k) + sh%S_chem(i,j,k)) * vol
+                               + (sh%S_arc(i,j,k) + sh%S_rad(i,j,k) &
+                                  + sh%S_chem(i,j,k)) * w_src * vol
 
                     ! Central coefficient
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &

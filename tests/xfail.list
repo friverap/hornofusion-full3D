@@ -2,17 +2,21 @@
 # mismo commit que aterriza su fix (el XPASS resultante lo recuerda).
 # Formatos: unit:<binario> | invariants:<check> | script:<id>
 invariants:sum_alpha
+# T_gas runaway estructural post-C1.7: el inventario del gas ideal
+# (rho(T)*cp*T = const) no acumula energía y no hay enfriamiento radiativo
+# real (S_RAD_LIMIT neutraliza el DO) ni salida de entalpía -> fix C3.4
 invariants:T_gas_bound
-# T_liquid explota desde C1.4 (el líquido ya persiste y recibe las fuentes
-# doblemente contadas del arco); misma causa raíz que T_gas -> fix en C1.7
-invariants:T_liquid_bound
+# lag de interfaz TDMA/SOR amplificado por el runaway de T_gas (solo
+# T_gas/uz_gas difieren; sólido/líquido/presión/especies son idénticos);
+# re-medir tras C3.4
 script:decomposition_cold_n1
 script:decomposition_cold_n4
-# melt requiere C1.1 (ancla de alpha) Y C1.8 (energía de fusión): hoy el
-# líquido recién fundido se recongela por el crash de T_s (cp_s vs cp_eff)
+# melt requiere C1.8 (energía de fusión): el líquido recién fundido se
+# recongela por el crash de T_s (cp_s vs cp_eff)
 script:melt
-# balances de audit.csv: energía hasta C1.6/C1.7 (doble conteo + MC extra),
-# masa líquida hasta C1.1
+# energy_balance: el inventario del gas ideal no acumula (ver T_gas_bound);
+# arc_budget: ~0.95 por celdas triviales/beams que escapan (afinar en C3.4);
+# mass_liq hasta C1.8
 audit:energy_balance
 audit:arc_budget
 audit:mass_liq
