@@ -35,7 +35,7 @@ contains
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft_f
         real(dp) :: mu_eff, rho_f, vol, rho_vol_dt
         real(dp) :: dur_dr, dur_dz, duth_dr, duth_dz, duz_dr, duz_dz
-        real(dp) :: dur_dth, duz_dth, S2
+        real(dp) :: dur_dth, duz_dth, duth_dth, S2, dT_dz, G_b
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
         logical  :: interior_z
 
@@ -85,6 +85,8 @@ contains
                               (m%r(i) * (m%theta(jp) - m%theta(jm)))
                     duz_dth = (liq%uz(i,jp,k) - liq%uz(i,jm,k)) / &
                               (m%r(i) * (m%theta(jp) - m%theta(jm)))
+                    duth_dth = (liq%uth(i,jp,k) - liq%uth(i,jm,k)) / &
+                               (m%r(i) * (m%theta(jp) - m%theta(jm)))
                     interior_z = (k > kstart .or. .not. at_zmin) .and. &
                                  (k < kend   .or. .not. at_zmax)
                     if (interior_z) then
@@ -93,13 +95,30 @@ contains
                         duz_dz = (liq%uz(i,j,k+1) - liq%uz(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
                     end if
 
-                    ! S^2 = 2*S_ij*S_ij (simplified)
-                    S2 = 2.0_dp * (dur_dr**2 + (liq%ur(i,j,k)/(m%r(i)+SMALL))**2 + duz_dz**2) &
+                    ! S^2 = 2*S_ij*S_ij — E_thth completo (C3.5): incluye
+                    ! (1/r)duth/dth + ur/r (antes faltaba duth_dth)
+                    S2 = 2.0_dp * (dur_dr**2 &
+                       + (duth_dth + liq%ur(i,j,k)/(m%r(i)+SMALL))**2 &
+                       + duz_dz**2) &
                        + (dur_dz + duz_dr)**2 &
                        + (dur_dth + duth_dr - liq%uth(i,j,k)/(m%r(i)+SMALL))**2 &
                        + (duz_dth + duth_dz)**2
 
-                    Gk(i,j,k) = sh%mu_t(i,j,k) * S2
+                    ! Producción de flotabilidad (Boussinesq, líquido):
+                    ! G_b = beta*g*(mu_t/Pr_t)*dT/dz; solo la parte
+                    ! desestabilizante (>0) entra como producción (C3.5)
+                    dT_dz = 0.0_dp
+                    if (interior_z) then
+                        dT_dz = (liq%T(i,j,k+1) - liq%T(i,j,k-1)) / &
+                                (m%z(k+1) - m%z(k-1))
+                    end if
+                    G_b = max(0.0_dp, cfg%beta_expansion * GRAVITY * &
+                              sh%mu_t(i,j,k) / PR_T * dT_dz)
+
+                    ! Limitador de producción estándar (C3.5): sin él, zonas
+                    ! de gradiente espurio disparaban k sin freno
+                    Gk(i,j,k) = min(sh%mu_t(i,j,k) * S2 + G_b, &
+                                    10.0_dp * liq%rho(i,j,k) * eps_old(i,j,k))
                 end do
             end do
         end do
