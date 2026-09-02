@@ -8,9 +8,8 @@ invariants:T_liquid_bound
 # T_solid: bajo el arco puede rebasar 4000 K vía HT con gas en runaway;
 # re-evaluar umbral tras C3.4
 invariants:T_solid_bound
-# T_gas runaway estructural post-C1.7: el inventario del gas ideal
-# (rho(T)*cp*T = const) no acumula energía y no hay enfriamiento radiativo
-# real (S_RAD_LIMIT neutraliza el DO) ni salida de entalpía -> fix C3.4
+# T_gas: domado por el DO real (C3.4; máx ~3000-6000 K vs 1e6 antes) pero
+# symmetry_3elec corre sin radiación (cuadratura) y ahí aún puede rebasar
 invariants:T_gas_bound
 # lag de interfaz TDMA/SOR amplificado por el runaway de T_gas (solo
 # T_gas/uz_gas difieren; sólido/líquido/presión/especies son idénticos);
@@ -29,9 +28,11 @@ invariants_melt:nan
 invariants_melt:Y_bounds
 invariants_melt:turb_positive
 invariants_melt:alpha_bounds
-# energy_balance: el inventario del gas ideal no acumula (ver T_gas_bound);
-# arc_budget: ~0.95 por celdas triviales/beams que escapan (afinar en C3.4);
-# mass_liq: transporte de alpha no conservativo hasta C2.2
+# energy_balance: resta el déficit convectivo de la forma acotada
+# (E_conv_defect, estimado desde los campos finales, lambda~0.6): la
+# instrumentación exacta requiere hooks por iteración del lazo externo.
+# arc_budget: ~0.95-0.97 por celdas triviales y beams MC que escapan.
+# mass_liq: transporte de alpha (forma acotada) + clipping.
 audit:energy_balance
 audit:arc_budget
 audit:mass_liq

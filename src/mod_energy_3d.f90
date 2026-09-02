@@ -138,9 +138,16 @@ contains
                     Fb = 0.0_dp; Ft = 0.0_dp
 
                     if (cfg%solve_flow) then
-                        ! Flujos de cara únicos y conservativos (C2.2)
+                        ! Flujos de cara únicos y conservativos (C2.2),
+                        ! multiplicados por cp: el flujo convectivo de calor
+                        ! es mdot*cp*T. El código original sumaba F [kg/s]
+                        ! directamente a D [W/K] — la convección térmica
+                        ! quedaba subponderada ~cp (x700-1000).
                         call face_mass_fluxes(alpha_q, ph%rho, ph%ur, &
                             ph%uth, ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                        Fw = Fw * ph%cp(i,j,k); Fe = Fe * ph%cp(i,j,k)
+                        Fs = Fs * ph%cp(i,j,k); Fn = Fn * ph%cp(i,j,k)
+                        Fb = Fb * ph%cp(i,j,k); Ft = Ft * ph%cp(i,j,k)
                     end if
 
                     ! Upwind: a_nb = D + max(F, 0) or D + max(-F, 0)
@@ -172,15 +179,12 @@ contains
                     aP_rad = w_src * sh%kappa_f(i,j,k) * 16.0_dp * &
                              STEFAN_BOLTZMANN * T_it**3 * vol
 
-                    ! Central coefficient — forma ACOTADA de Patankar:
-                    ! aP = Sum(a_nb) + transitorio (se resta la continuidad
-                    ! discreta x T_P). Garantiza T convexa/acotada siempre;
-                    ! el error de conservación asociado (T x residuo de
-                    ! continuidad) lo mide el audit. La forma original
-                    ! sumaba entradas Y salidas (sumidero artificial ~caudal,
-                    ! C2.2); la conservativa (+dF neto) pierde el acotamiento
-                    ! cuando la continuidad no está convergida (medido
-                    ! T -> +-1e9).
+                    ! Central coefficient — forma ACOTADA de Patankar
+                    ! (aP = Sum(a_nb) + transitorio + rad). Se probaron la
+                    ! conservativa implícita (+dF: T -> -2e4 K en compresión)
+                    ! y la corrección diferida (diverge al converger el lazo);
+                    ! el déficit conservativo de la forma acotada
+                    ! (phi x residuo de continuidad) queda medido por el audit.
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
                                + aB(i,j,k) + aT(i,j,k) + rho_cp_vol_dt + aP_rad
 

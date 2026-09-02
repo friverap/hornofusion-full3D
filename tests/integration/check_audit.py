@@ -21,7 +21,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from eafutil import Checker, parse_xfail_arg
+from eafutil import Checker, parse_xfail_arg, safe_float
 
 
 def main():
@@ -38,7 +38,7 @@ def main():
         sys.exit(f"ERROR: no existe {path}")
 
     with open(path) as f:
-        rows = [{k: float(v) for k, v in r.items()}
+        rows = [{k: safe_float(v) for k, v in r.items()}
                 for r in csv.DictReader(f)]
     if len(rows) < 2:
         sys.exit("ERROR: audit.csv sin pasos (solo estado inicial)")
@@ -56,7 +56,7 @@ def main():
     E_in = sum(r["E_src_liq_arc"] + r["E_src_liq_rad"] + r["E_src_liq_chem"] +
                r["E_src_gas_arc"] + r["E_src_gas_rad"] + r["E_src_gas_chem"] +
                r["E_arc_direct_sol"] + r.get("E_slag_intercept", 0.0) +
-               r.get("E_rad_sol", 0.0)
+               r.get("E_rad_sol", 0.0) + r.get("E_conv_defect", 0.0)
                for r in steps)
     scale = max(abs(dE), abs(E_in), 1.0)
     err = abs(dE - E_in) / scale

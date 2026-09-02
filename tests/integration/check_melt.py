@@ -17,7 +17,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from eafutil import cell_volumes, load_snapshot, read_config, snapshots
+from eafutil import (cell_volumes, load_snapshot, read_config, safe_float, snapshots)
 
 
 def masses(path, rho_steel):

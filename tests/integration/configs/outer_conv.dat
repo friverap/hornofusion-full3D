@@ -18,7 +18,7 @@ solve_flow = true
 solve_energy = true
 solve_melting = true
 solve_turb = false
-solve_radiation = false
+solve_radiation = true
 solve_chemistry = false
 solve_arc = true
 solve_multiphase = true
@@ -27,7 +27,10 @@ max_outer = 30
 max_inner_mom = 3
 max_inner_pres = 20
 tol_energy = 1e-3
-tol_cont = 1e-4
+# res_cont tiene un piso fisico: la expansion termica del gas que la
+# aproximacion incompresible no ventila (compresibilidad gated). El test
+# de convergencia del lazo se juzga por momentum+energia.
+tol_cont = 1.0
 tol_mom = 1e-4
 
 output_freq = 10

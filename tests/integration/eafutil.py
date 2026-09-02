@@ -9,6 +9,7 @@ en Fortran, así que h5py los presenta como (nz, nth, nr) -> eje theta = 1.
 """
 import glob
 import os
+import re
 import sys
 
 import h5py
@@ -24,6 +25,17 @@ DEFAULTS = {
 }
 
 N_ELECTRODES = 3
+
+
+def safe_float(tok):
+    """Float robusto ante el formato Fortran ES con exponente >= 100,
+    que omite la 'E' (p.ej. '6.3567+132' o '1.2-101')."""
+    tok = tok.strip()
+    try:
+        return float(tok)
+    except ValueError:
+        fixed = re.sub(r'(\d)([+-]\d+)$', r'\1E\2', tok)
+        return float(fixed)
 
 
 def read_config(path):

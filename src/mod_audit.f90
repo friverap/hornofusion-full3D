@@ -20,6 +20,7 @@ module mod_audit
     use mod_types_3d
     use mod_mpi_topology, only: mpi_allreduce_sum
     use mod_parallel_utils, only: get_loop_bounds
+    use mod_face_flux, only: face_mass_fluxes
     implicit none
     private
 
@@ -81,7 +82,7 @@ contains
                 'E_src_gas_arc,E_src_gas_rad,E_src_gas_chem,' // &
                 'E_arc_direct_sol,E_arc_discarded,E_mc_deposit,' // &
                 'm_melted,m_resolid,E_melt_from_solid,m_alpha_clip,' // &
-                'E_slag_intercept,E_rad_sol,E_rad_wall'
+                'E_slag_intercept,E_rad_sol,E_rad_wall,E_conv_defect'
             close(iu)
         end if
         acc = 0.0_dp
@@ -105,10 +106,15 @@ contains
         integer, intent(in)           :: step
         real(dp), intent(in)          :: time
 
-        ! sums: 1-8 inventarios, 9-14 fuentes por fase (arc, rad, chem)
-        integer, parameter :: NSUM = 14
+        ! sums: 1-8 inventarios, 9-14 fuentes por fase (arc, rad, chem),
+        ! 15: déficit conservativo de la convección de energía (forma
+        ! acotada de Patankar: se resta la continuidad discreta x T; el
+        ! déficit global = Sum dF_neto*cp*T — la entalpía de pluma que el
+        ! operador no entrega; físicamente ~ el off-gas no ventilado)
+        integer, parameter :: NSUM = 15
         real(dp) :: s(NSUM), s_glob(NSUM), a(N_AUD)
         real(dp) :: vol, src_dt, P_arc, w_l, w_g, C0_datum
+        real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, dfl, dfg
         integer  :: i, j, k, n, iu
         integer  :: istart, iend, jstart, jend, kstart, kend
         logical  :: liq_energy_on, gas_energy_on
@@ -170,6 +176,20 @@ contains
                                 * w_l * src_dt
                         s(11) = s(11) + sh%S_chem(i,j,k) * w_l * src_dt
                     end if
+                    ! Déficit conservativo (evaluado con los campos finales)
+                    if (cfg%solve_flow .and. cfg%solve_energy) then
+                        call face_mass_fluxes(liq%alpha, liq%rho, liq%ur, &
+                            liq%uth, liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                        dfl = (Fe - Fw) + (Fn - Fs) + (Ft - Fb)
+                        s(15) = s(15) + dfl * liq%cp(i,j,k) * liq%T(i,j,k) * cfg%dt
+                        if (gas_energy_on) then
+                            call face_mass_fluxes(gas%alpha, gas%rho, gas%ur, &
+                                gas%uth, gas%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                            dfg = (Fe - Fw) + (Fn - Fs) + (Ft - Fb)
+                            s(15) = s(15) + dfg * gas%cp(i,j,k) * gas%T(i,j,k) * cfg%dt
+                        end if
+                    end if
+
                     if (gas_energy_on .and. &
                         gas%alpha(i,j,k) >= ALPHA_CUTOFF) then
                         s(12) = s(12) + sh%S_arc(i,j,k)  * w_g * src_dt
@@ -204,7 +224,7 @@ contains
         if (is_writer(m)) then
             open(newunit=iu, file=trim(audit_path), status='old', &
                  action='write', position='append')
-            write(iu, '(I0,A,ES16.9,A,ES16.9,25(A,ES16.9))') &
+            write(iu, '(I0,A,ES16.9,A,ES16.9,26(A,ES16.9))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &
@@ -216,7 +236,8 @@ contains
                 ',', a(AUD_MELT_MASS), ',', a(AUD_RESOLID_MASS), &
                 ',', a(AUD_MELT_E_SOLID), ',', a(AUD_ALPHA_CLIP_MASS), &
                 ',', a(AUD_SLAG_INTERCEPT), &
-                ',', a(AUD_RAD_SOL), ',', a(AUD_RAD_WALL)
+                ',', a(AUD_RAD_SOL), ',', a(AUD_RAD_WALL), &
+                ',', s_glob(15)
             close(iu)
         end if
     end subroutine audit_write_step

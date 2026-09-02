@@ -195,6 +195,8 @@ contains
         call write_3d_field(group_id, 'tke', sh%tke, m, plist_xfer)
         call write_3d_field(group_id, 'epsilon', sh%eps, m, plist_xfer)
         call write_3d_field(group_id, 'S_arc', sh%S_arc, m, plist_xfer)
+        call write_3d_field(group_id, 'S_rad', sh%S_rad, m, plist_xfer)
+        call write_3d_field(group_id, 'G_rad', sh%G_rad, m, plist_xfer)
         call write_3d_field(group_id, 'F_lorentz_r', sh%F_lorentz_r, m, plist_xfer)
         call write_3d_field(group_id, 'F_lorentz_th', sh%F_lorentz_th, m, plist_xfer)
         call write_3d_field(group_id, 'Y_CO',     sh%Y_CO,     m, plist_xfer)

@@ -31,6 +31,10 @@ module mod_pressure_3d
     use mod_mpi_topology, only: mpi_exchange_halos_3d
     implicit none
 
+    ! Ver notas en solve_pressure_correction
+    logical, parameter :: GAS_IN_POISSON      = .false.
+    logical, parameter :: GAS_COMPRESSIBILITY = .false.
+
 contains
 
     subroutine solve_pressure_correction(liq, gas, gas_T_old, sh, m, cfg, &
@@ -116,24 +120,43 @@ contains
         call mpi_exchange_halos_3d(gpz, m%topo)
 
         !-----------------------------------------------------------------------
-        ! Acumular contribuciones de fase (C2.4).
-        ! GAS DESACTIVADO temporalmente: con la EOS rho(T) sin acople rho-p y
-        ! sin enfriamiento radiativo (C3.4), el runaway térmico del gas
-        ! produce una divergencia de expansión inabsorbible que revienta el
-        ! Poisson incluso en la corrida fría (medido: p -> NaN en 10 pasos).
-        ! Reactivar add_phase_contribution(gas) + corrección del gas al
-        ! aterrizar C3.4.
+        ! Acumular contribuciones de AMBAS fases (C2.4, reactivado tras C3.4:
+        ! con la radiación DO real el gas queda en ~3000-6000 K y su
+        ! expansión es absorbible por el Poisson)
+        !-----------------------------------------------------------------------
         call add_phase_contribution(liq)
-        if (.false.) call add_phase_contribution(gas)
+        ! GAS GATED (conclusión del punto C2.4): el acople P-V de una fase
+        ! con EOS rho(T) vía proyección incompresible es estructuralmente
+        ! marginal — tres inestabilidades independientes trazadas a él
+        ! (fuente de compresibilidad: NaN en -n1/-n4; acumulación a 30
+        ! iteraciones externas: NaN en outer_conv; interacción con el ancla:
+        ! asimetría 0.98). Requiere formulación compresible low-Mach
+        ! (rho(p,T) + ecuación de presión con término temporal). El gas
+        ! recibe drag interfase (Kexch) y su expansión queda como residuo
+        ! de continuidad medible (res_cont).
+        if (GAS_IN_POISSON) call add_phase_contribution(gas)
 
-        ! NOTA (C2.4): el término de compresibilidad del gas
-        ! -alpha_g*(rho(T)-rho(T_old))/dt*V se probó y EMPEORA: con la EOS
-        ! rho(T) (sin acople rho-p), la expansión x27/paso del gas del arco
-        ! exige flujos sónicos que este esquema tipo-incompresible no puede
-        ! representar. gas_T_old queda en la firma para retomarlo cuando el
-        ! modelo de gas tenga enfriamiento radiativo real (C3.4) y la
-        ! expansión sea gradual.
-        associate(dummy => gas_T_old); end associate
+        ! Compresibilidad del gas ideal (C2.4):
+        !   Su -= alpha_g*(rho(T)-rho(T_old))/dt*V
+        ! GATED: marginalmente estable — con ella, cold_10step diverge en
+        ! -n 1 y -n 4 (NaN en presión) aunque -n 8 corre. Requiere acople
+        ! rho-p real (EOS) o sub-relajación propia; reevaluar con C4.3
+        ! multigrid. Sin ella el Poisson trata al gas como incompresible y
+        ! la expansión térmica queda como residuo de continuidad medible.
+        if (GAS_COMPRESSIBILITY) then
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
+                    Su(i,j,k) = Su(i,j,k) - gas%alpha(i,j,k) * m%vol(i,j,k) &
+                        / cfg%dt * (gas%rho(i,j,k) &
+                        - cfg%rho_gas * cfg%T_ambient &
+                          / max(gas_T_old(i,j,k), T_MIN_GAS))
+                end do
+            end do
+        end do
+        end if
 
         ! Celdas activas sin contribución de ninguna fase: triviales
         do k = kstart, kend
@@ -157,7 +180,11 @@ contains
         ! Pressure BCs
         call apply_pressure_bc(aW, aE, aS, aN, aB, aT, aP, Su, m)
 
-        ! Fix reference pressure (avoid singular matrix)
+        ! Ancla de nivel de presión: NECESARIA con el Poisson solo-líquido
+        ! (la región del baño no toca los Dirichlet de las salidas del techo
+        ! -> bloque Neumann singular sin ella). Nota: si se reactiva el gas
+        ! (GAS_IN_POISSON), el ancla debe reemplazarse por proyección del
+        ! promedio: su hoyuelo en theta=0 rompe la simetría azimutal del gas.
         if (.not. m%is_parallel .or. &
             (m%topo%iglobal_start == 1 .and. m%topo%jglobal_start == 1 .and. &
              m%topo%kglobal_start == 1)) then
@@ -174,9 +201,9 @@ contains
 
         residual = cg_res
 
-        ! Correct velocities (gas gated junto con su contribución, ver arriba)
+        ! Correct velocities (gas gated, ver nota arriba)
         call correct_velocities(liq, sh, m, liq%alpha)
-        if (.false.) call correct_velocities(gas, sh, m, gas%alpha)
+        if (GAS_IN_POISSON) call correct_velocities(gas, sh, m, gas%alpha)
 
         ! Correct pressure
         sh%p = sh%p + cfg%alpha_p * sh%pp

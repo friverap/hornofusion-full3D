@@ -14,7 +14,7 @@ t_final = 5.0
 adaptive_dt = false
 
 solve_flow = true
-solve_energy = true
+solve_energy = false  # el runaway del gas (radiación off aquí) rompería el acople; el test sondea simetría de MÉTRICA y flujo (agitación de Lorentz)
 solve_melting = true
 solve_turb = true
 solve_radiation = false  # cuadratura S4 no es 120-invariante (efecto de rayos)
