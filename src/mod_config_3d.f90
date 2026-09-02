@@ -44,7 +44,6 @@ contains
         cfg%alpha_T    = 0.7_dp
         cfg%alpha_k    = 0.5_dp
         cfg%alpha_eps  = 0.5_dp
-        cfg%alpha_alpha = 0.3_dp
 
         ! Convergence
         cfg%tol_cont   = 1.0e-4_dp
@@ -206,6 +205,9 @@ contains
         case ('cp_s');       call parse_real(val, key, cfg%cp_s)
         case ('cp_l');       call parse_real(val, key, cfg%cp_l)
         case ('h_fusion');   call parse_real(val, key, cfg%h_fusion)
+        case ('k_s');        call parse_real(val, key, cfg%k_s)
+        case ('k_l');        call parse_real(val, key, cfg%k_l)
+        case ('emissivity'); call parse_real(val, key, cfg%emissivity)
         case ('T_initial');  call parse_real(val, key, cfg%T_initial)
         case ('T_ambient');  call parse_real(val, key, cfg%T_ambient)
         case ('T_wall');     call parse_real(val, key, cfg%T_wall)

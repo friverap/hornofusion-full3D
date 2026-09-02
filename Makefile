@@ -36,7 +36,6 @@ SRCS = \
 	$(SRCDIR)/mod_slag_3d.f90 \
 	$(SRCDIR)/mod_electrode_3d.f90 \
 	$(SRCDIR)/mod_arc_radiation_mc.f90 \
-	$(SRCDIR)/mod_arc_impingement.f90 \
 	$(SRCDIR)/mod_lorentz_3d.f90 \
 	$(SRCDIR)/mod_multiphase.f90 \
 	$(SRCDIR)/mod_turbulence_3d.f90 \
@@ -99,7 +98,6 @@ $(OBJDIR)/mod_arc_cassie_mayr.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3
 $(OBJDIR)/mod_slag_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_audit.o
 $(OBJDIR)/mod_electrode_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_arc_radiation_mc.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_audit.o
-$(OBJDIR)/mod_arc_impingement.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_lorentz_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_multiphase.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_momentum_3d.o $(OBJDIR)/mod_pressure_3d.o $(OBJDIR)/mod_energy_3d.o $(OBJDIR)/mod_continuity.o $(OBJDIR)/mod_drag_ergun.o $(OBJDIR)/mod_properties_3d.o $(OBJDIR)/mod_fields_3d.o
 $(OBJDIR)/mod_turbulence_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o
@@ -119,7 +117,7 @@ $(OBJDIR)/main_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR
                       $(OBJDIR)/mod_scrap_collapse.o $(OBJDIR)/mod_interphase_ht.o \
                       $(OBJDIR)/mod_arc_cassie_mayr.o $(OBJDIR)/mod_slag_3d.o \
                       $(OBJDIR)/mod_electrode_3d.o \
-                      $(OBJDIR)/mod_arc_radiation_mc.o $(OBJDIR)/mod_arc_impingement.o \
+                      $(OBJDIR)/mod_arc_radiation_mc.o \
                       $(OBJDIR)/mod_lorentz_3d.o $(OBJDIR)/mod_turbulence_3d.o $(OBJDIR)/mod_radiation_do.o \
                       $(OBJDIR)/mod_chemistry_carbon.o $(OBJDIR)/mod_species_transport.o \
                       $(OBJDIR)/mod_convergence_3d.o \

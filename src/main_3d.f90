@@ -36,7 +36,6 @@ program eaf_3d_simulator
     use mod_arc_cassie_mayr
     use mod_electrode_3d
     use mod_arc_radiation_mc
-    use mod_arc_impingement
     use mod_lorentz_3d
     use mod_slag_3d
     use mod_turbulence_3d
@@ -141,8 +140,9 @@ program eaf_3d_simulator
     ! Initialize electrodes
     call init_electrodes(elec, cfg)
 
-    ! Load charge recipe and electrode profile
-    call default_charge_recipe(cfg)
+    ! Load charge recipe (input/charge_recipe.dat; con fallback al default
+    ! si no existe — C4.4: antes el archivo JAMÁS se leía) y perfil V/I
+    call read_charge_recipe(cfg, 'input/charge_recipe.dat')
     call read_electrode_profile(elec_prof, 'input/electrode_profile.dat')
 
     ! Create output directory (only rank 0), then synchronize so no rank
@@ -230,7 +230,11 @@ program eaf_3d_simulator
             call update_electrodes(elec, sol, mesh, cfg, cfg%dt)
             call distribute_arc_heat(elec, sh, sol, mesh, cfg, sol%alpha_s, N_ELECTRODES)
             call distribute_arc_radiation_mc(elec, sol, sh, mesh, cfg, N_ELECTRODES, step)
-            call compute_arc_impingement(elec, sh, mesh, cfg, N_ELECTRODES)
+            ! (mod_arc_impingement retirado en C4.4: unidades N/m4 en vez
+            ! de N/m3 y magnitud ~0.2 N/m3 despreciable; la depresión del
+            ! baño por el jet requiere búsqueda global de superficie —
+            ! reintroducir con ese diseño si se necesita. S_arc_mom queda
+            ! en 0 y el término de momentum inerte.)
             call compute_lorentz_force(elec, liq%alpha, sh, mesh, cfg, I_elec, N_ELECTRODES)
             ! La escoria intercepta su fracción de S_arc AHORA (antes de que
             ! las ecuaciones de energía lo consuman; C1.6b)

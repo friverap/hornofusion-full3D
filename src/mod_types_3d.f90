@@ -39,7 +39,7 @@ module mod_types_3d
         ! SIMPLE
         integer  :: max_outer, max_inner_mom, max_inner_pres
         real(dp) :: alpha_u, alpha_p, alpha_T
-        real(dp) :: alpha_k, alpha_eps, alpha_alpha
+        real(dp) :: alpha_k, alpha_eps
 
         ! Convergence
         real(dp) :: tol_cont, tol_mom, tol_energy, tol_turb
