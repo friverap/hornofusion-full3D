@@ -66,7 +66,8 @@ def main():
                r["E_arc_direct_sol"] + r.get("E_slag_intercept", 0.0) +
                r.get("E_rad_sol", 0.0) + r.get("E_conv_defect", 0.0) -
                r.get("E_wall_conv", 0.0) + r.get("E_chem_sol", 0.0) +
-               r.get("E_ecs_in", 0.0) + r.get("E_flux_in", 0.0)
+               r.get("E_ecs_in", 0.0) + r.get("E_flux_in", 0.0) +
+               r.get("E_slag_ox", 0.0) - r.get("E_slag_red", 0.0)
                for r in steps)
     # (E_out_conv es DIAGNÓSTICO: la energía convectada a las celdas
     # outlet queda en su T — el déficit convectivo del hook ya incluye
@@ -104,7 +105,9 @@ def main():
     m_melt = sum(r["m_melted"] for r in steps)
     m_res = sum(r["m_resolid"] for r in steps)
     m_clip = sum(r["m_alpha_clip"] for r in steps)
-    expected = m_melt - m_res - m_clip
+    m_fey = sum(r.get("m_fe_yield", 0.0) for r in steps)
+    m_fer = sum(r.get("m_fe_return", 0.0) for r in steps)
+    expected = m_melt - m_res - m_clip - m_fey + m_fer
     denom = max(abs(m_melt) + abs(m_res) + abs(m_clip), abs(dm_l))
     if denom < 1.0:
         print("  PASS  mass_liq  (sin fusión: no aplica)")

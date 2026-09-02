@@ -47,6 +47,7 @@ program eaf_3d_simulator
     use mod_audit
     use mod_timers
     use mod_ecs_feed
+    use mod_slag_chemistry
     implicit none
 
     ! Main variables
@@ -182,10 +183,12 @@ program eaf_3d_simulator
     if (cfg%charge_bucket1) then
         call charge_scrap(sol, gas, mesh, cfg, 1)
     end if
+    call init_heel(liq, gas, sol, mesh, cfg)
+    call phase_exchange_halos(liq, mesh)
 
     ! Initialize slag layer (above scrap surface)
     if (cfg%solve_slag) then
-        call slag_initialize(slag, sol, gas, mesh, cfg)
+        call slag_initialize(slag, sol, liq, gas, mesh, cfg)
         call slag_exchange_halos(slag, mesh)
     end if
 
@@ -290,6 +293,14 @@ program eaf_3d_simulator
         call timer_start(T_CHEM)
         if (cfg%solve_chemistry) then
             call compute_carbon_oxidation(sol, gas, sh, mesh, cfg)
+            ! Química de escoria (E2.3/E2.4): tras el carbono (usa su O2
+            ! remanente) y antes del transporte de especies
+            if (cfg%solve_slag) then
+                call compute_slag_chemistry(slag, liq, gas, sh, mesh, cfg)
+                call slag_exchange_halos(slag, mesh)
+                if (mesh%is_parallel) &
+                    call mpi_exchange_halos_3d(liq%alpha, mesh%topo)
+            end if
         end if
 
         ! Species transport (CO / CO2)

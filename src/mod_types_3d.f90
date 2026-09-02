@@ -110,6 +110,9 @@ module mod_types_3d
         character(len=256) :: cal_profile_file
         real(dp) :: cal_frac_cao, cal_frac_mgo
         real(dp) :: carbon_inj_rate        ! kg/s a la escoria (SL_C)
+        real(dp) :: slag_eta_feo           ! eficiencia O2_rem->FeO (E2.3)
+        real(dp) :: heel_mass              ! kg de remanente liquido inicial
+        real(dp) :: heel_T                 ! K del remanente
         character(len=256) :: carbon_inj_profile_file
         real(dp) :: ecs_rate            ! kg/s (si no hay perfil)
         character(len=256) :: ecs_profile_file

@@ -23,9 +23,10 @@ contains
     !---------------------------------------------------------------------------
     ! Place initial slag layer just above the scrap surface
     !---------------------------------------------------------------------------
-    subroutine slag_initialize(slag, sol, gas, m, cfg)
+    subroutine slag_initialize(slag, sol, liq, gas, m, cfg)
         type(slag_t),  intent(inout) :: slag
         type(solid_t), intent(in)    :: sol
+        type(phase_t), intent(in)    :: liq
         type(phase_t), intent(inout) :: gas
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
@@ -50,10 +51,14 @@ contains
             nz_global = m%nz
         end if
 
-        ! Find local highest k with scrap (expressed as global k index)
+        ! Find local highest k with MATERIAL (scrap or liquid bath): en el
+        ! modo de carga continua con baño plano no hay cestas y la escoria
+        ! flota sobre el LÍQUIDO (fallback E2.3; antes solo chatarra y con
+        ! horno sin cestas quedaba V_slag = 0)
         k_top_local = 0
         do k = kend, kstart, -1
-            if (any(sol%alpha_s(istart:iend, jstart:jend, k) > 0.01_dp)) then
+            if (any(sol%alpha_s(istart:iend, jstart:jend, k) > 0.01_dp) &
+                .or. any(liq%alpha(istart:iend, jstart:jend, k) > 0.01_dp)) then
                 if (m%is_parallel) then
                     k_top_local = k + m%topo%kglobal_start - 1
                 else

@@ -123,6 +123,7 @@ full | rebaseline)
     run_case chem_test 4
     run_case ecs_test 1
     run_case ecs_test 8
+    run_case slag_chem_test 8
 
     for d in "$OUT"/cold_10step_n*; do
         check_invariants "$d" cold_10step
@@ -162,7 +163,9 @@ full | rebaseline)
     run_script "ecs" \
         $PY $INT/check_ecs.py "$OUT/ecs_test_n8" --config "$CFG/ecs_test.dat"
     run_script "decomposition_ecs" \
-        $PY $INT/compare_decomposition.py "$OUT/ecs_test_n1" "$OUT/ecs_test_n8" 
+        $PY $INT/compare_decomposition.py "$OUT/ecs_test_n1" "$OUT/ecs_test_n8"
+    run_script "slag_chem" \
+        $PY $INT/check_slag_chem.py "$OUT/slag_chem_test_n8" --config "$CFG/slag_chem_test.dat" 
 
     if [ "$MODE" = "rebaseline" ]; then
         $PY $INT/metrics_snapshot.py "$OUT" --mode rebaseline \

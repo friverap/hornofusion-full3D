@@ -81,6 +81,14 @@ DEFS = {
                        "slag [kg]"),
     "E_flux_in": ("C", "Sensible enthalpy of slag additions (enter at "
                        "ambient temperature) [J]"),
+    "m_fe_yield": ("C", "Iron oxidised out of the bath into slag FeO "
+                        "(yield loss) [kg]"),
+    "m_fe_return": ("C", "Iron returned to the bath by FeO+C reduction "
+                         "[kg]"),
+    "E_slag_ox": ("C", "Exothermic heat of Fe+1/2O$_2$$\\to$FeO to the "
+                       "slag [J]"),
+    "E_slag_red": ("C", "Endothermic heat of FeO+C$\\to$Fe+CO from the "
+                        "slag [J]"),
 }
 
 src = open(SRC).read()

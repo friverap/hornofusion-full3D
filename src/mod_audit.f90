@@ -35,6 +35,7 @@ module mod_audit
     public :: AUD_MELT_E_SOLID, AUD_SLAG_INTERCEPT
     public :: AUD_RAD_SOL, AUD_RAD_WALL, AUD_CHEM_SOL, AUD_MC_LOST
     public :: AUD_ECS_MASS, AUD_ECS_ENERGY, AUD_FLUX_MASS, AUD_FLUX_E
+    public :: AUD_FE_YIELD, AUD_FE_RETURN, AUD_SLAG_OX_E, AUD_SLAG_RED_E
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -53,7 +54,11 @@ module mod_audit
     integer, parameter :: AUD_ECS_ENERGY      = 14 ! J de entalpia cargada por el ECS
     integer, parameter :: AUD_FLUX_MASS       = 15 ! kg de adiciones a la escoria
     integer, parameter :: AUD_FLUX_E          = 16 ! J de entalpia de las adiciones
-    integer, parameter :: N_AUD = 16
+    integer, parameter :: AUD_FE_YIELD        = 17 ! kg Fe oxidados a la escoria
+    integer, parameter :: AUD_FE_RETURN       = 18 ! kg Fe devueltos por reduccion
+    integer, parameter :: AUD_SLAG_OX_E       = 19 ! J exo de Fe+1/2O2->FeO
+    integer, parameter :: AUD_SLAG_RED_E      = 20 ! J endo de FeO+C->Fe+CO
+    integer, parameter :: N_AUD = 20
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -124,7 +129,8 @@ contains
                 'm_melted,m_resolid,E_melt_from_solid,m_alpha_clip,' // &
                 'E_slag_intercept,E_rad_sol,E_rad_wall,E_conv_defect,' // &
                 'E_wall_conv,E_chem_sol,E_mc_lost,E_out_conv,E_gas_abs,' // &
-                'E_mass_liq,m_ecs_in,E_ecs_in,m_flux_in,E_flux_in'
+                'E_mass_liq,m_ecs_in,E_ecs_in,m_flux_in,E_flux_in,' // &
+                'm_fe_yield,m_fe_return,E_slag_ox,E_slag_red'
             close(iu)
         end if
         acc = 0.0_dp
@@ -230,7 +236,7 @@ contains
         if (is_writer(m)) then
             open(newunit=iu, file=trim(audit_path), status='old', &
                  action='write', position='append')
-            write(iu, '(I0,A,ES16.9,A,ES16.9,36(A,ES16.9))') &
+            write(iu, '(I0,A,ES16.9,A,ES16.9,40(A,ES16.9))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &
@@ -246,7 +252,9 @@ contains
                 ',', s_glob(15), ',', s_glob(16), ',', a(AUD_CHEM_SOL), &
                 ',', a(AUD_MC_LOST), ',', s_glob(17), ',', s_glob(18), &
                 ',', s_glob(19), ',', a(AUD_ECS_MASS), ',', a(AUD_ECS_ENERGY), &
-                ',', a(AUD_FLUX_MASS), ',', a(AUD_FLUX_E)
+                ',', a(AUD_FLUX_MASS), ',', a(AUD_FLUX_E), &
+                ',', a(AUD_FE_YIELD), ',', a(AUD_FE_RETURN), &
+                ',', a(AUD_SLAG_OX_E), ',', a(AUD_SLAG_RED_E)
             close(iu)
         end if
     end subroutine audit_write_step

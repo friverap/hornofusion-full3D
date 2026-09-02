@@ -134,6 +134,9 @@ contains
         cfg%cal_frac_cao     = 0.75_dp   ! cal sidérgica/dolomítica típica
         cfg%cal_frac_mgo     = 0.20_dp
         cfg%carbon_inj_rate  = 0.0_dp
+        cfg%slag_eta_feo     = 0.3_dp
+        cfg%heel_mass        = 0.0_dp
+        cfg%heel_T           = 1850.0_dp
         cfg%carbon_inj_profile_file = ''
         cfg%ecs_rate         = 0.0_dp
         cfg%ecs_profile_file = ''
@@ -289,6 +292,9 @@ contains
         case ('cal_frac_cao');     call parse_real(val, key, cfg%cal_frac_cao)
         case ('cal_frac_mgo');     call parse_real(val, key, cfg%cal_frac_mgo)
         case ('carbon_inj_rate');  call parse_real(val, key, cfg%carbon_inj_rate)
+        case ('slag_eta_feo');     call parse_real(val, key, cfg%slag_eta_feo)
+        case ('heel_mass');        call parse_real(val, key, cfg%heel_mass)
+        case ('heel_T');           call parse_real(val, key, cfg%heel_T)
         case ('carbon_inj_profile_file'); cfg%carbon_inj_profile_file = trim(val)
         case ('ecs_rate');         call parse_real(val, key, cfg%ecs_rate)
         case ('ecs_profile_file'); cfg%ecs_profile_file = trim(val)

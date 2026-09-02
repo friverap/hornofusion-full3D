@@ -8,6 +8,7 @@ module mod_fields_3d
     use mod_types_3d
     use mod_mpi_topology
     use mod_melting_3d, only: solid_enthalpy
+    use mod_parallel_utils, only: global_to_local, gather_global_field
     implicit none
 
 contains
@@ -420,6 +421,71 @@ contains
     ! Load scrap charge into furnace (bucket 1 or 2)
     ! MPI-aware: each process handles its local subdomain
     !---------------------------------------------------------------------------
+    !---------------------------------------------------------------------------
+    ! Remanente líquido inicial (heel): llena el bowl desde el fondo con
+    ! liq%alpha uniforme por nivel hasta consumir heel_mass. Determinista y
+    ! MPI-invariante: usa las réplicas globales vol_global/cell_type_global
+    ! (mismo patrón que el colapso). Llamar tras charge_scrap.
+    !---------------------------------------------------------------------------
+    subroutine init_heel(liq, gas, sol, m, cfg)
+        type(phase_t), intent(inout) :: liq, gas
+        type(solid_t), intent(in)    :: sol
+        type(mesh_t), intent(in)     :: m
+        type(config_t), intent(in)   :: cfg
+
+        integer  :: ig, jg, kg, il, jl, kl
+        logical  :: owned
+        real(dp) :: vol_needed, vol_level, a_fill
+
+        if (cfg%heel_mass <= 0.0_dp) return
+        vol_needed = cfg%heel_mass / cfg%rho_steel
+
+        ! El nivel se llena en la fracción del ESPACIO disponible
+        ! (headroom = gas) de cada celda: respeta la chatarra ya cargada.
+        ! El headroom global del nivel usa el estado del GAS local: para
+        ! mantenerlo determinista se calcula desde las réplicas globales
+        ! del sólido (1 - alpha_s_global aprox.: antes de cualquier
+        ! dinámica, gas = 1 - alpha_s exactamente).
+        block
+            real(dp), allocatable :: as_g(:,:,:)
+            real(dp) :: headroom
+            allocate(as_g(m%nr_g, m%nth_g, m%nz_g))
+            call gather_global_field(sol%alpha_s, as_g, m)
+            do kg = 1, m%nz_g
+                if (vol_needed <= 0.0_dp) exit
+                vol_level = 0.0_dp
+                do jg = 1, m%nth_g
+                    do ig = 1, m%nr_g
+                        if (m%cell_type_global(ig,jg,kg) /= 0) &
+                            vol_level = vol_level + (1.0_dp - &
+                                as_g(ig,jg,kg)) * m%vol_global(ig,jg,kg)
+                    end do
+                end do
+                if (vol_level <= SMALL) cycle
+                a_fill = min(1.0_dp, vol_needed / vol_level)
+                do jg = 1, m%nth_g
+                    do ig = 1, m%nr_g
+                        if (m%cell_type_global(ig,jg,kg) == 0) cycle
+                        call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
+                        if (.not. owned) cycle
+                        headroom = 1.0_dp - as_g(ig,jg,kg)
+                        liq%alpha(il,jl,kl) = liq%alpha(il,jl,kl) + &
+                                              a_fill * headroom
+                        liq%T(il,jl,kl)     = cfg%heel_T
+                        gas%alpha(il,jl,kl) = max(0.0_dp, &
+                            gas%alpha(il,jl,kl) - a_fill * headroom)
+                    end do
+                end do
+                vol_needed = vol_needed - a_fill * vol_level
+            end do
+            deallocate(as_g)
+        end block
+
+        if (.not. m%is_parallel .or. m%topo%rank == 0) &
+            print '(A,F10.1,A)', ' [HEEL] Remanente inicial: ', &
+                cfg%heel_mass, ' kg de liquido'
+    end subroutine init_heel
+
     subroutine charge_scrap(sol, gas, m, cfg, bucket)
         type(solid_t), intent(inout)  :: sol
         type(phase_t), intent(inout)  :: gas

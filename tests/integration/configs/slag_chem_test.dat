@@ -1,0 +1,57 @@
+# Test de quimica de escoria (E2.3/E2.4): conservacion elemental de Fe y
+# ciclo FeO. Chatarra cargada (bucket 1) con heel liquido en el bowl; la
+# escoria se inicializa sobre la chatarra con FeO/CaO/SiO2/MgO y recibe
+# carbon inyectado. Temperaturas casi congeladas (energia/fusion off)
+# para aislar la estequiometria; el O2 del gas alimenta la oxidacion.
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+
+R_shell = 3.80
+H_total = 4.50
+H_bowl = 0.60
+R_bowl = 2.50
+R_pcd = 0.85
+R_elec = 0.30
+
+dt = 0.5
+t_final = 10.0
+adaptive_dt = false
+T_initial = 1800.0
+T_ambient = 900.0
+heel_mass = 60000.0
+heel_T = 1850.0
+
+solve_flow = false
+solve_energy = false
+solve_melting = false
+solve_turb = false
+solve_radiation = false
+solve_chemistry = true
+solve_species = true
+solve_arc = false
+solve_multiphase = false
+solve_slag = true
+solve_ecs = false
+
+m_slag_init = 4000.0
+slag_x_feo_init = 0.25
+slag_x_cao_init = 0.35
+slag_x_sio2_init = 0.16
+slag_x_mgo_init = 0.08
+slag_eta_feo = 0.3
+carbon_inj_rate = 0.5
+cal_rate = 0.2
+
+carbon_frac = 0.0
+charge_bucket1 = false
+t_bucket2_charge = 1.0e30
+
+max_outer = 2
+max_inner_mom = 2
+max_inner_pres = 20
+output_freq = 5
+monitor_freq = 10
+audit_freq = 1
