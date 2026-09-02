@@ -81,9 +81,9 @@ contains
                         duz_dr = (liq%uz(i+1,j,k) - liq%uz(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
                     end if
                     dur_dth = (liq%ur(i,jp,k) - liq%ur(i,jm,k)) / &
-                              (m%r(i) * (m%theta(jp) - m%theta(jm) + merge(TWO_PI, 0.0_dp, jp < jm)))
+                              (m%r(i) * (m%theta(jp) - m%theta(jm)))
                     duz_dth = (liq%uz(i,jp,k) - liq%uz(i,jm,k)) / &
-                              (m%r(i) * (m%theta(jp) - m%theta(jm) + merge(TWO_PI, 0.0_dp, jp < jm)))
+                              (m%r(i) * (m%theta(jp) - m%theta(jm)))
                     interior_z = (k > kstart .or. .not. at_zmin) .and. &
                                  (k < kend   .or. .not. at_zmax)
                     if (interior_z) then

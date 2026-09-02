@@ -187,9 +187,12 @@ contains
                                    + (-alpha_f * dp_dr + src_extra) * vol
 
                     case ('uth')
+                        ! theta desenrollada en halos: la diferencia es
+                        ! correcta también en la costura (el parche
+                        ! merge(jp<jm) anterior nunca se activaba: comparaba
+                        ! ÍNDICES, y jp=j+1 > jm=j-1 siempre)
                         dp_dth = (sh%p(i,jp,k) - sh%p(i,jm,k)) / &
-                                 (m%r(i) * (m%theta(jp) - m%theta(jm) + &
-                                  merge(TWO_PI, 0.0_dp, jp < jm)))
+                                 (m%r(i) * (m%theta(jp) - m%theta(jm)))
                         ! Coriolis: -rho*u_r*u_th/r  +  Lorentz theta-stirring
                         src_extra = -alpha_f * ph%rho(i,j,k) * ph%ur(i,j,k) * ph%uth(i,j,k) / m%r(i) &
                                   + sh%F_lorentz_th(i,j,k)

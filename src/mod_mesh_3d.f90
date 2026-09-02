@@ -85,17 +85,17 @@ contains
             m%rf(i) = rf_global(ig)
         end do
         
-        ! Theta: periodic, so wrap around
+        ! Theta: coordenadas DESENROLLADAS (monótonas) también en los halos
+        ! (hallazgo 3.7). El wrap anterior producía dtheta(0) < 0 y
+        ! theta(0) ~ pi en la costura theta=0, corrompiendo los coeficientes
+        ! de difusión y los gradientes azimutales en j=1 / j=ntheta. La malla
+        ! azimutal es uniforme, así que la extensión lineal
+        ! thetaf = 2*pi*jg/nth vale para cualquier jg entero (los valores de
+        ! halo pueden salir de [0,2pi]: solo se usan en diferencias y en
+        ! cos/sin, ambos correctos).
         do j = -2, m%ntheta+2
             jg = m%topo%jglobal_start + j - 1
-            ! Wrap around for periodicity
-            do while (jg < 0)
-                jg = jg + nth_global
-            end do
-            do while (jg > nth_global)
-                jg = jg - nth_global
-            end do
-            m%thetaf(j) = thetaf_global(jg)
+            m%thetaf(j) = TWO_PI * real(jg, dp) / real(nth_global, dp)
         end do
         
         ! Axial: extract with clamping

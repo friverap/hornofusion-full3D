@@ -246,8 +246,7 @@ contains
                         d_coeff = m%vol(i,j,k) / ph%aP_uth(i,j,k)
                         ph%uth(i,j,k) = ph%uth(i,j,k) - d_coeff * &
                             (sh%pp(i,jp,k) - sh%pp(i,jm,k)) / &
-                            (m%r(i) * (m%theta(jp) - m%theta(jm) + &
-                             merge(TWO_PI, 0.0_dp, jp < jm)))
+                            (m%r(i) * (m%theta(jp) - m%theta(jm)))
                     end if
 
                     ! u_z correction
