@@ -28,34 +28,34 @@ contains
     ! Solve all three momentum components for a single phase
     !---------------------------------------------------------------------------
     subroutine solve_momentum_3d(ph, ph_old, sh, m, cfg, alpha_q, &
-                                  S_drag_r, S_drag_th, S_drag_z, &
-                                  res_ur, res_uth, res_uz)
+                                  drag_coef, res_ur, res_uth, res_uz)
         type(phase_t), intent(inout) :: ph
         type(phase_t), intent(in)    :: ph_old
         type(shared_t), intent(in)   :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
         real(dp), intent(in)         :: alpha_q(-1:,-1:,-1:)
-        real(dp), intent(in)         :: S_drag_r(-1:,-1:,-1:), S_drag_th(-1:,-1:,-1:), S_drag_z(-1:,-1:,-1:)
+        ! Coeficiente de Ergun (>=0), tratado IMPLÍCITO: aP += coef*vol (C1.4)
+        real(dp), intent(in)         :: drag_coef(-1:,-1:,-1:)
         real(dp), intent(out)        :: res_ur, res_uth, res_uz
 
         ! Solve each component
         call solve_momentum_component(ph%ur, ph_old%ur, ph, sh, m, cfg, &
-                                       alpha_q, S_drag_r, 'ur', res_ur)
-        
+                                       alpha_q, drag_coef, 'ur', res_ur)
+
         call solve_momentum_component(ph%uth, ph_old%uth, ph, sh, m, cfg, &
-                                       alpha_q, S_drag_th, 'uth', res_uth)
-        
+                                       alpha_q, drag_coef, 'uth', res_uth)
+
         call solve_momentum_component(ph%uz, ph_old%uz, ph, sh, m, cfg, &
-                                       alpha_q, S_drag_z, 'uz', res_uz)
-        
+                                       alpha_q, drag_coef, 'uz', res_uz)
+
     end subroutine solve_momentum_3d
 
     !---------------------------------------------------------------------------
     ! Single momentum component solver (MPI-aware)
     !---------------------------------------------------------------------------
     subroutine solve_momentum_component(vel, vel_old, ph, sh, m, cfg, &
-                                         alpha_q, S_drag, comp, residual)
+                                         alpha_q, drag_coef, comp, residual)
         real(dp), intent(inout)      :: vel(-1:,-1:,-1:)
         real(dp), intent(in)         :: vel_old(-1:,-1:,-1:)
         type(phase_t), intent(inout) :: ph
@@ -63,7 +63,7 @@ contains
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
         real(dp), intent(in)         :: alpha_q(-1:,-1:,-1:)
-        real(dp), intent(in)         :: S_drag(-1:,-1:,-1:)
+        real(dp), intent(in)         :: drag_coef(-1:,-1:,-1:)
         character(len=*), intent(in) :: comp
         real(dp), intent(out)        :: residual
 
@@ -182,7 +182,7 @@ contains
                         src_extra = alpha_f * ph%rho(i,j,k) * ph%uth(i,j,k)**2 / m%r(i) &
                                   + sh%F_lorentz_r(i,j,k)
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
-                                   + (-alpha_f * dp_dr + src_extra + S_drag(i,j,k)) * vol
+                                   + (-alpha_f * dp_dr + src_extra) * vol
 
                     case ('uth')
                         dp_dth = (sh%p(i,jp,k) - sh%p(i,jm,k)) / &
@@ -192,7 +192,7 @@ contains
                         src_extra = -alpha_f * ph%rho(i,j,k) * ph%ur(i,j,k) * ph%uth(i,j,k) / m%r(i) &
                                   + sh%F_lorentz_th(i,j,k)
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
-                                   + (-alpha_f * dp_dth + src_extra + S_drag(i,j,k)) * vol
+                                   + (-alpha_f * dp_dth + src_extra) * vol
 
                     case ('uz')
                         if (k > 1 .and. k < kend) then
@@ -209,12 +209,15 @@ contains
                                     * (ph%T(i,j,k) - cfg%T_ambient) &
                                   + sh%S_arc_mom(i,j,k)
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
-                                   + (-alpha_f * dp_dz + src_extra + S_drag(i,j,k)) * vol
+                                   + (-alpha_f * dp_dz + src_extra) * vol
                     end select
 
-                    ! Central coefficient
+                    ! Central coefficient (drag de Ergun IMPLÍCITO: coef*vol —
+                    ! incondicionalmente estable, mismo punto fijo que la
+                    ! versión explícita divergente; hallazgo 3.11)
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
                                + aB(i,j,k) + aT(i,j,k) + rho_vol_dt &
+                               + drag_coef(i,j,k) * vol &
                                + max(-Fw, 0.0_dp) + max(Fe, 0.0_dp) &
                                + max(-Fs, 0.0_dp) + max(Fn, 0.0_dp) &
                                + max(-Fb, 0.0_dp) + max(Ft, 0.0_dp)

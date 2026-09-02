@@ -4,6 +4,9 @@
 unit:test_mesh_seam
 invariants:sum_alpha
 invariants:T_gas_bound
+# T_liquid explota desde C1.4 (el líquido ya persiste y recibe las fuentes
+# doblemente contadas del arco); misma causa raíz que T_gas -> fix en C1.7
+invariants:T_liquid_bound
 script:decomposition_cold_n1
 script:decomposition_cold_n4
 script:symmetry

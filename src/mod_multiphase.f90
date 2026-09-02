@@ -25,13 +25,13 @@ module mod_multiphase
 contains
 
     subroutine multiphase_iteration(liq, gas, liq_old, gas_old, sol, sh, m, cfg, &
-                                     S_drag_r, S_drag_th, S_drag_z, conv)
+                                     drag_coef, conv)
         type(phase_t), intent(inout) :: liq, gas, liq_old, gas_old
         type(solid_t), intent(inout) :: sol
         type(shared_t), intent(inout) :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
-        real(dp), intent(inout)      :: S_drag_r(:,:,:), S_drag_th(:,:,:), S_drag_z(:,:,:)
+        real(dp), intent(inout)      :: drag_coef(-1:,-1:,-1:)
         type(convergence_t), intent(inout) :: conv
 
         real(dp) :: res_ur_l, res_uth_l, res_uz_l
@@ -44,22 +44,23 @@ contains
         call solid_exchange_halos(sol, m)
         call shared_exchange_halos(sh, m)
 
-        ! Compute Ergun drag on both phases from solid
-        call compute_ergun_drag(liq, sol, m, cfg, S_drag_r, S_drag_th, S_drag_z)
+        ! Compute Ergun drag coefficient from solid (Picard con |v| del líquido)
+        call compute_ergun_drag(liq, sol, m, cfg, drag_coef)
 
         ! Liquid momentum
         call solve_momentum_3d(liq, liq_old, sh, m, cfg, liq%alpha, &
-                               S_drag_r, S_drag_th, S_drag_z, &
-                               res_ur_l, res_uth_l, res_uz_l)
-        
+                               drag_coef, res_ur_l, res_uth_l, res_uz_l)
+
         ! Exchange halos after momentum
         call phase_exchange_halos(liq, m)
 
-        ! Gas momentum (with same drag field -- separate would be more correct
-        ! but gas drag through scrap is similar)
+        ! Gas momentum (same drag coefficient: computed with liquid
+        ! properties; a phase-specific coefficient would be more correct.
+        ! Nota: la versión explícita anterior aplicaba al gas una FUERZA
+        ! proporcional a la velocidad del LÍQUIDO; implícito, el coeficiente
+        ! actúa sobre la velocidad propia de cada fase.)
         call solve_momentum_3d(gas, gas_old, sh, m, cfg, gas%alpha, &
-                               S_drag_r, S_drag_th, S_drag_z, &
-                               res_ur_g, res_uth_g, res_uz_g)
+                               drag_coef, res_ur_g, res_uth_g, res_uz_g)
         
         ! Exchange halos after momentum
         call phase_exchange_halos(gas, m)

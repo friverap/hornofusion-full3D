@@ -64,8 +64,8 @@ program eaf_3d_simulator
     real(dp) :: time, V_elec, I_elec
     integer  :: step, outer, e
 
-    ! Drag arrays
-    real(dp), allocatable :: S_drag_r(:,:,:), S_drag_th(:,:,:), S_drag_z(:,:,:)
+    ! Coeficiente de drag de Ergun (implícito en aP; C1.4)
+    real(dp), allocatable :: drag_coef(:,:,:)
 
     ! Species transport old-timestep arrays
     real(dp), allocatable :: Y_CO_old(:,:,:), Y_CO2_old(:,:,:)
@@ -118,10 +118,8 @@ program eaf_3d_simulator
     call slag_allocate(slag, mesh)
     call shared_allocate(sh, mesh)
 
-    allocate(S_drag_r, mold=liq%ur)
-    allocate(S_drag_th, mold=liq%uth)
-    allocate(S_drag_z, mold=liq%uz)
-    S_drag_r = 0.0_dp; S_drag_th = 0.0_dp; S_drag_z = 0.0_dp
+    allocate(drag_coef, mold=liq%ur)
+    drag_coef = 0.0_dp
 
     allocate(Y_CO_old,  mold=sh%Y_CO);  Y_CO_old  = 0.0_dp
     allocate(Y_CO2_old, mold=sh%Y_CO2); Y_CO2_old = 0.0_dp
@@ -263,19 +261,18 @@ program eaf_3d_simulator
         
         do outer = 1, cfg%max_outer
 
-            ! Ergun drag from solid
+            ! Ergun drag coefficient from solid
             if (cfg%solve_flow) then
-                call compute_ergun_drag(liq, sol, mesh, cfg, &
-                                        S_drag_r, S_drag_th, S_drag_z)
+                call compute_ergun_drag(liq, sol, mesh, cfg, drag_coef)
             end if
 
             ! Multiphase SIMPLE iteration
             if (cfg%solve_flow .and. cfg%solve_multiphase) then
                 call multiphase_iteration(liq, gas, liq_old, gas_old, sol, sh, &
-                                          mesh, cfg, S_drag_r, S_drag_th, S_drag_z, conv)
+                                          mesh, cfg, drag_coef, conv)
             else if (cfg%solve_flow) then
                 call solve_momentum_3d(liq, liq_old, sh, mesh, cfg, liq%alpha, &
-                                       S_drag_r, S_drag_th, S_drag_z, &
+                                       drag_coef, &
                                        conv%res_ur, conv%res_uth, conv%res_uz)
                 ! Refresh halos (incl. aP_*) before Rhie-Chow in the pressure solve
                 call phase_exchange_halos(liq, mesh)
@@ -375,7 +372,7 @@ program eaf_3d_simulator
     call slag_destroy(slag)
     call shared_destroy(sh)
     call mesh_destroy(mesh)
-    deallocate(S_drag_r, S_drag_th, S_drag_z)
+    deallocate(drag_coef)
     deallocate(Y_CO_old, Y_CO2_old)
 
     if (should_print(mesh)) then
