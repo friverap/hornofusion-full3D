@@ -50,7 +50,7 @@ contains
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: Dw, De, Ds, Dn, Db, Dt
         real(dp) :: rho_f, k_f, vol, rho_cp_vol_dt
-        real(dp) :: alpha_f, w_src, C0_datum
+        real(dp) :: alpha_f, w_src, C0_datum, aP_rad, T_it
 
         ! Get loop bounds
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -151,12 +151,26 @@ contains
                     aB(i,j,k) = Db + max( Fb, 0.0_dp)
                     aT(i,j,k) = Dt + max(-Ft, 0.0_dp)
 
-                    ! Source: transient + heat sources ponderadas por fase
+                    ! Source: transient + heat sources ponderadas por fase.
+                    ! Radiación (C3.4): linearización de NEWTON de la emisión
+                    ! alrededor del ITERADO actual T_it (Patankar):
+                    !   k(G - 4σT^4) ≈ k(G + 12σT_it^4) - 16kσT_it^3 · T
+                    ! S_C a Su y S_P a aP. Con pendiente 4σT_old^3 (anclada
+                    ! al paso anterior) una celda fría con G grande saltaba a
+                    ! T ~ G/(4σT_old^3) astronómica.
                     w_src = alpha_q(i,j,k) / &
                             (alpha_q(i,j,k) + alpha_other(i,j,k) + SMALL)
+                    T_it = max(ph%T(i,j,k), 200.0_dp)
                     Su(i,j,k) = rho_cp_vol_dt * T_old(i,j,k) &
-                               + (sh%S_arc(i,j,k) + sh%S_rad(i,j,k) &
-                                  + sh%S_chem(i,j,k)) * w_src * vol
+                               + (sh%S_arc(i,j,k) + sh%S_chem(i,j,k)) &
+                                 * w_src * vol &
+                               + w_src * sh%kappa_f(i,j,k) * vol * &
+                                 (sh%G_rad(i,j,k) + 12.0_dp * &
+                                  STEFAN_BOLTZMANN * T_it**4)
+
+                    ! Emisión radiativa implícita (pendiente de Newton a aP)
+                    aP_rad = w_src * sh%kappa_f(i,j,k) * 16.0_dp * &
+                             STEFAN_BOLTZMANN * T_it**3 * vol
 
                     ! Central coefficient — forma ACOTADA de Patankar:
                     ! aP = Sum(a_nb) + transitorio (se resta la continuidad
@@ -168,7 +182,7 @@ contains
                     ! cuando la continuidad no está convergida (medido
                     ! T -> +-1e9).
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
-                               + aB(i,j,k) + aT(i,j,k) + rho_cp_vol_dt
+                               + aB(i,j,k) + aT(i,j,k) + rho_cp_vol_dt + aP_rad
 
                     ! Fuente de masa por fusión/solidificación (C1.8, líquido)
                     if (.not. is_gas) then

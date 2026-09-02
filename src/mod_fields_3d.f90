@@ -251,6 +251,7 @@ contains
                  sh%mu_t(i1:i2, j1:j2, k1:k2), sh%S_arc(i1:i2, j1:j2, k1:k2), &
                  sh%S_arc_mom(i1:i2, j1:j2, k1:k2), sh%F_lorentz_r(i1:i2, j1:j2, k1:k2), &
                  sh%F_lorentz_th(i1:i2, j1:j2, k1:k2), sh%S_rad(i1:i2, j1:j2, k1:k2), &
+                 sh%G_rad(i1:i2, j1:j2, k1:k2), sh%kappa_f(i1:i2, j1:j2, k1:k2), &
                  sh%S_chem(i1:i2, j1:j2, k1:k2), sh%Y_CO(i1:i2, j1:j2, k1:k2), &
                  sh%Y_CO2(i1:i2, j1:j2, k1:k2), sh%S_CO_src(i1:i2, j1:j2, k1:k2), &
                  sh%S_CO2_src(i1:i2, j1:j2, k1:k2), stat=ierr)
@@ -260,6 +261,7 @@ contains
         sh%mu_t = 0.0_dp; sh%S_arc = 0.0_dp; sh%S_arc_mom = 0.0_dp
         sh%F_lorentz_r = 0.0_dp; sh%F_lorentz_th = 0.0_dp
         sh%S_rad = 0.0_dp; sh%S_chem = 0.0_dp
+        sh%G_rad = 0.0_dp; sh%kappa_f = 0.0_dp
         sh%Y_CO = 0.0_dp; sh%Y_CO2 = 0.0_dp
         sh%S_CO_src = 0.0_dp; sh%S_CO2_src = 0.0_dp
     end subroutine shared_allocate
@@ -307,6 +309,8 @@ contains
         if (allocated(sh%F_lorentz_r))   deallocate(sh%F_lorentz_r)
         if (allocated(sh%F_lorentz_th))  deallocate(sh%F_lorentz_th)
         if (allocated(sh%S_rad))         deallocate(sh%S_rad)
+        if (allocated(sh%G_rad))         deallocate(sh%G_rad)
+        if (allocated(sh%kappa_f))       deallocate(sh%kappa_f)
         if (allocated(sh%S_chem))        deallocate(sh%S_chem)
         if (allocated(sh%Y_CO))          deallocate(sh%Y_CO)
         if (allocated(sh%Y_CO2))         deallocate(sh%Y_CO2)

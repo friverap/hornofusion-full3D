@@ -27,6 +27,7 @@ module mod_audit
     public :: AUD_ARC_DIRECT, AUD_ARC_DISCARD, AUD_MC_DEPOSIT
     public :: AUD_ALPHA_CLIP_MASS, AUD_MELT_MASS, AUD_RESOLID_MASS
     public :: AUD_MELT_E_SOLID, AUD_SLAG_INTERCEPT
+    public :: AUD_RAD_SOL, AUD_RAD_WALL
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -37,7 +38,9 @@ module mod_audit
     integer, parameter :: AUD_RESOLID_MASS    = 6  ! kg re-solidificados
     integer, parameter :: AUD_MELT_E_SOLID    = 7  ! J retirados del sólido al fundir
     integer, parameter :: AUD_SLAG_INTERCEPT  = 8  ! J de S_arc interceptados por escoria
-    integer, parameter :: N_AUD = 8
+    integer, parameter :: AUD_RAD_SOL         = 9  ! J radiativos depositados en el sólido
+    integer, parameter :: AUD_RAD_WALL        = 10 ! J radiativos netos perdidos a paredes
+    integer, parameter :: N_AUD = 10
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     character(len=320), save :: audit_path = ''
@@ -78,7 +81,7 @@ contains
                 'E_src_gas_arc,E_src_gas_rad,E_src_gas_chem,' // &
                 'E_arc_direct_sol,E_arc_discarded,E_mc_deposit,' // &
                 'm_melted,m_resolid,E_melt_from_solid,m_alpha_clip,' // &
-                'E_slag_intercept'
+                'E_slag_intercept,E_rad_sol,E_rad_wall'
             close(iu)
         end if
         acc = 0.0_dp
@@ -135,8 +138,16 @@ contains
 
                     s(5) = s(5) + liq%alpha(i,j,k) * liq%rho(i,j,k) * &
                                   (liq%cp(i,j,k) * liq%T(i,j,k) + C0_datum) * vol
-                    s(6) = s(6) + gas%alpha(i,j,k) * gas%rho(i,j,k) * &
-                                  gas%cp(i,j,k) * gas%T(i,j,k) * vol
+                    ! Inventario del gas ideal CONSISTENTE con el esquema:
+                    ! con rho = rho_ref*T_amb/T, la capacidad efectiva es
+                    ! alpha*rho(T)*cp y la energía absorbida acumulada es
+                    ! integral de alpha*rho(T)*cp dT = alpha*rho_ref*T_amb*
+                    ! cp*ln(T/T_amb). El inventario rho(T)*cp*T era CONSTANTE
+                    ! en T (el 'agujero' de ~70% del balance).
+                    s(6) = s(6) + gas%alpha(i,j,k) * cfg%rho_gas * &
+                                  cfg%T_ambient * gas%cp(i,j,k) * vol * &
+                                  log(max(gas%T(i,j,k), T_MIN_GAS) / &
+                                      cfg%T_ambient)
                     s(7) = s(7) + sol%E_s(i,j,k)
                     s(8) = s(8) + slag%E_sl(i,j,k)
 
@@ -151,13 +162,20 @@ contains
                     if (liq_energy_on .and. &
                         liq%alpha(i,j,k) >= ALPHA_CUTOFF) then
                         s(9)  = s(9)  + sh%S_arc(i,j,k)  * w_l * src_dt
-                        s(10) = s(10) + sh%S_rad(i,j,k)  * w_l * src_dt
+                        ! Radiación (C3.4): neto k_f*(G - 4 sigma T_fase^4),
+                        ! evaluado con la T actual de la fase (espejo de la
+                        ! linearización de solve_energy_3d)
+                        s(10) = s(10) + sh%kappa_f(i,j,k) * (sh%G_rad(i,j,k) &
+                                - 4.0_dp * STEFAN_BOLTZMANN * liq%T(i,j,k)**4) &
+                                * w_l * src_dt
                         s(11) = s(11) + sh%S_chem(i,j,k) * w_l * src_dt
                     end if
                     if (gas_energy_on .and. &
                         gas%alpha(i,j,k) >= ALPHA_CUTOFF) then
                         s(12) = s(12) + sh%S_arc(i,j,k)  * w_g * src_dt
-                        s(13) = s(13) + sh%S_rad(i,j,k)  * w_g * src_dt
+                        s(13) = s(13) + sh%kappa_f(i,j,k) * (sh%G_rad(i,j,k) &
+                                - 4.0_dp * STEFAN_BOLTZMANN * gas%T(i,j,k)**4) &
+                                * w_g * src_dt
                         s(14) = s(14) + sh%S_chem(i,j,k) * w_g * src_dt
                     end if
                 end do
@@ -186,7 +204,7 @@ contains
         if (is_writer(m)) then
             open(newunit=iu, file=trim(audit_path), status='old', &
                  action='write', position='append')
-            write(iu, '(I0,A,ES16.9,A,ES16.9,23(A,ES16.9))') &
+            write(iu, '(I0,A,ES16.9,A,ES16.9,25(A,ES16.9))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &
@@ -197,7 +215,8 @@ contains
                 ',', a(AUD_MC_DEPOSIT), &
                 ',', a(AUD_MELT_MASS), ',', a(AUD_RESOLID_MASS), &
                 ',', a(AUD_MELT_E_SOLID), ',', a(AUD_ALPHA_CLIP_MASS), &
-                ',', a(AUD_SLAG_INTERCEPT)
+                ',', a(AUD_SLAG_INTERCEPT), &
+                ',', a(AUD_RAD_SOL), ',', a(AUD_RAD_WALL)
             close(iu)
         end if
     end subroutine audit_write_step

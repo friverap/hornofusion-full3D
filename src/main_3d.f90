@@ -240,7 +240,7 @@ program eaf_3d_simulator
 
         ! Radiation (DO model)
         if (cfg%solve_radiation) then
-            call solve_radiation_do(liq, gas, sol, sh, mesh)
+            call solve_radiation_do(liq, gas, sol, sh, mesh, cfg)
         end if
 
         ! Chemistry

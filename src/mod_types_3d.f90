@@ -60,6 +60,7 @@ module mod_types_3d
 
         ! Boundary conditions
         real(dp) :: T_ambient, T_initial
+        real(dp) :: T_wall     ! T de paredes (radiación DO y BC Robin, C3.1/C3.4)
 
         ! Physics flags
         logical :: solve_flow, solve_energy, solve_melting
@@ -218,6 +219,11 @@ module mod_types_3d
 
         ! Radiation
         real(dp), allocatable :: S_rad(:,:,:)
+        ! Radiación DO (C3.4): G incidente y coef. de absorción del FLUIDO
+        ! para la linearización implícita en la energía:
+        !   Su += w*kappa_f*G*vol ;  aP += w*kappa_f*4*sigma*T_old^3*vol
+        real(dp), allocatable :: G_rad(:,:,:)
+        real(dp), allocatable :: kappa_f(:,:,:)
 
         ! Chemistry
         real(dp), allocatable :: S_chem(:,:,:)
