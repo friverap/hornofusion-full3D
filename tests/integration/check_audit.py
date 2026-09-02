@@ -55,7 +55,8 @@ def main():
     dE = total_E(last) - total_E(first)
     E_in = sum(r["E_src_liq_arc"] + r["E_src_liq_rad"] + r["E_src_liq_chem"] +
                r["E_src_gas_arc"] + r["E_src_gas_rad"] + r["E_src_gas_chem"] +
-               r["E_arc_direct_sol"] for r in steps)
+               r["E_arc_direct_sol"] + r.get("E_slag_intercept", 0.0)
+               for r in steps)
     scale = max(abs(dE), abs(E_in), 1.0)
     err = abs(dE - E_in) / scale
     chk.report("energy_balance", err <= args.etol,
@@ -64,7 +65,8 @@ def main():
 
     # -- arc_budget ----------------------------------------------------------
     E_arc_in = sum(r["E_src_liq_arc"] + r["E_src_gas_arc"] +
-                   r["E_arc_direct_sol"] for r in steps)
+                   r["E_arc_direct_sol"] + r.get("E_slag_intercept", 0.0)
+                   for r in steps)
     E_arc_avail = sum(r["P_arc"] * r["dt"] for r in steps)
     if E_arc_avail > 1.0:
         ratio = E_arc_in / E_arc_avail

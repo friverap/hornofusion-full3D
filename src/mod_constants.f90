@@ -91,6 +91,12 @@ module mod_constants
     real(dp), parameter :: ARC_SIGMA = 1.0e3_dp   ! S/m (ionized air conductivity)
     real(dp), parameter :: ARC_T_REF = 12000.0_dp ! K (reference arc temperature)
 
+    ! Reparto del presupuesto radiativo del arco (C1.6): fracción de
+    ! P_total*frac_rad que se distribuye vía Monte Carlo; el resto se
+    ! deposita directo en la superficie de chatarra. Antes el MC era
+    ! ADITIVO (inyectaba 0.5*frac_rad extra => hasta 125% de P_arc).
+    real(dp), parameter :: MC_RAD_SHARE = 0.5_dp
+
     ! Arc length correlation (Eq. 3 of paper): l_a = (|V| - threshold) / gradient
     real(dp), parameter :: ARC_VOLT_THRESHOLD = 40.0_dp  ! V (anode+cathode drop)
     real(dp), parameter :: ARC_LENGTH_GRAD    = 11.5_dp  ! V/cm (column field gradient)

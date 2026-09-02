@@ -145,9 +145,24 @@ contains
             P_total = elec(e)%arc_power
             if (P_total < 1.0_dp) cycle
 
-            P_rad_arc   = P_total * cfg%frac_rad
+            ! El MC (si está activo) toma SU parte del presupuesto frac_rad;
+            ! el depósito directo recibe el resto (C1.6a: antes el MC era
+            ! aditivo y se inyectaba 1 + 0.5*frac_rad veces P_arc)
+            if (cfg%n_beams > 0) then
+                P_rad_arc = P_total * cfg%frac_rad * (1.0_dp - MC_RAD_SHARE)
+            else
+                P_rad_arc = P_total * cfg%frac_rad
+            end if
             P_conv      = P_total * cfg%frac_conv
             P_elec_flow = P_total * cfg%frac_elec
+
+            ! Antes del bore-in la fracción electrónica no tiene baño que
+            ! calentar: se deposita en la columna del arco junto con P_conv
+            ! (antes se PERDÍA: presupuesto medido 0.20 en noflow_energy)
+            if (.not. elec(e)%bore_in_done) then
+                P_conv      = P_conv + P_elec_flow
+                P_elec_flow = 0.0_dp
+            end if
 
             x_elec = cfg%R_pcd * cos(elec(e)%theta_pos)
             y_elec = cfg%R_pcd * sin(elec(e)%theta_pos)
@@ -245,10 +260,16 @@ contains
                                         m%vol_global(ig,jg,kg) * cfg%dt
                                 ! Stability guard: limit ΔT_s to DT_RAD_MAX per step.
                                 Q_rad_lim = DT_RAD_MAX * sol%m_s(il,jl,kl) * cfg%cp_s
-                                ! Auditoría: energía descartada por el cap (hallazgo 3.1d)
-                                call audit_add(AUD_ARC_DISCARD, &
-                                               max(Q_rad - Q_rad_lim, 0.0_dp))
-                                Q_rad = min(Q_rad, Q_rad_lim)
+                                ! C1.6c: el excedente del cap NO se descarta —
+                                ! va a S_arc de la misma celda (los fluidos lo
+                                ! transportan y llega al sólido vía interfase).
+                                ! AUD_ARC_DISCARD queda como centinela (=0).
+                                if (Q_rad > Q_rad_lim) then
+                                    sh%S_arc(il,jl,kl) = sh%S_arc(il,jl,kl) + &
+                                        (Q_rad - Q_rad_lim) / &
+                                        (m%vol_global(ig,jg,kg) * cfg%dt + SMALL)
+                                    Q_rad = Q_rad_lim
+                                end if
                                 call audit_add(AUD_ARC_DIRECT, Q_rad)
                                 sol%E_s(il,jl,kl) = sol%E_s(il,jl,kl) + Q_rad
                                 sol%T_s(il,jl,kl) = sol%E_s(il,jl,kl) / &

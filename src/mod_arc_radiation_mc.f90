@@ -78,7 +78,9 @@ contains
         if (step_size < 1.0e-6_dp) step_size = 0.01_dp   ! absolute fallback
 
         do e = 1, n_elec
-            total_P_rad = elec(e)%arc_power * cfg%frac_rad * 0.5_dp
+            ! Parte del presupuesto frac_rad asignada al MC (C1.6a): el
+            ! complemento lo deposita distribute_arc_heat directo al sólido
+            total_P_rad = elec(e)%arc_power * cfg%frac_rad * MC_RAD_SHARE
             if (total_P_rad < 1.0_dp) cycle
 
             P_rad_per_beam = total_P_rad / real(cfg%n_beams, dp)

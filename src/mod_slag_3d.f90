@@ -12,6 +12,7 @@ module mod_slag_3d
     use mod_constants
     use mod_types_3d
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_allreduce_sum
+    use mod_audit, only: audit_add, AUD_SLAG_INTERCEPT
     implicit none
 
     real(dp), parameter :: SMALL_SL = 1.0e-6_dp
@@ -152,6 +153,54 @@ contains
     end subroutine slag_initialize
 
     !---------------------------------------------------------------------------
+    ! Intercepción del calor del arco por la escoria (C1.6b, hallazgo 3.1d).
+    ! Debe llamarse INMEDIATAMENTE después de distribuir S_arc y ANTES de que
+    ! las ecuaciones de energía lo consuman. La versión anterior interceptaba
+    ! al final del paso, cuando los fluidos ya habían absorbido el 100% de
+    ! S_arc (y éste se regenera al paso siguiente): la escoria creaba energía.
+    !---------------------------------------------------------------------------
+    subroutine slag_intercept_arc(slag, sh, m, cfg)
+        type(slag_t),  intent(inout) :: slag
+        type(shared_t),intent(inout) :: sh
+        type(mesh_t),  intent(in)    :: m
+        type(config_t),intent(in)    :: cfg
+
+        integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
+        real(dp) :: dE
+
+        if (m%is_parallel) then
+            istart = m%topo%istart; iend = m%topo%iend
+            jstart = m%topo%jstart; jend = m%topo%jend
+            kstart = m%topo%kstart; kend = m%topo%kend
+        else
+            istart = 1; iend = m%nr
+            jstart = 1; jend = m%ntheta
+            kstart = 1; kend = m%nz
+        end if
+
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (slag%alpha_sl(i,j,k) < SMALL_SL) cycle
+                    if (slag%m_sl(i,j,k)     < SMALL_SL) cycle
+
+                    dE = sh%S_arc(i,j,k) * m%vol(i,j,k) * cfg%dt &
+                         * slag%alpha_sl(i,j,k)
+                    slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + dE
+                    sh%S_arc(i,j,k)  = sh%S_arc(i,j,k) &
+                                       * (1.0_dp - slag%alpha_sl(i,j,k))
+                    call audit_add(AUD_SLAG_INTERCEPT, dE)
+
+                    slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / &
+                                       (slag%m_sl(i,j,k) * cfg%cp_slag)
+                    slag%T_sl(i,j,k) = max(300.0_dp, slag%T_sl(i,j,k))
+                end do
+            end do
+        end do
+    end subroutine slag_intercept_arc
+
+    !---------------------------------------------------------------------------
     ! Timestep update: buoyancy settling + energy exchange
     !---------------------------------------------------------------------------
     subroutine update_slag(slag, liq, gas, sh, m, cfg, dt)
@@ -281,10 +330,8 @@ contains
 
                     vol = m%vol(i,j,k)
 
-                    ! 1. Arc heat interception: slag absorbs proportional share of S_arc
-                    dE = sh%S_arc(i,j,k) * vol * dt * slag%alpha_sl(i,j,k)
-                    slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + dE
-                    sh%S_arc(i,j,k)  = sh%S_arc(i,j,k) * (1.0_dp - slag%alpha_sl(i,j,k))
+                    ! (La intercepción de S_arc se hace en slag_intercept_arc,
+                    !  ANTES de que las ecuaciones de energía consuman S_arc)
 
                     ! 2. Slag-liquid HT (liquid in cell below at k-1)
                     !    Guard: k > kstart so k-1 is in this rank's interior (safe to write)

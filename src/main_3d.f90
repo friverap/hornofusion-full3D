@@ -221,6 +221,11 @@ program eaf_3d_simulator
             call distribute_arc_radiation_mc(elec, sol, sh, mesh, cfg, N_ELECTRODES, step)
             call compute_arc_impingement(elec, sh, mesh, cfg, N_ELECTRODES)
             call compute_lorentz_force(elec, liq%alpha, sh, mesh, cfg, I_elec, N_ELECTRODES)
+            ! La escoria intercepta su fracción de S_arc AHORA (antes de que
+            ! las ecuaciones de energía lo consuman; C1.6b)
+            if (cfg%solve_slag) then
+                call slag_intercept_arc(slag, sh, mesh, cfg)
+            end if
         end if
 
         ! Radiation (DO model)

@@ -26,7 +26,7 @@ module mod_audit
     public :: audit_init, audit_write_step, audit_add
     public :: AUD_ARC_DIRECT, AUD_ARC_DISCARD, AUD_MC_DEPOSIT
     public :: AUD_ALPHA_CLIP_MASS, AUD_MELT_MASS, AUD_RESOLID_MASS
-    public :: AUD_MELT_E_SOLID
+    public :: AUD_MELT_E_SOLID, AUD_SLAG_INTERCEPT
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -36,7 +36,8 @@ module mod_audit
     integer, parameter :: AUD_MELT_MASS       = 5  ! kg fundidos (mdot*dt > 0)
     integer, parameter :: AUD_RESOLID_MASS    = 6  ! kg re-solidificados
     integer, parameter :: AUD_MELT_E_SOLID    = 7  ! J retirados del sólido al fundir
-    integer, parameter :: N_AUD = 7
+    integer, parameter :: AUD_SLAG_INTERCEPT  = 8  ! J de S_arc interceptados por escoria
+    integer, parameter :: N_AUD = 8
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     character(len=320), save :: audit_path = ''
@@ -76,7 +77,8 @@ contains
                 'E_src_liq_arc,E_src_liq_rad,E_src_liq_chem,' // &
                 'E_src_gas_arc,E_src_gas_rad,E_src_gas_chem,' // &
                 'E_arc_direct_sol,E_arc_discarded,E_mc_deposit,' // &
-                'm_melted,m_resolid,E_melt_from_solid,m_alpha_clip'
+                'm_melted,m_resolid,E_melt_from_solid,m_alpha_clip,' // &
+                'E_slag_intercept'
             close(iu)
         end if
         acc = 0.0_dp
@@ -174,7 +176,7 @@ contains
         if (is_writer(m)) then
             open(newunit=iu, file=trim(audit_path), status='old', &
                  action='write', position='append')
-            write(iu, '(I0,A,ES16.9,A,ES16.9,22(A,ES16.9))') &
+            write(iu, '(I0,A,ES16.9,A,ES16.9,23(A,ES16.9))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &
@@ -184,7 +186,8 @@ contains
                 ',', a(AUD_ARC_DIRECT), ',', a(AUD_ARC_DISCARD), &
                 ',', a(AUD_MC_DEPOSIT), &
                 ',', a(AUD_MELT_MASS), ',', a(AUD_RESOLID_MASS), &
-                ',', a(AUD_MELT_E_SOLID), ',', a(AUD_ALPHA_CLIP_MASS)
+                ',', a(AUD_MELT_E_SOLID), ',', a(AUD_ALPHA_CLIP_MASS), &
+                ',', a(AUD_SLAG_INTERCEPT)
             close(iu)
         end if
     end subroutine audit_write_step
