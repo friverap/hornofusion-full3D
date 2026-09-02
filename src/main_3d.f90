@@ -170,8 +170,13 @@ program eaf_3d_simulator
         print *, ' [MAIN] Writing initial state...'
     end if
 
-    ! Load first bucket
-    call charge_scrap(sol, gas, mesh, cfg, 1)
+    ! Load first bucket (omitible para tests de carga continua pura;
+    ! NOTA hallazgo E1.3: charge_scrap asigna NIVELES enteros con el vfrac
+    ! de la capa aunque la capa pida menos volumen — la masa cargada excede
+    ! la receta (~5x medido). Revisar en B1 (benchmark Ugarte).)
+    if (cfg%charge_bucket1) then
+        call charge_scrap(sol, gas, mesh, cfg, 1)
+    end if
 
     ! Initialize slag layer (above scrap surface)
     if (cfg%solve_slag) then

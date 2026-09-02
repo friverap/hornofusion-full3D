@@ -121,6 +121,8 @@ full | rebaseline)
     run_case symmetry_3elec 6
     run_case outer_conv 8
     run_case chem_test 4
+    run_case ecs_test 1
+    run_case ecs_test 8
 
     for d in "$OUT"/cold_10step_n*; do
         check_invariants "$d" cold_10step
@@ -156,7 +158,11 @@ full | rebaseline)
     run_script "outer_convergence" \
         $PY $INT/check_outer.py "$OUT/outer_conv_n8" --max-outer 30
     run_script "chem" \
-        $PY $INT/check_chem.py "$OUT/chem_test_n4" --config "$CFG/chem_test.dat" 
+        $PY $INT/check_chem.py "$OUT/chem_test_n4" --config "$CFG/chem_test.dat"
+    run_script "ecs" \
+        $PY $INT/check_ecs.py "$OUT/ecs_test_n8" --config "$CFG/ecs_test.dat"
+    run_script "decomposition_ecs" \
+        $PY $INT/compare_decomposition.py "$OUT/ecs_test_n1" "$OUT/ecs_test_n8" 
 
     if [ "$MODE" = "rebaseline" ]; then
         $PY $INT/metrics_snapshot.py "$OUT" --mode rebaseline \

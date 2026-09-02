@@ -97,6 +97,7 @@ module mod_types_3d
         real(dp) :: carbon_frac
         ! Cargador continuo ECS (E1): banda de entrada en la periferia
         logical  :: solve_ecs
+        logical  :: charge_bucket1   ! false: arranca vacio (tests ECS)
         real(dp) :: ecs_rate            ! kg/s (si no hay perfil)
         character(len=256) :: ecs_profile_file
         real(dp) :: ecs_theta_center    ! rad

@@ -119,6 +119,7 @@ contains
         cfg%carbon_frac     = 0.005_dp
         ! ECS (E1): apagado por defecto (golden intacto)
         cfg%solve_ecs        = .false.
+        cfg%charge_bucket1   = .true.
         cfg%ecs_rate         = 0.0_dp
         cfg%ecs_profile_file = ''
         cfg%ecs_theta_center = PI
@@ -260,6 +261,7 @@ contains
         case ('solve_species');   cfg%solve_species = parse_bool(val)
         case ('carbon_frac');     call parse_real(val, key, cfg%carbon_frac)
         case ('solve_ecs');        cfg%solve_ecs = parse_bool(val)
+        case ('charge_bucket1');   cfg%charge_bucket1 = parse_bool(val)
         case ('ecs_rate');         call parse_real(val, key, cfg%ecs_rate)
         case ('ecs_profile_file'); cfg%ecs_profile_file = trim(val)
         case ('ecs_theta_center'); call parse_real(val, key, cfg%ecs_theta_center)

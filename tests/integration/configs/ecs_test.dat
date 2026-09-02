@@ -1,0 +1,53 @@
+# Test del cargador continuo ECS (E1.3): conservacion exacta de la masa
+# alimentada e invarianza a la descomposicion MPI de la banda de entrada.
+# Todo lo demas apagado (la unica fisica activa es el deposito del ECS).
+# La banda esta centrada en theta=0: cruza la costura PERIODICA (serial)
+# y una frontera de rank (con -n 8: 4 ranks en theta).
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+
+R_shell = 3.80
+H_total = 4.50
+H_bowl = 0.60
+R_bowl = 2.50
+R_pcd = 0.85
+R_elec = 0.30
+
+dt = 0.5
+t_final = 10.0
+adaptive_dt = false
+T_initial = 300.0
+
+solve_flow = false
+solve_energy = false
+solve_melting = false
+solve_turb = false
+solve_radiation = false
+solve_chemistry = false
+solve_species = false
+solve_arc = false
+solve_multiphase = false
+solve_slag = false
+
+solve_ecs = true
+ecs_rate = 30.0
+ecs_theta_center = 0.0
+ecs_theta_width = 0.8
+ecs_r_inner = 2.4
+ecs_vfrac = 0.55
+ecs_T_charge = 310.0
+ecs_carbon_frac = 0.008
+
+# sin buckets: SOLO entra material por el ECS (horno vacio al inicio)
+charge_bucket1 = false
+t_bucket2_charge = 1.0e30
+
+max_outer = 2
+max_inner_mom = 2
+max_inner_pres = 20
+output_freq = 10
+monitor_freq = 10
+audit_freq = 1
