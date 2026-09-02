@@ -45,6 +45,9 @@ module mod_radiation_do
 contains
 
     subroutine solve_radiation_do(liq, gas, sol, sh, m, cfg)
+        use mod_workspace, only: ensure_workspace, aW => ws_aW, &
+            aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
+            aT => ws_aT, aP => ws_aP, Su => ws_Su
         type(phase_t), intent(in)    :: liq, gas
         type(solid_t), intent(inout) :: sol
         type(shared_t), intent(inout) :: sh
@@ -53,8 +56,6 @@ contains
 
         integer  :: i, j, k, d
         integer  :: istart, iend, jstart, jend, kstart, kend
-        real(dp), allocatable :: aW(:,:,:), aE(:,:,:), aS(:,:,:), aN(:,:,:)
-        real(dp), allocatable :: aB(:,:,:), aT(:,:,:), aP(:,:,:), Su(:,:,:)
         real(dp), allocatable :: Irad(:,:,:), Bmix(:,:,:), kmix(:,:,:)
         real(dp) :: sx, sy, sz, w_d
         real(dp) :: cw, ce, cs, cn, cb, ct
@@ -64,10 +65,7 @@ contains
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
 
-        allocate(aW, mold=sh%G_rad); allocate(aE, mold=sh%G_rad)
-        allocate(aS, mold=sh%G_rad); allocate(aN, mold=sh%G_rad)
-        allocate(aB, mold=sh%G_rad); allocate(aT, mold=sh%G_rad)
-        allocate(aP, mold=sh%G_rad); allocate(Su, mold=sh%G_rad)
+        call ensure_workspace(m)
         allocate(Irad, mold=sh%G_rad); allocate(Bmix, mold=sh%G_rad)
         allocate(kmix, mold=sh%G_rad)
 
@@ -268,7 +266,7 @@ contains
             end do
         end do
 
-        deallocate(aW, aE, aS, aN, aB, aT, aP, Su, Irad, Bmix, kmix)
+        deallocate(Irad, Bmix, kmix)
 
     contains
 

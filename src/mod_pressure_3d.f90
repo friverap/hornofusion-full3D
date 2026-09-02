@@ -39,6 +39,9 @@ contains
 
     subroutine solve_pressure_correction(liq, gas, gas_T_old, sh, m, cfg, &
                                           residual)
+        use mod_workspace, only: ensure_workspace, aW => ws_aW, &
+            aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
+            aT => ws_aT, aP => ws_aP, Su => ws_Su
         type(phase_t), intent(inout) :: liq, gas
         ! T del gas del paso anterior: término de COMPRESIBILIDAD del gas
         ! ideal, -alpha_g*(rho(T)-rho(T_old))/dt*V. Sin él, el Poisson
@@ -53,8 +56,6 @@ contains
 
         integer :: i, j, k, jm, jp
         integer :: istart, iend, jstart, jend, kstart, kend
-        real(dp), allocatable :: aW(:,:,:), aE(:,:,:), aS(:,:,:), aN(:,:,:)
-        real(dp), allocatable :: aB(:,:,:), aT(:,:,:), aP(:,:,:), Su(:,:,:)
         ! Gradientes de presión de CELDA (los mismos que usa momentum)
         real(dp), allocatable :: gpr(:,:,:), gpth(:,:,:), gpz(:,:,:)
         integer  :: n_iter_cg
@@ -64,10 +65,7 @@ contains
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
-        allocate(aW, mold=sh%pp); allocate(aE, mold=sh%pp)
-        allocate(aS, mold=sh%pp); allocate(aN, mold=sh%pp)
-        allocate(aB, mold=sh%pp); allocate(aT, mold=sh%pp)
-        allocate(aP, mold=sh%pp); allocate(Su, mold=sh%pp)
+        call ensure_workspace(m)
         allocate(gpr, mold=sh%pp); allocate(gpth, mold=sh%pp)
         allocate(gpz, mold=sh%pp)
 
@@ -208,7 +206,7 @@ contains
         ! Correct pressure
         sh%p = sh%p + cfg%alpha_p * sh%pp
 
-        deallocate(aW, aE, aS, aN, aB, aT, aP, Su, gpr, gpth, gpz)
+        deallocate(gpr, gpth, gpz)
 
     contains
 

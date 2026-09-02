@@ -20,6 +20,9 @@ contains
 
     subroutine solve_energy_3d(ph, T_old, sh, m, cfg, alpha_q, alpha_other, &
                                mdot, T_src, is_gas, residual)
+        use mod_workspace, only: ensure_workspace, aW => ws_aW, &
+            aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
+            aT => ws_aT, aP => ws_aP, Su => ws_Su
         type(phase_t), intent(inout) :: ph
         real(dp), intent(in)         :: T_old(-1:,-1:,-1:)
         type(shared_t), intent(in)   :: sh
@@ -45,8 +48,6 @@ contains
 
         integer :: i, j, k, jm, jp
         integer :: istart, iend, jstart, jend, kstart, kend
-        real(dp), allocatable :: aW(:,:,:), aE(:,:,:), aS(:,:,:), aN(:,:,:)
-        real(dp), allocatable :: aB(:,:,:), aT(:,:,:), aP(:,:,:), Su(:,:,:)
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: Dw, De, Ds, Dn, Db, Dt
         real(dp) :: rho_f, k_f, vol, rho_cp_vol_dt
@@ -59,14 +60,7 @@ contains
         C0_datum = (cfg%cp_s - cfg%cp_l) * cfg%T_liquidus + cfg%h_fusion
 
         ! Allocate with halos
-        allocate(aW, mold=ph%T)
-        allocate(aE, mold=ph%T)
-        allocate(aS, mold=ph%T)
-        allocate(aN, mold=ph%T)
-        allocate(aB, mold=ph%T)
-        allocate(aT, mold=ph%T)
-        allocate(aP, mold=ph%T)
-        allocate(Su, mold=ph%T)
+        call ensure_workspace(m)
 
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
@@ -249,7 +243,6 @@ contains
         ! Residual
         residual = compute_residual_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, ph%T, m)
 
-        deallocate(aW, aE, aS, aN, aB, aT, aP, Su)
 
     contains
 

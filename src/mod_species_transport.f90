@@ -20,6 +20,9 @@ module mod_species_transport
 contains
 
     subroutine solve_species_3d(gas, Y, Y_old, S_net, m, cfg, residual)
+        use mod_workspace, only: ensure_workspace, aW => ws_aW, &
+            aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
+            aT => ws_aT, aP => ws_aP, Su => ws_Su
         type(phase_t), intent(in)    :: gas
         real(dp),      intent(inout) :: Y(-1:,-1:,-1:)
         real(dp),      intent(in)    :: Y_old(-1:,-1:,-1:)
@@ -30,8 +33,6 @@ contains
 
         integer :: i, j, k, jm, jp
         integer :: istart, iend, jstart, jend, kstart, kend
-        real(dp), allocatable :: aW(:,:,:), aE(:,:,:), aS(:,:,:), aN(:,:,:)
-        real(dp), allocatable :: aB(:,:,:), aT(:,:,:), aP(:,:,:), Su(:,:,:)
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: Dw, De, Ds, Dn, Db, Dt
         real(dp) :: rho_f, D_eff, vol, rho_Y_vol_dt
@@ -41,14 +42,7 @@ contains
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
 
         ! Allocate coefficient arrays (same bounds as Y via mold)
-        allocate(aW, mold=Y)
-        allocate(aE, mold=Y)
-        allocate(aS, mold=Y)
-        allocate(aN, mold=Y)
-        allocate(aB, mold=Y)
-        allocate(aT, mold=Y)
-        allocate(aP, mold=Y)
-        allocate(Su, mold=Y)
+        call ensure_workspace(m)
 
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
@@ -157,7 +151,6 @@ contains
         ! Residual
         residual = compute_residual_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, Y, m)
 
-        deallocate(aW, aE, aS, aN, aB, aT, aP, Su)
 
     end subroutine solve_species_3d
 

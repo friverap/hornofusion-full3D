@@ -20,6 +20,9 @@ module mod_turbulence_3d
 contains
 
     subroutine solve_k_epsilon(liq, sh, m, cfg, dt)
+        use mod_workspace, only: ensure_workspace, aW => ws_aW, &
+            aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
+            aT => ws_aT, aP => ws_aP, Su => ws_Su
         type(phase_t), intent(in)    :: liq
         type(shared_t), intent(inout) :: sh
         type(mesh_t), intent(in)     :: m
@@ -28,8 +31,6 @@ contains
 
         integer :: i, j, k, jm, jp
         integer :: istart, iend, jstart, jend, kstart, kend
-        real(dp), allocatable :: aW(:,:,:), aE(:,:,:), aS(:,:,:), aN(:,:,:)
-        real(dp), allocatable :: aB(:,:,:), aT(:,:,:), aP(:,:,:), Su(:,:,:)
         real(dp), allocatable :: Gk(:,:,:), tke_old(:,:,:), eps_old(:,:,:)
         real(dp) :: Dw, De, Ds, Dn, Db, Dt_d
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft_f
@@ -46,14 +47,7 @@ contains
         call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
         ! Allocate with halos
-        allocate(aW, mold=sh%tke)
-        allocate(aE, mold=sh%tke)
-        allocate(aS, mold=sh%tke)
-        allocate(aN, mold=sh%tke)
-        allocate(aB, mold=sh%tke)
-        allocate(aT, mold=sh%tke)
-        allocate(aP, mold=sh%tke)
-        allocate(Su, mold=sh%tke)
+        call ensure_workspace(m)
         allocate(Gk, mold=sh%tke)
         allocate(tke_old, mold=sh%tke)
         allocate(eps_old, mold=sh%eps)
@@ -260,7 +254,7 @@ contains
             end do
         end do
 
-        deallocate(aW, aE, aS, aN, aB, aT, aP, Su, Gk, tke_old, eps_old)
+        deallocate(Gk, tke_old, eps_old)
     end subroutine solve_k_epsilon
 
 end module mod_turbulence_3d

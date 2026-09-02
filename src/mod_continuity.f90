@@ -20,6 +20,9 @@ module mod_continuity
 contains
 
     subroutine solve_volume_fraction(liq, gas, sol, alpha_slag, alpha_old, m, cfg)
+        use mod_workspace, only: ensure_workspace, aW => ws_aW, &
+            aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
+            aT => ws_aT, aP => ws_aP, Su => ws_Su
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
         ! Fracción de escoria: participa en la restricción de volumen
@@ -35,8 +38,6 @@ contains
 
         integer :: i, j, k, jm, jp
         integer :: istart, iend, jstart, jend, kstart, kend
-        real(dp), allocatable :: aW(:,:,:), aE(:,:,:), aS(:,:,:), aN(:,:,:)
-        real(dp), allocatable :: aB(:,:,:), aT(:,:,:), aP(:,:,:), Su(:,:,:)
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: rho_f, vol, vol_dt, a_pre
 
@@ -44,14 +45,7 @@ contains
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
 
         ! Allocate with halos
-        allocate(aW, mold=liq%alpha)
-        allocate(aE, mold=liq%alpha)
-        allocate(aS, mold=liq%alpha)
-        allocate(aN, mold=liq%alpha)
-        allocate(aB, mold=liq%alpha)
-        allocate(aT, mold=liq%alpha)
-        allocate(aP, mold=liq%alpha)
-        allocate(Su, mold=liq%alpha)
+        call ensure_workspace(m)
         
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
@@ -127,7 +121,6 @@ contains
             end do
         end do
 
-        deallocate(aW, aE, aS, aN, aB, aT, aP, Su)
     end subroutine solve_volume_fraction
 
 end module mod_continuity
