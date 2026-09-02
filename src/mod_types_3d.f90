@@ -61,6 +61,7 @@ module mod_types_3d
         ! Boundary conditions
         real(dp) :: T_ambient, T_initial
         real(dp) :: T_wall     ! T de paredes (radiación DO y BC Robin, C3.1/C3.4)
+        real(dp) :: h_wall     ! coef. Robin de pared [W/(m2 K)]; 0 = adiabático
 
         ! Physics flags
         logical :: solve_flow, solve_energy, solve_melting

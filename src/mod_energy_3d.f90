@@ -50,7 +50,7 @@ contains
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: Dw, De, Ds, Dn, Db, Dt
         real(dp) :: rho_f, k_f, vol, rho_cp_vol_dt
-        real(dp) :: alpha_f, w_src, C0_datum, aP_rad, T_it
+        real(dp) :: alpha_f, w_src, C0_datum, aP_rad, T_it, aP_wall
 
         ! Get loop bounds
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -175,6 +175,29 @@ contains
                                  (sh%G_rad(i,j,k) + 12.0_dp * &
                                   STEFAN_BOLTZMANN * T_it**4)
 
+                    ! Pérdidas de pared Robin (C3.1): en cada cara contra
+                    ! celda inactiva (pared física o refractario del tazón):
+                    ! flujo = h_wall*A*alpha*(T - T_wall), implícito
+                    ! (aP += hA*alpha; Su += hA*alpha*T_wall). h_wall=0 (el
+                    ! default) mantiene el comportamiento adiabático previo.
+                    aP_wall = 0.0_dp
+                    if (cfg%h_wall > 0.0_dp) then
+                        if (m%cell_type(i-1,j,k) == 0) &
+                            aP_wall = aP_wall + m%Ar(i-1,j,k)
+                        if (m%cell_type(i+1,j,k) == 0) &
+                            aP_wall = aP_wall + m%Ar(i,j,k)
+                        if (m%cell_type(i,jm,k) == 0) &
+                            aP_wall = aP_wall + m%Ath(i,j,k)
+                        if (m%cell_type(i,jp,k) == 0) &
+                            aP_wall = aP_wall + m%Ath(i,j,k)
+                        if (m%cell_type(i,j,k-1) == 0) &
+                            aP_wall = aP_wall + m%Az(i,j,k-1)
+                        if (m%cell_type(i,j,k+1) == 0) &
+                            aP_wall = aP_wall + m%Az(i,j,k)
+                        aP_wall = aP_wall * cfg%h_wall * alpha_f
+                        Su(i,j,k) = Su(i,j,k) + aP_wall * cfg%T_wall
+                    end if
+
                     ! Emisión radiativa implícita (pendiente de Newton a aP)
                     aP_rad = w_src * sh%kappa_f(i,j,k) * 16.0_dp * &
                              STEFAN_BOLTZMANN * T_it**3 * vol
@@ -186,7 +209,8 @@ contains
                     ! el déficit conservativo de la forma acotada
                     ! (phi x residuo de continuidad) queda medido por el audit.
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
-                               + aB(i,j,k) + aT(i,j,k) + rho_cp_vol_dt + aP_rad
+                               + aB(i,j,k) + aT(i,j,k) + rho_cp_vol_dt &
+                               + aP_rad + aP_wall
 
                     ! Fuente de masa por fusión/solidificación (C1.8, líquido)
                     if (.not. is_gas) then

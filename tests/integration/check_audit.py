@@ -56,7 +56,8 @@ def main():
     E_in = sum(r["E_src_liq_arc"] + r["E_src_liq_rad"] + r["E_src_liq_chem"] +
                r["E_src_gas_arc"] + r["E_src_gas_rad"] + r["E_src_gas_chem"] +
                r["E_arc_direct_sol"] + r.get("E_slag_intercept", 0.0) +
-               r.get("E_rad_sol", 0.0) + r.get("E_conv_defect", 0.0)
+               r.get("E_rad_sol", 0.0) + r.get("E_conv_defect", 0.0) -
+               r.get("E_wall_conv", 0.0)
                for r in steps)
     scale = max(abs(dE), abs(E_in), 1.0)
     err = abs(dE - E_in) / scale

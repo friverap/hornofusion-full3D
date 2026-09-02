@@ -89,6 +89,7 @@ contains
         cfg%T_ambient = 300.0_dp
         cfg%T_initial = 300.0_dp
         cfg%T_wall    = 300.0_dp
+        cfg%h_wall    = 0.0_dp
 
         ! Physics
         cfg%solve_flow       = .true.
@@ -207,6 +208,7 @@ contains
         case ('T_initial');  call parse_real(val, key, cfg%T_initial)
         case ('T_ambient');  call parse_real(val, key, cfg%T_ambient)
         case ('T_wall');     call parse_real(val, key, cfg%T_wall)
+        case ('h_wall');     call parse_real(val, key, cfg%h_wall)
         ! Physics flags
         case ('solve_flow');       cfg%solve_flow = parse_bool(val)
         case ('solve_energy');     cfg%solve_energy = parse_bool(val)

@@ -82,7 +82,8 @@ contains
                 'E_src_gas_arc,E_src_gas_rad,E_src_gas_chem,' // &
                 'E_arc_direct_sol,E_arc_discarded,E_mc_deposit,' // &
                 'm_melted,m_resolid,E_melt_from_solid,m_alpha_clip,' // &
-                'E_slag_intercept,E_rad_sol,E_rad_wall,E_conv_defect'
+                'E_slag_intercept,E_rad_sol,E_rad_wall,E_conv_defect,' // &
+                'E_wall_conv'
             close(iu)
         end if
         acc = 0.0_dp
@@ -111,7 +112,8 @@ contains
         ! acotada de Patankar: se resta la continuidad discreta x T; el
         ! déficit global = Sum dF_neto*cp*T — la entalpía de pluma que el
         ! operador no entrega; físicamente ~ el off-gas no ventilado)
-        integer, parameter :: NSUM = 15
+        ! 16: pérdida convectiva a paredes Robin (C3.1), sum alpha*h*A*(T-Tw)
+        integer, parameter :: NSUM = 16
         real(dp) :: s(NSUM), s_glob(NSUM), a(N_AUD)
         real(dp) :: vol, src_dt, P_arc, w_l, w_g, C0_datum
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, dfl, dfg
@@ -176,6 +178,26 @@ contains
                                 * w_l * src_dt
                         s(11) = s(11) + sh%S_chem(i,j,k) * w_l * src_dt
                     end if
+                    ! Pérdida Robin a paredes (espejo de solve_energy_3d)
+                    if (cfg%h_wall > 0.0_dp .and. cfg%solve_energy) then
+                        block
+                            real(dp) :: Awall
+                            Awall = 0.0_dp
+                            if (m%cell_type(i-1,j,k) == 0) Awall = Awall + m%Ar(i-1,j,k)
+                            if (m%cell_type(i+1,j,k) == 0) Awall = Awall + m%Ar(i,j,k)
+                            if (m%cell_type(i,j-1,k) == 0) Awall = Awall + m%Ath(i,j,k)
+                            if (m%cell_type(i,j+1,k) == 0) Awall = Awall + m%Ath(i,j,k)
+                            if (m%cell_type(i,j,k-1) == 0) Awall = Awall + m%Az(i,j,k-1)
+                            if (m%cell_type(i,j,k+1) == 0) Awall = Awall + m%Az(i,j,k)
+                            if (liq%alpha(i,j,k) >= ALPHA_CUTOFF) &
+                                s(16) = s(16) + cfg%h_wall * Awall * liq%alpha(i,j,k) * &
+                                        (liq%T(i,j,k) - cfg%T_wall) * cfg%dt
+                            if (gas_energy_on .and. gas%alpha(i,j,k) >= ALPHA_CUTOFF) &
+                                s(16) = s(16) + cfg%h_wall * Awall * gas%alpha(i,j,k) * &
+                                        (gas%T(i,j,k) - cfg%T_wall) * cfg%dt
+                        end block
+                    end if
+
                     ! Déficit conservativo (evaluado con los campos finales)
                     if (cfg%solve_flow .and. cfg%solve_energy) then
                         call face_mass_fluxes(liq%alpha, liq%rho, liq%ur, &
@@ -224,7 +246,7 @@ contains
         if (is_writer(m)) then
             open(newunit=iu, file=trim(audit_path), status='old', &
                  action='write', position='append')
-            write(iu, '(I0,A,ES16.9,A,ES16.9,26(A,ES16.9))') &
+            write(iu, '(I0,A,ES16.9,A,ES16.9,27(A,ES16.9))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &
@@ -237,7 +259,7 @@ contains
                 ',', a(AUD_MELT_E_SOLID), ',', a(AUD_ALPHA_CLIP_MASS), &
                 ',', a(AUD_SLAG_INTERCEPT), &
                 ',', a(AUD_RAD_SOL), ',', a(AUD_RAD_WALL), &
-                ',', s_glob(15)
+                ',', s_glob(15), ',', s_glob(16)
             close(iu)
         end if
     end subroutine audit_write_step
