@@ -10,11 +10,14 @@
 !   - The RNG is seeded with a FIXED seed (reproducible runs); every rank
 !     generates the same beam directions in the same order.
 !   - Beams are traced on the GLOBAL geometry (rf_global/zf_global, uniform
-!     global theta) using the globally-replicated alpha_s, so the absorption
-!     cell of each beam is identical on every rank and in serial.
-!   - Only the rank owning the absorption cell deposits the beam power.
+!     global theta) using the globally-replicated alpha_s (gathered UNA vez
+!     por paso en main y compartido con distribute_arc_heat — C4.2), so the
+!     absorption cell of each beam is identical on every rank and in serial.
+!   - C4.2: beams round-robin entre ranks; depósito acumulado en un array
+!     global y reducido con MPI_SUM; solo el dueño de la celda escribe.
 !===============================================================================
 module mod_arc_radiation_mc
+    use mpi
     use mod_constants
     use mod_types_3d
     use mod_parallel_utils
@@ -43,12 +46,12 @@ contains
         deallocate(seed)
     end subroutine reseed_rng
 
-    subroutine distribute_arc_radiation_mc(elec, sol, sh, m, cfg, n_elec, step)
+    subroutine distribute_arc_radiation_mc(elec, sh, m, cfg, alpha_g, n_elec, step)
         type(electrode_t), intent(in)   :: elec(:)
-        type(solid_t), intent(in)       :: sol
         type(shared_t), intent(inout)   :: sh
         type(mesh_t), intent(in)        :: m
         type(config_t), intent(in)      :: cfg
+        real(dp), intent(in)            :: alpha_g(:,:,:)
         integer, intent(in)             :: n_elec
         integer, intent(in)             :: step
 
@@ -62,16 +65,24 @@ contains
         real(dp) :: rnd1, rnd2, rnd3
         integer  :: n_steps
         logical  :: owned
-        real(dp), allocatable :: alpha_g(:,:,:)
+        integer  :: idx, ierr
+        real(dp), allocatable :: dep_g(:,:,:)
         integer, parameter :: MAX_TRACE_STEPS = 50000
 
         if (cfg%n_beams <= 0) return   ! MC apagado (n_beams = 0 en config)
 
         call reseed_rng(step)
 
-        ! Globally-replicated alpha_s: every rank sees the same scrap surface
-        allocate(alpha_g(m%nr_g, m%nth_g, m%nz_g))
-        call gather_global_field(sol%alpha_s, alpha_g, m)
+        ! C4.2: los beams se REPARTEN entre ranks (round-robin sobre el
+        ! índice global de beam). Todos los ranks consumen la secuencia RNG
+        ! completa (determinismo: las direcciones no dependen de nprocs);
+        ! cada rank traza solo su subconjunto y el depósito se acumula en
+        ! un array global reducido con MPI_SUM. La suma por celda puede
+        ! reordenarse entre descomposiciones => invariante a ~1e-15, no
+        ! bitwise (tolerado por compare_decomposition).
+        allocate(dep_g(m%nr_g, m%nth_g, m%nz_g))
+        dep_g = 0.0_dp
+        idx = 0
 
         ! Step size from the GLOBAL minimum radial width (identical on all ranks)
         step_size = minval(m%rf_global(1:m%nr_g) - m%rf_global(0:m%nr_g-1)) * 0.5_dp
@@ -94,6 +105,9 @@ contains
                 call random_number(rnd1)
                 call random_number(rnd2)
                 call random_number(rnd3)
+
+                idx = idx + 1
+                if (mod(idx - 1, m%topo%nprocs) /= m%topo%rank) cycle
 
                 phi_rand = TWO_PI * rnd1
                 cos_theta = 2.0_dp * rnd2 - 1.0_dp
@@ -131,21 +145,33 @@ contains
                     ! Check if beam hits solid or liquid
                     if (alpha_g(ig, jg, kg) > 0.1_dp .or. &
                         z_pos < cfg%H_bowl + 0.5_dp) then
-                        ! Deposit energy — only the owner of the cell writes
-                        call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
-                        if (owned) then
-                            sh%S_arc(il, jl, kl) = sh%S_arc(il, jl, kl) + &
-                                P_rad_per_beam / (m%vol_global(ig, jg, kg) + SMALL)
-                            ! Auditoría: energía inyectada por el MC este paso
-                            call audit_add(AUD_MC_DEPOSIT, P_rad_per_beam * cfg%dt)
-                        end if
+                        ! Acumular POTENCIA en la celda global; el depósito
+                        ! real ocurre tras la reducción
+                        dep_g(ig, jg, kg) = dep_g(ig, jg, kg) + P_rad_per_beam
                         exit trace
                     end if
                 end do trace
             end do
         end do
 
-        deallocate(alpha_g)
+        call MPI_Allreduce(MPI_IN_PLACE, dep_g, size(dep_g), &
+                           MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+        ! Depósito: solo el dueño de cada celda escribe (y audita)
+        do kg = 1, m%nz_g
+            do jg = 1, m%nth_g
+                do ig = 1, m%nr_g
+                    if (dep_g(ig, jg, kg) <= 0.0_dp) cycle
+                    call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
+                    if (.not. owned) cycle
+                    sh%S_arc(il, jl, kl) = sh%S_arc(il, jl, kl) + &
+                        dep_g(ig, jg, kg) / (m%vol_global(ig, jg, kg) + SMALL)
+                    call audit_add(AUD_MC_DEPOSIT, dep_g(ig, jg, kg) * cfg%dt)
+                end do
+            end do
+        end do
+
+        deallocate(dep_g)
 
     end subroutine distribute_arc_radiation_mc
 

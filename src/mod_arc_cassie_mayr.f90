@@ -106,19 +106,20 @@ contains
     !   P_elec (frac_elec) : electron-flow heating of liquid bath; deposited
     !                        below the tip AFTER bore_in_done.
     !
-    ! Decomposition-invariant implementation: every rank replicates alpha_s
-    ! globally (exact disjoint-owner gather) and computes the arc column and
+    ! Decomposition-invariant implementation: every rank receives alpha_s
+    ! replicado globalmente (gather único por paso en main, compartido con el
+    ! MC — C4.2) and computes the arc column and
     ! the weight sums by looping over the GLOBAL mesh in the same order as a
     ! serial run, so the totals are bit-identical regardless of the MPI
     ! decomposition.  Deposits are then applied only to locally-owned cells.
     !---------------------------------------------------------------------------
-    subroutine distribute_arc_heat(elec, sh, sol, m, cfg, alpha_s, n_elec)
+    subroutine distribute_arc_heat(elec, sh, sol, m, cfg, alpha_g, n_elec)
         type(electrode_t), intent(in)   :: elec(:)
         type(shared_t), intent(inout)   :: sh
         type(solid_t), intent(inout)    :: sol
         type(mesh_t), intent(in)        :: m
         type(config_t), intent(in)      :: cfg
-        real(dp), intent(in)            :: alpha_s(-1:,-1:,-1:)
+        real(dp), intent(in)            :: alpha_g(:,:,:)
         integer, intent(in)             :: n_elec
 
         integer  :: e, ig, jg, kg, il, jl, kl, kg_tip, kg_scrap
@@ -127,15 +128,11 @@ contains
         real(dp) :: r2, sigma_r, gw
         real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol
         real(dp) :: Q_rad, Q_rad_lim
-        real(dp), allocatable :: alpha_g(:,:,:)
         logical  :: found_scrap, owned
         ! Maximum ΔT_solid per timestep from direct arc radiation [K].
         ! Prevents T_s → NaN/Inf in cells with small m_s (explicit E_s update
         ! has no implicit solver to absorb large source terms).
         real(dp), parameter :: DT_RAD_MAX = 2.0_dp
-
-        allocate(alpha_g(m%nr_g, m%nth_g, m%nz_g))
-        call gather_global_field(alpha_s, alpha_g, m)
 
         sh%S_arc     = 0.0_dp
         sh%S_arc_mom = 0.0_dp
@@ -365,7 +362,6 @@ contains
 
         end do
 
-        deallocate(alpha_g)
 
     end subroutine distribute_arc_heat
 
