@@ -9,6 +9,8 @@ output*/
 plots*/
 *.png
 *.mp4
+# ...excepto las figuras del README (versionadas)
+!docs/img/*.png
 
 # Build artifacts
 obj/
