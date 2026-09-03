@@ -39,3 +39,6 @@ tests/bin/
 .idea/
 .vscode/
 *.swp
+
+# Manuscrito (no se publica en el repo)
+paper/
