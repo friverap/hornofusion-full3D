@@ -129,7 +129,6 @@ hornofusion-full3D/
 ├── scripts/        run_campaign.py (campañas), hdf5_to_vtk.py, analyze_*.py
 ├── campaigns/      Definiciones JSON + audit/config de campañas (C2/C3/C4/S4/S5)
 ├── postprocess/    plot_insights.py, render_3d_video.py, plot_geometry_3d.py
-├── paper/          Manuscrito (MNRAS) con el working plan del proyecto
 └── docs/           ARCHITECTURE / PHYSICS / CONFIGURATION / OUTPUT / RUNNING
 ```
 
