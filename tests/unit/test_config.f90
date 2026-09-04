@@ -34,6 +34,7 @@ program test_config
     write(iu, '(A)') 'ecs_theta_width = 0.7854'
     write(iu, '(A)') 'ecs_mode = coupled'
     write(iu, '(A)') 'ecs_profile_file = input/ecs.dat'
+    write(iu, '(A)') 'd_particle = 0.025'
     close(iu)
 
     call config_set_defaults(cfg)
@@ -48,6 +49,7 @@ program test_config
     if (trim(cfg%output_dir) /= 'tests/out/xyz') call fail('output_dir', ok)
     if (.not. cfg%solve_ecs)                call fail('solve_ecs', ok)
     if (abs(cfg%ecs_rate - 55.5_dp) > 1e-12_dp) call fail('ecs_rate', ok)
+    if (abs(cfg%d_particle - 0.025_dp) > 1e-12_dp) call fail('d_particle', ok)
     if (abs(cfg%ecs_theta_width - 0.7854_dp) > 1e-12_dp) &
                                             call fail('ecs_theta_width', ok)
     if (trim(cfg%ecs_mode) /= 'coupled')    call fail('ecs_mode', ok)

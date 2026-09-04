@@ -241,6 +241,7 @@ contains
         case ('h_fusion');   call parse_real(val, key, cfg%h_fusion)
         case ('k_s');        call parse_real(val, key, cfg%k_s)
         case ('k_l');        call parse_real(val, key, cfg%k_l)
+        case ('d_particle'); call parse_real(val, key, cfg%d_particle)
         case ('emissivity'); call parse_real(val, key, cfg%emissivity)
         case ('T_initial');  call parse_real(val, key, cfg%T_initial)
         case ('T_ambient');  call parse_real(val, key, cfg%T_ambient)
