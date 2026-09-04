@@ -228,6 +228,8 @@ contains
         case ('alpha_u');    call parse_real(val, key, cfg%alpha_u)
         case ('alpha_p');    call parse_real(val, key, cfg%alpha_p)
         case ('alpha_T');    call parse_real(val, key, cfg%alpha_T)
+        case ('alpha_k');    call parse_real(val, key, cfg%alpha_k)
+        case ('alpha_eps');  call parse_real(val, key, cfg%alpha_eps)
         ! Convergence
         case ('tol_cont');   call parse_real(val, key, cfg%tol_cont)
         case ('tol_mom');    call parse_real(val, key, cfg%tol_mom)
