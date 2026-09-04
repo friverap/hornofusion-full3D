@@ -91,7 +91,23 @@ def main():
                    r["E_arc_direct_sol"] + r.get("E_slag_intercept", 0.0) +
                    r.get("E_mc_lost", 0.0)
                    for r in steps)
-    E_arc_avail = sum(r["P_arc"] * r["dt"] for r in steps)
+    # Integración por Δt ENTRE filas: con audit_freq>1 el dt de la fila
+    # solo cubre el último paso y subcuenta la energía disponible ~freq×
+    # (los acumuladores del numerador sí se vuelcan completos por escritura)
+    E_arc_avail = steps[0]["P_arc"] * steps[0]["dt"] + sum(
+        steps[i]["P_arc"] * (steps[i]["time"] - steps[i - 1]["time"])
+        for i in range(1, len(steps)))
+    # LIMITACIÓN CONOCIDA (pendiente 2026-09): las identidades de este
+    # checker están calibradas para audit_freq=1 (los gates del harness).
+    # Con freq>1 la cuadratura de P_arc introduce ~4% sistemático y el
+    # balance de energía mezcla columnas de distinta semántica de volcado
+    # — los resultados son INFORMATIVOS, no gate.
+    freq_gt1 = len(steps) > 1 and \
+        (steps[1]["time"] - steps[0]["time"]) > 1.5 * steps[1]["dt"]
+    if freq_gt1:
+        print("  [WARN] audit_freq>1 detectado: energy_balance y "
+              "arc_budget son INFORMATIVOS (identidades calibradas "
+              "a freq=1)")
     if E_arc_avail > 1.0:
         ratio = E_arc_in / E_arc_avail
         disc = sum(r["E_arc_discarded"] for r in steps)
