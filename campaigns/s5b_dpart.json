@@ -1,0 +1,25 @@
+{
+  "template": "input/config_300s_borein.dat",
+  "outdir":   "campaigns/s5b",
+  "nprocs":   16,
+  "runs": [
+    {
+      "name": "dpart_low",
+      "overrides": {
+        "t_final": 120.0,
+        "audit_freq": 5,
+        "output_freq": 5000,
+        "d_particle": 0.025
+      }
+    },
+    {
+      "name": "dpart_high",
+      "overrides": {
+        "t_final": 120.0,
+        "audit_freq": 5,
+        "output_freq": 5000,
+        "d_particle": 0.075
+      }
+    }
+  ]
+}
