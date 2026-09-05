@@ -1,0 +1,95 @@
+# config_300s_borein.dat — Bore-in calibration run (300 simulated seconds)
+# Electrodes descend from z=4.4m at 0.01 m/s → bore_in_done at t≈200 s (step 40)
+# Steps 40-60: post bore-in arc regulation + scrap heating begins
+# Mesh: 18×36×24  |  dt=5 s  |  t_final=300 s  |  60 steps
+# Run: mpirun -n 8 ./bin/eaf3d_mpi input/config_300s_borein.dat
+
+# ============================================================
+# MESH
+# ============================================================
+nr = 18
+ntheta = 36
+nz = 24
+stretch_r = 1.5
+stretch_z = 1.5
+
+# ============================================================
+# EAF GEOMETRY (130-ton AC EAF)
+# ============================================================
+R_shell = 3.80
+H_total = 4.50
+H_bowl = 0.60
+R_bowl = 2.50
+R_pcd = 0.85
+R_elec = 0.30
+
+# ============================================================
+# TIME INTEGRATION
+# dt=5 s → 60 steps = 300 s total
+# Bore-in completes at step ~40 (t≈200 s, electrode descends 2 m at 0.01 m/s)
+# ============================================================
+dt = 5.0
+t_final = 300.0
+
+# ============================================================
+# SIMPLE ALGORITHM
+# ============================================================
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 20
+
+alpha_u = 0.3
+alpha_p = 0.7
+alpha_T = 0.7
+alpha_k = 0.5
+alpha_eps = 0.5
+
+# ============================================================
+# MATERIAL PROPERTIES (Ugarte et al. 2024, Tabla 2)
+# ============================================================
+rho_steel = 7500.0
+T_solidus = 1600.0
+T_liquidus = 1809.0
+cp_s = 400.0
+cp_l = 696.4
+h_fusion = 247000.0
+k_s = 35.0
+k_l = 30.0
+T_initial = 300.0
+T_ambient = 300.0
+
+# ============================================================
+# FÍSICA — todos los módulos activos
+# ============================================================
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = true
+solve_radiation = true
+solve_chemistry = true
+solve_arc = true
+solve_multiphase = true
+
+# ============================================================
+# OUTPUT — cada 5 pasos (cada 25 s de tiempo simulado)
+# ============================================================
+output_freq = 5
+monitor_freq = 1
+output_dir = output
+
+# ============================================================
+# ARC HEAT FRACTIONS (Ugarte et al. 2024, Table 3)
+# f_rad=0.50 : radiative fraction to scrap/walls
+# f_conv=0.30 : convective fraction to gas
+# f_elec=0.20 : resistive fraction to electrode tips
+# ============================================================
+frac_rad  = 0.50
+frac_conv = 0.30
+frac_elec = 0.20
+
+# --- overrides de la campana ---
+output_dir = /Users/frariv/Horno/hornofusion-full3D/campaigns/s5b/dpart_050
+t_final = 120.0
+audit_freq = 5
+output_freq = 5000
+d_particle = 0.05

@@ -35,9 +35,11 @@ Q_COLS = ["E_arc_direct_sol", "E_mc_deposit", "E_rad_sol", "E_chem_sol"]
 
 
 # corridas cuyo régimen las saca de la comparación directa (ver §6):
-# dpart_low lleva el intercambio interfase explícito a su clamp
-# (equilibrio térmico local completo por paso)
-CLAMPED = {"dpart_low"}
+# en AMBOS extremos de d_p el intercambio interfase explícito llega a su
+# clamp (equilibrio térmico local completo por paso): a d_p chico por
+# área (hA ~ d_p^-1.75), a d_p grande por velocidad (menos drag Ergun
+# => v mayor => h ~ v^0.9). La ventana resuelta es d_p ~ 0.05-0.10.
+CLAMPED = {"dpart_low", "dpart_150"}
 T_FINAL = 120.0
 
 
