@@ -92,7 +92,7 @@ def main():
     spec = json.load(open(args.campaign))
     template = os.path.join(REPO, spec["template"])
     outdir = os.path.join(REPO, spec["outdir"])
-    nprocs = spec.get("nprocs", 8)
+    nprocs_default = spec.get("nprocs", 8)
     binary = os.path.join(REPO, spec.get("binary", "bin/eaf3d_mpi"))
     os.makedirs(outdir, exist_ok=True)
 
@@ -114,6 +114,7 @@ def main():
         if args.dry_run:
             continue
 
+        nprocs = run.get("nprocs", nprocs_default)
         t0 = time.time()
         log = os.path.join(rundir, "run.log")
         with open(log, "w") as lf:
