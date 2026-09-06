@@ -57,6 +57,8 @@ def main():
     # consistente cuando la masa advecta). Fallback al inventario log si
     # la columna no existe (audits viejos).
     if "E_gas_abs" in last:
+        # E_gas_abs es diferencia de estado por paso (T - T_old): ya
+        # incluye el retiro de la interfase (poke a gas%T dentro del paso)
         dE_gas = sum(r["E_gas_abs"] for r in steps)
     else:
         dE_gas = last["E_gas"] - first["E_gas"]

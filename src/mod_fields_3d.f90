@@ -494,7 +494,10 @@ contains
         integer, intent(in)           :: bucket
 
         integer :: i, j, k, k_global, n
-        real(dp) :: vfrac, mass_layer, vol_needed, vol_acc
+        real(dp) :: vfrac
+        real(dp) :: mass_rem, mass_take, mass_level, vfrac_eff
+        real(dp) :: bulk_avail, take_bulk, best_mass
+        integer  :: best_layer
         real(dp) :: z_top, z_top_global
         real(dp) :: local_vol_add, global_vol_add
         integer :: layer_start, layer_end
@@ -547,73 +550,125 @@ contains
         ! Let's assume we can start from k_global=1
         k_global = 1
         
-        ! Fill layers bottom-up globally
-        do n = layer_start, layer_end
+        ! Llenado POR NIVELES a masa exacta (fix 2026-09, 2a iteración):
+        ! - v1 (niveles enteros a vfrac fijo, chequeo posterior): sobretiro
+        !   de hasta un nivel por capa => carga ~3-7x la receta, dependiente
+        !   de dz (la CI no convergía con la malla — lo destapó C1).
+        ! - v2 (una capa = un nivel parcial): masa exacta pero lecho diluido
+        !   (alpha ~ m_capa/(rho*V_nivel) ~ 0.05 llenando todo el horno) —
+        !   no físico y por debajo del umbral del buscador de superficie
+        !   del arco.
+        ! - v3 (esta): cada NIVEL se llena a la densidad bulk de la receta
+        !   tomando masa de capas consecutivas (en malla gruesa varias
+        !   capas comparten nivel; en fina una capa abarca varios niveles);
+        !   solo el nivel del tope queda parcial. sum(m_s) == sum(receta)
+        !   en toda malla y la altura del lecho converge con dz.
+        ! V_nivel se reduce globalmente ANTES de colocar y el resto son
+        ! escalares deterministas => invariante a la descomposición.
+        n = layer_start
+        mass_rem = 0.0_dp
+        vfrac = 0.5_dp
+        if (n <= layer_end) then
+            mass_rem = cfg%layer_mass(n)
             vfrac = cfg%layer_vfrac(n)
-            mass_layer = cfg%layer_mass(n)
-            if (mass_layer <= 0.0_dp) cycle
+        end if
 
-            vol_needed = mass_layer / (cfg%rho_steel * vfrac)
-            vol_acc = 0.0_dp
-
-            ! Loop over global k
-            do while (vol_acc < vol_needed .and. k_global <= nz_global)
-                ! Skip if this global k is below z_top
-                ! We need a safe way to check this. If we just let it run, 
-                ! cells with m%zf < z_top shouldn't be filled.
-                
-                local_vol_add = 0.0_dp
-                
-                ! Check if global k is in our local domain
-                ! Note: m%nz is global nz in serial, but in parallel it might be local
-                ! Let's use the topo%kglobal_start to map k_global to local k
-                k = -1
-                if (m%is_parallel) then
-                    if (k_global >= m%topo%kglobal_start .and. &
-                        k_global < m%topo%kglobal_start + m%topo%kloc) then
-                        k = k_global - m%topo%kglobal_start + 1
-                    end if
-                else
-                    k = k_global
+        do while (k_global <= nz_global)
+            ! ¿queda receta por cargar?
+            do while (n <= layer_end .and. mass_rem <= 0.0_dp)
+                n = n + 1
+                if (n <= layer_end) then
+                    mass_rem = cfg%layer_mass(n)
+                    vfrac = cfg%layer_vfrac(n)
                 end if
-                
+            end do
+            if (n > layer_end) exit
+
+            ! Map global k -> local k (si es nuestro)
+            k = -1
+            if (m%is_parallel) then
+                if (k_global >= m%topo%kglobal_start .and. &
+                    k_global < m%topo%kglobal_start + m%topo%kloc) then
+                    k = k_global - m%topo%kglobal_start + 1
+                end if
+            else
+                k = k_global
+            end if
+
+            ! Volumen GLOBAL del nivel (celdas activas sobre z_top)
+            local_vol_add = 0.0_dp
+            if (k >= kstart .and. k <= kend) then
+                if (m%zf(k) > z_top) then
+                    local_vol_add = sum(m%vol(istart:iend,jstart:jend,k), &
+                                       mask=(m%cell_type(istart:iend,jstart:jend,k)==1))
+                end if
+            end if
+            if (m%is_parallel) then
+                call mpi_allreduce_sum(local_vol_add, global_vol_add, m%topo)
+            else
+                global_vol_add = local_vol_add
+            end if
+            if (global_vol_add <= 0.0_dp) then
+                k_global = k_global + 1
+                cycle
+            end if
+
+            ! Consumir capas hacia el nivel hasta llenarlo (volumen bulk)
+            bulk_avail = global_vol_add
+            mass_level = 0.0_dp
+            best_mass  = -1.0_dp
+            best_layer = n
+            do while (bulk_avail > 1.0e-12_dp * global_vol_add)
+                if (mass_rem <= 0.0_dp) then
+                    n = n + 1
+                    if (n > layer_end) exit
+                    mass_rem = cfg%layer_mass(n)
+                    vfrac = cfg%layer_vfrac(n)
+                    cycle
+                end if
+                take_bulk = min(mass_rem / (cfg%rho_steel * vfrac), bulk_avail)
+                mass_take = take_bulk * cfg%rho_steel * vfrac
+                mass_level = mass_level + mass_take
+                bulk_avail = bulk_avail - take_bulk
+                mass_rem   = mass_rem - mass_take
+                if (mass_take > best_mass) then
+                    best_mass  = mass_take
+                    best_layer = n
+                end if
+            end do
+
+            ! Colocar el nivel a su fracción efectiva (== vfrac de la receta
+            ! salvo el nivel parcial del tope)
+            if (mass_level > 0.0_dp) then
+                vfrac_eff = mass_level / (cfg%rho_steel * global_vol_add)
                 if (k >= kstart .and. k <= kend) then
                     if (m%zf(k) > z_top) then
                         do j = jstart, jend
                             do i = istart, iend
                                 if (m%cell_type(i,j,k) == 1) then
-                                    sol%alpha_s(i,j,k) = vfrac
-                                    sol%m_s(i,j,k) = cfg%rho_steel * vfrac * m%vol(i,j,k)
+                                    sol%alpha_s(i,j,k) = vfrac_eff
+                                    sol%m_s(i,j,k) = cfg%rho_steel * vfrac_eff * m%vol(i,j,k)
                                     sol%T_s(i,j,k) = cfg%T_initial
                                     ! Entalpía consistente con la función única
-                                    ! (incluye latente si T_initial > T_solidus)
                                     sol%E_s(i,j,k) = sol%m_s(i,j,k) * &
                                         solid_enthalpy(cfg%T_initial, cfg)
                                     sol%m_C(i,j,k) = cfg%carbon_frac * sol%m_s(i,j,k)
-                                    sol%layer_id(i,j,k) = n
-                                    gas%alpha(i,j,k) = 1.0_dp - vfrac
+                                    sol%layer_id(i,j,k) = best_layer
+                                    gas%alpha(i,j,k) = 1.0_dp - vfrac_eff
                                 end if
                             end do
                         end do
-                        
-                        ! Accumulate volume (local contribution)
-                        local_vol_add = sum(m%vol(istart:iend,jstart:jend,k), &
-                                           mask=(m%cell_type(istart:iend,jstart:jend,k)==1))
                     end if
                 end if
-                
-                ! In parallel, need global sum
-                if (m%is_parallel) then
-                    call mpi_allreduce_sum(local_vol_add, global_vol_add, m%topo)
-                    local_vol_add = global_vol_add
-                end if
-                vol_acc = vol_acc + local_vol_add
-                
-                k_global = k_global + 1
-            end do
-            ! No z_top bookkeeping needed between layers: k_global is not
-            ! reset, so the next layer continues filling above this one
+            end if
+            k_global = k_global + 1
         end do
+
+        if (mass_rem > 0.0_dp .and. &
+            (.not. m%is_parallel .or. m%topo%rank == 0)) then
+            print '(A,ES10.3,A)', ' [CHARGE] WARNING: receta sin espacio: ', &
+                  mass_rem, ' kg no cargados (techo alcanzado)'
+        end if
 
         if (.not. m%is_parallel .or. m%topo%rank == 0) then
             print '(A,I1,A,I3,A,I3)', ' [CHARGE] Bucket ', bucket, &

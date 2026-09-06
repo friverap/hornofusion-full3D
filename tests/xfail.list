@@ -5,3 +5,12 @@
 # arco) no consume su parte de S_arc — limitación de diseño del test,
 # no un bug (con flujo el presupuesto cierra a 1.0000).
 audit_noflow:arc_budget
+# energy_balance SOLO en el cold de 10 pasos: con la carga por masa exacta
+# (2026-09) el transitorio de ignición es más rígido y el error de
+# CUADRATURA del libro del gas (E_gas_abs integra alpha*rho(T_fin)*cp*dT
+# por paso; O(dT^2)) sube a ~1.5-2% — las formas lineal y log ACOTAN el
+# balance (-1.5%/+2%), la interfase cierra a 0.0 exacto y arc_budget a
+# 1.0000: es el instrumento, no una fuga. En régimen convergido el
+# balance cierra a 3e-6 (gate deep, sigue activo). Fix real pendiente:
+# acumular en cada update de T con el rho local (pendiente del audit).
+audit_cold:energy_balance

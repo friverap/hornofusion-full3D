@@ -91,6 +91,12 @@ DEFS = {
                         "slag [J]"),
     "E_rad_foam": ("C", "DO radiation absorbed by the foam/slag layer "
                         "[J]"),
+    "E_iph_sol": ("C", "Interphase heat gained by the solid over the "
+                       "interval, as applied to $E_s$ [J]"),
+    "E_iph_gas": ("C", "Interphase heat removed from the gas (with the "
+                       "regularised denominator of the $T$ update) [J]"),
+    "E_iph_liq": ("C", "Interphase heat removed from the liquid (idem) "
+                       "[J]"),
 }
 
 src = open(SRC).read()

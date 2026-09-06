@@ -37,6 +37,7 @@ module mod_audit
     public :: AUD_ECS_MASS, AUD_ECS_ENERGY, AUD_FLUX_MASS, AUD_FLUX_E
     public :: AUD_FE_YIELD, AUD_FE_RETURN, AUD_SLAG_OX_E, AUD_SLAG_RED_E
     public :: AUD_RAD_FOAM
+    public :: AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -60,7 +61,10 @@ module mod_audit
     integer, parameter :: AUD_SLAG_OX_E       = 19 ! J exo de Fe+1/2O2->FeO
     integer, parameter :: AUD_SLAG_RED_E      = 20 ! J endo de FeO+C->Fe+CO
     integer, parameter :: AUD_RAD_FOAM        = 21 ! J radiativos a la espuma/escoria
-    integer, parameter :: N_AUD = 21
+    integer, parameter :: AUD_IPH_SOL         = 22 ! J interfase GANADOS por el sólido
+    integer, parameter :: AUD_IPH_GAS         = 23 ! J interfase RETIRADOS del gas (tal como se aplicó)
+    integer, parameter :: AUD_IPH_LIQ         = 24 ! J interfase RETIRADOS del líquido (idem)
+    integer, parameter :: N_AUD = 24
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -132,7 +136,8 @@ contains
                 'E_slag_intercept,E_rad_sol,E_rad_wall,E_conv_defect,' // &
                 'E_wall_conv,E_chem_sol,E_mc_lost,E_out_conv,E_gas_abs,' // &
                 'E_mass_liq,m_ecs_in,E_ecs_in,m_flux_in,E_flux_in,' // &
-                'm_fe_yield,m_fe_return,E_slag_ox,E_slag_red,E_rad_foam'
+                'm_fe_yield,m_fe_return,E_slag_ox,E_slag_red,E_rad_foam,' // &
+                'E_iph_sol,E_iph_gas,E_iph_liq'
             close(iu)
         end if
         acc = 0.0_dp
@@ -238,7 +243,7 @@ contains
         if (is_writer(m)) then
             open(newunit=iu, file=trim(audit_path), status='old', &
                  action='write', position='append')
-            write(iu, '(I0,A,ES16.9,A,ES16.9,41(A,ES16.9))') &
+            write(iu, '(I0,A,ES16.9,A,ES16.9,44(A,ES16.9))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &
@@ -257,7 +262,8 @@ contains
                 ',', a(AUD_FLUX_MASS), ',', a(AUD_FLUX_E), &
                 ',', a(AUD_FE_YIELD), ',', a(AUD_FE_RETURN), &
                 ',', a(AUD_SLAG_OX_E), ',', a(AUD_SLAG_RED_E), &
-                ',', a(AUD_RAD_FOAM)
+                ',', a(AUD_RAD_FOAM), &
+                ',', a(AUD_IPH_SOL), ',', a(AUD_IPH_GAS), ',', a(AUD_IPH_LIQ)
             close(iu)
         end if
     end subroutine audit_write_step
@@ -308,7 +314,16 @@ contains
                         ! Calor absorbido por el gas en el PASO completo
                         ! (medida alpha*rho(T)*cp*dT, consistente con la
                         ! ecuación en forma T; incluye la remoción explícita
-                        ! de la interfase, que ocurre tras el solve)
+                        ! de la interfase, que ocurre tras el solve).
+                        ! LIMITACIÓN MEDIDA (2026-09): es una cuadratura de
+                        ! integral de camino por paso; con dT/paso grande
+                        ! (ignición sobre lecho denso) su error es O(dT^2):
+                        ! la forma lineal con rho(T_fin) da -1.5% y la forma
+                        ! log rho*T*ln(T/T_old) +2% en el cold de 10 pasos —
+                        ! ACOTAN el balance. En régimen convergido el error
+                        ! cae al residuo iterativo (3e-6, gate deep). La
+                        ! medida exacta exige acumular en cada update de T
+                        ! con el rho local (pendiente del audit).
                         srcacc(18) = srcacc(18) + gas%alpha(i,j,k) * &
                             gas%rho(i,j,k) * gas%cp(i,j,k) * &
                             (gas%T(i,j,k) - gas_T_old(i,j,k)) * vol

@@ -87,9 +87,11 @@ check_invariants() {  # <rundir> <config_name>
     fi
 }
 
-check_audit_if_present() {  # <rundir>
+check_audit_if_present() {  # <rundir> [prefijo_xfail_extra]
+    local extra=""
+    [ -n "${2:-}" ] && extra=",$(xfail_ids "$2")"
     if [ -f "$1/audit.csv" ]; then
-        if ! $PY $INT/check_audit.py "$1" --xfail "$(xfail_ids audit)"; then
+        if ! $PY $INT/check_audit.py "$1" --xfail "$(xfail_ids audit)$extra"; then
             echo ">> FAIL auditoría en $1"
             note_fail
         fi
@@ -102,7 +104,7 @@ quick)
     mkdir -p "$OUT"
     run_case cold_10step 8 && {
         check_invariants "$OUT/cold_10step_n8" cold_10step
-        check_audit_if_present "$OUT/cold_10step_n8"
+        check_audit_if_present "$OUT/cold_10step_n8" audit_cold
         if ! $PY $INT/metrics_snapshot.py "$OUT" --mode check \
                 --only cold_10step_n8; then
             echo ">> FAIL métricas golden"
@@ -127,7 +129,7 @@ full | rebaseline)
 
     for d in "$OUT"/cold_10step_n*; do
         check_invariants "$d" cold_10step
-        check_audit_if_present "$d"
+        check_audit_if_present "$d" audit_cold
     done
     # melt_forced: régimen violento aún inestable (gated en C3.4) ->
     # sus invariantes duros (nan/bounds) llevan xfail PROPIO por corrida

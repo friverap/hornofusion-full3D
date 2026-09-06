@@ -11,6 +11,7 @@
 !===============================================================================
 module mod_interphase_ht
     use mod_constants
+    use mod_audit, only: audit_add, AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
     use mod_types_3d
     use mod_melting_3d, only: solid_T_from_enthalpy
     implicit none
@@ -31,7 +32,7 @@ contains
         real(dp) :: T_g, T_l, T_s, alpha_s, d_s
         real(dp) :: vmag_g, Re_gs, Pr_g, h_gs, h_ls
         real(dp) :: Q_gs, Q_ls, Q_total
-        real(dp) :: A_sv, eps_s, Q_lim, Q_lim_sol
+        real(dp) :: A_sv, eps_s, Q_lim, Q_lim_sol, cap_g, cap_l
 
         d_s = cfg%d_particle
 
@@ -95,6 +96,10 @@ contains
 
                     ! Apply heat to solid energy balance
                     sol%E_s(i,j,k) = sol%E_s(i,j,k) + Q_total * cfg%dt
+                    ! Auditoría del intercambio interfase (el hook del gas
+                    ! no ve este retiro: se contabiliza aquí tal como se
+                    ! aplica, con el mismo denominador +SMALL)
+                    call audit_add(AUD_IPH_SOL, Q_total * cfg%dt)
 
                     ! Update solid temperature (función de entalpía ÚNICA, C1.8:
                     ! antes E/(m*cp_s) chocaba con el cp_eff de la fusión)
@@ -105,12 +110,19 @@ contains
 
                     ! Corresponding heat removal from fluid phases
                     if (gas%alpha(i,j,k) > 1.0e-6_dp .and. abs(Q_gs) > SMALL) then
-                        gas%T(i,j,k) = gas%T(i,j,k) - Q_gs * cfg%dt / &
-                            (gas%alpha(i,j,k) * gas%rho(i,j,k) * gas%cp(i,j,k) * m%vol(i,j,k) + SMALL)
+                        cap_g = gas%alpha(i,j,k) * gas%rho(i,j,k) * &
+                                gas%cp(i,j,k) * m%vol(i,j,k)
+                        gas%T(i,j,k) = gas%T(i,j,k) - Q_gs * cfg%dt / (cap_g + SMALL)
+                        ! energía realmente retirada del estado del gas
+                        call audit_add(AUD_IPH_GAS, &
+                            Q_gs * cfg%dt * cap_g / (cap_g + SMALL))
                     end if
                     if (liq%alpha(i,j,k) > 1.0e-6_dp .and. abs(Q_ls) > SMALL) then
-                        liq%T(i,j,k) = liq%T(i,j,k) - Q_ls * cfg%dt / &
-                            (liq%alpha(i,j,k) * liq%rho(i,j,k) * liq%cp(i,j,k) * m%vol(i,j,k) + SMALL)
+                        cap_l = liq%alpha(i,j,k) * liq%rho(i,j,k) * &
+                                liq%cp(i,j,k) * m%vol(i,j,k)
+                        liq%T(i,j,k) = liq%T(i,j,k) - Q_ls * cfg%dt / (cap_l + SMALL)
+                        call audit_add(AUD_IPH_LIQ, &
+                            Q_ls * cfg%dt * cap_l / (cap_l + SMALL))
                     end if
                 end do
             end do
