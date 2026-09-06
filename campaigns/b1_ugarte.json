@@ -1,0 +1,20 @@
+{
+  "template": "input/config_300s_borein.dat",
+  "outdir":   "campaigns/b1",
+  "nprocs":   12,
+  "runs": [
+    {
+      "name": "b1_full_heat",
+      "overrides": {
+        "nr": 30, "ntheta": 60, "nz": 42,
+        "t_final": 5040.0,
+        "adaptive_dt": true,
+        "dt": 0.01, "dt_min": 0.001, "dt_max": 1.0,
+        "solve_slag": true,
+        "solve_species": true,
+        "audit_freq": 5,
+        "output_freq": 2500
+      }
+    }
+  ]
+}
