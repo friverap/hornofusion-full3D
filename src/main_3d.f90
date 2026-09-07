@@ -439,7 +439,8 @@ program eaf_3d_simulator
 
         ! Adaptive time stepping (criterio CFL + convergencia real; C3.2)
         call adapt_timestep(cfg%dt, conv, &
-                            compute_cfl_rate(liq, gas, mesh), cfg)
+                            compute_cfl_rate(liq, gas, mesh), &
+                            interphase_tau_global(mesh), cfg)
 
         !---------------------------------------------------------------
         ! OUTPUT (HDF5 parallel)

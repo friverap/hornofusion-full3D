@@ -15,7 +15,7 @@ module mod_mpi_topology
     public :: mpi_topology_t
     public :: mpi_init_topology, mpi_finalize_topology
     public :: mpi_exchange_halos_3d, mpi_exchange_halos_3d_int
-    public :: mpi_allreduce_sum, mpi_allreduce_max
+    public :: mpi_allreduce_sum, mpi_allreduce_max, mpi_allreduce_min
     public :: check_mpi
 
     ! Communication statistics accumulated at module level (topo is intent(in)
@@ -612,6 +612,20 @@ contains
         call MPI_Allreduce(local_val, global_val, 1, MPI_DOUBLE_PRECISION, &
                           MPI_MAX, topo%comm_cart, ierr)
     end subroutine mpi_allreduce_max
+
+    !---------------------------------------------------------------------------
+    ! Global min reduction
+    !---------------------------------------------------------------------------
+    subroutine mpi_allreduce_min(local_val, global_val, topo)
+        real(dp), intent(in) :: local_val
+        real(dp), intent(out) :: global_val
+        type(mpi_topology_t), intent(in) :: topo
+
+        integer :: ierr
+
+        call MPI_Allreduce(local_val, global_val, 1, MPI_DOUBLE_PRECISION, &
+                          MPI_MIN, topo%comm_cart, ierr)
+    end subroutine mpi_allreduce_min
     
     !---------------------------------------------------------------------------
     ! Finalize MPI

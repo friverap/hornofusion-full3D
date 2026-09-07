@@ -12,9 +12,17 @@
 module mod_interphase_ht
     use mod_constants
     use mod_audit, only: audit_add, AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
+    use mod_mpi_topology, only: mpi_allreduce_min
     use mod_types_3d
     use mod_melting_3d, only: solid_T_from_enthalpy
     implicit none
+
+    ! Escala temporal mínima del acople interfase del último paso
+    ! (tau = alpha_g*rho*cp / (h*A_sv)): por debajo de ~tau el intercambio
+    ! explícito satura su clamp y fuerza equilibrio térmico local (régimen
+    ! medido en S5-dpart y en B1 con dt=10 ms) — el dt adaptativo debe
+    ! respetarla (adapt_timestep).
+    real(dp), save :: tau_iph_local = 1.0e30_dp
 
     real(dp), parameter :: T_TRANSITION = 1373.0_dp  ! K
     real(dp), parameter :: A_RADIATION  = 3.6_dp     ! empirical constant
@@ -35,6 +43,7 @@ contains
         real(dp) :: A_sv, eps_s, Q_lim, Q_lim_sol, cap_g, cap_l
 
         d_s = cfg%d_particle
+        tau_iph_local = 1.0e30_dp
 
         do k = 1, m%nz
             do j = 1, m%ntheta
@@ -67,6 +76,9 @@ contains
                                    T_g**0.3_dp / (d_s**0.75_dp + SMALL)
                         end if
 
+                        tau_iph_local = min(tau_iph_local, &
+                            gas%alpha(i,j,k) * gas%rho(i,j,k) * &
+                            gas%cp(i,j,k) / (h_gs * A_sv + SMALL))
                         Q_gs = h_gs * A_sv * (T_g - T_s) * m%vol(i,j,k)
                         ! Clamp por AMBOS lados: ni el gas ni el sólido pueden
                         ! rebasar la T del otro en un paso explícito. El clamp
@@ -129,5 +141,18 @@ contains
         end do
 
     end subroutine compute_interphase_heat
+
+    !---------------------------------------------------------------------------
+    ! Tau mínimo GLOBAL del acople interfase del último paso [s]
+    !---------------------------------------------------------------------------
+    function interphase_tau_global(m) result(tau)
+        type(mesh_t), intent(in) :: m
+        real(dp) :: tau
+        if (m%is_parallel) then
+            call mpi_allreduce_min(tau_iph_local, tau, m%topo)
+        else
+            tau = tau_iph_local
+        end if
+    end function interphase_tau_global
 
 end module mod_interphase_ht

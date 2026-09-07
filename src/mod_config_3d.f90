@@ -73,6 +73,9 @@ contains
 
         ! Ergun
         cfg%d_particle = D_PARTICLE
+        ! dt adaptativo <= safety * tau_interfase (0 = desactivado): evita
+        ! operar en el régimen de clamp/equilibrio local (S5-dpart, B1)
+        cfg%iph_dt_safety = 0.5_dp
 
         ! Arc
         cfg%arc_tau       = ARC_TAU
@@ -244,6 +247,7 @@ contains
         case ('k_s');        call parse_real(val, key, cfg%k_s)
         case ('k_l');        call parse_real(val, key, cfg%k_l)
         case ('d_particle'); call parse_real(val, key, cfg%d_particle)
+        case ('iph_dt_safety'); call parse_real(val, key, cfg%iph_dt_safety)
         case ('emissivity'); call parse_real(val, key, cfg%emissivity)
         case ('T_initial');  call parse_real(val, key, cfg%T_initial)
         case ('T_ambient');  call parse_real(val, key, cfg%T_ambient)

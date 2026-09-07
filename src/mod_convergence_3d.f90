@@ -55,11 +55,16 @@ contains
     ! REAL del lazo externo (antes main forzaba converged=.true. en max_outer
     ! y la rama de reducción era inalcanzable: dt solo podía crecer).
     !---------------------------------------------------------------------------
-    subroutine adapt_timestep(dt, conv, cfl_rate, cfg)
+    subroutine adapt_timestep(dt, conv, cfl_rate, tau_iph, cfg)
         real(dp), intent(inout)         :: dt
         type(convergence_t), intent(in) :: conv
         ! Tasa CFL global: max sobre celdas/fases de sum(|u_i|/dx_i) [1/s]
         real(dp), intent(in)            :: cfl_rate
+        ! Tau mínimo global del acople interfase gas-sólido [s]: con
+        ! dt >~ tau el intercambio explícito satura su clamp y fuerza
+        ! equilibrio térmico local (columna del arco drenada — medido en
+        ! B1 con dt=10 ms vs C1 con dt=2 ms). dt <= safety*tau.
+        real(dp), intent(in)            :: tau_iph
         type(config_t), intent(in)      :: cfg
 
         if (.not. cfg%adaptive_dt) return
@@ -73,6 +78,10 @@ contains
 
         ! Límite CFL (implícito tolera CFL O(1); cfl_max configurable)
         if (cfl_rate > SMALL) dt = min(dt, cfg%cfl_max / cfl_rate)
+
+        ! Límite del acople interfase (ver arg tau_iph)
+        if (cfg%iph_dt_safety > 0.0_dp .and. tau_iph < 1.0e29_dp) &
+            dt = min(dt, cfg%iph_dt_safety * tau_iph)
 
         dt = min(max(dt, cfg%dt_min), cfg%dt_max)
     end subroutine adapt_timestep
