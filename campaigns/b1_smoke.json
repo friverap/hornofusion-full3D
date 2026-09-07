@@ -1,0 +1,9 @@
+{
+  "template": "input/config_300s_borein.dat",
+  "outdir":   "campaigns/b1smoke",
+  "nprocs":   15,
+  "runs": [
+    {"name": "iph_on",  "overrides": {"nr":15,"ntheta":30,"nz":21,"t_final":30.0,"adaptive_dt":true,"dt":0.01,"dt_max":1.0,"solve_species":true,"audit_freq":5,"output_freq":5000}},
+    {"name": "iph_off", "overrides": {"nr":15,"ntheta":30,"nz":21,"t_final":30.0,"adaptive_dt":true,"dt":0.01,"dt_max":1.0,"solve_species":true,"audit_freq":5,"output_freq":5000,"iph_dt_safety":0.0}}
+  ]
+}
