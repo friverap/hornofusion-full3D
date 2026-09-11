@@ -88,6 +88,12 @@ contains
         call relax_field(liq%uth, p_lth, cfg%alpha_u, m)
         call relax_field(liq%uz,  p_luz, cfg%alpha_u, m)
 
+        ! Cota física |u_liq| <= U_LIQ_MAX preservando dirección (ver
+        ! mod_constants): las celdas-gota apenas sobre el corte no tienen
+        ! inercia para oponerse al gradiente de presión del arco y su
+        ! velocidad diverge (B1). El cap es post-solve y pre-halos.
+        call cap_liquid_velocity(liq, m)
+
         ! Exchange halos after momentum
         call phase_exchange_halos(liq, m)
 
@@ -152,5 +158,35 @@ contains
         conv%res_energy = max(res_energy_l, res_energy_g)
 
     end subroutine multiphase_iteration
+
+    !---------------------------------------------------------------------------
+    ! Cota física de velocidad del líquido (ver U_LIQ_MAX en mod_constants).
+    ! Escala el vector completo => preserva dirección; solo celdas activas.
+    !---------------------------------------------------------------------------
+    subroutine cap_liquid_velocity(liq, m)
+        type(phase_t), intent(inout) :: liq
+        type(mesh_t), intent(in)     :: m
+
+        integer  :: i, j, k
+        integer  :: istart, iend, jstart, jend, kstart, kend
+        real(dp) :: vmag, f
+
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    vmag = sqrt(liq%ur(i,j,k)**2 + liq%uth(i,j,k)**2 + &
+                                liq%uz(i,j,k)**2)
+                    if (vmag > U_LIQ_MAX) then
+                        f = U_LIQ_MAX / vmag
+                        liq%ur(i,j,k)  = liq%ur(i,j,k)  * f
+                        liq%uth(i,j,k) = liq%uth(i,j,k) * f
+                        liq%uz(i,j,k)  = liq%uz(i,j,k)  * f
+                    end if
+                end do
+            end do
+        end do
+    end subroutine cap_liquid_velocity
 
 end module mod_multiphase

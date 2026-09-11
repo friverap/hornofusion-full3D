@@ -66,6 +66,13 @@ module mod_constants
     ! de velocidad de ~1e4 m/s que divergían a 1e14. La masa fundida sigue
     ! acumulándose vía la ecuación de alpha hasta cruzar el umbral.
     real(dp), parameter :: ALPHA_FLOW_CUTOFF = 1.0e-2_dp
+    ! Cota física de velocidad del ACERO líquido [m/s]. El acero en el
+    ! horno se mueve a O(1) m/s (plumas, EBT ~5-7 m/s); 20 m/s es 3x el
+    ! máximo físico. Sin la cota, gotas apenas sobre ALPHA_FLOW_CUTOFF
+    ! (inercia diminuta) acumulan velocidad por fuerzas de presión del
+    ! arco hasta reventar el CFL del transporte de alpha (B1: CFL_liq
+    ! 1181 => NaN a t=471 s). Misma familia que P_HYDRO_CAP/COMP_SRC_CAP.
+    real(dp), parameter :: U_LIQ_MAX = 20.0_dp
 
     ! Re-solidification explicit sub-step limiter (fraction of the full mass
     ! transfer applied per timestep, CFL-like stabilization)
