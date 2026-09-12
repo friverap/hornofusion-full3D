@@ -115,6 +115,13 @@ contains
         ! se corrigen (C2.4)
         call solve_pressure_correction(liq, gas, gas_old%T, sh, m, cfg, res_cont)
 
+        ! Cota fisica TAMBIEN tras la correccion de presion: la correccion
+        ! u' = u - V*grad(p')/aP con aP diminuto (celda-gota apenas sobre
+        ! ALPHA_FLOW_CUTOFF) puede disparar |u| en UN paso — B1 v3 murio en
+        ! el MISMO paso que v2 (235829, t=471.66: el cap pre-presion nunca
+        ! disparo; el blow-up nace aqui). Bit-identico cuando no dispara.
+        call cap_liquid_velocity(liq, m)
+
         ! Exchange halos after pressure
         call shared_exchange_halos(sh, m)
         call phase_exchange_halos(liq, m)
