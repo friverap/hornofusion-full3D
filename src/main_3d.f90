@@ -437,6 +437,33 @@ program eaf_3d_simulator
         end if
         call timer_stop(T_IO)
 
+        !---------------------------------------------------------------
+        ! FRENO DE NaN: si algun campo o residual dejo de ser finito, la
+        ! corrida NO puede producir nada util — se vuelca el estado para
+        ! diagnostico y se aborta (exit 3). Decision GLOBAL: todos los
+        ! ranks salen juntos (ver nan_guard_triggered).
+        !---------------------------------------------------------------
+        if (nan_guard_triggered(conv, liq, gas, sol, sh, mesh, step, time)) then
+            if (should_print(mesh)) then
+                print '(A)', ''
+                print '(A)', ' ================================================'
+                print '(A,I0,A,F10.3,A)', ' [ABORT] NaN/Inf en el paso ', &
+                      step, ' (t = ', time, ' s): corrida detenida.'
+                print '(A)', ' Estado volcado para diagnostico:'
+                print '(A,A)', '   snapshot: ', trim(cfg%output_dir)
+                print '(A)', ' ================================================'
+            end if
+            ! volcado colectivo del estado corrupto (todos los ranks)
+            if (cfg%audit_freq > 0) then
+                call audit_write_step(liq, gas, sol, slag, sh, elec, mesh, &
+                                      cfg, step, time)
+            end if
+            call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, step, &
+                                     time, cfg%output_dir)
+            call mpi_finalize_topology(mesh%topo)
+            stop 3
+        end if
+
         ! Adaptive time stepping (criterio CFL + convergencia real; C3.2)
         call adapt_timestep(cfg%dt, conv, &
                             compute_cfl_rate(liq, gas, mesh), &
