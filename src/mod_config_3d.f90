@@ -76,6 +76,9 @@ contains
         ! dt adaptativo <= safety * tau_interfase (0 = desactivado): evita
         ! operar en el régimen de clamp/equilibrio local (S5-dpart, B1)
         cfg%iph_dt_safety = 0.5_dp
+        ! sonda de diagnostico (mod_probe): desactivada por defecto
+        cfg%probe_step_from = 0
+        cfg%probe_step_to   = 0
 
         ! Arc
         cfg%arc_tau       = ARC_TAU
@@ -248,6 +251,8 @@ contains
         case ('k_l');        call parse_real(val, key, cfg%k_l)
         case ('d_particle'); call parse_real(val, key, cfg%d_particle)
         case ('iph_dt_safety'); call parse_real(val, key, cfg%iph_dt_safety)
+        case ('probe_step_from'); call parse_int(val, key, cfg%probe_step_from)
+        case ('probe_step_to');   call parse_int(val, key, cfg%probe_step_to)
         case ('emissivity'); call parse_real(val, key, cfg%emissivity)
         case ('T_initial');  call parse_real(val, key, cfg%T_initial)
         case ('T_ambient');  call parse_real(val, key, cfg%T_ambient)

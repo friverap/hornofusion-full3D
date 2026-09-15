@@ -20,6 +20,7 @@ module mod_multiphase
     use mod_drag_ergun
     use mod_properties_3d
     use mod_fields_3d
+    use mod_probe, only: probe_report
     implicit none
 
 contains
@@ -92,7 +93,9 @@ contains
         ! mod_constants): las celdas-gota apenas sobre el corte no tienen
         ! inercia para oponerse al gradiente de presión del arco y su
         ! velocidad diverge (B1). El cap es post-solve y pre-halos.
+        call probe_report('post-momentum ', liq, gas, sol, sh, m, cfg)
         call cap_liquid_velocity(liq, m)
+        call probe_report('post-cap1     ', liq, gas, sol, sh, m, cfg)
 
         ! Exchange halos after momentum
         call phase_exchange_halos(liq, m)
@@ -120,7 +123,9 @@ contains
         ! ALPHA_FLOW_CUTOFF) puede disparar |u| en UN paso — B1 v3 murio en
         ! el MISMO paso que v2 (235829, t=471.66: el cap pre-presion nunca
         ! disparo; el blow-up nace aqui). Bit-identico cuando no dispara.
+        call probe_report('post-presion  ', liq, gas, sol, sh, m, cfg)
         call cap_liquid_velocity(liq, m)
+        call probe_report('post-cap2     ', liq, gas, sol, sh, m, cfg)
 
         ! Exchange halos after pressure
         call shared_exchange_halos(sh, m)
@@ -135,6 +140,8 @@ contains
             call phase_exchange_halos(liq, m)
             call phase_exchange_halos(gas, m)
         end if
+
+        call probe_report('post-alpha    ', liq, gas, sol, sh, m, cfg)
 
         ! Energy
         if (cfg%solve_energy) then

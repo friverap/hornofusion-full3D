@@ -25,6 +25,7 @@ module mod_continuity
     use mod_types_3d
     use mod_solver_3d
     use mod_parallel_utils
+    use mod_probe, only: probe_active_now
     use mod_face_flux
     use mod_mpi_topology, only: mpi_allreduce_max
     use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS
@@ -48,6 +49,7 @@ contains
         type(config_t), intent(in)   :: cfg
 
         integer :: i, j, k, isub, n_sub
+        integer :: icfl, jcfl, kcfl
         integer :: istart, iend, jstart, jend, kstart, kend
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: cfl_loc, cfl_max, cfl_glob, dt_sub, a_pre, flux_net
@@ -60,6 +62,7 @@ contains
         ! n_sub UNIFORME GLOBAL desde el CFL donor-cell máximo
         ! (suma de flujos de salida * dt / (rho*V))
         cfl_max = 0.0_dp
+        icfl = 0; jcfl = 0; kcfl = 0
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
@@ -70,7 +73,10 @@ contains
                                max(-Fs,0.0_dp) + max(Fn,0.0_dp) + &
                                max(-Fb,0.0_dp) + max(Ft,0.0_dp)) * cfg%dt / &
                               (liq%rho(i,j,k) * m%vol(i,j,k))
-                    cfl_max = max(cfl_max, cfl_loc)
+                    if (cfl_loc > cfl_max) then
+                        cfl_max = cfl_loc
+                        icfl = i; jcfl = j; kcfl = k
+                    end if
                 end do
             end do
         end do
@@ -79,6 +85,22 @@ contains
         else
             cfl_glob = cfl_max
         end if
+        ! sonda: el CFL del transporte de alpha con su celda dominante.
+        ! Es el numero que no cuadra en B1 (1181 con |u| <= U_LIQ_MAX: la
+        ! geometria de la malla solo lo explicaria con ~1800 m/s).
+        if (probe_active_now(cfg) .and. icfl > 0 .and. &
+            abs(cfl_max - cfl_glob) < 1.0e-12_dp) then
+            print '(A,ES11.4,A,I0,A,I0,A,I0,A,ES11.4,A,ES11.4,A,F8.5,A,ES11.4)', &
+                '   [PROBE-alpha] CFL=', cfl_glob, ' en (', &
+                icfl + m%topo%iglobal_start - 1, ',', &
+                jcfl + m%topo%jglobal_start - 1, ',', &
+                kcfl + m%topo%kglobal_start - 1, ')  rho=', &
+                liq%rho(icfl,jcfl,kcfl), '  V=', m%vol(icfl,jcfl,kcfl), &
+                '  a_l=', liq%alpha(icfl,jcfl,kcfl), '  |u|=', &
+                sqrt(liq%ur(icfl,jcfl,kcfl)**2 + liq%uth(icfl,jcfl,kcfl)**2 &
+                     + liq%uz(icfl,jcfl,kcfl)**2)
+        end if
+
         n_sub = max(1, ceiling(cfl_glob / 0.9_dp))
         if (n_sub > N_SUB_MAX) then
             if (.not. fallback_warned .and. .not. m%is_parallel .or. &

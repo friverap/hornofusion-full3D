@@ -37,6 +37,8 @@ program test_config
     write(iu, '(A)') 'd_particle = 0.025'
     write(iu, '(A)') 'alpha_k = 0.45'
     write(iu, '(A)') 'iph_dt_safety = 0.25'
+    write(iu, '(A)') 'probe_step_from = 1200'
+    write(iu, '(A)') 'probe_step_to = 1300'
     close(iu)
 
     call config_set_defaults(cfg)
@@ -54,6 +56,8 @@ program test_config
     if (abs(cfg%d_particle - 0.025_dp) > 1e-12_dp) call fail('d_particle', ok)
     if (abs(cfg%alpha_k - 0.45_dp) > 1e-12_dp)  call fail('alpha_k', ok)
     if (abs(cfg%iph_dt_safety - 0.25_dp) > 1e-12_dp) call fail('iph_dt_safety', ok)
+    if (cfg%probe_step_from /= 1200) call fail('probe_step_from', ok)
+    if (cfg%probe_step_to /= 1300)   call fail('probe_step_to', ok)
     if (abs(cfg%ecs_theta_width - 0.7854_dp) > 1e-12_dp) &
                                             call fail('ecs_theta_width', ok)
     if (trim(cfg%ecs_mode) /= 'coupled')    call fail('ecs_mode', ok)

@@ -54,6 +54,7 @@ module mod_types_3d
         ! Ergun
         real(dp) :: d_particle
         real(dp) :: iph_dt_safety
+        integer  :: probe_step_from, probe_step_to
 
         ! Arc
         real(dp) :: arc_tau, arc_w, arc_sigma_cond, arc_T_ref

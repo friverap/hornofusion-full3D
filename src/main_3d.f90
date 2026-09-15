@@ -20,6 +20,7 @@ program eaf_3d_simulator
     use mod_mesh_3d
     use mod_fields_3d
     use mod_output_hdf5
+    use mod_probe, only: probe_report, probe_set_step, probe_active
     use mod_solver_3d
     use mod_boundary_3d
     use mod_energy_3d
@@ -340,7 +341,9 @@ program eaf_3d_simulator
         conv%res_tke = 0.0_dp
         conv%res_eps = 0.0_dp
         conv%converged = .false.
-        
+        call probe_set_step(step)
+        call probe_report('inicio-paso   ', liq, gas, sol, sh, mesh, cfg)
+
         call timer_start(T_SIMPLE)
         do outer = 1, cfg%max_outer
 
@@ -405,6 +408,8 @@ program eaf_3d_simulator
             if (conv%converged) exit
         end do
         call timer_stop(T_SIMPLE)
+
+        call probe_report('fin-SIMPLE    ', liq, gas, sol, sh, mesh, cfg)
 
         ! Transferencia interfase (tras los solves de energía)
         call timer_start(T_SOLID)
