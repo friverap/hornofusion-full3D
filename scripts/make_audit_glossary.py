@@ -97,6 +97,11 @@ DEFS = {
                        "regularised denominator of the $T$ update) [J]"),
     "E_iph_liq": ("C", "Interphase heat removed from the liquid (idem) "
                        "[J]"),
+    "m_resid_closed": ("C", "Residual solid handed to the liquid by the "
+                             "vanishing-phase closure ($0<\\alpha_s\\le10^{-4}$) "
+                             "[kg]; subset of m\\_melted"),
+    "E_resid_closed": ("C", "Enthalpy handed with that residual [J]; subset "
+                             "of E\\_melt\\_from\\_solid"),
 }
 
 src = open(SRC).read()

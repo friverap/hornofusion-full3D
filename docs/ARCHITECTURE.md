@@ -616,3 +616,9 @@ eaf3d_XXXXXXXX.h5
 **Causa:** `sol%E_s -= dm · h_fusion` no elimina el calor sensible de la masa dm que se funde. Sin esa corrección: `T_s_new = (E_s - dm·h_fus) / ((m_s - dm)·cp)` puede ser **mayor** que `T_s_old` → realimentación positiva → T_s → NaN.
 **Fix:** `sol%E_s -= dm · (h_fusion + cp_eff · T_s)`, lo que garantiza `T_s_new = T_s - dm·h_fus/((m_s-dm)·cp_eff) < T_s`.
 **Archivo:** `mod_melting_3d.f90`
+
+### Bug 11 — Fase evanescente: energía huérfana en sólido residual (`mod_melting_3d.f90`)
+
+**Síntoma:** B1 (malla media, t=471.66 s, paso 235829): `T_s` de la celda (1,1,6) salta de 3386 a 35 628 K en un paso, `T_l` → 1e26, momentum 2.5e86, NaN. Los capes de velocidad (`U_LIQ_MAX`) solo lo retrasaban.
+**Causa:** la guardia `m_s > SMALL=1e-30` permitía sólidos de microgramos con temperatura propia `T_s = f(E_s/m_s)`; depósitos no proporcionales a la masa (arco, interfase con `Q_lim_sol` ∝ m_s pero `T_l` ya alta) la desbocan. Es el *vanishing phase problem* de los modelos de dos fluidos (Hérard & Hurisse 2014; `residualAlpha` en OpenFOAM, 1e-4 en COMSOL): por debajo de una fracción residual la fase no tiene variables intensivas propias.
+**Fix:** cierre conservativo en `compute_melting`: si `0 < m_s ≤ ρ_s·V·ALPHA_SOLID_RESID` (1e-4) y la celda no re-solidifica, toda la masa y entalpía pasan al líquido por el camino `mdot`/`T_src` con `T_src = liquid_entry_T(e) = (e − C0)/cp_l` (conservación exacta en el dato común), y la celda queda exactamente vacía. Celdas vacías con líquido: `T_s := T_l`. Columnas de audit `m_resid_closed`/`E_resid_closed` (subconjuntos de `m_melted`/`E_melt_from_solid`, así las identidades existentes siguen cerrando). Test: `test_residual_closure`. Golden v10.

@@ -29,7 +29,7 @@ module mod_melting_3d
     use mod_types_3d
     use mod_parallel_utils
     use mod_audit, only: audit_add, AUD_MELT_MASS, AUD_RESOLID_MASS, &
-                         AUD_MELT_E_SOLID
+                         AUD_MELT_E_SOLID, AUD_RESID_MASS, AUD_RESID_E
     implicit none
 
 contains
@@ -83,6 +83,47 @@ contains
     end function liquid_datum_offset
 
     !---------------------------------------------------------------------------
+    ! Masa residual del solido en una celda [kg]: por debajo, la celda se
+    ! cierra (ver ALPHA_SOLID_RESID en mod_constants).
+    !---------------------------------------------------------------------------
+    pure function solid_residual_mass(vol, cfg) result(m_min)
+        real(dp), intent(in)       :: vol
+        type(config_t), intent(in) :: cfg
+        real(dp) :: m_min
+        m_min = cfg%rho_steel * vol * ALPHA_SOLID_RESID
+    end function solid_residual_mass
+
+    !---------------------------------------------------------------------------
+    ! Temperatura de ENTRADA al liquido que transporta exactamente la
+    ! entalpia especifica e del solido: e_l(T_in) = cp_l*T_in + C0 = e.
+    ! Para e >= e_s(T_liq) coincide con solid_T_from_enthalpy(e); por debajo
+    ! (remanente frio) es menor: el liquido paga el latente que al
+    ! remanente le faltaba. Es la unica T_src que hace conservativo el
+    ! termino mdot*cp_l*T_src de solve_energy_3d para cualquier e.
+    !---------------------------------------------------------------------------
+    pure function liquid_entry_T(e, cfg) result(T_in)
+        real(dp), intent(in)       :: e
+        type(config_t), intent(in) :: cfg
+        real(dp) :: T_in
+        T_in = (e - liquid_datum_offset(cfg)) / cfg%cp_l
+    end function liquid_entry_T
+
+    !---------------------------------------------------------------------------
+    ! Fusion, re-solidificacion y CIERRE del solido residual.
+    !
+    ! Cierre de fase evanescente (sep-2026, causa raiz del NaN de B1): tras
+    ! fundir, una celda con 0 < m_s <= m_min = rho_s*V*ALPHA_SOLID_RESID
+    ! entrega TODA su masa y entalpia al liquido por el mismo camino que el
+    ! fundido (mdot, T_src) y queda exactamente vacia (m_s=E_s=m_C=0,
+    ! alpha_s=0). Conservacion exacta por construccion: el liquido recibe
+    ! dm*(e - C0) por la fuente de masa y dm*C0 por el inventario. El
+    ! cierre NO se aplica en el paso en que la celda re-solidifica (mdot<0):
+    ! el solver de energia contabiliza el latente liberado con el signo de
+    ! mdot y mezclar signos en la misma celda lo perderia; el remanente
+    ! congelado se cierra al paso siguiente si no siguio creciendo.
+    ! Celdas vacias con liquido: T_s esclavizada a T_l (diagnostico; la
+    ! fase residual no tiene temperatura propia — Herard & Hurisse 2014).
+    !---------------------------------------------------------------------------
     subroutine compute_melting(sol, liq, m, cfg, dt)
         type(solid_t), intent(inout) :: sol
         type(phase_t), intent(inout) :: liq
@@ -91,7 +132,7 @@ contains
         real(dp), intent(in)         :: dt
 
         integer :: i, j, k
-        real(dp) :: T_s, T_l, dm, e_spec
+        real(dp) :: T_s, T_l, dm, e_spec, m_min
 
         do k = 1, m%nz
             do j = 1, m%ntheta
@@ -100,6 +141,7 @@ contains
 
                     sol%mdot(i,j,k) = 0.0_dp
                     T_l = liq%T(i,j,k)
+                    m_min = solid_residual_mass(m%vol(i,j,k), cfg)
 
                     if (sol%m_s(i,j,k) > SMALL) then
                         e_spec = sol%E_s(i,j,k) / sol%m_s(i,j,k)
@@ -108,6 +150,11 @@ contains
                     else
                         e_spec = 0.0_dp
                         T_s = sol%T_s(i,j,k)
+                        ! Celda sin solido: T_s esclavizada al portador
+                        if (liq%alpha(i,j,k) > ALPHA_CUTOFF) then
+                            sol%T_s(i,j,k) = T_l
+                            T_s = T_l
+                        end if
                     end if
 
                     ! Melting: solid above liquidus converts to liquid.
@@ -178,6 +225,34 @@ contains
                             sol%T_s(i,j,k) = solid_T_from_enthalpy( &
                                 sol%E_s(i,j,k) / sol%m_s(i,j,k), cfg)
                         end if
+                    end if
+
+                    ! --- Cierre del solido residual (fase evanescente) ---
+                    if (sol%mdot(i,j,k) >= 0.0_dp .and. &
+                        sol%m_s(i,j,k) > 0.0_dp .and. &
+                        sol%m_s(i,j,k) <= m_min) then
+                        dm = sol%m_s(i,j,k)
+                        if (dm > SMALL) then
+                            e_spec = sol%E_s(i,j,k) / dm
+                        else
+                            ! masa por debajo de la precision: la entalpia
+                            ! que pudiera quedar es no representable como
+                            ! mdot*T_src; se contabiliza en el mismo ledger
+                            e_spec = 0.0_dp
+                        end if
+                        ! Toda la masa que sale de la celda en este paso
+                        ! (fundido + remanente) comparte e_spec: la fusion
+                        ! conserva la entalpia especifica del solido.
+                        sol%mdot(i,j,k) = sol%mdot(i,j,k) + dm / dt
+                        sol%T_s(i,j,k)  = liquid_entry_T(e_spec, cfg)
+                        call audit_add(AUD_MELT_MASS, dm)
+                        call audit_add(AUD_MELT_E_SOLID, dm * e_spec)
+                        call audit_add(AUD_RESID_MASS, dm)
+                        call audit_add(AUD_RESID_E, dm * e_spec)
+                        sol%m_s(i,j,k)     = 0.0_dp
+                        sol%E_s(i,j,k)     = 0.0_dp
+                        sol%m_C(i,j,k)     = 0.0_dp
+                        sol%alpha_s(i,j,k) = 0.0_dp
                     end if
                 end do
             end do

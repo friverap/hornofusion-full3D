@@ -66,6 +66,20 @@ module mod_constants
     ! de velocidad de ~1e4 m/s que divergían a 1e14. La masa fundida sigue
     ! acumulándose vía la ecuación de alpha hasta cruzar el umbral.
     real(dp), parameter :: ALPHA_FLOW_CUTOFF = 1.0e-2_dp
+    ! Fraccion RESIDUAL del solido (cierre de fase evanescente, sep-2026).
+    ! Una celda con 0 < alpha_s <= este umbral ya no es un lecho: su masa y
+    ! entalpia se entregan al liquido co-localizado (mismo camino que la
+    ! fusion, conservacion exacta) y la celda queda EXACTAMENTE vacia.
+    ! Motivo (B1, paso 235829): la guardia m_s > SMALL=1e-30 dejaba vivir
+    ! solidos de microgramos cuya T_s = f(E_s/m_s) explotaba (3386 ->
+    ! 35628 K en un paso) al recibir depositos no proporcionales a la masa
+    ! -> T_l 1e26 -> NaN. Es el "vanishing phase problem" de los modelos de
+    ! dos fluidos (Herard & Hurisse 2014; residualAlpha de OpenFOAM,
+    ! 1e-4 en COMSOL Euler-Euler): por debajo del residuo la fase no tiene
+    ! temperatura propia. Valor: 1e-4 (COMSOL); en la malla media son
+    ! 0.05 g (eje) a 1.5 g (periferia) por celda — sin significado fisico
+    ! como chatarra.
+    real(dp), parameter :: ALPHA_SOLID_RESID = 1.0e-4_dp
     ! Cota física de velocidad del ACERO líquido [m/s]. El acero en el
     ! horno se mueve a O(1) m/s (plumas, EBT ~5-7 m/s); 20 m/s es 3x el
     ! máximo físico. Sin la cota, gotas apenas sobre ALPHA_FLOW_CUTOFF
