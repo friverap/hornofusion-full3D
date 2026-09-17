@@ -20,7 +20,7 @@ module mod_energy_3d
 contains
 
     subroutine solve_energy_3d(ph, T_old, sh, m, cfg, alpha_q, alpha_other, &
-                               mdot, T_src, is_gas, residual)
+                               alpha_old, mdot, T_src, is_gas, residual)
         use mod_workspace, only: ensure_workspace, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su
@@ -35,9 +35,25 @@ contains
         ! Antes cada fase recibía el 100% de cada fuente: donde ambas
         ! superaban el cutoff la potencia se DUPLICABA (hallazgo 3.1b).
         real(dp), intent(in)         :: alpha_other(-1:,-1:,-1:)
+        ! Fracción de ESTA fase al inicio del paso (alpha^n). Forma exacta de
+        ! Patankar (continuidad discreta restada): el transitorio lleva la
+        ! masa VIEJA, alpha^n*rho*cp*V/dt*(T - T_old); la masa nueva entra
+        ! por sus propios términos (a_nb de entrada, mdot*cp*T_src). Con
+        ! alpha^{n+1} en el transitorio (forma previa) la masa recién
+        ! llegada figuraba como si hubiera existido a T_old: una celda vacía
+        ! (T_old = 300 K inicial) que recibe fundido a 1809 K quedaba a
+        ! (300+1809)/2 y re-solidificaba al paso siguiente — B1 v6: 9646 kg
+        ! fundidos, 9315 re-solidificados, 10 kg de baño a los 442 s, 68%
+        ! de las celdas líquidas bajo el solidus (mediana 740 K). Solo se
+        ! usa para el LÍQUIDO: el gas conserva la forma T con rho(T) a la
+        ! que está calibrado su libro (E_gas_abs).
+        real(dp), intent(in)         :: alpha_old(-1:,-1:,-1:)
         ! Fuente de masa por fusión/solidificación (C1.8, solo líquido):
         ! mdot>0 la masa fundida entra a T_src (temperatura del sólido);
-        ! mdot<0 sumidero a T_P + liberación del latente al líquido.
+        ! mdot<0: en la forma con continuidad restada el sumidero a T_P se
+        ! CANCELA exactamente (la masa se va a la T de la celda); solo queda
+        ! la liberación del latente al líquido. El antiguo aP += |mdot|*cp
+        ! era un enfriamiento espurio que realimentaba la congelación.
         real(dp), intent(in)         :: mdot(-1:,-1:,-1:)
         real(dp), intent(in)         :: T_src(-1:,-1:,-1:)
         ! Identidad de fase: el LÍQUIDO difunde con k_eff = k + cp*mu_t/Pr_t
@@ -51,7 +67,7 @@ contains
         integer :: istart, iend, jstart, jend, kstart, kend
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: Dw, De, Ds, Dn, Db, Dt
-        real(dp) :: rho_f, k_f, vol, rho_cp_vol_dt
+        real(dp) :: rho_f, k_f, vol, rho_cp_vol_dt, alpha_tr
         real(dp) :: alpha_f, w_src, C0_datum, aP_rad, T_it, aP_wall
 
         ! Get loop bounds
@@ -85,7 +101,13 @@ contains
                         cycle
                     end if
 
-                    rho_cp_vol_dt = alpha_f * ph%rho(i,j,k) * ph%cp(i,j,k) * vol / cfg%dt
+                    ! Transitorio con la masa VIEJA (líquido; ver alpha_old)
+                    if (is_gas) then
+                        alpha_tr = alpha_f
+                    else
+                        alpha_tr = max(alpha_old(i,j,k), 0.0_dp)
+                    end if
+                    rho_cp_vol_dt = alpha_tr * ph%rho(i,j,k) * ph%cp(i,j,k) * vol / cfg%dt
 
                     ! --- Diffusion conductances ---
                     Dw = 0.0_dp; De = 0.0_dp; Db = 0.0_dp; Dt = 0.0_dp
@@ -216,17 +238,26 @@ contains
                                         ph%cp(i,j,k) * T_src(i,j,k)
                             aP(i,j,k) = aP(i,j,k) + mdot(i,j,k) * ph%cp(i,j,k)
                         else if (mdot(i,j,k) < 0.0_dp) then
-                            ! Sumidero a T_P (upwind: aP += |mdot|*cp) más el
-                            ! latente liberado e_l(T_old) - e_entry >= 0
-                            ! entregado al líquido, con el MISMO e_entry que
-                            ! usa compute_melting (min con e_s(T_solidus)
-                            ! garantiza fuente no negativa)
-                            aP(i,j,k) = aP(i,j,k) - mdot(i,j,k) * ph%cp(i,j,k)
+                            ! Sumidero: sin término en aP (se cancela con la
+                            ! continuidad restada). Queda el latente liberado
+                            ! e_l(T_old) - e_entry >= 0 entregado al líquido,
+                            ! con el MISMO e_entry que usa compute_melting
+                            ! (min con e_s(T_solidus) garantiza fuente no
+                            ! negativa)
                             Su(i,j,k) = Su(i,j,k) - mdot(i,j,k) * &
                                 (ph%cp(i,j,k) * T_old(i,j,k) + C0_datum &
                                  - min(cfg%cp_s * cfg%T_solidus, &
                                        ph%cp(i,j,k) * T_old(i,j,k) + C0_datum))
                         end if
+                    end if
+
+                    ! Celda con fase nueva pero sin masa vieja, sin entrada
+                    ! por caras, sin fuente de masa ni difusión (continuidad
+                    ! discreta no exacta, p.ej. fallback implícito de alpha):
+                    ! ecuación trivial en vez de diagonal nula.
+                    if (aP(i,j,k) <= SMALL) then
+                        aP(i,j,k) = 1.0_dp
+                        Su(i,j,k) = T_old(i,j,k)
                     end if
                 end do
             end do
@@ -302,8 +333,12 @@ contains
                         if (m%cell_type(ii,jj,kk) == 0) cycle
                         if (alpha_q(ii,jj,kk) < ALPHA_CUTOFF) cycle
                         vv  = m%vol(ii,jj,kk)
-                        rcv = max(alpha_q(ii,jj,kk), SMALL) * &
-                              ph%rho(ii,jj,kk) * ph%cp(ii,jj,kk) * vv / cfg%dt
+                        if (is_gas) then
+                            rcv = max(alpha_q(ii,jj,kk), SMALL)
+                        else
+                            rcv = max(alpha_old(ii,jj,kk), 0.0_dp)
+                        end if
+                        rcv = rcv * ph%rho(ii,jj,kk) * ph%cp(ii,jj,kk) * vv / cfg%dt
                         ww  = alpha_q(ii,jj,kk) / (alpha_q(ii,jj,kk) + &
                               alpha_other(ii,jj,kk) + SMALL)
                         Tit = max(Tpre(ii,jj,kk), 200.0_dp)
@@ -343,13 +378,13 @@ contains
                                     ph%cp(ii,jj,kk) * (T_src(ii,jj,kk) - &
                                     ph%T(ii,jj,kk)) * cfg%dt
                             else if (mdot(ii,jj,kk) < 0.0_dp) then
+                                ! solo el latente (el sumidero a T_P se
+                                ! cancela en la forma con continuidad restada)
                                 ee = min(cfg%cp_s * cfg%T_solidus, &
                                      ph%cp(ii,jj,kk) * T_old(ii,jj,kk) + C0_datum)
                                 s_mass = s_mass + cfg%dt * ( &
                                     - mdot(ii,jj,kk) * (ph%cp(ii,jj,kk) * &
-                                      T_old(ii,jj,kk) + C0_datum - ee) &
-                                    + mdot(ii,jj,kk) * ph%cp(ii,jj,kk) * &
-                                      ph%T(ii,jj,kk) )
+                                      T_old(ii,jj,kk) + C0_datum - ee) )
                             end if
                         end if
                     end do

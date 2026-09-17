@@ -146,13 +146,15 @@ contains
         ! Energy
         if (cfg%solve_energy) then
             call solve_energy_3d(liq, liq_old%T, sh, m, cfg, liq%alpha, &
-                                 gas%alpha, sol%mdot, sol%T_s, &
+                                 gas%alpha, liq_old%alpha, sol%mdot, sol%T_s, &
                                  .false., res_energy_l)
             call relax_field(liq%T, p_lT, cfg%alpha_T, m)
             call phase_exchange_halos(liq, m)
 
+            ! gas: alpha_old no se usa (forma T con rho(T)); se pasa la
+            ! fracción actual por uniformidad de la interfaz
             call solve_energy_3d(gas, gas_old%T, sh, m, cfg, gas%alpha, &
-                                 liq%alpha, sol%mdot, sol%T_s, &
+                                 liq%alpha, gas%alpha, sol%mdot, sol%T_s, &
                                  .true., res_energy_g)
             call relax_field(gas%T, p_gT, cfg%alpha_T, m)
             call phase_exchange_halos(gas, m)

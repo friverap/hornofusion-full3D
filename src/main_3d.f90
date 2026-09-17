@@ -370,7 +370,7 @@ program eaf_3d_simulator
                 call solve_pressure_correction(liq, gas, gas%T, sh, mesh, cfg, conv%res_cont)
                 if (cfg%solve_energy) then
                     call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, &
-                                         gas%alpha, sol%mdot, sol%T_s, &
+                                         gas%alpha, liq_old%alpha, sol%mdot, sol%T_s, &
                                          .false., conv%res_energy)
                     call relax_field(liq%T, prev_T, cfg%alpha_T, mesh)
                 end if
@@ -381,7 +381,7 @@ program eaf_3d_simulator
                 ! único consumidor de S_arc/S_chem/radiación (w_src = 1);
                 ! con gas%alpha se perdía ~85% del arco (budget 0.154)
                 call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, &
-                                     K_zero, sol%mdot, sol%T_s, &
+                                     K_zero, liq_old%alpha, sol%mdot, sol%T_s, &
                                      .false., conv%res_energy)
                 call relax_field(liq%T, prev_T, cfg%alpha_T, mesh)
                 ! Propiedades tambien sin flujo: rho_gas(T) debe seguir a T

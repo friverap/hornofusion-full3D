@@ -1,0 +1,2 @@
+name,E_arc_total,T_gas_max,T_gas_min,T_liquid_max,T_liquid_min,T_solid_max,T_solid_min,alpha_liquid_max,alpha_liquid_min,alpha_solid_max,alpha_solid_min,exit,m_gas_final,m_liq_final,m_melted_total,m_sol_final,n_snapshots,n_steps,pressure_max,pressure_min,t_final,wall_s
+b1_full_heat,37234448792.78127,nan,nan,2.961527986894901e+72,1.7977330439223742,1.0094814795724066e+74,-719.9141197742132,1.0,0.0,0.0,0.0,3,208.3356328,65311.32056,75056.1308851474,0.0,90,221442.0,2000000.0,-2000000.0,442.884,58258.3
