@@ -21,6 +21,7 @@ contains
 
     subroutine solve_energy_3d(ph, T_old, sh, m, cfg, alpha_q, alpha_other, &
                                alpha_old, mdot, T_src, is_gas, residual)
+        use mod_face_flux, only: face_mass_fluxes_noalpha
         use mod_workspace, only: ensure_workspace, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su
@@ -114,38 +115,38 @@ contains
                     ! West face (i-1/2)
                     if (m%cell_type(i-1,j,k) /= 0) then
                             k_f = harm(keff(i,j,k), keff(i-1,j,k))
-                            Dw = alpha_f * k_f * m%Ar(i-1,j,k) / &
+                            Dw = aface(alpha_q(i,j,k), alpha_q(i-1,j,k)) * k_f * m%Ar(i-1,j,k) / &
                                  (0.5_dp * (m%dr(i) + m%dr(i-1)))
                         end if
 
                     ! East face (i+1/2)
                     if (m%cell_type(i+1,j,k) /= 0) then
                             k_f = harm(keff(i,j,k), keff(i+1,j,k))
-                            De = alpha_f * k_f * m%Ar(i,j,k) / &
+                            De = aface(alpha_q(i,j,k), alpha_q(i+1,j,k)) * k_f * m%Ar(i,j,k) / &
                                  (0.5_dp * (m%dr(i) + m%dr(i+1)))
                         end if
 
                     ! South face (j-1/2) in theta
                     k_f = harm(keff(i,j,k), keff(i,jm,k))
-                    Ds = alpha_f * k_f * m%Ath(i,j,k) / &
+                    Ds = aface(alpha_q(i,j,k), alpha_q(i,jm,k)) * k_f * m%Ath(i,j,k) / &
                          (m%r(i) * 0.5_dp * (m%dtheta(j) + m%dtheta(jm)))
 
                     ! North face (j+1/2) in theta
                     k_f = harm(keff(i,j,k), keff(i,jp,k))
-                    Dn = alpha_f * k_f * m%Ath(i,j,k) / &
+                    Dn = aface(alpha_q(i,j,k), alpha_q(i,jp,k)) * k_f * m%Ath(i,j,k) / &
                          (m%r(i) * 0.5_dp * (m%dtheta(j) + m%dtheta(jp)))
 
                     ! Bottom face (k-1/2)
                     if (m%cell_type(i,j,k-1) /= 0) then
                             k_f = harm(keff(i,j,k), keff(i,j,k-1))
-                            Db = alpha_f * k_f * m%Az(i,j,k-1) / &
+                            Db = aface(alpha_q(i,j,k), alpha_q(i,j,k-1)) * k_f * m%Az(i,j,k-1) / &
                                  (0.5_dp * (m%dz(k) + m%dz(k-1)))
                         end if
 
                     ! Top face (k+1/2)
                     if (m%cell_type(i,j,k+1) /= 0) then
                             k_f = harm(keff(i,j,k), keff(i,j,k+1))
-                            Dt = alpha_f * k_f * m%Az(i,j,k) / &
+                            Dt = aface(alpha_q(i,j,k), alpha_q(i,j,k+1)) * k_f * m%Az(i,j,k) / &
                                  (0.5_dp * (m%dz(k) + m%dz(k+1)))
                         end if
 
@@ -160,8 +161,31 @@ contains
                         ! es mdot*cp*T. El código original sumaba F [kg/s]
                         ! directamente a D [W/K] — la convección térmica
                         ! quedaba subponderada ~cp (x700-1000).
-                        call face_mass_fluxes(alpha_q, ph%rho, ph%ur, &
-                            ph%uth, ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                        if (is_gas) then
+                            call face_mass_fluxes(alpha_q, ph%rho, ph%ur, &
+                                ph%uth, ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                        else
+                            ! LÍQUIDO (sep-2026): flujo DONOR-CELL, el mismo
+                            ! que usa el transporte de alpha (mod_continuity):
+                            ! rho*u simétrico en la cara x alpha del lado
+                            ! upwind. Con la interpolación simétrica de alpha
+                            ! una celda vacía (alpha=0) "entregaba" ½·alpha_P·
+                            ! rho·u de masa fantasma a la T rancia de la celda
+                            ! vacía (300 K inicial): en B1 v7 el 42% de las
+                            ! caras de celdas líquidas daban a vecinas vacías
+                            ! y el déficit convectivo acumulaba -2.2 GJ (la
+                            ! mitad de la entalpía fundida). Es además la
+                            ! única forma en que la forma con continuidad
+                            ! restada (alpha_old) es exacta.
+                            call face_mass_fluxes_noalpha(ph%rho, ph%ur, &
+                                ph%uth, ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                            Fw = donor(Fw, alpha_q(i-1,j,k), alpha_q(i,j,k))
+                            Fe = donor(Fe, alpha_q(i,j,k), alpha_q(i+1,j,k))
+                            Fs = donor(Fs, alpha_q(i,jm,k), alpha_q(i,j,k))
+                            Fn = donor(Fn, alpha_q(i,j,k), alpha_q(i,jp,k))
+                            Fb = donor(Fb, alpha_q(i,j,k-1), alpha_q(i,j,k))
+                            Ft = donor(Ft, alpha_q(i,j,k), alpha_q(i,j,k+1))
+                        end if
                         Fw = Fw * ph%cp(i,j,k); Fe = Fe * ph%cp(i,j,k)
                         Fs = Fs * ph%cp(i,j,k); Fn = Fn * ph%cp(i,j,k)
                         Fb = Fb * ph%cp(i,j,k); Ft = Ft * ph%cp(i,j,k)
@@ -304,7 +328,30 @@ contains
             end if
         end function keff
 
-        pure function harm(ka, kb) result(kf)
+        ! Fracción de fase EN LA CARA para la conductancia difusiva: media
+    ! armónica (simétrica -> la difusión telescopa exactamente; nula si
+    ! un lado no tiene la fase). Con alpha_P sola, una celda líquida
+    ! conducía calor hacia el "líquido" inexistente de la vecina vacía
+    ! (T rancia = 300 K): sumidero infinito no auditado (B1 v6/v7).
+    pure function aface(a1, a2) result(af)
+        real(dp), intent(in) :: a1, a2
+        real(dp) :: af
+        af = 2.0_dp * a1 * a2 / max(a1 + a2, SMALL)
+    end function aface
+
+    ! Flujo de masa donor-cell en una cara orientada de "lo" (lado -) a
+    ! "hi" (lado +): F>0 va de lo a hi y lleva alpha_lo; F<0 lleva alpha_hi.
+    pure function donor(F, a_lo, a_hi) result(Fd)
+        real(dp), intent(in) :: F, a_lo, a_hi
+        real(dp) :: Fd
+        if (F >= 0.0_dp) then
+            Fd = F * a_lo
+        else
+            Fd = F * a_hi
+        end if
+    end function donor
+
+    pure function harm(ka, kb) result(kf)
             real(dp), intent(in) :: ka, kb
             real(dp) :: kf
             kf = 2.0_dp * ka * kb / max(ka + kb, SMALL)

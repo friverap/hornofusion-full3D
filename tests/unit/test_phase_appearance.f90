@@ -14,6 +14,11 @@
 !   2. Sumidero sin latente (T_old=1300 < 1334 K => e_l <= e_s(T_sol)):
 !      campo uniforme, mdot<0 en una celda -> T = 1300 EXACTO en todas
 !      (antes: la celda del sumidero se enfriaba).
+!   3. Losa líquida a 1700 K rodeada de celdas vacías con T rancia 300 K,
+!      sin flujo -> la losa NO se enfría (conductancia con alpha de cara
+!      armónica; antes alpha_P sola conducía al vacío).
+!   4. Idem con velocidad vertical uniforme -> tampoco (flujo donor-cell:
+!      la vecina vacía no entrega masa; antes ½·alpha_P·rho·u a 300 K).
 !===============================================================================
 program test_phase_appearance
     use mod_constants
@@ -97,6 +102,49 @@ program test_phase_appearance
             ' celdas se apartan de 1300 K; sumidero T = ', liq%T(4,4,3)
         ok = .false.
     end if
+
+    ! ---- caso 3: sin difusión hacia vecinas vacías ----
+    ! losa líquida k=3 a 1700 K; el resto vacío con T rancia 300 K
+    liq%alpha = 0.0_dp; a_old = 0.0_dp; sol%mdot = 0.0_dp
+    liq%alpha(:,:,3) = 0.5_dp; a_old(:,:,3) = 0.5_dp
+    T_old = 300.0_dp; T_old(:,:,3) = 1700.0_dp; liq%T = T_old
+    call solve_energy_3d(liq, T_old, sh, mesh, cfg, liq%alpha, zero3, a_old, &
+                         sol%mdot, sol%T_s, .false., res)
+    nbad = 0
+    do j = 1, mesh%ntheta
+        do i = 1, mesh%nr
+            if (mesh%cell_type(i,j,3) == 0) cycle
+            if (abs(liq%T(i,j,3) - 1700.0_dp) > 1.0e-2_dp) nbad = nbad + 1
+        end do
+    end do
+    if (nbad > 0) then
+        print '(A,I0,A,F12.5)', '   FAIL caso 3: ', nbad, &
+            ' celdas de la losa se enfriaron por difusion a vecinas vacias; T = ', &
+            liq%T(3,4,3)
+        ok = .false.
+    end if
+
+    ! ---- caso 4: sin masa fantasma por convección desde vecina vacía ----
+    ! misma losa, velocidad vertical uniforme: la cara inferior de la losa
+    ! da a una celda vacía; con interpolación simétrica de alpha entraba
+    ! ½·alpha_P·rho·u de "líquido" a 300 K
+    liq%uz = 0.05_dp
+    liq%T = T_old
+    call solve_energy_3d(liq, T_old, sh, mesh, cfg, liq%alpha, zero3, a_old, &
+                         sol%mdot, sol%T_s, .false., res)
+    nbad = 0
+    do j = 1, mesh%ntheta
+        do i = 1, mesh%nr
+            if (mesh%cell_type(i,j,3) == 0) cycle
+            if (abs(liq%T(i,j,3) - 1700.0_dp) > 1.0e-2_dp) nbad = nbad + 1
+        end do
+    end do
+    if (nbad > 0) then
+        print '(A,I0,A,F12.5)', '   FAIL caso 4: ', nbad, &
+            ' celdas de la losa recibieron masa fantasma fria; T = ', liq%T(3,4,3)
+        ok = .false.
+    end if
+    liq%uz = 0.0_dp
 
     if (ok) then
         print '(A)', ' PASS test_phase_appearance'
