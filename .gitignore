@@ -42,3 +42,4 @@ tests/bin/
 
 # Manuscrito (no se publica en el repo)
 paper/
+__pycache__/
