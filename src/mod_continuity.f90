@@ -29,6 +29,8 @@ module mod_continuity
     use mod_face_flux
     use mod_mpi_topology, only: mpi_allreduce_max
     use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS
+    use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
+                             ws_Mr, ws_Mth, ws_Mz, ws_lim, ws_flux_valid
     implicit none
 
     logical, save :: fallback_warned = .false.
@@ -54,10 +56,15 @@ contains
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: cfl_loc, cfl_max, cfl_glob, dt_sub, a_pre, flux_net
         integer, parameter :: N_SUB_MAX = 128
-        real(dp), allocatable :: a_new(:,:,:)
+        integer, parameter :: N_LIM_IT = 3
+        integer :: ilim
+        real(dp) :: inflow, outflow, room
+        real(dp), allocatable :: a_new(:,:,:), lim_new(:,:,:)
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         allocate(a_new, mold=liq%alpha)
+        allocate(lim_new, mold=liq%alpha)
+        lim_new = 1.0_dp
 
         ! n_sub UNIFORME GLOBAL desde el CFL donor-cell máximo
         ! (suma de flujos de salida * dt / (rho*V))
@@ -126,7 +133,68 @@ contains
         liq%alpha = alpha_old
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
 
+        call ensure_workspace(m)
+        ws_Fr = 0.0_dp; ws_Fth = 0.0_dp; ws_Fz = 0.0_dp
+
         do isub = 1, n_sub
+            ! (1) Flujo donor-cell CRUDO por las caras + de cada celda
+            !     (rho*u simétrico en la cara x alpha del lado upwind)
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        ws_Mr(i,j,k) = 0.0_dp; ws_Mth(i,j,k) = 0.0_dp
+                        ws_Mz(i,j,k) = 0.0_dp
+                        if (m%cell_type(i,j,k) == 0) cycle
+                        call face_mass_fluxes_noalpha(liq%rho, liq%ur, &
+                            liq%uth, liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                        ws_Mr(i,j,k)  = donor_flux(Fe, liq%alpha(i,j,k), liq%alpha(i+1,j,k))
+                        ws_Mth(i,j,k) = donor_flux(Fn, liq%alpha(i,j,k), liq%alpha(i,j+1,k))
+                        ws_Mz(i,j,k)  = donor_flux(Ft, liq%alpha(i,j,k), liq%alpha(i,j,k+1))
+                    end do
+                end do
+            end do
+            call mpi_exchange_halos_3d(ws_Mr,  m%topo)
+            call mpi_exchange_halos_3d(ws_Mth, m%topo)
+            call mpi_exchange_halos_3d(ws_Mz,  m%topo)
+
+            ! (2) Limitador de HUECO (sep-2026): la entrada a una celda no
+            !     puede exceder el volumen que le queda libre
+            !     (1 - alpha_s - alpha_sl - alpha_l) más lo que sale de ella
+            !     en el mismo sub-paso. Antes el exceso se recortaba
+            !     (clip) y se PERDÍA: B1 v8, 4.4 t de acero en 427 s (7 t/min
+            !     al final) drenando al fondo del lecho ya lleno. Físicamente
+            !     el fundido percola por los huecos y, si no cabe, se
+            !     acumula encima. El factor s(celda) escala TODAS sus
+            !     entradas y lo aplican las dos celdas de cada cara =>
+            !     conservativo por construcción. Iterado N_LIM_IT veces
+            !     porque la salida de una celda es la entrada (limitada) de
+            !     su vecina; el residuo va al clip auditado.
+            ws_lim = 1.0_dp
+            do ilim = 1, N_LIM_IT
+                do k = kstart, kend
+                    do j = jstart, jend
+                        do i = istart, iend
+                            if (m%cell_type(i,j,k) == 0) cycle
+                            call cell_in_out(i, j, k, inflow, outflow)
+                            room = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k) &
+                                   - alpha_slag(i,j,k) - liq%alpha(i,j,k)) * &
+                                   liq%rho(i,j,k) * m%vol(i,j,k) / dt_sub &
+                                   + outflow - sol%mdot(i,j,k)
+                            if (inflow > SMALL) then
+                                lim_new(i,j,k) = min(1.0_dp, max(0.0_dp, room) / inflow)
+                            else
+                                lim_new(i,j,k) = 1.0_dp
+                            end if
+                        end do
+                    end do
+                end do
+                ws_lim = lim_new
+                call mpi_exchange_halos_3d(ws_lim, m%topo)
+            end do
+
+            ! (3) Actualización en forma de flujo con los flujos EFECTIVOS
+            !     (mismo valor en las dos celdas de la cara) y acumulación
+            !     para la energía
             do k = kstart, kend
                 do j = jstart, jend
                     do i = istart, iend
@@ -134,31 +202,29 @@ contains
                             a_new(i,j,k) = 0.0_dp
                             cycle
                         end if
-                        call face_mass_fluxes_noalpha(liq%rho, liq%ur, &
-                            liq%uth, liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
-                        ! Donor-cell: flujo de cara * alpha del lado upwind
-                        flux_net = &
-                              max(Fw,0.0_dp)*liq%alpha(i-1,j,k) &
-                            - max(-Fw,0.0_dp)*liq%alpha(i,j,k)  &
-                            - max(Fe,0.0_dp)*liq%alpha(i,j,k)   &
-                            + max(-Fe,0.0_dp)*liq%alpha(i+1,j,k) &
-                            + max(Fs,0.0_dp)*liq%alpha(i,j-1,k) &
-                            - max(-Fs,0.0_dp)*liq%alpha(i,j,k)  &
-                            - max(Fn,0.0_dp)*liq%alpha(i,j,k)   &
-                            + max(-Fn,0.0_dp)*liq%alpha(i,j+1,k) &
-                            + max(Fb,0.0_dp)*liq%alpha(i,j,k-1) &
-                            - max(-Fb,0.0_dp)*liq%alpha(i,j,k)  &
-                            - max(Ft,0.0_dp)*liq%alpha(i,j,k)   &
-                            + max(-Ft,0.0_dp)*liq%alpha(i,j,k+1)
+                        Fw = eff_flux(ws_Mr(i-1,j,k),  ws_lim(i-1,j,k), ws_lim(i,j,k))
+                        Fe = eff_flux(ws_Mr(i,j,k),    ws_lim(i,j,k),   ws_lim(i+1,j,k))
+                        Fs = eff_flux(ws_Mth(i,j-1,k), ws_lim(i,j-1,k), ws_lim(i,j,k))
+                        Fn = eff_flux(ws_Mth(i,j,k),   ws_lim(i,j,k),   ws_lim(i,j+1,k))
+                        Fb = eff_flux(ws_Mz(i,j,k-1),  ws_lim(i,j,k-1), ws_lim(i,j,k))
+                        Ft = eff_flux(ws_Mz(i,j,k),    ws_lim(i,j,k),   ws_lim(i,j,k+1))
+                        flux_net = Fw - Fe + Fs - Fn + Fb - Ft
                         a_new(i,j,k) = liq%alpha(i,j,k) + dt_sub * &
                             (flux_net + sol%mdot(i,j,k)) / &
                             (liq%rho(i,j,k) * m%vol(i,j,k))
+                        ws_Fr(i,j,k)  = ws_Fr(i,j,k)  + Fe * dt_sub / cfg%dt
+                        ws_Fth(i,j,k) = ws_Fth(i,j,k) + Fn * dt_sub / cfg%dt
+                        ws_Fz(i,j,k)  = ws_Fz(i,j,k)  + Ft * dt_sub / cfg%dt
                     end do
                 end do
             end do
             liq%alpha = a_new
             call mpi_exchange_halos_3d(liq%alpha, m%topo)
         end do
+        call mpi_exchange_halos_3d(ws_Fr,  m%topo)
+        call mpi_exchange_halos_3d(ws_Fth, m%topo)
+        call mpi_exchange_halos_3d(ws_Fz,  m%topo)
+        ws_flux_valid = .true.
 
         ! Restricciones de acotamiento (el ÚNICO error de masa; auditado)
         do k = kstart, kend
@@ -185,9 +251,61 @@ contains
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
         call mpi_exchange_halos_3d(gas%alpha, m%topo)
 
-        deallocate(a_new)
+        deallocate(a_new, lim_new)
+
+    contains
+
+        ! Entradas y salidas CRUDAS de la celda [kg/s] (con el limitador
+        ! actual de las receptoras aplicado a las salidas)
+        subroutine cell_in_out(ii, jj, kk, fin, fout)
+            integer, intent(in)   :: ii, jj, kk
+            real(dp), intent(out) :: fin, fout
+            real(dp) :: f
+            fin = 0.0_dp; fout = 0.0_dp
+            f = ws_Mr(ii-1,jj,kk)
+            if (f > 0.0_dp) then; fin = fin + f
+            else; fout = fout - f * ws_lim(ii-1,jj,kk); end if
+            f = ws_Mr(ii,jj,kk)
+            if (f < 0.0_dp) then; fin = fin - f
+            else; fout = fout + f * ws_lim(ii+1,jj,kk); end if
+            f = ws_Mth(ii,jj-1,kk)
+            if (f > 0.0_dp) then; fin = fin + f
+            else; fout = fout - f * ws_lim(ii,jj-1,kk); end if
+            f = ws_Mth(ii,jj,kk)
+            if (f < 0.0_dp) then; fin = fin - f
+            else; fout = fout + f * ws_lim(ii,jj+1,kk); end if
+            f = ws_Mz(ii,jj,kk-1)
+            if (f > 0.0_dp) then; fin = fin + f
+            else; fout = fout - f * ws_lim(ii,jj,kk-1); end if
+            f = ws_Mz(ii,jj,kk)
+            if (f < 0.0_dp) then; fin = fin - f
+            else; fout = fout + f * ws_lim(ii,jj,kk+1); end if
+        end subroutine cell_in_out
 
     end subroutine solve_volume_fraction
+
+    ! Flujo donor-cell en una cara orientada de lo (-) a hi (+)
+    pure function donor_flux(F, a_lo, a_hi) result(Fd)
+        real(dp), intent(in) :: F, a_lo, a_hi
+        real(dp) :: Fd
+        if (F >= 0.0_dp) then
+            Fd = F * a_lo
+        else
+            Fd = F * a_hi
+        end if
+    end function donor_flux
+
+    ! Flujo efectivo: el crudo escalado por el limitador de la celda
+    ! RECEPTORA (hi si F>0, lo si F<0)
+    pure function eff_flux(F, lim_lo, lim_hi) result(Fe)
+        real(dp), intent(in) :: F, lim_lo, lim_hi
+        real(dp) :: Fe
+        if (F >= 0.0_dp) then
+            Fe = F * lim_hi
+        else
+            Fe = F * lim_lo
+        end if
+    end function eff_flux
 
     !---------------------------------------------------------------------------
     ! Forma implícita ACOTADA (fallback para CFL > N_SUB_MAX*0.9): estable
@@ -212,6 +330,7 @@ contains
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         call ensure_workspace(m)
+        ws_flux_valid = .false.
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
 

@@ -25,6 +25,17 @@ module mod_workspace
     real(dp), allocatable :: ws_aS(:,:,:), ws_aN(:,:,:)
     real(dp), allocatable :: ws_aB(:,:,:), ws_aT(:,:,:)
     real(dp), allocatable :: ws_aP(:,:,:), ws_Su(:,:,:)
+    ! Flujos de masa EFECTIVOS del líquido [kg/s] por las caras + de cada
+    ! celda (este i+1/2, norte j+1/2, tope k+1/2), promediados sobre los
+    ! sub-pasos del transporte de alpha (limitador de hueco incluido).
+    ! Los consume solve_energy_3d para que la convección del líquido mueva
+    ! exactamente la masa que movió la continuidad (forma alpha^n exacta).
+    ! ws_flux_valid lo pone solve_volume_fraction (camino explícito) y lo
+    ! quita el fallback implícito. ws_M*/ws_lim: temporales del limitador.
+    real(dp), allocatable :: ws_Fr(:,:,:), ws_Fth(:,:,:), ws_Fz(:,:,:)
+    real(dp), allocatable :: ws_Mr(:,:,:), ws_Mth(:,:,:), ws_Mz(:,:,:)
+    real(dp), allocatable :: ws_lim(:,:,:)
+    logical, save :: ws_flux_valid = .false.
 
 contains
 
@@ -34,6 +45,8 @@ contains
         if (allocated(ws_aP)) return
         allocate(ws_aW(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         allocate(ws_aE, ws_aS, ws_aN, ws_aB, ws_aT, ws_aP, ws_Su, mold=ws_aW)
+        allocate(ws_Fr, ws_Fth, ws_Fz, ws_Mr, ws_Mth, ws_Mz, ws_lim, mold=ws_aW)
+        ws_Fr = 0.0_dp; ws_Fth = 0.0_dp; ws_Fz = 0.0_dp
     end subroutine ensure_workspace
 
 end module mod_workspace

@@ -22,7 +22,8 @@ contains
     subroutine solve_energy_3d(ph, T_old, sh, m, cfg, alpha_q, alpha_other, &
                                alpha_old, mdot, T_src, is_gas, residual)
         use mod_face_flux, only: face_mass_fluxes_noalpha
-        use mod_workspace, only: ensure_workspace, aW => ws_aW, &
+        use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
+            ws_flux_valid, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su
         type(phase_t), intent(inout) :: ph
@@ -177,14 +178,24 @@ contains
                             ! mitad de la entalpía fundida). Es además la
                             ! única forma en que la forma con continuidad
                             ! restada (alpha_old) es exacta.
-                            call face_mass_fluxes_noalpha(ph%rho, ph%ur, &
-                                ph%uth, ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
-                            Fw = donor(Fw, alpha_q(i-1,j,k), alpha_q(i,j,k))
-                            Fe = donor(Fe, alpha_q(i,j,k), alpha_q(i+1,j,k))
-                            Fs = donor(Fs, alpha_q(i,jm,k), alpha_q(i,j,k))
-                            Fn = donor(Fn, alpha_q(i,j,k), alpha_q(i,jp,k))
-                            Fb = donor(Fb, alpha_q(i,j,k-1), alpha_q(i,j,k))
-                            Ft = donor(Ft, alpha_q(i,j,k), alpha_q(i,j,k+1))
+                            if (ws_flux_valid) then
+                                ! flujos EFECTIVOS del transporte de alpha
+                                ! (limitador de hueco incluido, promedio de
+                                ! sub-pasos): la energía mueve exactamente la
+                                ! masa que movió la continuidad
+                                Fw = ws_Fr(i-1,j,k);  Fe = ws_Fr(i,j,k)
+                                Fs = ws_Fth(i,jm,k);  Fn = ws_Fth(i,j,k)
+                                Fb = ws_Fz(i,j,k-1);  Ft = ws_Fz(i,j,k)
+                            else
+                                call face_mass_fluxes_noalpha(ph%rho, ph%ur, &
+                                    ph%uth, ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                                Fw = donor(Fw, alpha_q(i-1,j,k), alpha_q(i,j,k))
+                                Fe = donor(Fe, alpha_q(i,j,k), alpha_q(i+1,j,k))
+                                Fs = donor(Fs, alpha_q(i,jm,k), alpha_q(i,j,k))
+                                Fn = donor(Fn, alpha_q(i,j,k), alpha_q(i,jp,k))
+                                Fb = donor(Fb, alpha_q(i,j,k-1), alpha_q(i,j,k))
+                                Ft = donor(Ft, alpha_q(i,j,k), alpha_q(i,j,k+1))
+                            end if
                         end if
                         Fw = Fw * ph%cp(i,j,k); Fe = Fe * ph%cp(i,j,k)
                         Fs = Fs * ph%cp(i,j,k); Fn = Fn * ph%cp(i,j,k)
