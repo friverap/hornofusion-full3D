@@ -15,6 +15,10 @@
 !   2. Columna uniforme alpha_l=0.5 con flujo vertical: el limitador no
 !      actúa (entrada = salida), la masa se conserva a 1e-12 y el flujo
 !      efectivo acumulado por cara es el donor-cell crudo.
+!   3. Columna casi llena (alpha_l=0.99 en k=2..nz) sobre fondo sólido con
+!      flujo hacia abajo fuerte: el "no cabe" debe propagarse por toda la
+!      columna (convergencia del limitador, no 3 barridos fijos): masa
+!      exacta y ningún sobrellenado.
 !===============================================================================
 program test_alpha_limiter
     use mod_constants
@@ -112,6 +116,26 @@ program test_alpha_limiter
     if (err > 1.0e-9_dp) then
         print '(A,2ES12.4)', '   FAIL caso 2: flujo efectivo /= donor crudo: ', &
             ws_Fz(3,4,3), F_expected
+        ok = .false.
+    end if
+
+    ! ---- caso 3: columna casi llena, el limitador debe converger ----
+    sol%alpha_s = 0.0_dp; liq%alpha = 0.0_dp
+    sol%alpha_s(3,4,1) = 1.0_dp
+    liq%alpha(3,4,2:nz) = 0.99_dp
+    liq%uz = -2.0_dp
+    a_old = liq%alpha
+    m0 = liquid_mass()
+    call solve_volume_fraction(liq, gas, sol, slag%alpha_sl, a_old, mesh, cfg)
+    m1 = liquid_mass()
+    err = abs(m1 - m0) / m0
+    if (err > 1.0e-12_dp) then
+        print '(A,ES10.3)', '   FAIL caso 3: columna llena perdio masa (clip), err = ', err
+        ok = .false.
+    end if
+    over = maxval(liq%alpha(1:nr,1:nth,1:nz) + sol%alpha_s(1:nr,1:nth,1:nz)) - 1.0_dp
+    if (over > 1.0e-12_dp) then
+        print '(A,ES10.3)', '   FAIL caso 3: sobrellenado = ', over
         ok = .false.
     end if
 

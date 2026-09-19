@@ -247,7 +247,9 @@ contains
         if (is_writer(m)) then
             open(newunit=iu, file=trim(audit_path), status='old', &
                  action='write', position='append')
-            write(iu, '(I0,A,ES16.9,A,ES16.9,46(A,ES16.9))') &
+            ! ES17.9E3: sin E3 un valor < 1e-99 imprime '6.678-178' (sin la
+            ! E) y rompe el CSV (B1 v9, m_alpha_clip subnormal)
+            write(iu, '(I0,A,ES17.9E3,A,ES17.9E3,46(A,ES17.9E3))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &

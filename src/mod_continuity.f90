@@ -25,7 +25,7 @@ module mod_continuity
     use mod_types_3d
     use mod_solver_3d
     use mod_parallel_utils
-    use mod_probe, only: probe_active_now
+    use mod_probe, only: probe_active_now, probe_current_step
     use mod_face_flux
     use mod_mpi_topology, only: mpi_allreduce_max
     use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS
@@ -34,6 +34,13 @@ module mod_continuity
     implicit none
 
     logical, save :: fallback_warned = .false.
+    ! Clip auditado por PASO (sep-2026): solve_volume_fraction corre en
+    ! cada iteración externa y rehace alpha desde alpha_old, así que el
+    ! clip real del paso es el de la ÚLTIMA iteración, no la suma (B1 v9:
+    ! el audit contaba 13.1 t con 2.6 t perdidas — exactamente x5 outers).
+    ! Se audita la diferencia respecto a la llamada anterior del mismo paso.
+    real(dp), save :: clip_step_prev = 0.0_dp
+    integer,  save :: clip_step_id = -huge(1)
 
 contains
 
@@ -56,9 +63,13 @@ contains
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: cfl_loc, cfl_max, cfl_glob, dt_sub, a_pre, flux_net
         integer, parameter :: N_SUB_MAX = 128
-        integer, parameter :: N_LIM_IT = 3
+        ! Barridos del limitador: el "no cabe" se propaga UNA celda por
+        ! barrido; una columna que se llena desde el fondo necesita ~nz.
+        ! Se itera hasta convergencia (B1 v9: con 3 barridos fijos, el
+        ! drenaje súbito de 425 s recortó 2.6 t en columnas de 10 celdas).
+        integer, parameter :: N_LIM_MAX = 256
         integer :: ilim
-        real(dp) :: inflow, outflow, room
+        real(dp) :: inflow, outflow, room, dlim, dlim_glob, clip_call
         real(dp), allocatable :: a_new(:,:,:), lim_new(:,:,:)
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -170,7 +181,7 @@ contains
             !     porque la salida de una celda es la entrada (limitada) de
             !     su vecina; el residuo va al clip auditado.
             ws_lim = 1.0_dp
-            do ilim = 1, N_LIM_IT
+            do ilim = 1, N_LIM_MAX
                 do k = kstart, kend
                     do j = jstart, jend
                         do i = istart, iend
@@ -188,8 +199,16 @@ contains
                         end do
                     end do
                 end do
+                dlim = maxval(abs(lim_new(istart:iend,jstart:jend,kstart:kend) &
+                                - ws_lim(istart:iend,jstart:jend,kstart:kend)))
                 ws_lim = lim_new
                 call mpi_exchange_halos_3d(ws_lim, m%topo)
+                if (m%is_parallel) then
+                    call mpi_allreduce_max(dlim, dlim_glob, m%topo)
+                else
+                    dlim_glob = dlim
+                end if
+                if (dlim_glob < 1.0e-12_dp) exit
             end do
 
             ! (3) Actualización en forma de flujo con los flujos EFECTIVOS
@@ -227,6 +246,7 @@ contains
         ws_flux_valid = .true.
 
         ! Restricciones de acotamiento (el ÚNICO error de masa; auditado)
+        clip_call = 0.0_dp
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
@@ -240,8 +260,8 @@ contains
                     liq%alpha(i,j,k) = max(0.0_dp, &
                         min(1.0_dp - sol%alpha_s(i,j,k) - alpha_slag(i,j,k), &
                             liq%alpha(i,j,k)))
-                    call audit_add(AUD_ALPHA_CLIP_MASS, &
-                        (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k))
+                    clip_call = clip_call + &
+                        (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k)
                     gas%alpha(i,j,k) = 1.0_dp - sol%alpha_s(i,j,k) &
                                        - alpha_slag(i,j,k) - liq%alpha(i,j,k)
                     gas%alpha(i,j,k) = max(0.0_dp, gas%alpha(i,j,k))
@@ -250,6 +270,7 @@ contains
         end do
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
         call mpi_exchange_halos_3d(gas%alpha, m%topo)
+        call audit_clip_step(clip_call)
 
         deallocate(a_new, lim_new)
 
@@ -326,11 +347,12 @@ contains
 
         integer :: i, j, k
         integer :: istart, iend, jstart, jend, kstart, kend
-        real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, vol_dt, a_pre
+        real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, vol_dt, a_pre, clip_call
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         call ensure_workspace(m)
         ws_flux_valid = .false.
+        clip_call = 0.0_dp
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
 
@@ -369,8 +391,8 @@ contains
                     liq%alpha(i,j,k) = max(0.0_dp, &
                         min(1.0_dp - sol%alpha_s(i,j,k) - alpha_slag(i,j,k), &
                             liq%alpha(i,j,k)))
-                    call audit_add(AUD_ALPHA_CLIP_MASS, &
-                        (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k))
+                    clip_call = clip_call + &
+                        (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k)
                     gas%alpha(i,j,k) = 1.0_dp - sol%alpha_s(i,j,k) &
                                        - alpha_slag(i,j,k) - liq%alpha(i,j,k)
                     gas%alpha(i,j,k) = max(0.0_dp, gas%alpha(i,j,k))
@@ -379,5 +401,21 @@ contains
         end do
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
         call mpi_exchange_halos_3d(gas%alpha, m%topo)
+        call audit_clip_step(clip_call)
     end subroutine solve_alpha_bounded_implicit
+
+    ! Audita el clip de ESTA llamada de modo que, al cierre del paso, el
+    ! contador contenga el clip de la última iteración externa (las
+    ! llamadas del mismo paso se auditan como diferencias telescópicas)
+    subroutine audit_clip_step(clip_call)
+        real(dp), intent(in) :: clip_call
+        integer :: step
+        step = probe_current_step()
+        if (step /= clip_step_id) then
+            clip_step_id   = step
+            clip_step_prev = 0.0_dp
+        end if
+        call audit_add(AUD_ALPHA_CLIP_MASS, clip_call - clip_step_prev)
+        clip_step_prev = clip_call
+    end subroutine audit_clip_step
 end module mod_continuity

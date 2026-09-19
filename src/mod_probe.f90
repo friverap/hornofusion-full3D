@@ -22,7 +22,7 @@ module mod_probe
     implicit none
 
     private
-    public :: probe_active, probe_active_now, probe_report, probe_set_step
+    public :: probe_active, probe_active_now, probe_current_step, probe_report, probe_set_step
 
     ! el paso lo fija main cada iteracion: asi las subetapas del lazo
     ! multifase no necesitan cambiar de firma para instrumentarse
@@ -37,6 +37,10 @@ contains
     end subroutine probe_set_step
 
     !---------------------------------------------------------------------------
+    pure integer function probe_current_step()
+        probe_current_step = current_step
+    end function probe_current_step
+
     pure logical function probe_active_now(cfg)
         type(config_t), intent(in) :: cfg
         probe_active_now = probe_active(cfg, current_step)
