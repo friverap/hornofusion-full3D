@@ -146,6 +146,13 @@ contains
 
         call ensure_workspace(m)
         ws_Fr = 0.0_dp; ws_Fth = 0.0_dp; ws_Fz = 0.0_dp
+        ! Arrays de cara COMPLETOS a cero (halos incluidos): los halos de
+        ! frontera FÍSICA (eje i=0, piso k=0) los leen cell_in_out/eff_flux
+        ! y nadie los escribe (no hay rank vecino que los intercambie).
+        ! Con memoria sucia allí, B1 v10 creó 12 kg de líquido en el paso 5
+        ! y 143 t (más que la carga) en 120 s; el mismo binario con heap
+        ! limpio no lo reproducía (dependía del estado del heap).
+        ws_Mr = 0.0_dp; ws_Mth = 0.0_dp; ws_Mz = 0.0_dp; ws_lim = 1.0_dp
 
         do isub = 1, n_sub
             ! (1) Flujo donor-cell CRUDO por las caras + de cada celda
