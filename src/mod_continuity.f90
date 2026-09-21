@@ -28,7 +28,7 @@ module mod_continuity
     use mod_probe, only: probe_active_now, probe_current_step
     use mod_face_flux
     use mod_mpi_topology, only: mpi_allreduce_max
-    use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS
+    use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS, AUD_SPILL_MASS
     use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
                              ws_Mr, ws_Mth, ws_Mz, ws_lim, ws_flux_valid
     implicit none
@@ -41,6 +41,8 @@ module mod_continuity
     ! Se audita la diferencia respecto a la llamada anterior del mismo paso.
     real(dp), save :: clip_step_prev = 0.0_dp
     integer,  save :: clip_step_id = -huge(1)
+    real(dp), save :: spill_step_prev = 0.0_dp
+    integer,  save :: spill_step_id = -huge(1)
 
 contains
 
@@ -68,8 +70,11 @@ contains
         ! Se itera hasta convergencia (B1 v9: con 3 barridos fijos, el
         ! drenaje súbito de 425 s recortó 2.6 t en columnas de 10 celdas).
         integer, parameter :: N_LIM_MAX = 256
-        integer :: ilim
+        integer, parameter :: N_SPILL_MAX = 64
+        integer :: ilim, ipass, n_it_max
         real(dp) :: inflow, outflow, room, dlim, dlim_glob, clip_call
+        real(dp) :: dlim_exit, cap, exc, room_up, give, exc_glob, spill_call
+        real(dp) :: exc0_glob
         real(dp), allocatable :: a_new(:,:,:), lim_new(:,:,:)
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -146,6 +151,7 @@ contains
 
         call ensure_workspace(m)
         ws_Fr = 0.0_dp; ws_Fth = 0.0_dp; ws_Fz = 0.0_dp
+        n_it_max = 0; dlim_exit = 0.0_dp
         ! Arrays de cara COMPLETOS a cero (halos incluidos): los halos de
         ! frontera FÍSICA (eje i=0, piso k=0) los leen cell_in_out/eff_flux
         ! y nadie los escribe (no hay rank vecino que los intercambie).
@@ -217,6 +223,8 @@ contains
                 end if
                 if (dlim_glob < 1.0e-12_dp) exit
             end do
+            n_it_max  = max(n_it_max, min(ilim, N_LIM_MAX))
+            dlim_exit = max(dlim_exit, dlim_glob)
 
             ! (3) Actualización en forma de flujo con los flujos EFECTIVOS
             !     (mismo valor en las dos celdas de la cara) y acumulación
@@ -252,6 +260,69 @@ contains
         call mpi_exchange_halos_3d(ws_Fz,  m%topo)
         ws_flux_valid = .true.
 
+        !-------------------------------------------------------------------
+        ! Derrame CONSERVATIVO del exceso (sep-2026, B1 v11): lo que aun
+        ! sobrepase la restriccion de volumen tras el limitador (residuo del
+        ! punto fijo, ~g por paso en el bano lleno) se desplaza a la celda
+        ! de ARRIBA con hueco en vez de recortarse — la superficie libre
+        ! sube, que es lo que hace el liquido que no cabe. Propagacion
+        ! dirigida (una celda por pasada, finita: profundidad del bano), con
+        ! la misma cantidad aplicada por dador y receptor => conservativo e
+        ! invariante a la descomposicion (z esta descompuesta: 'give' se
+        ! intercambia por halos). La masa derramada entra a ws_Fz para que
+        ! la energia la transporte con la T del dador. Lo que ni asi cabe
+        ! (columna llena hasta el techo) va al clip auditado.
+        !-------------------------------------------------------------------
+        spill_call = 0.0_dp; exc0_glob = -1.0_dp
+        do ipass = 1, N_SPILL_MAX
+            exc = 0.0_dp
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        ws_lim(i,j,k) = 0.0_dp
+                        if (m%cell_type(i,j,k) == 0) cycle
+                        cap = 1.0_dp - sol%alpha_s(i,j,k) - alpha_slag(i,j,k)
+                        give = liq%alpha(i,j,k) - cap
+                        if (give <= 1.0e-15_dp) cycle
+                        exc = max(exc, give)
+                        if (m%cell_type(i,j,k+1) == 0) cycle
+                        room_up = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k+1) &
+                                  - alpha_slag(i,j,k+1) - liq%alpha(i,j,k+1)) &
+                                  * m%vol(i,j,k+1) / m%vol(i,j,k)
+                        ws_lim(i,j,k) = min(give, room_up)
+                    end do
+                end do
+            end do
+            if (m%is_parallel) then
+                call mpi_allreduce_max(exc, exc_glob, m%topo)
+            else
+                exc_glob = exc
+            end if
+            if (exc0_glob < 0.0_dp) exc0_glob = exc_glob
+            if (exc_glob <= 1.0e-15_dp) exit
+            call mpi_exchange_halos_3d(ws_lim, m%topo)
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        if (m%cell_type(i,j,k) == 0) cycle
+                        give = ws_lim(i,j,k)
+                        liq%alpha(i,j,k) = liq%alpha(i,j,k) - give
+                        if (m%cell_type(i,j,k-1) /= 0) &
+                            liq%alpha(i,j,k) = liq%alpha(i,j,k) + ws_lim(i,j,k-1) &
+                                * m%vol(i,j,k-1) / m%vol(i,j,k)
+                        if (give > 0.0_dp) then
+                            ws_Fz(i,j,k) = ws_Fz(i,j,k) + give * liq%rho(i,j,k) &
+                                           * m%vol(i,j,k) / cfg%dt
+                            spill_call = spill_call + give * liq%rho(i,j,k) * m%vol(i,j,k)
+                        end if
+                    end do
+                end do
+            end do
+            call mpi_exchange_halos_3d(liq%alpha, m%topo)
+        end do
+        call mpi_exchange_halos_3d(ws_Fz, m%topo)
+        call audit_step_delta(AUD_SPILL_MASS, spill_call, spill_step_prev, spill_step_id)
+
         ! Restricciones de acotamiento (el ÚNICO error de masa; auditado)
         clip_call = 0.0_dp
         do k = kstart, kend
@@ -277,7 +348,18 @@ contains
         end do
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
         call mpi_exchange_halos_3d(gas%alpha, m%topo)
-        call audit_clip_step(clip_call)
+        call audit_step_delta(AUD_ALPHA_CLIP_MASS, clip_call, clip_step_prev, clip_step_id)
+
+        ! Diagnostico del limitador/derrame (rank 0, espaciado): iteraciones
+        ! del punto fijo, dlim al salir, exceso maximo antes del derrame,
+        ! masa derramada y recortada en esta llamada (locales al rank 0)
+        if (should_print(m) .and. mod(probe_current_step(), 250) == 0 .and. &
+            (spill_call > 1.0e-3_dp .or. clip_call > 1.0e-3_dp)) then
+            print '(A,I0,A,I0,A,ES9.2,A,ES9.2,A,ES10.3,A,ES10.3)', &
+                '   [LIM] paso ', probe_current_step(), ' it_max=', n_it_max, &
+                ' dlim_exit=', dlim_exit, ' exc0=', exc0_glob, &
+                ' derramado=', spill_call, ' recortado=', clip_call
+        end if
 
         deallocate(a_new, lim_new)
 
@@ -408,21 +490,24 @@ contains
         end do
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
         call mpi_exchange_halos_3d(gas%alpha, m%topo)
-        call audit_clip_step(clip_call)
+        call audit_step_delta(AUD_ALPHA_CLIP_MASS, clip_call, clip_step_prev, clip_step_id)
     end subroutine solve_alpha_bounded_implicit
 
-    ! Audita el clip de ESTA llamada de modo que, al cierre del paso, el
-    ! contador contenga el clip de la última iteración externa (las
-    ! llamadas del mismo paso se auditan como diferencias telescópicas)
-    subroutine audit_clip_step(clip_call)
-        real(dp), intent(in) :: clip_call
+    ! Audita el valor de ESTA llamada de modo que, al cierre del paso, el
+    ! contador contenga el de la última iteración externa (las llamadas
+    ! del mismo paso se auditan como diferencias telescópicas)
+    subroutine audit_step_delta(id, val, prev, step_id)
+        integer,  intent(in)    :: id
+        real(dp), intent(in)    :: val
+        real(dp), intent(inout) :: prev
+        integer,  intent(inout) :: step_id
         integer :: step
         step = probe_current_step()
-        if (step /= clip_step_id) then
-            clip_step_id   = step
-            clip_step_prev = 0.0_dp
+        if (step /= step_id) then
+            step_id = step
+            prev    = 0.0_dp
         end if
-        call audit_add(AUD_ALPHA_CLIP_MASS, clip_call - clip_step_prev)
-        clip_step_prev = clip_call
-    end subroutine audit_clip_step
+        call audit_add(id, val - prev)
+        prev = val
+    end subroutine audit_step_delta
 end module mod_continuity

@@ -38,7 +38,7 @@ module mod_audit
     public :: AUD_FE_YIELD, AUD_FE_RETURN, AUD_SLAG_OX_E, AUD_SLAG_RED_E
     public :: AUD_RAD_FOAM
     public :: AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
-    public :: AUD_RESID_MASS, AUD_RESID_E
+    public :: AUD_RESID_MASS, AUD_RESID_E, AUD_SPILL_MASS
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -67,7 +67,8 @@ module mod_audit
     integer, parameter :: AUD_IPH_LIQ         = 24 ! J interfase RETIRADOS del líquido (idem)
     integer, parameter :: AUD_RESID_MASS      = 25 ! kg de solido residual cerrados al liquido (subconjunto de m_melted)
     integer, parameter :: AUD_RESID_E         = 26 ! J entregados con ese residuo (subconjunto de E_melt_from_solid)
-    integer, parameter :: N_AUD = 26
+    integer, parameter :: AUD_SPILL_MASS      = 27 ! kg de liquido derramados hacia arriba (conservativo; informativo)
+    integer, parameter :: N_AUD = 27
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -141,7 +142,7 @@ contains
                 'E_mass_liq,m_ecs_in,E_ecs_in,m_flux_in,E_flux_in,' // &
                 'm_fe_yield,m_fe_return,E_slag_ox,E_slag_red,E_rad_foam,' // &
                 'E_iph_sol,E_iph_gas,E_iph_liq,' // &
-                'm_resid_closed,E_resid_closed'
+                'm_resid_closed,E_resid_closed,m_spill'
             close(iu)
         end if
         acc = 0.0_dp
@@ -249,7 +250,7 @@ contains
                  action='write', position='append')
             ! ES17.9E3: sin E3 un valor < 1e-99 imprime '6.678-178' (sin la
             ! E) y rompe el CSV (B1 v9, m_alpha_clip subnormal)
-            write(iu, '(I0,A,ES17.9E3,A,ES17.9E3,46(A,ES17.9E3))') &
+            write(iu, '(I0,A,ES17.9E3,A,ES17.9E3,47(A,ES17.9E3))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &
@@ -270,7 +271,7 @@ contains
                 ',', a(AUD_SLAG_OX_E), ',', a(AUD_SLAG_RED_E), &
                 ',', a(AUD_RAD_FOAM), &
                 ',', a(AUD_IPH_SOL), ',', a(AUD_IPH_GAS), ',', a(AUD_IPH_LIQ), &
-                ',', a(AUD_RESID_MASS), ',', a(AUD_RESID_E)
+                ',', a(AUD_RESID_MASS), ',', a(AUD_RESID_E), ',', a(AUD_SPILL_MASS)
             close(iu)
         end if
     end subroutine audit_write_step

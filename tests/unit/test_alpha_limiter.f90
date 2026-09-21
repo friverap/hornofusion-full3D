@@ -19,6 +19,10 @@
 !      flujo hacia abajo fuerte: el "no cabe" debe propagarse por toda la
 !      columna (convergencia del limitador, no 3 barridos fijos): masa
 !      exacta y ningún sobrellenado.
+!   4. Derrame: alpha_old sobrellena una celda (a_l=1 con a_s=0.2) con
+!      hueco encima y velocidad nula -> el exceso 0.2 sube a la celda de
+!      arriba (con la razón de volúmenes), masa exacta, sin clip, y
+!      ws_Fz de la cara superior lleva la masa derramada (energía).
 !===============================================================================
 program test_alpha_limiter
     use mod_constants
@@ -136,6 +140,36 @@ program test_alpha_limiter
     over = maxval(liq%alpha(1:nr,1:nth,1:nz) + sol%alpha_s(1:nr,1:nth,1:nz)) - 1.0_dp
     if (over > 1.0e-12_dp) then
         print '(A,ES10.3)', '   FAIL caso 3: sobrellenado = ', over
+        ok = .false.
+    end if
+
+    ! ---- caso 4: derrame conservativo del exceso ----
+    sol%alpha_s = 0.0_dp; liq%alpha = 0.0_dp; liq%uz = 0.0_dp
+    sol%alpha_s(3,4,2) = 0.2_dp
+    liq%alpha(3,4,2) = 1.0_dp          ! sobrellena: a_s + a_l = 1.2
+    liq%alpha(3,4,3) = 0.1_dp
+    a_old = liq%alpha
+    m0 = liquid_mass()
+    call solve_volume_fraction(liq, gas, sol, slag%alpha_sl, a_old, mesh, cfg)
+    m1 = liquid_mass()
+    err = abs(m1 - m0) / m0
+    if (err > 1.0e-12_dp) then
+        print '(A,ES10.3)', '   FAIL caso 4: el derrame no conservo la masa, err = ', err
+        ok = .false.
+    end if
+    if (abs(liq%alpha(3,4,2) - 0.8_dp) > 1.0e-12_dp) then
+        print '(A,F10.6)', '   FAIL caso 4: la celda sobrellena no quedo en 0.8: ', liq%alpha(3,4,2)
+        ok = .false.
+    end if
+    F_expected = 0.1_dp + 0.2_dp * mesh%vol(3,4,2) / mesh%vol(3,4,3)
+    if (abs(liq%alpha(3,4,3) - F_expected) > 1.0e-12_dp) then
+        print '(A,2F10.6)', '   FAIL caso 4: la celda de arriba no recibio el exceso: ', &
+            liq%alpha(3,4,3), F_expected
+        ok = .false.
+    end if
+    F_expected = 0.2_dp * liq%rho(3,4,2) * mesh%vol(3,4,2) / cfg%dt
+    if (abs(ws_Fz(3,4,2) - F_expected) > 1.0e-9_dp * F_expected) then
+        print '(A,2ES12.4)', '   FAIL caso 4: ws_Fz no lleva el derrame: ', ws_Fz(3,4,2), F_expected
         ok = .false.
     end if
 

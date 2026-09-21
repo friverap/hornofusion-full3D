@@ -102,6 +102,9 @@ DEFS = {
                              "[kg]; subset of m\\_melted"),
     "E_resid_closed": ("C", "Enthalpy handed with that residual [J]; subset "
                              "of E\\_melt\\_from\\_solid"),
+    "m_spill": ("C", "Liquid displaced upward by the conservative spill of "
+                     "volume-constraint excess [kg] (informative; no mass "
+                     "error)"),
 }
 
 src = open(SRC).read()
