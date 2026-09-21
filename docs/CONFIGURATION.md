@@ -159,8 +159,9 @@ Los residuales son normas L2 globales (reducción MPI). El SIMPLE itera hasta qu
 | `h_fusion` | real | 247000.0 | J/kg | Calor latente de fusión |
 | `k_s` | real | 35.0 | W/(m·K) | Conductividad térmica sólido |
 | `k_l` | real | 30.0 | W/(m·K) | Conductividad térmica líquido |
+| `d_droplet` | real | 0.002 | m | Diámetro de gota del líquido disperso (α_l < 0.01): fija su velocidad terminal de sedimentación (Schiller–Naumann contra el gas local). 0 desactiva la sedimentación (comportamiento anterior a sep-2026: la niebla quedaba suspendida). |
 
-Fuente: Ugarte et al. (2024), Tabla 2.
+Fuente: Ugarte et al. (2024), Tabla 2; `d_droplet` es un cierre propio (ver `docs/PHYSICS.md`).
 
 ---
 

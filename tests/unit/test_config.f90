@@ -35,6 +35,7 @@ program test_config
     write(iu, '(A)') 'ecs_mode = coupled'
     write(iu, '(A)') 'ecs_profile_file = input/ecs.dat'
     write(iu, '(A)') 'd_particle = 0.025'
+    write(iu, '(A)') 'd_droplet = 0.004'
     write(iu, '(A)') 'alpha_k = 0.45'
     write(iu, '(A)') 'iph_dt_safety = 0.25'
     write(iu, '(A)') 'probe_step_from = 1200'
@@ -54,6 +55,7 @@ program test_config
     if (.not. cfg%solve_ecs)                call fail('solve_ecs', ok)
     if (abs(cfg%ecs_rate - 55.5_dp) > 1e-12_dp) call fail('ecs_rate', ok)
     if (abs(cfg%d_particle - 0.025_dp) > 1e-12_dp) call fail('d_particle', ok)
+    if (abs(cfg%d_droplet - 0.004_dp) > 1e-12_dp) call fail('d_droplet', ok)
     if (abs(cfg%alpha_k - 0.45_dp) > 1e-12_dp)  call fail('alpha_k', ok)
     if (abs(cfg%iph_dt_safety - 0.25_dp) > 1e-12_dp) call fail('iph_dt_safety', ok)
     if (cfg%probe_step_from /= 1200) call fail('probe_step_from', ok)

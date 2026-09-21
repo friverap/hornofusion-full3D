@@ -53,6 +53,9 @@ module mod_types_3d
 
         ! Ergun
         real(dp) :: d_particle
+        ! Diametro de gota del liquido DISPERSO (alpha_l < ALPHA_FLOW_CUTOFF):
+        ! fija su velocidad terminal de sedimentacion (0 = sin sedimentacion)
+        real(dp) :: d_droplet
         real(dp) :: iph_dt_safety
         integer  :: probe_step_from, probe_step_to
 

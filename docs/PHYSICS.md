@@ -623,3 +623,12 @@ g = -9.81 m/s²       (hacia abajo, z negativo)
 ---
 
 *Referencia base: Ugarte et al. (2024), Materials 17(21), 5139*
+
+## Líquido disperso: sedimentación (sep-2026)
+
+Por debajo de `ALPHA_FLOW_CUTOFF` el líquido no tiene ecuación de momento propia (su inercia es demasiado pequeña para el acople de presión). En el transporte de α se le asigna la velocidad de la fase portadora más una velocidad de deslizamiento terminal hacia abajo — el cierre de **deslizamiento algebraico** del modelo de mezcla (Manninen, Taivassalo & Kallio, *On the mixture model for multiphase flow*, VTT 1996), válido cuando la gota alcanza su velocidad terminal en un tiempo corto frente al del flujo:
+
+    u_l = u_g − u_t(d) ẑ,    u_t = sqrt( 4 g d (ρ_l − ρ_g) / (3 C_d ρ_g) ),
+    C_d = 24/Re (1 + 0.15 Re^0.687)  (Re < 1000),   0.44  (Re ≥ 1000),   Re = ρ_g u_t d / μ_g
+
+resuelto por punto fijo. `d_droplet` (default 2 mm) es el diámetro de gota; para acero en gas a 1800 K u_t ≈ 35 m/s, mayor que la caída libre desde el techo, por lo que la niebla salpicada por el arco vuelve al baño en menos de un segundo y el resultado es insensible a d en el rango 1–5 mm. El flujo entra como flujo de cara donor-cell, conservativo, y la energía lo acompaña por los flujos efectivos.

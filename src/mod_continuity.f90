@@ -27,13 +27,16 @@ module mod_continuity
     use mod_parallel_utils
     use mod_probe, only: probe_active_now, probe_current_step
     use mod_face_flux
-    use mod_mpi_topology, only: mpi_allreduce_max
+    use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d
     use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS, AUD_SPILL_MASS
     use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
                              ws_Mr, ws_Mth, ws_Mz, ws_lim, ws_flux_valid
     implicit none
 
     logical, save :: fallback_warned = .false.
+    ! Cota de la velocidad de sedimentacion [m/s]: con dz~0.1 m y dt=2 ms
+    ! da CFL~1 => 1-2 sub-pasos; fisicamente u_t(2 mm) ~ 35 m/s
+    real(dp), parameter :: U_SETTLE_MAX = 50.0_dp
     ! Clip auditado por PASO (sep-2026): solve_volume_fraction corre en
     ! cada iteración externa y rehace alpha desde alpha_old, así que el
     ! clip real del paso es el de la ÚLTIMA iteración, no la suma (B1 v9:
@@ -76,11 +79,20 @@ contains
         real(dp) :: dlim_exit, cap, exc, room_up, give, exc_glob, spill_call
         real(dp) :: exc0_glob
         real(dp), allocatable :: a_new(:,:,:), lim_new(:,:,:)
+        ! Velocidad EFECTIVA del liquido para el transporte de alpha: la del
+        ! momento donde alpha_l >= ALPHA_FLOW_CUTOFF; bajo el umbral (liquido
+        ! disperso, sin ecuacion de momento propia) la del gas mas la
+        ! velocidad terminal de sedimentacion hacia abajo (cierre de
+        ! deslizamiento algebraico, Manninen et al. 1996). Antes era 0:
+        ! la niebla salpicada por el arco quedaba suspendida (B1 v11, 3.6 t).
+        real(dp), allocatable :: ur_e(:,:,:), uth_e(:,:,:), uz_e(:,:,:)
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         allocate(a_new, mold=liq%alpha)
         allocate(lim_new, mold=liq%alpha)
         lim_new = 1.0_dp
+        allocate(ur_e, uth_e, uz_e, mold=liq%alpha)
+        call effective_liquid_velocity(liq, gas, m, cfg, ur_e, uth_e, uz_e)
 
         ! n_sub UNIFORME GLOBAL desde el CFL donor-cell máximo
         ! (suma de flujos de salida * dt / (rho*V))
@@ -90,8 +102,8 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
-                    call face_mass_fluxes_noalpha(liq%rho, liq%ur, liq%uth, &
-                        liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                    call face_mass_fluxes_noalpha(liq%rho, ur_e, uth_e, &
+                        uz_e, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
                     cfl_loc = (max(-Fw,0.0_dp) + max(Fe,0.0_dp) + &
                                max(-Fs,0.0_dp) + max(Fn,0.0_dp) + &
                                max(-Fb,0.0_dp) + max(Ft,0.0_dp)) * cfg%dt / &
@@ -139,8 +151,8 @@ contains
             ! el audit mass_liq). En producción con dt por CFL esto no se
             ! alcanza.
             call solve_alpha_bounded_implicit(liq, gas, sol, alpha_slag, &
-                                              alpha_old, m, cfg)
-            deallocate(a_new)
+                                              alpha_old, m, cfg, ur_e, uth_e, uz_e)
+            deallocate(a_new, lim_new, ur_e, uth_e, uz_e)
             return
         end if
         dt_sub = cfg%dt / real(n_sub, dp)
@@ -169,8 +181,8 @@ contains
                         ws_Mr(i,j,k) = 0.0_dp; ws_Mth(i,j,k) = 0.0_dp
                         ws_Mz(i,j,k) = 0.0_dp
                         if (m%cell_type(i,j,k) == 0) cycle
-                        call face_mass_fluxes_noalpha(liq%rho, liq%ur, &
-                            liq%uth, liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                        call face_mass_fluxes_noalpha(liq%rho, ur_e, &
+                            uth_e, uz_e, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
                         ws_Mr(i,j,k)  = donor_flux(Fe, liq%alpha(i,j,k), liq%alpha(i+1,j,k))
                         ws_Mth(i,j,k) = donor_flux(Fn, liq%alpha(i,j,k), liq%alpha(i,j+1,k))
                         ws_Mz(i,j,k)  = donor_flux(Ft, liq%alpha(i,j,k), liq%alpha(i,j,k+1))
@@ -361,7 +373,7 @@ contains
                 ' derramado=', spill_call, ' recortado=', clip_call
         end if
 
-        deallocate(a_new, lim_new)
+        deallocate(a_new, lim_new, ur_e, uth_e, uz_e)
 
     contains
 
@@ -394,6 +406,66 @@ contains
 
     end subroutine solve_volume_fraction
 
+    !---------------------------------------------------------------------------
+    ! Velocidad terminal de una gota de liquido en el gas local (Schiller-
+    ! Naumann, punto fijo sobre Re; C_d = 0.44 en regimen de Newton).
+    ! Acotada a U_SETTLE_MAX para que el sub-paso CFL siga acotado.
+    !---------------------------------------------------------------------------
+    pure function settling_velocity(d, rho_l, rho_g, mu_g) result(u_t)
+        real(dp), intent(in) :: d, rho_l, rho_g, mu_g
+        real(dp) :: u_t, Re, Cd
+        integer  :: it
+        u_t = 0.0_dp
+        if (d <= 0.0_dp .or. rho_g <= 0.0_dp) return
+        u_t = sqrt(4.0_dp * GRAVITY * d * max(rho_l - rho_g, 0.0_dp) / (3.0_dp * 0.44_dp * rho_g))
+        do it = 1, 20
+            Re = max(rho_g * u_t * d / max(mu_g, SMALL), 1.0e-6_dp)
+            if (Re < 1000.0_dp) then
+                Cd = 24.0_dp / Re * (1.0_dp + 0.15_dp * Re**0.687_dp)
+            else
+                Cd = 0.44_dp
+            end if
+            u_t = sqrt(4.0_dp * GRAVITY * d * max(rho_l - rho_g, 0.0_dp) / (3.0_dp * Cd * rho_g))
+        end do
+        u_t = min(u_t, U_SETTLE_MAX)
+    end function settling_velocity
+
+    !---------------------------------------------------------------------------
+    ! Velocidad efectiva del liquido para el transporte de alpha (ver
+    ! declaracion en solve_volume_fraction). Solo celdas propias + halos
+    ! por intercambio; en las fronteras fisicas las caras no existen.
+    !---------------------------------------------------------------------------
+    subroutine effective_liquid_velocity(liq, gas, m, cfg, ur_e, uth_e, uz_e)
+        type(phase_t), intent(in)   :: liq, gas
+        type(mesh_t), intent(in)    :: m
+        type(config_t), intent(in)  :: cfg
+        real(dp), intent(out)       :: ur_e(-1:,-1:,-1:), uth_e(-1:,-1:,-1:)
+        real(dp), intent(out)       :: uz_e(-1:,-1:,-1:)
+        integer :: i, j, k, istart, iend, jstart, jend, kstart, kend
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        ur_e = liq%ur; uth_e = liq%uth; uz_e = liq%uz
+        if (cfg%d_droplet <= 0.0_dp) return
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (liq%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF) cycle
+                    if (liq%alpha(i,j,k) <= 0.0_dp) then
+                        ur_e(i,j,k) = 0.0_dp; uth_e(i,j,k) = 0.0_dp; uz_e(i,j,k) = 0.0_dp
+                        cycle
+                    end if
+                    ur_e(i,j,k)  = gas%ur(i,j,k)
+                    uth_e(i,j,k) = gas%uth(i,j,k)
+                    uz_e(i,j,k)  = gas%uz(i,j,k) - settling_velocity(cfg%d_droplet, &
+                                   liq%rho(i,j,k), gas%rho(i,j,k), gas%mu(i,j,k))
+                end do
+            end do
+        end do
+        call mpi_exchange_halos_3d(ur_e,  m%topo)
+        call mpi_exchange_halos_3d(uth_e, m%topo)
+        call mpi_exchange_halos_3d(uz_e,  m%topo)
+    end subroutine effective_liquid_velocity
+
     ! Flujo donor-cell en una cara orientada de lo (-) a hi (+)
     pure function donor_flux(F, a_lo, a_hi) result(Fd)
         real(dp), intent(in) :: F, a_lo, a_hi
@@ -423,7 +495,7 @@ contains
     ! por el audit). Es la forma que fue titular hasta el cierre 2026.
     !---------------------------------------------------------------------------
     subroutine solve_alpha_bounded_implicit(liq, gas, sol, alpha_slag, &
-                                            alpha_old, m, cfg)
+                                            alpha_old, m, cfg, ur_e, uth_e, uz_e)
         use mod_workspace, only: ensure_workspace, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su
@@ -433,6 +505,8 @@ contains
         real(dp), intent(in)         :: alpha_old(-1:,-1:,-1:)
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
+        real(dp), intent(in)         :: ur_e(-1:,-1:,-1:), uth_e(-1:,-1:,-1:)
+        real(dp), intent(in)         :: uz_e(-1:,-1:,-1:)
 
         integer :: i, j, k
         integer :: istart, iend, jstart, jend, kstart, kend
@@ -450,8 +524,8 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     vol_dt = liq%rho(i,j,k) * m%vol(i,j,k) / cfg%dt
-                    call face_mass_fluxes_noalpha(liq%rho, liq%ur, liq%uth, &
-                        liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                    call face_mass_fluxes_noalpha(liq%rho, ur_e, uth_e, &
+                        uz_e, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
                     aW(i,j,k) = max( Fw, 0.0_dp)
                     aE(i,j,k) = max(-Fe, 0.0_dp)
                     aS(i,j,k) = max( Fs, 0.0_dp)
