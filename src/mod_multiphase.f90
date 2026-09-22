@@ -21,7 +21,8 @@ module mod_multiphase
     use mod_properties_3d
     use mod_fields_3d
     use mod_probe, only: probe_report
-    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid
+    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_ut, &
+                             ws_liq_cont_prev
     implicit none
 
 contains
@@ -69,21 +70,47 @@ contains
         call solid_exchange_halos(sol, m)
         call shared_exchange_halos(sh, m)
 
-        ! Compute Ergun drag coefficient from solid (Picard con |v| del líquido)
-        call compute_ergun_drag(liq, sol, m, cfg, drag_coef)
-
         ! Mascara de liquido CONTINUO (Bug 15; halos de alpha ya intercambiados)
         call ensure_workspace(m)
         ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s)
         ws_liq_cont_valid = .true.
+        call compute_liquid_drift(liq, gas, sol, m, cfg, liq_old)
+
+        ! Transicion DISPERSO -> CONTINUO (Bug 15): la celda entra al momento
+        ! y al Poisson con la velocidad promedio de sus vecinas continuas
+        ! (0 si no hay), tambien en el ancla temporal liq_old. Con la
+        ! velocidad de drift 'horneada' en liq%u, el Poisson tenia que
+        ! frenar acero a m/s en un paso: rho_l u dx/dt ~ MPa.
+        call reset_new_continuous(liq, liq_old, m)
+        ws_liq_cont_prev = ws_liq_cont
+
+        ! Compute Ergun drag coefficient from solid (Picard con |v| del líquido)
+        call compute_ergun_drag(liq, sol, m, cfg, drag_coef)
+
 
         ! Coeficiente de intercambio gas-líquido: K = a_l*a_g*rho_l/TAU_LG
         ! (régimen disperso; ver mod_constants::TAU_LG)
+        ! Donde el liquido es DISPERSO (Bug 15) el arrastre es el FISICO de
+        ! una gota a velocidad terminal: K = alpha_l (rho_l - rho_g) g / u_t,
+        ! exacto en el punto de operacion (arrastre = peso con deslizamiento
+        ! u_t) e implicito en ambas fases: la inercia de la niebla (100x la
+        ! del gas a alpha_l = 0.5%) amortigua al gas con tau_g = alpha_g
+        ! rho_g u_t/(alpha_l rho_l g) ~ 30 ms. TAU_LG = 0.01 s daba 0.1 ms
+        ! (300x demasiado rigido: era lo que 'estabilizaba' el gas en v11);
+        ! K = 0 dejaba al gas libre bajo 100x su masa (melt_forced: gas a
+        ! 845 m/s y p en la cota en 3 pasos).
         do k = lbound(Kexch,3)+2, ubound(Kexch,3)-2
             do j = lbound(Kexch,2)+2, ubound(Kexch,2)-2
                 do i = lbound(Kexch,1)+2, ubound(Kexch,1)-2
-                    Kexch(i,j,k) = liq%alpha(i,j,k) * gas%alpha(i,j,k) * &
-                                   liq%rho(i,j,k) / TAU_LG
+                    if (ws_liq_cont(i,j,k)) then
+                        Kexch(i,j,k) = liq%alpha(i,j,k) * gas%alpha(i,j,k) * &
+                                       liq%rho(i,j,k) / TAU_LG
+                    else if (ws_ut(i,j,k) > SMALL .and. liq%alpha(i,j,k) > 0.0_dp) then
+                        Kexch(i,j,k) = liq%alpha(i,j,k) * &
+                            max(liq%rho(i,j,k) - gas%rho(i,j,k), 0.0_dp) * GRAVITY / ws_ut(i,j,k)
+                    else
+                        Kexch(i,j,k) = 0.0_dp
+                    end if
                 end do
             end do
         end do
@@ -215,5 +242,42 @@ contains
             end do
         end do
     end subroutine cap_liquid_velocity
+
+    !---------------------------------------------------------------------------
+    ! Celdas que acaban de volverse liquido CONTINUO: velocidad = promedio de
+    ! las vecinas continuas (0 si ninguna), en liq y en el ancla liq_old.
+    !---------------------------------------------------------------------------
+    subroutine reset_new_continuous(liq, liq_old, m)
+        type(phase_t), intent(inout) :: liq, liq_old
+        type(mesh_t), intent(in)     :: m
+        integer  :: i, j, k, n, istart, iend, jstart, jend, kstart, kend
+        integer  :: di(6), dj(6), dk(6), q, ii, jj, kk
+        real(dp) :: sr, sth, sz
+        di = [-1, 1, 0, 0, 0, 0]; dj = [0, 0, -1, 1, 0, 0]; dk = [0, 0, 0, 0, -1, 1]
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (.not. ws_liq_cont(i,j,k) .or. ws_liq_cont_prev(i,j,k)) cycle
+                    n = 0; sr = 0.0_dp; sth = 0.0_dp; sz = 0.0_dp
+                    do q = 1, 6
+                        ii = i + di(q); jj = j + dj(q); kk = k + dk(q)
+                        if (m%cell_type(ii,jj,kk) == 0) cycle
+                        if (.not. ws_liq_cont_prev(ii,jj,kk)) cycle
+                        n = n + 1
+                        sr = sr + liq%ur(ii,jj,kk); sth = sth + liq%uth(ii,jj,kk)
+                        sz = sz + liq%uz(ii,jj,kk)
+                    end do
+                    if (n > 0) then
+                        sr = sr / n; sth = sth / n; sz = sz / n
+                    end if
+                    liq%ur(i,j,k) = sr;      liq%uth(i,j,k) = sth;      liq%uz(i,j,k) = sz
+                    liq_old%ur(i,j,k) = sr;  liq_old%uth(i,j,k) = sth;  liq_old%uz(i,j,k) = sz
+                end do
+            end do
+        end do
+        call phase_exchange_halos(liq, m)
+    end subroutine reset_new_continuous
 
 end module mod_multiphase

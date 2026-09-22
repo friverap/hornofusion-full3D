@@ -71,6 +71,7 @@ contains
                                          ph, ph_other, sh, m, cfg, &
                                          alpha_q, drag_coef, is_gas, comp, residual)
         use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
+            ws_ud_r, ws_ud_th, ws_ud_z, &
             aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su
@@ -80,7 +81,6 @@ contains
         real(dp), intent(in)         :: Kexch(-1:,-1:,-1:)
         type(phase_t), intent(inout) :: ph
         type(phase_t), intent(in)    :: ph_other
-        real(dp) :: d_r, d_th, d_z
         type(shared_t), intent(in)   :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
@@ -133,14 +133,10 @@ contains
                             if (alpha_q(i,j,k) <= 0.0_dp) then
                                 Su(i,j,k) = 0.0_dp
                             else
-                                call drift_velocity(ph_other%ur(i,j,k), ph_other%uth(i,j,k), &
-                                    ph_other%uz(i,j,k), settling_velocity(cfg%d_droplet, &
-                                    ph%rho(i,j,k), ph_other%rho(i,j,k), ph_other%mu(i,j,k)), &
-                                    d_r, d_th, d_z)
                                 select case (comp)
-                                case ('ur');  Su(i,j,k) = d_r
-                                case ('uth'); Su(i,j,k) = d_th
-                                case default; Su(i,j,k) = d_z
+                                case ('ur');  Su(i,j,k) = ws_ud_r(i,j,k)
+                                case ('uth'); Su(i,j,k) = ws_ud_th(i,j,k)
+                                case default; Su(i,j,k) = ws_ud_z(i,j,k)
                                 end select
                             end if
                             cycle

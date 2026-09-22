@@ -30,7 +30,8 @@ module mod_continuity
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d
     use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS, AUD_SPILL_MASS
     use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
-                             ws_Mr, ws_Mth, ws_Mz, ws_lim, ws_flux_valid
+                             ws_Mr, ws_Mth, ws_Mz, ws_lim, ws_flux_valid, &
+                             ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, ws_drift_valid
     implicit none
 
     logical, save :: fallback_warned = .false.
@@ -409,6 +410,83 @@ contains
     ! declaracion en solve_volume_fraction). Solo celdas propias + halos
     ! por intercambio; en las fronteras fisicas las caras no existen.
     !---------------------------------------------------------------------------
+    !---------------------------------------------------------------------------
+    ! Velocidad de DRIFT-FLUX del liquido disperso -> ws_ud_* (Bug 15).
+    !
+    ! Objetivo: gas + sedimentacion terminal (Schiller-Naumann), modulo
+    ! acotado a U_SETTLE_MAX; en celdas CON chatarra (alpha_s >= 0.01) el
+    ! liquido percola verticalmente a sqrt(2 g d_p) (~1.4 m/s) sin montar
+    ! en el gas (Ergun con el solido domina). Sin esa cota, melt_forced
+    ! saturaba p en 3 pasos (celdas del lecho entrando al Poisson con la
+    ! velocidad del gas).
+    !
+    ! RELAJACION (Manninen 1996, forma con inercia de particula): la gota
+    ! alcanza el objetivo con tau_p = u_t/g (regimen de Newton: ~3.5 s para
+    ! 2 mm; percolacion ~0.14 s) — NO instantaneamente. La hipotesis del
+    ! deslizamiento algebraico (tau_p << escala del flujo) no se cumple con
+    ! dt = 2 ms, y con ajuste instantaneo el gas nunca sentia la inercia de
+    ! la niebla (100x la suya a alpha_l = 0.5%): melt_forced, gas a 250 m/s
+    ! y p 300 kPa sobre el lecho. Con la gota retrasada, el deslizamiento
+    ! crece durante los transitorios del gas y K(u_l - u_g) frena al gas
+    ! con la masa de la niebla. u_old = liq_old (ancla temporal) si se
+    ! pasa; si no (transporte sin flujo resuelto), objetivo directo.
+    !---------------------------------------------------------------------------
+    subroutine compute_liquid_drift(liq, gas, sol, m, cfg, liq_old)
+        type(phase_t), intent(in)   :: liq, gas
+        type(solid_t), intent(in)   :: sol
+        type(mesh_t), intent(in)    :: m
+        type(config_t), intent(in)  :: cfg
+        type(phase_t), intent(in), optional :: liq_old
+        integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
+        real(dp) :: u_t, u_perc, tr, tth, tz, f
+        call ensure_workspace(m)
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        u_perc = sqrt(2.0_dp * GRAVITY * max(cfg%d_particle, 1.0e-3_dp))
+        ws_ud_r = liq%ur; ws_ud_th = liq%uth; ws_ud_z = liq%uz; ws_ut = 0.0_dp
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (liq_continuous(liq%alpha(i,j,k), sol%alpha_s(i,j,k))) cycle
+                    if (liq%alpha(i,j,k) <= 0.0_dp .or. cfg%d_droplet <= 0.0_dp) then
+                        ws_ud_r(i,j,k) = 0.0_dp; ws_ud_th(i,j,k) = 0.0_dp; ws_ud_z(i,j,k) = 0.0_dp
+                        cycle
+                    end if
+                    u_t = settling_velocity(cfg%d_droplet, liq%rho(i,j,k), &
+                                            gas%rho(i,j,k), gas%mu(i,j,k))
+                    if (sol%alpha_s(i,j,k) >= 1.0e-2_dp) then
+                        u_t = min(u_t, u_perc)
+                        tr = 0.0_dp; tth = 0.0_dp; tz = -u_t
+                    else
+                        call drift_velocity(gas%ur(i,j,k), gas%uth(i,j,k), gas%uz(i,j,k), u_t, &
+                                            tr, tth, tz)
+                    end if
+                    ws_ut(i,j,k) = u_t
+                    if (present(liq_old)) then
+                        ! relajacion de particula hacia el objetivo
+                        f = min(1.0_dp, cfg%dt * GRAVITY / max(u_t, SMALL))
+                        ws_ud_r(i,j,k)  = liq_old%ur(i,j,k)  + f * (tr  - liq_old%ur(i,j,k))
+                        ws_ud_th(i,j,k) = liq_old%uth(i,j,k) + f * (tth - liq_old%uth(i,j,k))
+                        ws_ud_z(i,j,k)  = liq_old%uz(i,j,k)  + f * (tz  - liq_old%uz(i,j,k))
+                    else
+                        ws_ud_r(i,j,k) = tr; ws_ud_th(i,j,k) = tth; ws_ud_z(i,j,k) = tz
+                    end if
+                end do
+            end do
+        end do
+        call mpi_exchange_halos_3d(ws_ud_r,  m%topo)
+        call mpi_exchange_halos_3d(ws_ud_th, m%topo)
+        call mpi_exchange_halos_3d(ws_ud_z,  m%topo)
+        call mpi_exchange_halos_3d(ws_ut,    m%topo)
+        ws_drift_valid = present(liq_old)
+    end subroutine compute_liquid_drift
+
+    !---------------------------------------------------------------------------
+    ! Velocidad efectiva del liquido para el transporte de alpha (ver
+    ! declaracion en solve_volume_fraction): la propia donde es continuo,
+    ! el drift-flux donde es disperso. Reutiliza el drift relajado de la
+    ! iteracion (multiphase) si existe; si no, objetivo directo.
+    !---------------------------------------------------------------------------
     subroutine effective_liquid_velocity(liq, gas, sol, m, cfg, ur_e, uth_e, uz_e)
         type(phase_t), intent(in)   :: liq, gas
         type(solid_t), intent(in)   :: sol
@@ -416,29 +494,8 @@ contains
         type(config_t), intent(in)  :: cfg
         real(dp), intent(out)       :: ur_e(-1:,-1:,-1:), uth_e(-1:,-1:,-1:)
         real(dp), intent(out)       :: uz_e(-1:,-1:,-1:)
-        integer :: i, j, k, istart, iend, jstart, jend, kstart, kend
-        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
-        ur_e = liq%ur; uth_e = liq%uth; uz_e = liq%uz
-        if (cfg%d_droplet <= 0.0_dp) return
-        do k = kstart, kend
-            do j = jstart, jend
-                do i = istart, iend
-                    if (m%cell_type(i,j,k) == 0) cycle
-                    ! Liquido CONTINUO: su propia velocidad (Bug 15)
-                    if (liq_continuous(liq%alpha(i,j,k), sol%alpha_s(i,j,k))) cycle
-                    if (liq%alpha(i,j,k) <= 0.0_dp) then
-                        ur_e(i,j,k) = 0.0_dp; uth_e(i,j,k) = 0.0_dp; uz_e(i,j,k) = 0.0_dp
-                        cycle
-                    end if
-                    call drift_velocity(gas%ur(i,j,k), gas%uth(i,j,k), gas%uz(i,j,k), &
-                        settling_velocity(cfg%d_droplet, liq%rho(i,j,k), gas%rho(i,j,k), &
-                        gas%mu(i,j,k)), ur_e(i,j,k), uth_e(i,j,k), uz_e(i,j,k))
-                end do
-            end do
-        end do
-        call mpi_exchange_halos_3d(ur_e,  m%topo)
-        call mpi_exchange_halos_3d(uth_e, m%topo)
-        call mpi_exchange_halos_3d(uz_e,  m%topo)
+        if (.not. ws_drift_valid) call compute_liquid_drift(liq, gas, sol, m, cfg)
+        ur_e = ws_ud_r; uth_e = ws_ud_th; uz_e = ws_ud_z
     end subroutine effective_liquid_velocity
 
     ! Flujo donor-cell en una cara orientada de lo (-) a hi (+)

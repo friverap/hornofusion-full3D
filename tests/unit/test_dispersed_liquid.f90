@@ -14,8 +14,9 @@
 !      (umbral ordinario); 0.005 con chatarra -> disperso.
 !   2. Momento: gas uniforme uz=+3, ur=1; gota alpha_l=0.05 (sin chatarra)
 !      con velocidad inicial 20 m/s -> tras solve_momentum_3d del liquido
-!      su uz = 3 - u_t y ur = 1 (drift-flux exactos); una celda de bano
-!      (alpha_l=0.6) NO queda en el valor drift (resuelve su momento).
+!      su velocidad es la de drift RELAJADA desde liq_old con tau_p = u_t/g
+!      hacia (1, 0, 3 - u_t) (exacta a 1e-9); una celda de bano (alpha_l=
+!      0.6) NO queda en el valor drift (resuelve su momento).
 !   3. Presion: bano en reposo (alpha_l=0.7 en k=1..2) + gota alpha_l=0.05
 !      en k=3, pegada a la superficie del bano (cara enlazada).
 !      (a) Con el fix, p tras UNA correccion es el mismo (1e-3 relativo;
@@ -25,6 +26,12 @@
 !      (b) Con la regla antigua (mascara invalida: alpha >= 0.01 entra),
 !          la gota a -20 m/s multiplica p_max por > 10: es la punta de
 !          rho_l*u^2 que rompio B1.
+!   4. Acople gas-gota FISICO: gota dispersa alpha_l=0.005 a su drift (-u_t)
+!      y K = a_l*(rho_l-rho_g)*g/u_t (arrastre = peso a velocidad terminal,
+!      implicito): el cambio de velocidad del gas en un paso es
+!      -K u_t dt/(a_g rho_g + K dt), a 1e-2. Con K = a_l a_g rho_l/TAU_LG
+!      (0.01 s) el gas quedaba clavado en 0.1 ms; con K=0, libre bajo 100x
+!      su masa.
 !===============================================================================
 program test_dispersed_liquid
     use mod_constants
@@ -35,6 +42,7 @@ program test_dispersed_liquid
     use mod_fields_3d
     use mod_momentum_3d, only: solve_momentum_3d
     use mod_pressure_3d, only: solve_pressure_correction
+    use mod_continuity, only: compute_liquid_drift
     use mod_drag_ergun, only: compute_ergun_drag
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid
     implicit none
@@ -86,10 +94,14 @@ program test_dispersed_liquid
     liq%ur = 20.0_dp; liq%uth = 0.0_dp; liq%uz = 20.0_dp
     call copy_old()
     ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s); ws_liq_cont_valid = .true.
+    call compute_liquid_drift(liq, gas, sol, mesh, cfg, liq_old)
     call compute_ergun_drag(liq, sol, mesh, cfg, drag)
     call solve_momentum_3d(liq, liq_old, gas, Kz, sh, mesh, cfg, liq%alpha, drag, .false., r1, r2, r3)
     u_t = settling_velocity(cfg%d_droplet, liq%rho(ic,jc,kc), gas%rho(ic,jc,kc), gas%mu(ic,jc,kc))
-    call drift_velocity(1.0_dp, 0.0_dp, 3.0_dp, u_t, r1, r2, r3)   ! drift acotado esperado
+    call drift_velocity(1.0_dp, 0.0_dp, 3.0_dp, u_t, r1, r2, r3)   ! objetivo acotado
+    ! relajacion de particula desde liq_old (20, 0, 20) con f = dt g / u_t
+    pscale = min(1.0_dp, cfg%dt * GRAVITY / u_t)
+    r1 = 20.0_dp + pscale * (r1 - 20.0_dp); r3 = 20.0_dp + pscale * (r3 - 20.0_dp)
     if (abs(liq%uz(ic,jc,kc) - r3) > 1.0e-9_dp .or. abs(liq%ur(ic,jc,kc) - r1) > 1.0e-9_dp) then
         print '(A,3F10.4)', '   FAIL caso 2: gota no en drift-flux: uz, ur, u_t = ', liq%uz(ic,jc,kc), liq%ur(ic,jc,kc), u_t
         ok = .false.
@@ -126,6 +138,31 @@ program test_dispersed_liquid
         '   p_max antigua = ', maxval(abs(sh%p(1:nr,1:nth,1:nz)))
     if (res < 10.0_dp) then
         print '(A)', '   FAIL caso 3b: la regla antigua no reproduce la punta de presion (el test no discrimina)'
+        ok = .false.
+    end if
+
+    ! ---- caso 4: acople gas-gota fisico: K = a_l*drho*g/u_t, implicito ----
+    sol%alpha_s = 0.0_dp; slag%alpha_sl = 0.0_dp
+    liq%alpha = 0.0_dp; liq%alpha(ic,jc,kc) = 0.005_dp
+    gas%alpha = 1.0_dp - liq%alpha
+    gas%ur = 0.0_dp; gas%uth = 0.0_dp; gas%uz = 0.0_dp
+    sh%p = 0.0_dp; sh%pp = 0.0_dp; sh%S_arc_mom = 0.0_dp
+    u_t = settling_velocity(cfg%d_droplet, liq%rho(ic,jc,kc), gas%rho(ic,jc,kc), gas%mu(ic,jc,kc))
+    liq%ur = 0.0_dp; liq%uth = 0.0_dp; liq%uz = 0.0_dp; liq%uz(ic,jc,kc) = -u_t
+    call copy_old()
+    ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s); ws_liq_cont_valid = .true.
+    call compute_liquid_drift(liq, gas, sol, mesh, cfg, liq_old)
+    Kz = 0.0_dp
+    Kz(ic,jc,kc) = liq%alpha(ic,jc,kc) * (liq%rho(ic,jc,kc) - gas%rho(ic,jc,kc)) * GRAVITY / u_t
+    call compute_ergun_drag(gas, sol, mesh, cfg, drag)
+    call solve_momentum_3d(gas, gas_old, liq, Kz, sh, mesh, cfg, gas%alpha, drag, .true., r1, r2, r3)
+    ! forma implicita: du = K (u_l - u_g^old) dt / (a_g rho_g + K dt), con
+    ! u_l - u_g^old = -u_t => K u_t = peso de las gotas. Se compara contra
+    ! una celda de gas puro (misma gravedad propia del gas).
+    res = gas%uz(ic,jc,kc) - gas%uz(ic,jc,kc+2)
+    pscale = -Kz(ic,jc,kc) * u_t * cfg%dt / (gas%alpha(ic,jc,kc) * gas%rho(ic,jc,kc) + Kz(ic,jc,kc) * cfg%dt)
+    if (abs(res - pscale) > 1.0e-2_dp * abs(pscale)) then
+        print '(A,2ES12.4)', '   FAIL caso 4: du del gas /= arrastre implicito de las gotas: ', res, pscale
         ok = .false.
     end if
 
@@ -171,6 +208,7 @@ contains
         sh%p = 0.0_dp; sh%pp = 0.0_dp
         call copy_old()
         ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s); ws_liq_cont_valid = .true.
+        call compute_liquid_drift(liq, gas, sol, mesh, cfg, liq_old)
     end subroutine setup_bath
 
     subroutine one_pv_iteration()

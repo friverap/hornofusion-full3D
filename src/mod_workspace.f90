@@ -41,6 +41,22 @@ module mod_workspace
     ! Sin ella (camino monofasico) rige el umbral ALPHA_FLOW_CUTOFF.
     logical, allocatable :: ws_liq_cont(:,:,:)
     logical, save :: ws_liq_cont_valid = .false.
+    ! Mascara de la llamada anterior: detecta la transicion disperso ->
+    ! continuo (la velocidad del liquido debe entrar desde la fase continua
+    ! vecina, no desde el drift: con la del gas 'horneada' exigia MPa)
+    logical, allocatable :: ws_liq_cont_prev(:,:,:)
+    ! Velocidad de DRIFT-FLUX del liquido disperso (Bug 15), calculada UNA
+    ! vez por iteracion externa en compute_liquid_drift (mod_continuity):
+    ! gas + sedimentacion terminal, acotada; en el lecho la sedimentacion
+    ! se limita a la velocidad de percolacion sqrt(2 g d_p). La leen
+    ! momentum (celdas dispersas) y el transporte de alpha.
+    real(dp), allocatable :: ws_ud_r(:,:,:), ws_ud_th(:,:,:), ws_ud_z(:,:,:)
+    ! Velocidad terminal EFECTIVA usada en el drift (0 donde no aplica):
+    ! fija el arrastre fisico gas-gota K = alpha_l (rho_l-rho_g) g / u_t
+    real(dp), allocatable :: ws_ut(:,:,:)
+    ! ws_ud_* calculado con RELAJACION desde liq_old (multiphase) en esta
+    ! iteracion: el transporte de alpha lo reutiliza en vez de recomputar
+    logical, save :: ws_drift_valid = .false.
 
 contains
 
@@ -53,6 +69,10 @@ contains
         allocate(ws_Fr, ws_Fth, ws_Fz, ws_Mr, ws_Mth, ws_Mz, ws_lim, mold=ws_aW)
         allocate(ws_liq_cont(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         ws_liq_cont = .true.
+        allocate(ws_liq_cont_prev, mold=ws_liq_cont)
+        ws_liq_cont_prev = .true.
+        allocate(ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, mold=ws_aW)
+        ws_ud_r = 0.0_dp; ws_ud_th = 0.0_dp; ws_ud_z = 0.0_dp; ws_ut = 0.0_dp
         ws_Fr = 0.0_dp; ws_Fth = 0.0_dp; ws_Fz = 0.0_dp
         ws_Mr = 0.0_dp; ws_Mth = 0.0_dp; ws_Mz = 0.0_dp; ws_lim = 1.0_dp
     end subroutine ensure_workspace
