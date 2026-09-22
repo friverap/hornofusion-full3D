@@ -24,7 +24,7 @@ program test_settling
     use mod_config_3d, only: config_set_defaults
     use mod_mesh_3d, only: mesh_generate_parallel
     use mod_fields_3d
-    use mod_continuity, only: solve_volume_fraction, settling_velocity
+    use mod_continuity, only: solve_volume_fraction
     implicit none
 
     type(config_t) :: cfg

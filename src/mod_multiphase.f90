@@ -21,6 +21,7 @@ module mod_multiphase
     use mod_properties_3d
     use mod_fields_3d
     use mod_probe, only: probe_report
+    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid
     implicit none
 
 contains
@@ -70,6 +71,11 @@ contains
 
         ! Compute Ergun drag coefficient from solid (Picard con |v| del líquido)
         call compute_ergun_drag(liq, sol, m, cfg, drag_coef)
+
+        ! Mascara de liquido CONTINUO (Bug 15; halos de alpha ya intercambiados)
+        call ensure_workspace(m)
+        ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s)
+        ws_liq_cont_valid = .true.
 
         ! Coeficiente de intercambio gas-líquido: K = a_l*a_g*rho_l/TAU_LG
         ! (régimen disperso; ver mod_constants::TAU_LG)
@@ -192,6 +198,11 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
+                    ! El liquido DISPERSO lleva la velocidad de drift-flux,
+                    ! ya acotada a U_SETTLE_MAX (Bug 15): no se capa aqui
+                    if (ws_liq_cont_valid) then
+                        if (.not. ws_liq_cont(i,j,k)) cycle
+                    end if
                     vmag = sqrt(liq%ur(i,j,k)**2 + liq%uth(i,j,k)**2 + &
                                 liq%uz(i,j,k)**2)
                     if (vmag > U_LIQ_MAX) then

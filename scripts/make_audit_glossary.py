@@ -105,6 +105,12 @@ DEFS = {
     "m_spill": ("C", "Liquid displaced upward by the conservative spill of "
                      "volume-constraint excess [kg] (informative; no mass "
                      "error)"),
+    "p_max": ("D", "Maximum $|p|$ over active cells at the written step [Pa] "
+                   "(blow-up sentinel: the cap is $2\\times10^6$)"),
+    "u_gas_max": ("D", "Maximum gas speed over cells with "
+                       "$\\alpha_g\\ge10^{-2}$ [m\\,s$^{-1}$]"),
+    "u_liq_max": ("D", "Maximum liquid speed over cells with "
+                       "$\\alpha_l\\ge10^{-2}$ [m\\,s$^{-1}$] (cap 20)"),
 }
 
 src = open(SRC).read()

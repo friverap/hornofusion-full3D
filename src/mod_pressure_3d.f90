@@ -84,7 +84,7 @@ contains
                                           residual)
         use mod_workspace, only: ensure_workspace, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
-            aT => ws_aT, aP => ws_aP, Su => ws_Su
+            aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid
         type(phase_t), intent(inout) :: liq, gas
         ! T del gas del paso anterior: término de COMPRESIBILIDAD del gas
         ! ideal, -alpha_g*(rho(T)-rho(T_old))/dt*V. Sin él, el Poisson
@@ -101,6 +101,9 @@ contains
         integer :: istart, iend, jstart, jend, kstart, kend
         ! Gradientes de presión de CELDA (los mismos que usa momentum)
         real(dp), allocatable :: gpr(:,:,:), gpth(:,:,:), gpz(:,:,:)
+        ! Fases ACTIVAS en el acople P-V por celda (Bug 15): gas por el
+        ! umbral hidrodinamico; liquido solo donde es fase continua
+        logical, allocatable :: act_l(:,:,:), act_g(:,:,:)
         integer  :: n_iter_cg
         real(dp) :: cg_res
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
@@ -111,6 +114,15 @@ contains
         call ensure_workspace(m)
         allocate(gpr, mold=sh%pp); allocate(gpth, mold=sh%pp)
         allocate(gpz, mold=sh%pp)
+        allocate(act_l(lbound(sh%pp,1):ubound(sh%pp,1), lbound(sh%pp,2):ubound(sh%pp,2), &
+                       lbound(sh%pp,3):ubound(sh%pp,3)))
+        allocate(act_g, mold=act_l)
+        if (ws_liq_cont_valid) then
+            act_l = ws_liq_cont
+        else
+            act_l = (liq%alpha >= ALPHA_FLOW_CUTOFF)
+        end if
+        act_g = (gas%alpha >= ALPHA_FLOW_CUTOFF)
 
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
@@ -165,11 +177,11 @@ contains
         ! con la radiación DO real el gas queda en ~3000-6000 K y su
         ! expansión es absorbible por el Poisson)
         !-----------------------------------------------------------------------
-        call add_phase_contribution(liq)
+        call add_phase_contribution(liq, act_l)
         ! Gas en el Poisson SOLO con multifase: sin gas momentum resuelto,
         ! sus aP_u* valen 0 y d_f = V/SMALL revienta los coeficientes.
         if (cfg%gas_in_poisson .and. cfg%solve_multiphase) &
-            call add_phase_contribution(gas)
+            call add_phase_contribution(gas, act_g)
 
         ! NOTA (cierre 2026): NO añadir aquí la fuente de masa de fusión
         ! del líquido (Su += mdot - rho*dalpha/dt). Se probó: realimenta
@@ -210,8 +222,7 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
-                    if (liq%alpha(i,j,k) < ALPHA_FLOW_CUTOFF .and. &
-                        gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) then
+                    if (.not. act_l(i,j,k) .and. .not. act_g(i,j,k)) then
                         aW(i,j,k) = 0.0_dp; aE(i,j,k) = 0.0_dp
                         aS(i,j,k) = 0.0_dp; aN(i,j,k) = 0.0_dp
                         aB(i,j,k) = 0.0_dp; aT(i,j,k) = 0.0_dp
@@ -232,7 +243,7 @@ contains
                         ! c~4000 m/s): diagonal para celdas líquido-puras
                         ! (sin gas no hay término acústico del gas y la
                         ! compliance sola deja el nivel de p sin física)
-                        if (liq%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF) then
+                        if (act_l(i,j,k)) then
                             aP(i,j,k) = aP(i,j,k) + liq%alpha(i,j,k) * &
                                 m%vol(i,j,k) / (C_SOUND_LIQ**2 * cfg%dt)
                         end if
@@ -258,15 +269,15 @@ contains
 
         residual = cg_res
 
-        call correct_velocities(liq, sh, m, liq%alpha)
+        call correct_velocities(liq, sh, m, act_l)
         if (cfg%gas_in_poisson .and. cfg%solve_multiphase) &
-            call correct_velocities(gas, sh, m, gas%alpha)
+            call correct_velocities(gas, sh, m, act_g)
 
         ! Correct pressure (con cota física, ver P_HYDRO_CAP)
         sh%p = sh%p + cfg%alpha_p * sh%pp
         sh%p = max(-P_HYDRO_CAP, min(P_HYDRO_CAP, sh%p))
 
-        deallocate(gpr, gpth, gpz)
+        deallocate(gpr, gpth, gpz, act_l, act_g)
 
     contains
 
@@ -275,8 +286,9 @@ contains
         ! contribución de una fase (con su alpha, sus aP de momentum y sus
         ! velocidades)
         !-----------------------------------------------------------------------
-        subroutine add_phase_contribution(ph)
+        subroutine add_phase_contribution(ph, act)
             type(phase_t), intent(in) :: ph
+            logical, intent(in)       :: act(-1:,-1:,-1:)
 
             integer  :: ii, jj, kk, jjm, jjp
             real(dp) :: d_f, arho_f, u_f, delta
@@ -286,10 +298,10 @@ contains
                     jjm = jj - 1; jjp = jj + 1
                     do ii = istart, iend
                         if (m%cell_type(ii,jj,kk) == 0) cycle
-                        if (ph%alpha(ii,jj,kk) < ALPHA_FLOW_CUTOFF) cycle
+                        if (.not. act(ii,jj,kk)) cycle
 
                         ! --- Cara Oeste (i-1/2) ---
-                        if (link(ph, ii-1, jj, kk)) then
+                        if (link(act, ii-1, jj, kk)) then
                             d_f    = 0.5_dp * (m%vol(ii,jj,kk)  / max(ph%aP_ur(ii,jj,kk),  SMALL) + &
                                                m%vol(ii-1,jj,kk)/ max(ph%aP_ur(ii-1,jj,kk),SMALL))
                             arho_f = 0.5_dp * (ph%alpha(ii,jj,kk)*ph%rho(ii,jj,kk) + &
@@ -303,7 +315,7 @@ contains
                         end if
 
                         ! --- Cara Este (i+1/2) ---
-                        if (link(ph, ii+1, jj, kk)) then
+                        if (link(act, ii+1, jj, kk)) then
                             d_f    = 0.5_dp * (m%vol(ii,jj,kk)  / max(ph%aP_ur(ii,jj,kk),  SMALL) + &
                                                m%vol(ii+1,jj,kk)/ max(ph%aP_ur(ii+1,jj,kk),SMALL))
                             arho_f = 0.5_dp * (ph%alpha(ii,jj,kk)*ph%rho(ii,jj,kk) + &
@@ -317,7 +329,7 @@ contains
                         end if
 
                         ! --- Cara Sur (j-1/2) ---
-                        if (link(ph, ii, jjm, kk)) then
+                        if (link(act, ii, jjm, kk)) then
                             d_f    = 0.5_dp * (m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
                                                m%vol(ii,jjm,kk)/ max(ph%aP_uth(ii,jjm,kk),SMALL))
                             arho_f = 0.5_dp * (ph%alpha(ii,jj,kk)*ph%rho(ii,jj,kk) + &
@@ -331,7 +343,7 @@ contains
                         end if
 
                         ! --- Cara Norte (j+1/2) ---
-                        if (link(ph, ii, jjp, kk)) then
+                        if (link(act, ii, jjp, kk)) then
                             d_f    = 0.5_dp * (m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
                                                m%vol(ii,jjp,kk)/ max(ph%aP_uth(ii,jjp,kk),SMALL))
                             arho_f = 0.5_dp * (ph%alpha(ii,jj,kk)*ph%rho(ii,jj,kk) + &
@@ -345,7 +357,7 @@ contains
                         end if
 
                         ! --- Cara Inferior (k-1/2) ---
-                        if (link(ph, ii, jj, kk-1)) then
+                        if (link(act, ii, jj, kk-1)) then
                             d_f    = 0.5_dp * (m%vol(ii,jj,kk)  / max(ph%aP_uz(ii,jj,kk),  SMALL) + &
                                                m%vol(ii,jj,kk-1)/ max(ph%aP_uz(ii,jj,kk-1),SMALL))
                             arho_f = 0.5_dp * (ph%alpha(ii,jj,kk)*ph%rho(ii,jj,kk) + &
@@ -359,7 +371,7 @@ contains
                         end if
 
                         ! --- Cara Superior (k+1/2) ---
-                        if (link(ph, ii, jj, kk+1)) then
+                        if (link(act, ii, jj, kk+1)) then
                             d_f    = 0.5_dp * (m%vol(ii,jj,kk)  / max(ph%aP_uz(ii,jj,kk),  SMALL) + &
                                                m%vol(ii,jj,kk+1)/ max(ph%aP_uz(ii,jj,kk+1),SMALL))
                             arho_f = 0.5_dp * (ph%alpha(ii,jj,kk)*ph%rho(ii,jj,kk) + &
@@ -376,12 +388,11 @@ contains
             end do
         end subroutine add_phase_contribution
 
-        ! Cara con flujo de ESTA fase: vecino activo con alpha >= umbral
-        logical function link(ph, ii, jj, kk)
-            type(phase_t), intent(in) :: ph
+        ! Cara con flujo de ESTA fase: vecino activo en el acople
+        logical function link(act, ii, jj, kk)
+            logical, intent(in) :: act(-1:,-1:,-1:)
             integer, intent(in) :: ii, jj, kk
-            link = (m%cell_type(ii,jj,kk) /= 0) .and. &
-                   (ph%alpha(ii,jj,kk) >= ALPHA_FLOW_CUTOFF)
+            link = (m%cell_type(ii,jj,kk) /= 0) .and. act(ii,jj,kk)
         end function link
 
     end subroutine solve_pressure_correction
@@ -390,11 +401,11 @@ contains
     ! Correct velocities using pressure correction gradient (esténcil central
     ! de celda; el suavizado de cara lo aporta Rhie-Chow en la divergencia)
     !---------------------------------------------------------------------------
-    subroutine correct_velocities(ph, sh, m, alpha_q)
+    subroutine correct_velocities(ph, sh, m, act)
         type(phase_t), intent(inout) :: ph
         type(shared_t), intent(in)   :: sh
         type(mesh_t), intent(in)     :: m
-        real(dp), intent(in)         :: alpha_q(-1:,-1:,-1:)
+        logical, intent(in)  :: act(-1:,-1:,-1:)
 
         integer :: i, j, k, jm, jp
         integer :: istart, iend, jstart, jend, kstart, kend
@@ -415,7 +426,7 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     ! Sin corrección bajo el umbral hidrodinámico (C2.2)
-                    if (alpha_q(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
+                    if (.not. act(i,j,k)) cycle
 
                     ! u_r correction
                     skip_r = (i == istart .and. at_rmin) .or. &

@@ -36,6 +36,11 @@ module mod_workspace
     real(dp), allocatable :: ws_Mr(:,:,:), ws_Mth(:,:,:), ws_Mz(:,:,:)
     real(dp), allocatable :: ws_lim(:,:,:)
     logical, save :: ws_flux_valid = .false.
+    ! Mascara de LIQUIDO CONTINUO (Bug 15): la calcula multiphase_iteration
+    ! (necesita alpha_s) antes de los solves; momentum y presion la leen.
+    ! Sin ella (camino monofasico) rige el umbral ALPHA_FLOW_CUTOFF.
+    logical, allocatable :: ws_liq_cont(:,:,:)
+    logical, save :: ws_liq_cont_valid = .false.
 
 contains
 
@@ -46,6 +51,8 @@ contains
         allocate(ws_aW(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         allocate(ws_aE, ws_aS, ws_aN, ws_aB, ws_aT, ws_aP, ws_Su, mold=ws_aW)
         allocate(ws_Fr, ws_Fth, ws_Fz, ws_Mr, ws_Mth, ws_Mz, ws_lim, mold=ws_aW)
+        allocate(ws_liq_cont(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
+        ws_liq_cont = .true.
         ws_Fr = 0.0_dp; ws_Fth = 0.0_dp; ws_Fz = 0.0_dp
         ws_Mr = 0.0_dp; ws_Mth = 0.0_dp; ws_Mz = 0.0_dp; ws_lim = 1.0_dp
     end subroutine ensure_workspace

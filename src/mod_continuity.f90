@@ -34,9 +34,6 @@ module mod_continuity
     implicit none
 
     logical, save :: fallback_warned = .false.
-    ! Cota de la velocidad de sedimentacion [m/s]: con dz~0.1 m y dt=2 ms
-    ! da CFL~1 => 1-2 sub-pasos; fisicamente u_t(2 mm) ~ 35 m/s
-    real(dp), parameter :: U_SETTLE_MAX = 50.0_dp
     ! Clip auditado por PASO (sep-2026): solve_volume_fraction corre en
     ! cada iteración externa y rehace alpha desde alpha_old, así que el
     ! clip real del paso es el de la ÚLTIMA iteración, no la suma (B1 v9:
@@ -80,8 +77,8 @@ contains
         real(dp) :: exc0_glob
         real(dp), allocatable :: a_new(:,:,:), lim_new(:,:,:)
         ! Velocidad EFECTIVA del liquido para el transporte de alpha: la del
-        ! momento donde alpha_l >= ALPHA_FLOW_CUTOFF; bajo el umbral (liquido
-        ! disperso, sin ecuacion de momento propia) la del gas mas la
+        ! momento donde el liquido es fase CONTINUA (liq_continuous, Bug 15);
+        ! donde es disperso (sin ecuacion de momento propia) la del gas mas la
         ! velocidad terminal de sedimentacion hacia abajo (cierre de
         ! deslizamiento algebraico, Manninen et al. 1996). Antes era 0:
         ! la niebla salpicada por el arco quedaba suspendida (B1 v11, 3.6 t).
@@ -92,7 +89,7 @@ contains
         allocate(lim_new, mold=liq%alpha)
         lim_new = 1.0_dp
         allocate(ur_e, uth_e, uz_e, mold=liq%alpha)
-        call effective_liquid_velocity(liq, gas, m, cfg, ur_e, uth_e, uz_e)
+        call effective_liquid_velocity(liq, gas, sol, m, cfg, ur_e, uth_e, uz_e)
 
         ! n_sub UNIFORME GLOBAL desde el CFL donor-cell máximo
         ! (suma de flujos de salida * dt / (rho*V))
@@ -406,37 +403,15 @@ contains
 
     end subroutine solve_volume_fraction
 
-    !---------------------------------------------------------------------------
-    ! Velocidad terminal de una gota de liquido en el gas local (Schiller-
-    ! Naumann, punto fijo sobre Re; C_d = 0.44 en regimen de Newton).
-    ! Acotada a U_SETTLE_MAX para que el sub-paso CFL siga acotado.
-    !---------------------------------------------------------------------------
-    pure function settling_velocity(d, rho_l, rho_g, mu_g) result(u_t)
-        real(dp), intent(in) :: d, rho_l, rho_g, mu_g
-        real(dp) :: u_t, Re, Cd
-        integer  :: it
-        u_t = 0.0_dp
-        if (d <= 0.0_dp .or. rho_g <= 0.0_dp) return
-        u_t = sqrt(4.0_dp * GRAVITY * d * max(rho_l - rho_g, 0.0_dp) / (3.0_dp * 0.44_dp * rho_g))
-        do it = 1, 20
-            Re = max(rho_g * u_t * d / max(mu_g, SMALL), 1.0e-6_dp)
-            if (Re < 1000.0_dp) then
-                Cd = 24.0_dp / Re * (1.0_dp + 0.15_dp * Re**0.687_dp)
-            else
-                Cd = 0.44_dp
-            end if
-            u_t = sqrt(4.0_dp * GRAVITY * d * max(rho_l - rho_g, 0.0_dp) / (3.0_dp * Cd * rho_g))
-        end do
-        u_t = min(u_t, U_SETTLE_MAX)
-    end function settling_velocity
 
     !---------------------------------------------------------------------------
     ! Velocidad efectiva del liquido para el transporte de alpha (ver
     ! declaracion en solve_volume_fraction). Solo celdas propias + halos
     ! por intercambio; en las fronteras fisicas las caras no existen.
     !---------------------------------------------------------------------------
-    subroutine effective_liquid_velocity(liq, gas, m, cfg, ur_e, uth_e, uz_e)
+    subroutine effective_liquid_velocity(liq, gas, sol, m, cfg, ur_e, uth_e, uz_e)
         type(phase_t), intent(in)   :: liq, gas
+        type(solid_t), intent(in)   :: sol
         type(mesh_t), intent(in)    :: m
         type(config_t), intent(in)  :: cfg
         real(dp), intent(out)       :: ur_e(-1:,-1:,-1:), uth_e(-1:,-1:,-1:)
@@ -449,15 +424,15 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
-                    if (liq%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF) cycle
+                    ! Liquido CONTINUO: su propia velocidad (Bug 15)
+                    if (liq_continuous(liq%alpha(i,j,k), sol%alpha_s(i,j,k))) cycle
                     if (liq%alpha(i,j,k) <= 0.0_dp) then
                         ur_e(i,j,k) = 0.0_dp; uth_e(i,j,k) = 0.0_dp; uz_e(i,j,k) = 0.0_dp
                         cycle
                     end if
-                    ur_e(i,j,k)  = gas%ur(i,j,k)
-                    uth_e(i,j,k) = gas%uth(i,j,k)
-                    uz_e(i,j,k)  = gas%uz(i,j,k) - settling_velocity(cfg%d_droplet, &
-                                   liq%rho(i,j,k), gas%rho(i,j,k), gas%mu(i,j,k))
+                    call drift_velocity(gas%ur(i,j,k), gas%uth(i,j,k), gas%uz(i,j,k), &
+                        settling_velocity(cfg%d_droplet, liq%rho(i,j,k), gas%rho(i,j,k), &
+                        gas%mu(i,j,k)), ur_e(i,j,k), uth_e(i,j,k), uz_e(i,j,k))
                 end do
             end do
         end do

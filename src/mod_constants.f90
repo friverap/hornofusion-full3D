@@ -87,6 +87,24 @@ module mod_constants
     ! arco hasta reventar el CFL del transporte de alpha (B1: CFL_liq
     ! 1181 => NaN a t=471 s). Misma familia que P_HYDRO_CAP/COMP_SRC_CAP.
     real(dp), parameter :: U_LIQ_MAX = 20.0_dp
+    ! Fraccion a partir de la cual el LIQUIDO es fase CONTINUA fuera del lecho
+    ! (sep-2026, Bug 15): solo entonces resuelve su momento y entra al
+    ! Poisson. Por debajo (gotas, niebla, salpicaduras: 0 < alpha_l < 0.3
+    ! con alpha_s < 0.01) es fase dispersa y se mueve como drift-flux
+    ! (velocidad del gas + sedimentacion terminal). Motivo: gotas que
+    ! cruzaban ALPHA_FLOW_CUTOFF entraban al acople de presion con 20 m/s
+    ! (U_LIQ_MAX) y exigian correcciones de MPa para frenarlas; esas puntas
+    ! aceleraban el gas puro vecino (rho~0.3) a 400-600 m/s y a t~415 s (B1
+    ! v11) la realimentacion saturo p = P_HYDRO_CAP en todo el horno, gas a
+    ! km/s y el charco desplomado ("cave-in" espurio). En el lecho
+    ! (alpha_s >= 0.01) el liquido sigue el tratamiento de dos fluidos con
+    ! Ergun (percolacion), con el umbral ALPHA_FLOW_CUTOFF. 0.3 es el
+    ! limite disperso->segregado habitual de los mapas de regimen
+    ! (OpenFOAM blended interfacial models).
+    real(dp), parameter :: ALPHA_LIQ_CONT = 0.3_dp
+    ! Cota de la velocidad de sedimentacion [m/s]: con dz~0.1 m y dt=2 ms
+    ! da CFL~1 => 1-2 sub-pasos; fisicamente u_t(2 mm) ~ 35 m/s
+    real(dp), parameter :: U_SETTLE_MAX = 50.0_dp
 
     ! Re-solidification explicit sub-step limiter (fraction of the full mass
     ! transfer applied per timestep, CFL-like stabilization)
@@ -137,5 +155,64 @@ module mod_constants
     real(dp), parameter :: ARC_VOLT_THRESHOLD = 40.0_dp  ! V (anode+cathode drop)
     real(dp), parameter :: ARC_LENGTH_GRAD    = 11.5_dp  ! V/cm (column field gradient)
     real(dp), parameter :: ARC_LENGTH_MIN     = 0.01_dp  ! m (minimum arc length)
+
+contains
+
+    !---------------------------------------------------------------------------
+    ! El liquido de la celda es fase continua (momento propio + Poisson)?
+    ! Fuera del lecho: alpha_l >= ALPHA_LIQ_CONT. En el lecho (hay chatarra):
+    ! el umbral hidrodinamico ordinario (el arrastre de Ergun gobierna).
+    !---------------------------------------------------------------------------
+    pure elemental logical function liq_continuous(al, as)
+        real(dp), intent(in) :: al, as
+        if (as >= 1.0e-2_dp) then
+            liq_continuous = (al >= ALPHA_FLOW_CUTOFF)
+        else
+            liq_continuous = (al >= ALPHA_LIQ_CONT)
+        end if
+    end function liq_continuous
+
+    !---------------------------------------------------------------------------
+    ! Velocidad terminal de una gota de liquido en el gas local (Schiller-
+    ! Naumann, punto fijo sobre Re; C_d = 0.44 en regimen de Newton).
+    ! Acotada a U_SETTLE_MAX para que el sub-paso CFL siga acotado.
+    !---------------------------------------------------------------------------
+    pure function settling_velocity(d, rho_l, rho_g, mu_g) result(u_t)
+        real(dp), intent(in) :: d, rho_l, rho_g, mu_g
+        real(dp) :: u_t, Re, Cd
+        integer  :: it
+        u_t = 0.0_dp
+        if (d <= 0.0_dp .or. rho_g <= 0.0_dp) return
+        u_t = sqrt(4.0_dp * GRAVITY * d * max(rho_l - rho_g, 0.0_dp) / (3.0_dp * 0.44_dp * rho_g))
+        do it = 1, 20
+            Re = max(rho_g * u_t * d / max(mu_g, SMALL), 1.0e-6_dp)
+            if (Re < 1000.0_dp) then
+                Cd = 24.0_dp / Re * (1.0_dp + 0.15_dp * Re**0.687_dp)
+            else
+                Cd = 0.44_dp
+            end if
+            u_t = sqrt(4.0_dp * GRAVITY * d * max(rho_l - rho_g, 0.0_dp) / (3.0_dp * Cd * rho_g))
+        end do
+        u_t = min(u_t, U_SETTLE_MAX)
+    end function settling_velocity
+
+    !---------------------------------------------------------------------------
+    ! Velocidad de DRIFT-FLUX del liquido disperso: la del gas menos la
+    ! terminal de sedimentacion en z, con el modulo acotado a U_SETTLE_MAX
+    ! (misma cota en momento y transporte de alpha => campos consistentes;
+    ! el gas en el arco puede ir a cientos de m/s y una gota arrastrada a
+    ! esa velocidad rompe el sub-paso CFL del transporte).
+    !---------------------------------------------------------------------------
+    pure subroutine drift_velocity(ug_r, ug_th, ug_z, u_t, ur, uth, uz)
+        real(dp), intent(in)  :: ug_r, ug_th, ug_z, u_t
+        real(dp), intent(out) :: ur, uth, uz
+        real(dp) :: vmag, f
+        ur = ug_r; uth = ug_th; uz = ug_z - u_t
+        vmag = sqrt(ur*ur + uth*uth + uz*uz)
+        if (vmag > U_SETTLE_MAX) then
+            f = U_SETTLE_MAX / vmag
+            ur = ur * f; uth = uth * f; uz = uz * f
+        end if
+    end subroutine drift_velocity
 
 end module mod_constants

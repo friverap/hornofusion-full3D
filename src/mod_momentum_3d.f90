@@ -51,15 +51,15 @@ contains
 
         ! Solve each component
         call solve_momentum_component(ph%ur, ph_old%ur, ph_other%ur, Kexch, &
-                                       ph, sh, m, cfg, &
+                                       ph, ph_other, sh, m, cfg, &
                                        alpha_q, drag_coef, is_gas, 'ur', res_ur)
 
         call solve_momentum_component(ph%uth, ph_old%uth, ph_other%uth, Kexch, &
-                                       ph, sh, m, cfg, &
+                                       ph, ph_other, sh, m, cfg, &
                                        alpha_q, drag_coef, is_gas, 'uth', res_uth)
 
         call solve_momentum_component(ph%uz, ph_old%uz, ph_other%uz, Kexch, &
-                                       ph, sh, m, cfg, &
+                                       ph, ph_other, sh, m, cfg, &
                                        alpha_q, drag_coef, is_gas, 'uz', res_uz)
 
     end subroutine solve_momentum_3d
@@ -68,9 +68,10 @@ contains
     ! Single momentum component solver (MPI-aware)
     !---------------------------------------------------------------------------
     subroutine solve_momentum_component(vel, vel_old, vel_other, Kexch, &
-                                         ph, sh, m, cfg, &
+                                         ph, ph_other, sh, m, cfg, &
                                          alpha_q, drag_coef, is_gas, comp, residual)
-        use mod_workspace, only: ensure_workspace, aW => ws_aW, &
+        use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
+            aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su
         real(dp), intent(inout)      :: vel(-1:,-1:,-1:)
@@ -78,6 +79,8 @@ contains
         real(dp), intent(in)         :: vel_other(-1:,-1:,-1:)
         real(dp), intent(in)         :: Kexch(-1:,-1:,-1:)
         type(phase_t), intent(inout) :: ph
+        type(phase_t), intent(in)    :: ph_other
+        real(dp) :: d_r, d_th, d_z
         type(shared_t), intent(in)   :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
@@ -121,6 +124,28 @@ contains
                     ! (C2.2, ALPHA_FLOW_CUTOFF; antes vel=vel_old con umbral
                     ! 1e-6 dejaba celdas casi vacías con aP diminuto en el
                     ! acople de presión)
+                    ! LIQUIDO DISPERSO (Bug 15): sin momento propio; se mueve
+                    ! con el gas mas la sedimentacion terminal (drift-flux,
+                    ! Manninen 1996). Cubre tambien alpha < ALPHA_FLOW_CUTOFF.
+                    if (.not. is_gas .and. ws_liq_cont_valid) then
+                        if (.not. ws_liq_cont(i,j,k)) then
+                            aP(i,j,k) = 1.0_dp
+                            if (alpha_q(i,j,k) <= 0.0_dp) then
+                                Su(i,j,k) = 0.0_dp
+                            else
+                                call drift_velocity(ph_other%ur(i,j,k), ph_other%uth(i,j,k), &
+                                    ph_other%uz(i,j,k), settling_velocity(cfg%d_droplet, &
+                                    ph%rho(i,j,k), ph_other%rho(i,j,k), ph_other%mu(i,j,k)), &
+                                    d_r, d_th, d_z)
+                                select case (comp)
+                                case ('ur');  Su(i,j,k) = d_r
+                                case ('uth'); Su(i,j,k) = d_th
+                                case default; Su(i,j,k) = d_z
+                                end select
+                            end if
+                            cycle
+                        end if
+                    end if
                     if (alpha_q(i,j,k) < ALPHA_FLOW_CUTOFF) then
                         aP(i,j,k) = 1.0_dp
                         Su(i,j,k) = 0.0_dp

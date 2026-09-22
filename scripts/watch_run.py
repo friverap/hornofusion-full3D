@@ -123,6 +123,20 @@ def main():
         if dtw < 1.5e-3:
             W(f"dt cayó a {dtw:.2e} s")
 
+    # --- acople P-V (Bug 15): p y velocidades maximas ------------------------
+    if "p_max" in r:
+        pm, ugm, ulm = r["p_max"], r["u_gas_max"], r["u_liq_max"]
+        if pm >= 1.5e6:
+            A(f"presión en la cota: p_max={pm:.3e} Pa (P_HYDRO_CAP 2e6) — acople P-V roto")
+        elif pm > 3.0e5:
+            W(f"p_max={pm:.3e} Pa (>3e5; hidrostática del baño ~1e5)")
+        if ugm > 1000.0:
+            A(f"gas hipersónico: |u_g|max={ugm:.0f} m/s")
+        elif ugm > 300.0:
+            W(f"|u_g|max={ugm:.0f} m/s (>300; low-Mach exige << 900)")
+        if ulm >= 19.5:
+            W(f"líquido en el cap U_LIQ_MAX: |u_l|max={ulm:.1f} m/s")
+
     # --- energía: nada por encima de lo inyectado -----------------------------
     P_int = sum(rows[i]["P_arc"] * (rows[i]["time"] - rows[i-1]["time"]) for i in range(1, len(rows)))
     E_tot = r["E_liq"] + r["E_sol"] + r["E_gas"] + r["E_slag"]

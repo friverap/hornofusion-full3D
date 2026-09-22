@@ -21,7 +21,7 @@
 module mod_audit
     use mod_constants
     use mod_types_3d
-    use mod_mpi_topology, only: mpi_allreduce_sum
+    use mod_mpi_topology, only: mpi_allreduce_sum, mpi_allreduce_max
     use mod_parallel_utils, only: get_loop_bounds
     use mod_face_flux, only: face_mass_fluxes
     use mod_boundary_3d, only: physical_boundary_flags
@@ -142,7 +142,8 @@ contains
                 'E_mass_liq,m_ecs_in,E_ecs_in,m_flux_in,E_flux_in,' // &
                 'm_fe_yield,m_fe_return,E_slag_ox,E_slag_red,E_rad_foam,' // &
                 'E_iph_sol,E_iph_gas,E_iph_liq,' // &
-                'm_resid_closed,E_resid_closed,m_spill'
+                'm_resid_closed,E_resid_closed,m_spill,' // &
+                'p_max,u_gas_max,u_liq_max'
             close(iu)
         end if
         acc = 0.0_dp
@@ -175,6 +176,11 @@ contains
         integer, parameter :: NSUM = 19
         real(dp) :: s(NSUM), s_glob(NSUM), a(N_AUD)
         real(dp) :: vol, P_arc, C0_datum
+        ! Diagnosticos de MAXIMO (Bug 15): el blow-up del acople P-V de B1
+        ! v11 (p = 2 MPa en todo el horno, gas a km/s) era INVISIBLE para
+        ! las columnas de inventario y balance — la masa y la energia se
+        ! conservaban. Se reducen con allreduce_max.
+        real(dp) :: mx(3), mx_glob(3), ug, ul
         integer  :: i, j, k, n, iu
         integer  :: istart, iend, jstart, jend, kstart, kend
         logical  :: liq_energy_on, gas_energy_on
@@ -190,12 +196,21 @@ contains
         ! por fusión cierre exactamente (C0 = e_s(T_liq) - cp_l*T_liq)
         C0_datum = (cfg%cp_s - cfg%cp_l) * cfg%T_liquidus + cfg%h_fusion
 
-        s = 0.0_dp
+        s = 0.0_dp; mx = 0.0_dp
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     vol = m%vol(i,j,k)
+                    mx(1) = max(mx(1), abs(sh%p(i,j,k)))
+                    if (gas%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF) then
+                        ug = sqrt(gas%ur(i,j,k)**2 + gas%uth(i,j,k)**2 + gas%uz(i,j,k)**2)
+                        mx(2) = max(mx(2), ug)
+                    end if
+                    if (liq%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF) then
+                        ul = sqrt(liq%ur(i,j,k)**2 + liq%uth(i,j,k)**2 + liq%uz(i,j,k)**2)
+                        mx(3) = max(mx(3), ul)
+                    end if
 
                     s(1) = s(1) + liq%alpha(i,j,k) * liq%rho(i,j,k) * vol
                     s(2) = s(2) + gas%alpha(i,j,k) * gas%rho(i,j,k) * vol
@@ -233,9 +248,13 @@ contains
             do n = 1, N_AUD
                 call mpi_allreduce_sum(acc(n), a(n), m%topo)
             end do
+            do n = 1, 3
+                call mpi_allreduce_max(mx(n), mx_glob(n), m%topo)
+            end do
         else
             s_glob = s
             a = acc
+            mx_glob = mx
         end if
         acc = 0.0_dp
         srcacc = 0.0_dp
@@ -250,7 +269,7 @@ contains
                  action='write', position='append')
             ! ES17.9E3: sin E3 un valor < 1e-99 imprime '6.678-178' (sin la
             ! E) y rompe el CSV (B1 v9, m_alpha_clip subnormal)
-            write(iu, '(I0,A,ES17.9E3,A,ES17.9E3,47(A,ES17.9E3))') &
+            write(iu, '(I0,A,ES17.9E3,A,ES17.9E3,50(A,ES17.9E3))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &
@@ -271,7 +290,8 @@ contains
                 ',', a(AUD_SLAG_OX_E), ',', a(AUD_SLAG_RED_E), &
                 ',', a(AUD_RAD_FOAM), &
                 ',', a(AUD_IPH_SOL), ',', a(AUD_IPH_GAS), ',', a(AUD_IPH_LIQ), &
-                ',', a(AUD_RESID_MASS), ',', a(AUD_RESID_E), ',', a(AUD_SPILL_MASS)
+                ',', a(AUD_RESID_MASS), ',', a(AUD_RESID_E), ',', a(AUD_SPILL_MASS), &
+                ',', mx_glob(1), ',', mx_glob(2), ',', mx_glob(3)
             close(iu)
         end if
     end subroutine audit_write_step
