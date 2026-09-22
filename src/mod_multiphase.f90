@@ -49,6 +49,7 @@ contains
         real(dp), allocatable, save :: p_lT(:,:,:), p_gT(:,:,:)
         ! Coeficiente de intercambio de momentum gas-líquido (C2.4)
         real(dp), allocatable, save :: Kexch(:,:,:)
+        real(dp), allocatable, save :: drag_gas(:,:,:)
         integer :: i, j, k
 
         if (.not. allocated(Kexch)) then
@@ -86,6 +87,16 @@ contains
 
         ! Compute Ergun drag coefficient from solid (Picard con |v| del líquido)
         call compute_ergun_drag(liq, sol, m, cfg, drag_coef)
+        ! Ergun del GAS con sus propias rho, mu y |v| (Bug 15, addendum 3):
+        ! el coeficiente del liquido (rho_l = 7500, |v_l|) aplicado al gas
+        ! daba, en cuanto el liquido disperso se movia a ~1 m/s por el
+        ! lecho, un termino de Forchheimer ~4e8 kg/m3/s que congelaba el
+        ! gas celda a celda; el Poisson perdia sus caminos por el lecho y
+        ! p subia en cada solve (B1 v13, 5.5 s). Dormia con u_l = 0.
+        if (.not. allocated(drag_gas)) then
+            allocate(drag_gas, mold=liq%ur); drag_gas = 0.0_dp
+        end if
+        call compute_ergun_drag(gas, sol, m, cfg, drag_gas)
 
 
         ! Coeficiente de intercambio gas-líquido: K = a_l*a_g*rho_l/TAU_LG
@@ -133,13 +144,12 @@ contains
         ! Exchange halos after momentum
         call phase_exchange_halos(liq, m)
 
-        ! Gas momentum (same drag coefficient: computed with liquid
-        ! properties; a phase-specific coefficient would be more correct.
+        ! Gas momentum con SU coeficiente de Ergun (drag_gas; ver arriba).
         ! Nota: la versión explícita anterior aplicaba al gas una FUERZA
         ! proporcional a la velocidad del LÍQUIDO; implícito, el coeficiente
-        ! actúa sobre la velocidad propia de cada fase.)
+        ! actúa sobre la velocidad propia de cada fase.
         call solve_momentum_3d(gas, gas_old, liq, Kexch, sh, m, cfg, gas%alpha, &
-                               drag_coef, .true., res_ur_g, res_uth_g, res_uz_g)
+                               drag_gas, .true., res_ur_g, res_uth_g, res_uz_g)
         call relax_field(gas%ur,  p_gur, cfg%alpha_u, m)
         call relax_field(gas%uth, p_gth, cfg%alpha_u, m)
         call relax_field(gas%uz,  p_guz, cfg%alpha_u, m)

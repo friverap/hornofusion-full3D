@@ -20,7 +20,8 @@ module mod_turbulence_3d
 contains
 
     subroutine solve_k_epsilon(liq, sh, m, cfg, dt)
-        use mod_workspace, only: ensure_workspace, aW => ws_aW, &
+        use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
+            aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su
         type(phase_t), intent(in)    :: liq
@@ -35,6 +36,17 @@ contains
         real(dp) :: Dw, De, Ds, Dn, Db, Dt_d
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft_f
         real(dp) :: mu_eff, rho_f, vol, rho_vol_dt
+        ! Bug 15: el k-eps es un modelo del LIQUIDO CONTINUO. Sin guardia de
+        ! fase, la produccion (gradientes de liq%u) y la conveccion
+        ! (rho_l u_l, 7500 kg/m3) actuaban en celdas sin liquido; dormia
+        ! porque bajo el cutoff u_l era 0 — con el drift-flux del disperso
+        ! se excito: mu_t enorme en la celda continua de fusion => aP del
+        ! momento gigante => d=V/aP~0 => el Poisson no podia reducir la
+        ! divergencia y p subia en cada solve (B1 v13, 5.5 s). Ahora:
+        ! velocidades enmascaradas (0 fuera del continuo), ecuacion trivial
+        ! y mu_t = 0 en celdas no continuas.
+        logical,  allocatable :: cont(:,:,:)
+        real(dp), allocatable :: um_r(:,:,:), um_th(:,:,:), um_z(:,:,:)
         real(dp) :: dur_dr, dur_dz, duth_dr, duth_dz, duz_dr, duz_dz
         real(dp) :: dur_dth, duz_dth, duth_dth, S2, dT_dz, G_b
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
@@ -48,6 +60,16 @@ contains
 
         ! Allocate with halos
         call ensure_workspace(m)
+        allocate(cont(lbound(liq%ur,1):ubound(liq%ur,1), lbound(liq%ur,2):ubound(liq%ur,2), &
+                      lbound(liq%ur,3):ubound(liq%ur,3)))
+        if (ws_liq_cont_valid) then
+            cont = ws_liq_cont
+        else
+            cont = (liq%alpha >= ALPHA_FLOW_CUTOFF)
+        end if
+        allocate(um_r, um_th, um_z, mold=liq%ur)
+        um_r = merge(liq%ur, 0.0_dp, cont); um_th = merge(liq%uth, 0.0_dp, cont)
+        um_z = merge(liq%uz, 0.0_dp, cont)
         allocate(Gk, mold=sh%tke)
         allocate(tke_old, mold=sh%tke)
         allocate(eps_old, mold=sh%eps)
@@ -64,6 +86,7 @@ contains
 
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
+                    if (.not. cont(i,j,k)) cycle   ! sin liquido continuo: Gk = 0
 
                     ! Approximate velocity gradients using central differences
                     dur_dr = 0.0_dp; duth_dr = 0.0_dp; duz_dr = 0.0_dp
@@ -71,31 +94,31 @@ contains
                     dur_dz = 0.0_dp; duth_dz = 0.0_dp; duz_dz = 0.0_dp
 
                     if (i > 1 .and. i < iend) then
-                        dur_dr = (liq%ur(i+1,j,k) - liq%ur(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
-                        duth_dr = (liq%uth(i+1,j,k) - liq%uth(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
-                        duz_dr = (liq%uz(i+1,j,k) - liq%uz(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
+                        dur_dr = (um_r(i+1,j,k) - um_r(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
+                        duth_dr = (um_th(i+1,j,k) - um_th(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
+                        duz_dr = (um_z(i+1,j,k) - um_z(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
                     end if
-                    dur_dth = (liq%ur(i,jp,k) - liq%ur(i,jm,k)) / &
+                    dur_dth = (um_r(i,jp,k) - um_r(i,jm,k)) / &
                               (m%r(i) * (m%theta(jp) - m%theta(jm)))
-                    duz_dth = (liq%uz(i,jp,k) - liq%uz(i,jm,k)) / &
+                    duz_dth = (um_z(i,jp,k) - um_z(i,jm,k)) / &
                               (m%r(i) * (m%theta(jp) - m%theta(jm)))
-                    duth_dth = (liq%uth(i,jp,k) - liq%uth(i,jm,k)) / &
+                    duth_dth = (um_th(i,jp,k) - um_th(i,jm,k)) / &
                                (m%r(i) * (m%theta(jp) - m%theta(jm)))
                     interior_z = (k > kstart .or. .not. at_zmin) .and. &
                                  (k < kend   .or. .not. at_zmax)
                     if (interior_z) then
-                        dur_dz = (liq%ur(i,j,k+1) - liq%ur(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
-                        duth_dz = (liq%uth(i,j,k+1) - liq%uth(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
-                        duz_dz = (liq%uz(i,j,k+1) - liq%uz(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
+                        dur_dz = (um_r(i,j,k+1) - um_r(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
+                        duth_dz = (um_th(i,j,k+1) - um_th(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
+                        duz_dz = (um_z(i,j,k+1) - um_z(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
                     end if
 
                     ! S^2 = 2*S_ij*S_ij — E_thth completo (C3.5): incluye
                     ! (1/r)duth/dth + ur/r (antes faltaba duth_dth)
                     S2 = 2.0_dp * (dur_dr**2 &
-                       + (duth_dth + liq%ur(i,j,k)/(m%r(i)+SMALL))**2 &
+                       + (duth_dth + um_r(i,j,k)/(m%r(i)+SMALL))**2 &
                        + duz_dz**2) &
                        + (dur_dz + duz_dr)**2 &
-                       + (dur_dth + duth_dr - liq%uth(i,j,k)/(m%r(i)+SMALL))**2 &
+                       + (dur_dth + duth_dr - um_th(i,j,k)/(m%r(i)+SMALL))**2 &
                        + (duz_dth + duth_dz)**2
 
                     ! Producción de flotabilidad (Boussinesq, líquido):
@@ -129,6 +152,11 @@ contains
                 jp = j + 1
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
+                    if (.not. cont(i,j,k)) then
+                        aP(i,j,k) = 1.0_dp
+                        Su(i,j,k) = 1.0e-10_dp     ! sin liquido continuo: k, eps en el piso
+                        cycle
+                    end if
 
                     vol = m%vol(i,j,k)
                     rho_f = liq%rho(i,j,k)
@@ -157,8 +185,8 @@ contains
 
                     ! Flujos convectivos de cara únicos (C2.2; el helper
                     ! enmascara caras contra celdas inactivas/frontera)
-                    call face_mass_fluxes_noalpha(liq%rho, liq%ur, liq%uth, &
-                        liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft_f)
+                    call face_mass_fluxes_noalpha(liq%rho, um_r, um_th, &
+                        um_z, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft_f)
 
                     aW(i,j,k) = Dw + max(Fw,0.0_dp)
                     aE(i,j,k) = De + max(-Fe,0.0_dp)
@@ -193,6 +221,11 @@ contains
                 jp = j + 1
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
+                    if (.not. cont(i,j,k)) then
+                        aP(i,j,k) = 1.0_dp
+                        Su(i,j,k) = 1.0e-10_dp     ! sin liquido continuo: k, eps en el piso
+                        cycle
+                    end if
 
                     vol = m%vol(i,j,k)
                     rho_f = liq%rho(i,j,k)
@@ -218,8 +251,8 @@ contains
                         m%cell_type(i,j,k+1) /= 0) &
                         Dt_d = mu_eff * m%Az(i,j,k) / (0.5_dp*(m%dz(k)+m%dz(k+1)))
 
-                    call face_mass_fluxes_noalpha(liq%rho, liq%ur, liq%uth, &
-                        liq%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft_f)
+                    call face_mass_fluxes_noalpha(liq%rho, um_r, um_th, &
+                        um_z, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft_f)
 
                     aW(i,j,k) = Dw + max(Fw,0.0_dp)
                     aE(i,j,k) = De + max(-Fe,0.0_dp)
@@ -248,13 +281,18 @@ contains
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
-                    sh%mu_t(i,j,k) = liq%rho(i,j,k) * C_MU * &
-                                      sh%tke(i,j,k)**2 / (sh%eps(i,j,k) + SMALL)
+                    if (cont(i,j,k)) then
+                        sh%mu_t(i,j,k) = liq%rho(i,j,k) * C_MU * &
+                                          sh%tke(i,j,k)**2 / (sh%eps(i,j,k) + SMALL)
+                    else
+                        sh%mu_t(i,j,k) = 0.0_dp
+                    end if
                 end do
             end do
         end do
 
         deallocate(Gk, tke_old, eps_old)
+        deallocate(cont, um_r, um_th, um_z)
     end subroutine solve_k_epsilon
 
 end module mod_turbulence_3d

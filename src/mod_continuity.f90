@@ -495,7 +495,17 @@ contains
         real(dp), intent(out)       :: ur_e(-1:,-1:,-1:), uth_e(-1:,-1:,-1:)
         real(dp), intent(out)       :: uz_e(-1:,-1:,-1:)
         if (.not. ws_drift_valid) call compute_liquid_drift(liq, gas, sol, m, cfg)
-        ur_e = ws_ud_r; uth_e = ws_ud_th; uz_e = ws_ud_z
+        ! Continuas: la velocidad ACTUAL (recien corregida por el Poisson —
+        ! el transporte debe mover alpha con el campo libre de divergencia
+        ! de esta iteracion; con la copia tomada al inicio de la iteracion,
+        ! una iteracion atrasada, el Poisson nunca cerraba la divergencia y
+        ! p crecia en cada solve: B1 v13 revento a los 5.5 s, en el primer
+        ! liquido). Dispersas: el drift relajado de esta iteracion.
+        where (liq_continuous(liq%alpha, sol%alpha_s))
+            ur_e = liq%ur; uth_e = liq%uth; uz_e = liq%uz
+        elsewhere
+            ur_e = ws_ud_r; uth_e = ws_ud_th; uz_e = ws_ud_z
+        end where
     end subroutine effective_liquid_velocity
 
     ! Flujo donor-cell en una cara orientada de lo (-) a hi (+)
