@@ -124,18 +124,32 @@ def main():
             W(f"dt cayó a {dtw:.2e} s")
 
     # --- acople P-V (Bug 15): p y velocidades maximas ------------------------
+    # Se miran los MAXIMOS DE LA VENTANA, no la ultima fila: las excursiones
+    # del acople duran decimas de segundo y se recuperan (B1 v15: 2 MPa y
+    # 9.5 km/s entre t=34.6 y 37.7 s, invisibles en la fila final).
     if "p_max" in r:
-        pm, ugm, ulm = r["p_max"], r["u_gas_max"], r["u_liq_max"]
+        win_pv = [x for x in rows if x["time"] >= t - 300.0] or [r]
+        pm = max(x["p_max"] for x in win_pv)
+        ugm = max(x["u_gas_max"] for x in win_pv)
+        ulm = max(x["u_liq_max"] for x in win_pv)
+        n_pk = sum(1 for x in win_pv if x["p_max"] > 3.0e5)
+        if n_pk:
+            W(f"{n_pk} filas con p>3e5 en los últimos 300 s (pico {pm:.2e} Pa)")
         if pm >= 1.5e6:
             A(f"presión en la cota: p_max={pm:.3e} Pa (P_HYDRO_CAP 2e6) — acople P-V roto")
+        if r["p_max"] > 0 and any(abs(x["p_max"] - r["p_max"]) < 1e-9 * max(r["p_max"], 1.0)
+                                  for x in rows[-200:-20] if x is not r) and r["p_max"] > 1.0e4:
+            A(f"p_max congelado en {r['p_max']:.4e} Pa (celda sellada, Bug 16)")
         elif pm > 3.0e5:
             W(f"p_max={pm:.3e} Pa (>3e5; hidrostática del baño ~1e5)")
         if ugm > 1000.0:
             A(f"gas hipersónico: |u_g|max={ugm:.0f} m/s")
         elif ugm > 300.0:
             W(f"|u_g|max={ugm:.0f} m/s (>300; low-Mach exige << 900)")
-        if ulm >= 19.5:
-            W(f"líquido en el cap U_LIQ_MAX: |u_l|max={ulm:.1f} m/s")
+        # el liquido DISPERSO va a su velocidad de deriva (hasta
+        # U_SETTLE_MAX = 50 m/s), asi que solo avisa por encima de eso
+        if ulm >= 49.5:
+            W(f"líquido en el cap de deriva: |u_l|max={ulm:.1f} m/s")
 
     # --- energía: nada por encima de lo inyectado -----------------------------
     P_int = sum(rows[i]["P_arc"] * (rows[i]["time"] - rows[i-1]["time"]) for i in range(1, len(rows)))

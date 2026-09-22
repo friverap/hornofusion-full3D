@@ -157,6 +157,7 @@ contains
         call relax_field(gas%ur,  p_gur, cfg%alpha_u, m)
         call relax_field(gas%uth, p_gth, cfg%alpha_u, m)
         call relax_field(gas%uz,  p_guz, cfg%alpha_u, m)
+        call cap_gas_velocity(gas, m)
 
         ! Exchange halos after momentum
         call phase_exchange_halos(gas, m)
@@ -172,6 +173,7 @@ contains
         ! disparo; el blow-up nace aqui). Bit-identico cuando no dispara.
         call probe_report('post-presion  ', liq, gas, sol, sh, m, cfg)
         call cap_liquid_velocity(liq, m)
+        call cap_gas_velocity(gas, m)
         call probe_report('post-cap2     ', liq, gas, sol, sh, m, cfg)
 
         ! Exchange halos after pressure
@@ -226,6 +228,33 @@ contains
     ! Cota física de velocidad del líquido (ver U_LIQ_MAX en mod_constants).
     ! Escala el vector completo => preserva dirección; solo celdas activas.
     !---------------------------------------------------------------------------
+    ! Cota de validez low-Mach del gas (Bug 18); ver U_GAS_MAX
+    subroutine cap_gas_velocity(gas, m)
+        type(phase_t), intent(inout) :: gas
+        type(mesh_t), intent(in)     :: m
+
+        integer  :: i, j, k
+        integer  :: istart, iend, jstart, jend, kstart, kend
+        real(dp) :: vmag, f
+
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    vmag = sqrt(gas%ur(i,j,k)**2 + gas%uth(i,j,k)**2 + &
+                                gas%uz(i,j,k)**2)
+                    if (vmag > U_GAS_MAX) then
+                        f = U_GAS_MAX / vmag
+                        gas%ur(i,j,k)  = gas%ur(i,j,k)  * f
+                        gas%uth(i,j,k) = gas%uth(i,j,k) * f
+                        gas%uz(i,j,k)  = gas%uz(i,j,k)  * f
+                    end if
+                end do
+            end do
+        end do
+    end subroutine cap_gas_velocity
+
     subroutine cap_liquid_velocity(liq, m)
         type(phase_t), intent(inout) :: liq
         type(mesh_t), intent(in)     :: m

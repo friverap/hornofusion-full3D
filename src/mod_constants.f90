@@ -87,6 +87,20 @@ module mod_constants
     ! arco hasta reventar el CFL del transporte de alpha (B1: CFL_liq
     ! 1181 => NaN a t=471 s). Misma familia que P_HYDRO_CAP/COMP_SRC_CAP.
     real(dp), parameter :: U_LIQ_MAX = 20.0_dp
+    ! Cota de validez LOW-MACH del gas [m/s] (Bug 18). La formulacion
+    ! low-Mach del gas (rho(p,T) con termino acustico diagonal, sin ecuacion
+    ! de onda) solo vale para M << 1; con c ~ 780 m/s a 1500 K, 300 m/s son
+    ! M ~ 0.4 y ya es el limite. Una solucion con M = 28 (B1 v15: 9.5 km/s)
+    ! esta FUERA del dominio de validez del modelo, no es fisica que haya
+    ! que conservar. Origen: celdas del lecho con el gas expulsado
+    ! (alpha_g -> 0) y liquido continuo quedan hidraulicamente bloqueadas
+    ! (Ergun + Kexch dominan aP => d = V/aP ~ 0), su fila del Poisson tiene
+    ! coeficientes minusculos y cualquier desbalance de caras se absorbe con
+    ! presiones de MPa; el gas vecino responde a ese gradiente. El CG
+    ! converge (res_cont 1e-6): es el sistema discreto, no el solver.
+    ! Misma familia que U_LIQ_MAX y P_HYDRO_CAP: cota del modelo, auditada
+    ! (u_gas_max en audit.csv sigue mostrando cuando se toca).
+    real(dp), parameter :: U_GAS_MAX = 300.0_dp
     ! Fraccion a partir de la cual el LIQUIDO es fase CONTINUA fuera del lecho
     ! (sep-2026, Bug 15): solo entonces resuelve su momento y entra al
     ! Poisson. Por debajo (gotas, niebla, salpicaduras: 0 < alpha_l < 0.3
