@@ -197,6 +197,54 @@ contains
     end function settling_velocity
 
     !---------------------------------------------------------------------------
+    ! Gradiente 1D de presion con vecinas OPCIONALES (Bug 16): una celda sin
+    ! fase continua — o una celda de pared — no tiene presion de fluido y se
+    ! trata como frontera (diferencia unilateral). Con la centrada a traves
+    ! de ella, su valor (rancio o cero) empujaba al fluido para siempre.
+    !---------------------------------------------------------------------------
+    pure function pgrad(pm, p0, pp_, xm, x0, xp, okm, okp) result(g)
+        real(dp), intent(in) :: pm, p0, pp_, xm, x0, xp
+        logical,  intent(in) :: okm, okp
+        real(dp) :: g
+        if (okm .and. okp) then
+            g = (pp_ - pm) / (xp - xm)
+        else if (okp) then
+            g = (pp_ - p0) / (xp - x0)
+        else if (okm) then
+            g = (p0 - pm) / (x0 - xm)
+        else
+            g = 0.0_dp
+        end if
+    end function pgrad
+
+    !---------------------------------------------------------------------------
+    ! Velocidad de PERCOLACION del liquido disperso por el lecho de chatarra:
+    ! el punto estacionario de SU PROPIA ecuacion de momento, es decir donde
+    ! el arrastre de Ergun iguala el peso boyante:
+    !     (mu/K + C_F rho |u| / sqrt(K)) u = alpha_l (rho_l - rho_g) g
+    ! (raiz positiva, forma numericamente estable). Con d_p = 0.1 m,
+    ! eps = 0.5 y alpha_l = 0.01 da ~2 mm/s. La estimacion anterior por
+    ! caida libre, sqrt(2 g d_p) ~ 1.4 m/s, era 700x mayor: drenaba el
+    ! primer fundido de la zona caliente antes de que se acumulara y lo
+    ! congelaba en la chatarra fria de abajo (B1 v14: 8 kg de bano a 30 s
+    ! frente a 89 kg de la referencia v11).
+    !---------------------------------------------------------------------------
+    pure function percolation_velocity(alpha_l, alpha_s, rho_l, rho_g, mu_l, d_p) result(u)
+        real(dp), intent(in) :: alpha_l, alpha_s, rho_l, rho_g, mu_l, d_p
+        real(dp) :: u, eps, K_perm, C_F, A, B, C
+        u = 0.0_dp
+        if (alpha_l <= 0.0_dp .or. d_p <= 0.0_dp) return
+        eps    = max(1.0_dp - alpha_s, 0.01_dp)
+        K_perm = d_p**2 * eps**3 / (150.0_dp * (1.0_dp - eps)**2 + SMALL)
+        C_F    = 1.75_dp / (d_p * eps**3 + SMALL)
+        A = mu_l / (K_perm + SMALL)
+        B = C_F * rho_l / (sqrt(K_perm) + SMALL)
+        C = alpha_l * max(rho_l - rho_g, 0.0_dp) * GRAVITY
+        u = 2.0_dp * C / (A + sqrt(A*A + 4.0_dp * B * C))
+        u = min(u, U_SETTLE_MAX)
+    end function percolation_velocity
+
+    !---------------------------------------------------------------------------
     ! Velocidad de DRIFT-FLUX del liquido disperso: la del gas menos la
     ! terminal de sedimentacion en z, con el modulo acotado a U_SETTLE_MAX
     ! (misma cota en momento y transporte de alpha => campos consistentes;

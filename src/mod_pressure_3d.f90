@@ -139,31 +139,23 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
 
-                    if (i > istart .and. i < iend) then
-                        gpr(i,j,k) = (sh%p(i+1,j,k) - sh%p(i-1,j,k)) / &
-                                     (m%r(i+1) - m%r(i-1))
-                    else if (i == istart .and. iend > istart) then
-                        gpr(i,j,k) = (sh%p(i+1,j,k) - sh%p(i,j,k)) / &
-                                     (m%r(i+1) - m%r(i))
-                    else if (i == iend .and. iend > istart) then
-                        gpr(i,j,k) = (sh%p(i,j,k) - sh%p(i-1,j,k)) / &
-                                     (m%r(i) - m%r(i-1))
-                    end if
+                    ! Gradientes con las celdas SIN fluido tratadas como
+                    ! pared (Bug 16): su presion no es de fluido y entraba
+                    ! al termino de Rhie-Chow del propio Poisson.
+                    gpr(i,j,k) = pgrad(sh%p(i-1,j,k), sh%p(i,j,k), sh%p(i+1,j,k), &
+                                       m%r(i-1), m%r(i), m%r(i+1), &
+                                       i > istart .and. pv_cell(i-1,j,k), &
+                                       i < iend   .and. pv_cell(i+1,j,k))
 
-                    gpth(i,j,k) = (sh%p(i,jp,k) - sh%p(i,jm,k)) / &
-                                  (m%r(i) * (m%theta(jp) - m%theta(jm)))
+                    gpth(i,j,k) = pgrad(sh%p(i,jm,k), sh%p(i,j,k), sh%p(i,jp,k), &
+                                        m%r(i) * m%theta(jm), m%r(i) * m%theta(j), &
+                                        m%r(i) * m%theta(jp), &
+                                        pv_cell(i,jm,k), pv_cell(i,jp,k))
 
-                    if ((k > kstart .or. .not. at_zmin) .and. &
-                        (k < kend   .or. .not. at_zmax)) then
-                        gpz(i,j,k) = (sh%p(i,j,k+1) - sh%p(i,j,k-1)) / &
-                                     (m%z(k+1) - m%z(k-1))
-                    else if (k == kstart .and. kend > kstart) then
-                        gpz(i,j,k) = (sh%p(i,j,k+1) - sh%p(i,j,k)) / &
-                                     (m%z(k+1) - m%z(k))
-                    else if (k == kend .and. kend > kstart) then
-                        gpz(i,j,k) = (sh%p(i,j,k) - sh%p(i,j,k-1)) / &
-                                     (m%z(k) - m%z(k-1))
-                    end if
+                    gpz(i,j,k) = pgrad(sh%p(i,j,k-1), sh%p(i,j,k), sh%p(i,j,k+1), &
+                                       m%z(k-1), m%z(k), m%z(k+1), &
+                                       (k > kstart .or. .not. at_zmin) .and. pv_cell(i,j,k-1), &
+                                       (k < kend   .or. .not. at_zmax) .and. pv_cell(i,j,k+1))
                 end do
             end do
         end do
@@ -277,9 +269,64 @@ contains
         sh%p = sh%p + cfg%alpha_p * sh%pp
         sh%p = max(-P_HYDRO_CAP, min(P_HYDRO_CAP, sh%p))
 
+        !-------------------------------------------------------------------
+        ! Celdas SIN fase continua (Bug 16): su pp es identicamente 0 (aP=1,
+        ! Su=0), asi que su presion queda CONGELADA para siempre en el valor
+        ! que tuviera al sellarse — y los vecinos la leen en dp/dx del
+        ! momento. B1 v14: una celda con alpha_s = 1.0000 exacto quedo con
+        ! 613 kPa a t=42 s y sostuvo un chorro de gas de 200 m/s tres celdas
+        ! mas arriba durante el resto de la corrida (p_max identico a 5
+        ! cifras durante 20 s de simulacion). Se les impone Neumann: la
+        ! media de sus vecinas con fluido (0 si no hay ninguna), que es la
+        ! condicion de pared y anula el gradiente espurio.
+        !-------------------------------------------------------------------
+        block
+            real(dp) :: psum
+            integer  :: nnb
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        if (m%cell_type(i,j,k) == 0) cycle
+                        if (act_l(i,j,k) .or. act_g(i,j,k)) cycle
+                        psum = 0.0_dp; nnb = 0
+                        call acc_nb(i-1, j, k, psum, nnb)
+                        call acc_nb(i+1, j, k, psum, nnb)
+                        call acc_nb(i, j-1, k, psum, nnb)
+                        call acc_nb(i, j+1, k, psum, nnb)
+                        call acc_nb(i, j, k-1, psum, nnb)
+                        call acc_nb(i, j, k+1, psum, nnb)
+                        if (nnb > 0) then
+                            sh%p(i,j,k) = psum / real(nnb, dp)
+                        else
+                            sh%p(i,j,k) = 0.0_dp
+                        end if
+                    end do
+                end do
+            end do
+        end block
+        call mpi_exchange_halos_3d(sh%p, m%topo)
+
         deallocate(gpr, gpth, gpz, act_l, act_g)
 
     contains
+
+        ! La celda tiene presion de fluido definida? (Bug 16)
+        pure logical function pv_cell(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            pv_cell = (m%cell_type(ii,jj,kk) /= 0) .and. &
+                      (act_l(ii,jj,kk) .or. act_g(ii,jj,kk))
+        end function pv_cell
+
+        ! Acumula la presion de una vecina CON fluido continuo (Neumann de
+        ! pared para las celdas selladas; ver Bug 16)
+        subroutine acc_nb(ii, jj, kk, psum, nnb)
+            integer,  intent(in)    :: ii, jj, kk
+            real(dp), intent(inout) :: psum
+            integer,  intent(inout) :: nnb
+            if (m%cell_type(ii,jj,kk) == 0) return
+            if (.not. act_l(ii,jj,kk) .and. .not. act_g(ii,jj,kk)) return
+            psum = psum + sh%p(ii,jj,kk); nnb = nnb + 1
+        end subroutine acc_nb
 
         !-----------------------------------------------------------------------
         ! Suma al Laplaciano compacto y a la divergencia Rhie-Chow la

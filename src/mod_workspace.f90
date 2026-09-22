@@ -45,6 +45,12 @@ module mod_workspace
     ! continuo (la velocidad del liquido debe entrar desde la fase continua
     ! vecina, no desde el drift: con la del gas 'horneada' exigia MPa)
     logical, allocatable :: ws_liq_cont_prev(:,:,:)
+    ! Celdas CON alguna fase continua en el acople P-V (Bug 16): las demas
+    ! no tienen presion de fluido — su pp es 0 y el valor que guarden queda
+    ! congelado. Momento las trata como pared en dp/dx y la correccion de
+    ! presion les impone el Neumann de sus vecinas con fluido.
+    logical, allocatable :: ws_pv_active(:,:,:)
+    logical, save :: ws_pv_valid = .false.
     ! Velocidad de DRIFT-FLUX del liquido disperso (Bug 15), calculada UNA
     ! vez por iteracion externa en compute_liquid_drift (mod_continuity):
     ! gas + sedimentacion terminal, acotada; en el lecho la sedimentacion
@@ -69,8 +75,8 @@ contains
         allocate(ws_Fr, ws_Fth, ws_Fz, ws_Mr, ws_Mth, ws_Mz, ws_lim, mold=ws_aW)
         allocate(ws_liq_cont(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         ws_liq_cont = .true.
-        allocate(ws_liq_cont_prev, mold=ws_liq_cont)
-        ws_liq_cont_prev = .true.
+        allocate(ws_liq_cont_prev, ws_pv_active, mold=ws_liq_cont)
+        ws_liq_cont_prev = .true.; ws_pv_active = .true.
         allocate(ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, mold=ws_aW)
         ws_ud_r = 0.0_dp; ws_ud_th = 0.0_dp; ws_ud_z = 0.0_dp; ws_ut = 0.0_dp
         ws_Fr = 0.0_dp; ws_Fth = 0.0_dp; ws_Fz = 0.0_dp

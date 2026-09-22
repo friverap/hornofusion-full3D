@@ -71,7 +71,7 @@ contains
                                          ph, ph_other, sh, m, cfg, &
                                          alpha_q, drag_coef, is_gas, comp, residual)
         use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
-            ws_ud_r, ws_ud_th, ws_ud_z, &
+            ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
             aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su
@@ -201,13 +201,10 @@ contains
 
                     select case (comp)
                     case ('ur')
-                        if (i > 1 .and. i < iend) then
-                            dp_dr = (sh%p(i+1,j,k) - sh%p(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
-                        else if (i == istart .and. iend > istart) then
-                            dp_dr = (sh%p(i+1,j,k) - sh%p(i,j,k)) / (m%r(i+1) - m%r(i))
-                        else if (i == iend .and. iend > istart) then
-                            dp_dr = (sh%p(i,j,k) - sh%p(i-1,j,k)) / (m%r(i) - m%r(i-1))
-                        end if
+                        dp_dr = pgrad(sh%p(i-1,j,k), sh%p(i,j,k), sh%p(i+1,j,k), &
+                                      m%r(i-1), m%r(i), m%r(i+1), &
+                                      i > 1    .and. pv_ok(i-1,j,k), &
+                                      i < iend .and. pv_ok(i+1,j,k))
                         ! Centrifugal: +rho*u_th^2/r  +  Lorentz r-stirring
                         src_extra = alpha_f * ph%rho(i,j,k) * ph%uth(i,j,k)**2 / m%r(i) &
                                   + sh%F_lorentz_r(i,j,k)
@@ -219,8 +216,10 @@ contains
                         ! correcta también en la costura (el parche
                         ! merge(jp<jm) anterior nunca se activaba: comparaba
                         ! ÍNDICES, y jp=j+1 > jm=j-1 siempre)
-                        dp_dth = (sh%p(i,jp,k) - sh%p(i,jm,k)) / &
-                                 (m%r(i) * (m%theta(jp) - m%theta(jm)))
+                        dp_dth = pgrad(sh%p(i,jm,k), sh%p(i,j,k), sh%p(i,jp,k), &
+                                       m%r(i) * m%theta(jm), m%r(i) * m%theta(j), &
+                                       m%r(i) * m%theta(jp), &
+                                       pv_ok(i,jm,k), pv_ok(i,jp,k))
                         ! Coriolis -rho*ur*uth/r, LINEAL en uth: linearización
                         ! de Patankar — implícito (aP_extra) cuando el
                         ! coeficiente es positivo. Explícito cerraba el lazo de
@@ -238,14 +237,10 @@ contains
                     case ('uz')
                         ! Central salvo en frontera FÍSICA; en interfaces de
                         ! rank el halo de p es válido (hallazgo 3.6)
-                        if ((k > kstart .or. .not. at_zmin) .and. &
-                            (k < kend   .or. .not. at_zmax)) then
-                            dp_dz = (sh%p(i,j,k+1) - sh%p(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
-                        else if (k == kstart .and. kend > kstart) then
-                            dp_dz = (sh%p(i,j,k+1) - sh%p(i,j,k)) / (m%z(k+1) - m%z(k))
-                        else if (k == kend .and. kend > kstart) then
-                            dp_dz = (sh%p(i,j,k) - sh%p(i,j,k-1)) / (m%z(k) - m%z(k-1))
-                        end if
+                        dp_dz = pgrad(sh%p(i,j,k-1), sh%p(i,j,k), sh%p(i,j,k+1), &
+                                      m%z(k-1), m%z(k), m%z(k+1), &
+                                      (k > kstart .or. .not. at_zmin) .and. pv_ok(i,j,k-1), &
+                                      (k < kend   .or. .not. at_zmax) .and. pv_ok(i,j,k+1))
                         ! Gravity + arc impingement; Boussinesq SOLO líquido
                         ! (rho constante): el gas ya tiene flotabilidad vía
                         ! rho(T) de gas ideal (hallazgo 3.13)
@@ -294,6 +289,19 @@ contains
 
         ! Compute residual (MPI-aware)
         residual = compute_residual_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, vel, m)
+
+
+    contains
+
+        ! La celda tiene presion de fluido definida? (Bug 16)
+        pure logical function pv_ok(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            if (ws_pv_valid) then
+                pv_ok = ws_pv_active(ii,jj,kk)
+            else
+                pv_ok = (m%cell_type(ii,jj,kk) /= 0)
+            end if
+        end function pv_ok
 
     end subroutine solve_momentum_component
 

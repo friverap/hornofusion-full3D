@@ -22,7 +22,7 @@ module mod_multiphase
     use mod_fields_3d
     use mod_probe, only: probe_report
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_ut, &
-                             ws_liq_cont_prev
+                             ws_liq_cont_prev, ws_pv_active, ws_pv_valid
     implicit none
 
 contains
@@ -75,6 +75,10 @@ contains
         call ensure_workspace(m)
         ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s)
         ws_liq_cont_valid = .true.
+        ! Celdas con presion de fluido definida (Bug 16)
+        ws_pv_active = (ws_liq_cont .or. gas%alpha >= ALPHA_FLOW_CUTOFF) &
+                       .and. (m%cell_type /= 0)
+        ws_pv_valid = .true.
         call compute_liquid_drift(liq, gas, sol, m, cfg, liq_old)
 
         ! Transicion DISPERSO -> CONTINUO (Bug 15): la celda entra al momento

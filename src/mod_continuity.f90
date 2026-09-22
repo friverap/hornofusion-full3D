@@ -438,10 +438,9 @@ contains
         type(config_t), intent(in)  :: cfg
         type(phase_t), intent(in), optional :: liq_old
         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: u_t, u_perc, tr, tth, tz, f
+        real(dp) :: u_t, tr, tth, tz, f
         call ensure_workspace(m)
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
-        u_perc = sqrt(2.0_dp * GRAVITY * max(cfg%d_particle, 1.0e-3_dp))
         ws_ud_r = liq%ur; ws_ud_th = liq%uth; ws_ud_z = liq%uz; ws_ut = 0.0_dp
         do k = kstart, kend
             do j = jstart, jend
@@ -452,18 +451,25 @@ contains
                         ws_ud_r(i,j,k) = 0.0_dp; ws_ud_th(i,j,k) = 0.0_dp; ws_ud_z(i,j,k) = 0.0_dp
                         cycle
                     end if
+                    if (sol%alpha_s(i,j,k) >= 1.0e-2_dp) then
+                        ! LECHO: percolacion al balance de Ergun (el estado
+                        ! estacionario de SU PROPIA ecuacion de momento);
+                        ! relajacion instantanea (tau = alpha_l rho_l /
+                        ! drag_Ergun ~ 1e-4 s << dt) y no monta en el gas.
+                        u_t = percolation_velocity(liq%alpha(i,j,k), sol%alpha_s(i,j,k), &
+                                  liq%rho(i,j,k), gas%rho(i,j,k), liq%mu(i,j,k), cfg%d_particle)
+                        ws_ut(i,j,k) = u_t
+                        ws_ud_r(i,j,k) = 0.0_dp; ws_ud_th(i,j,k) = 0.0_dp
+                        ws_ud_z(i,j,k) = -u_t
+                        cycle
+                    end if
                     u_t = settling_velocity(cfg%d_droplet, liq%rho(i,j,k), &
                                             gas%rho(i,j,k), gas%mu(i,j,k))
-                    if (sol%alpha_s(i,j,k) >= 1.0e-2_dp) then
-                        u_t = min(u_t, u_perc)
-                        tr = 0.0_dp; tth = 0.0_dp; tz = -u_t
-                    else
-                        call drift_velocity(gas%ur(i,j,k), gas%uth(i,j,k), gas%uz(i,j,k), u_t, &
-                                            tr, tth, tz)
-                    end if
+                    call drift_velocity(gas%ur(i,j,k), gas%uth(i,j,k), gas%uz(i,j,k), u_t, &
+                                        tr, tth, tz)
                     ws_ut(i,j,k) = u_t
                     if (present(liq_old)) then
-                        ! relajacion de particula hacia el objetivo
+                        ! relajacion de particula hacia el objetivo (freeboard)
                         f = min(1.0_dp, cfg%dt * GRAVITY / max(u_t, SMALL))
                         ws_ud_r(i,j,k)  = liq_old%ur(i,j,k)  + f * (tr  - liq_old%ur(i,j,k))
                         ws_ud_th(i,j,k) = liq_old%uth(i,j,k) + f * (tth - liq_old%uth(i,j,k))
