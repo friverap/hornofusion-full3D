@@ -14,21 +14,22 @@ audit_noflow:arc_budget
 # balance cierra a 3e-6 (gate deep, sigue activo). Fix real pendiente:
 # acumular en cada update de T con el rho local (pendiente del audit).
 audit_cold:energy_balance
-# --- Bug 19 (Plan C, F0 2026-09-23): banco del bano de liquido puro ---
-# El Poisson impone div(sum alpha rho u)=0 sin transitorio de densidad y el
-# transporte de alpha reconstruye sus flujos desde velocidades de centro
-# (no los de Rhie-Chow que el Poisson hizo solenoidales): un charco puro
-# en reposo NO es punto fijo del acople (u_l 0.7 m/s, d alpha 5e-2 en 1 s,
-# ferrostatica con 6% de error, gas en la cota U_GAS_MAX). Se quitan en
-# F1 (flujos conservativos exportados del Poisson) y F2 (transitorio).
-bath:bath_hydrostatic
+# --- Bug 19 (Plan C, F1 2026-09-23): banco del bano de liquido puro ---
+# Tras F1 (flujos conservativos del Poisson en el transporte de alpha,
+# regla de superficie libre, dador en caras mixtas, presion del gas sobre
+# el bano, residuales reales del lazo externo) el bano ya es ESTABLE:
+# ferrostatica al 0.5 %, p y u_gas acotados, masa exacta, bath_fill limpio.
+# Quedan las CORRIENTES FANTASMA del esquema colocado: velocidades de
+# centro de 0.17 m/s con flujos de cara ~0 (Rhie-Chow con fuerza de
+# cuerpo: el gradiente central y la fuerza de la celda no se balancean
+# exactamente donde p no es lineal — superficie libre y fondo abombado),
+# que mueven d alpha ~2e-3/s en la capa bajo la superficie. Fix previsto
+# (F1b): fuerza de cuerpo balanceada por caras + correccion de Choi/
+# Majumdar al Rhie-Chow (independencia de dt y relajacion).
 bath:bath_rest
 bath:bath_alpha_frozen
-bath:bath_pv_bounded
-# bath_fill: el limitador satura en el PRIMER paso (5.4 t recortadas bajo
-# celdas selladas alpha_l+alpha_s=1) porque el campo que transporta alpha
-# no es solenoidal — misma causa; el handoff fusion->liquido cierra a 1e-9.
-bath_fill:bath_mass_steel
-# invarianza n1 vs n4 del bano: la velocidad del liquido en reposo es ruido
-# del acople (0.7 m/s) y no es invariante; se resuelve con F1.
+# invarianza n1 vs n4 del bano: todos los campos < 1e-3 salvo las
+# componentes theta de velocidad, que son ~0 por axisimetria y su error
+# RELATIVO es ruido (3e-2 sobre un maximo de 1e-3 m/s). Se levanta cuando
+# compare_decomposition escale por el modulo de la velocidad.
 script:decomposition_bath

@@ -31,6 +31,8 @@ module mod_continuity
     use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS, AUD_SPILL_MASS
     use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
                              ws_Mr, ws_Mth, ws_Mz, ws_lim, ws_flux_valid, &
+                             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, &
+                             ws_Fc_lk_z, ws_Fc_valid, ws_liq_cont, ws_liq_cont_valid, &
                              ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, ws_drift_valid
     implicit none
 
@@ -84,6 +86,10 @@ contains
         ! deslizamiento algebraico, Manninen et al. 1996). Antes era 0:
         ! la niebla salpicada por el arco quedaba suspendida (B1 v11, 3.6 t).
         real(dp), allocatable :: ur_e(:,:,:), uth_e(:,:,:), uz_e(:,:,:)
+        ! Flujo de masa SIN alpha (rho_f u_f A) por las caras + de cada celda,
+        ! fijo durante los sub-pasos (las velocidades no cambian; solo alpha)
+        real(dp), allocatable :: Gr(:,:,:), Gth(:,:,:), Gz(:,:,:)
+        logical,  allocatable :: cont(:,:,:)
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         allocate(a_new, mold=liq%alpha)
@@ -91,6 +97,14 @@ contains
         lim_new = 1.0_dp
         allocate(ur_e, uth_e, uz_e, mold=liq%alpha)
         call effective_liquid_velocity(liq, gas, sol, m, cfg, ur_e, uth_e, uz_e)
+        allocate(Gr, Gth, Gz, mold=liq%alpha)
+        allocate(cont, mold=ws_liq_cont)
+        if (ws_liq_cont_valid) then
+            cont = ws_liq_cont
+        else
+            call liquid_continuity_mask(liq, sol, m, cont)
+        end if
+        call face_fluxes_noalpha_all(liq, m, ur_e, uth_e, uz_e, cont, Gr, Gth, Gz)
 
         ! n_sub UNIFORME GLOBAL desde el CFL donor-cell máximo
         ! (suma de flujos de salida * dt / (rho*V))
@@ -100,8 +114,8 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
-                    call face_mass_fluxes_noalpha(liq%rho, ur_e, uth_e, &
-                        uz_e, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                    Fw = Gr(i-1,j,k); Fe = Gr(i,j,k); Fs = Gth(i,j-1,k)
+                    Fn = Gth(i,j,k);  Fb = Gz(i,j,k-1); Ft = Gz(i,j,k)
                     cfl_loc = (max(-Fw,0.0_dp) + max(Fe,0.0_dp) + &
                                max(-Fs,0.0_dp) + max(Fn,0.0_dp) + &
                                max(-Fb,0.0_dp) + max(Ft,0.0_dp)) * cfg%dt / &
@@ -150,7 +164,7 @@ contains
             ! alcanza.
             call solve_alpha_bounded_implicit(liq, gas, sol, alpha_slag, &
                                               alpha_old, m, cfg, ur_e, uth_e, uz_e)
-            deallocate(a_new, lim_new, ur_e, uth_e, uz_e)
+            deallocate(a_new, lim_new, ur_e, uth_e, uz_e, Gr, Gth, Gz, cont)
             return
         end if
         dt_sub = cfg%dt / real(n_sub, dp)
@@ -179,8 +193,7 @@ contains
                         ws_Mr(i,j,k) = 0.0_dp; ws_Mth(i,j,k) = 0.0_dp
                         ws_Mz(i,j,k) = 0.0_dp
                         if (m%cell_type(i,j,k) == 0) cycle
-                        call face_mass_fluxes_noalpha(liq%rho, ur_e, &
-                            uth_e, uz_e, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                        Fe = Gr(i,j,k); Fn = Gth(i,j,k); Ft = Gz(i,j,k)
                         ws_Mr(i,j,k)  = donor_flux(Fe, liq%alpha(i,j,k), liq%alpha(i+1,j,k))
                         ws_Mth(i,j,k) = donor_flux(Fn, liq%alpha(i,j,k), liq%alpha(i,j+1,k))
                         ws_Mz(i,j,k)  = donor_flux(Ft, liq%alpha(i,j,k), liq%alpha(i,j,k+1))
@@ -371,7 +384,7 @@ contains
                 ' derramado=', spill_call, ' recortado=', clip_call
         end if
 
-        deallocate(a_new, lim_new, ur_e, uth_e, uz_e)
+        deallocate(a_new, lim_new, ur_e, uth_e, uz_e, Gr, Gth, Gz, cont)
 
     contains
 
@@ -446,7 +459,11 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
-                    if (liq_continuous(liq%alpha(i,j,k), sol%alpha_s(i,j,k))) cycle
+                    if (ws_liq_cont_valid) then
+                        if (ws_liq_cont(i,j,k)) cycle
+                    else
+                        if (liq_continuous(liq%alpha(i,j,k), sol%alpha_s(i,j,k))) cycle
+                    end if
                     if (liq%alpha(i,j,k) <= 0.0_dp .or. cfg%d_droplet <= 0.0_dp) then
                         ws_ud_r(i,j,k) = 0.0_dp; ws_ud_th(i,j,k) = 0.0_dp; ws_ud_z(i,j,k) = 0.0_dp
                         cycle
@@ -493,6 +510,144 @@ contains
     ! el drift-flux donde es disperso. Reutiliza el drift relajado de la
     ! iteracion (multiphase) si existe; si no, objetivo directo.
     !---------------------------------------------------------------------------
+    !---------------------------------------------------------------------------
+    ! Mascara de LIQUIDO CONTINUO (Bug 15 + regla de superficie libre, Plan C
+    ! F1). Regla elemental (liq_continuous): alpha_l >= ALPHA_LIQ_CONT en el
+    ! freeboard, >= ALPHA_FLOW_CUTOFF dentro del lecho. Regla de SUPERFICIE
+    ! LIBRE: la celda con liquido (>= ALPHA_FLOW_CUTOFF) que descansa sobre
+    ! una celda de bano (elementalmente continua y con alpha_l >=
+    ! ALPHA_LIQ_CONT) es la pelicula superficial del bano, no niebla: entra
+    ! al momento y al Poisson enlazada con el bano. Sin ella, la celda de
+    ! superficie oscilaba entre continua y dispersa al cruzar 0.3 (bath_test:
+    ! al pasar a dispersa, su cara con el bano se desenlazaba del Poisson y
+    ! el drift empujaba liquido al bano sellado -> succion de kPa -> gas a
+    ! 300 m/s a t = 0.8 s). Un nivel, sin propagacion: la superficie ocupa
+    ! una capa de celdas. Se evalua tambien en halos (funcion local de alpha
+    ! y alpha_s ya intercambiados) => coherente entre ranks sin intercambio.
+    !---------------------------------------------------------------------------
+    subroutine liquid_continuity_mask(liq, sol, m, cont)
+        type(phase_t), intent(in) :: liq
+        type(solid_t), intent(in) :: sol
+        type(mesh_t), intent(in)  :: m
+        logical, intent(out)      :: cont(-1:,-1:,-1:)
+        integer :: k, klo, khi
+        cont = liq_continuous(liq%alpha, sol%alpha_s)
+        klo = lbound(cont,3) + 1; khi = ubound(cont,3)
+        do k = khi, klo, -1
+            where (.not. cont(:,:,k) .and. m%cell_type(:,:,k) /= 0 &
+                   .and. liq%alpha(:,:,k) >= ALPHA_FLOW_CUTOFF &
+                   .and. m%cell_type(:,:,k-1) /= 0 &
+                   .and. liq_continuous(liq%alpha(:,:,k-1), sol%alpha_s(:,:,k-1)) &
+                   .and. liq%alpha(:,:,k-1) >= ALPHA_LIQ_CONT)
+                cont(:,:,k) = .true.
+            end where
+        end do
+    end subroutine liquid_continuity_mask
+
+    !---------------------------------------------------------------------------
+    ! Flujo de masa sin alpha (rho_f u_f A) por las caras + de cada celda
+    ! propia, halos intercambiados (Bug 19, Plan C F1).
+    !   - Cara ENLAZADA en el Poisson del liquido (ambas celdas con liquido
+    !     continuo): el flujo conservativo exportado, F/(alpha rho)_f * rho_f
+    !     — la velocidad de cara de Rhie-Chow que el CG dejo solenoidal. Es
+    !     el mismo alpha_f que llevaba F, asi que G = rho_f u_f A exacto.
+    !   - Cara MIXTA (continuo | disperso): regla del DADOR. El liquido que
+    !     sale de la celda continua lo hace a la velocidad de ESA celda; las
+    !     gotas que caen a la continua, a su velocidad de drift. La media
+    !     simetrica aplicaba al bano la velocidad del gas de la celda casi
+    !     vacia de encima (50-300 m/s): la celda de superficie se vaciaba
+    !     hacia arriba en un paso, pasaba a dispersa, y la cascada acababa
+    !     con succion de kPa en el bano y gas en la cota (bath_test, 0.8 s).
+    !     Flujos convergentes: la media (neto); divergentes: 0 (no hay
+    !     liquido en la cara).
+    !   - Resto de caras (ambas dispersas, o sin liquido): reconstruccion
+    !     simetrica desde la velocidad efectiva de centro (camino previo).
+    ! Antes TODAS las caras usaban la reconstruccion de centro, que no es
+    ! solenoidal aunque p haya convergido: un charco puro en reposo se
+    ! llenaba y drenaba solo (bath_test: d alpha 4.7e-2/s, |u_l| 0.7 m/s).
+    !---------------------------------------------------------------------------
+    subroutine face_fluxes_noalpha_all(liq, m, ur_e, uth_e, uz_e, cont, Gr, Gth, Gz)
+        type(phase_t), intent(in) :: liq
+        type(mesh_t), intent(in)  :: m
+        real(dp), intent(in)      :: ur_e(-1:,-1:,-1:), uth_e(-1:,-1:,-1:)
+        real(dp), intent(in)      :: uz_e(-1:,-1:,-1:)
+        logical,  intent(in)      :: cont(-1:,-1:,-1:)
+        real(dp), intent(out)     :: Gr(-1:,-1:,-1:), Gth(-1:,-1:,-1:), Gz(-1:,-1:,-1:)
+
+        integer  :: i, j, k
+        integer  :: istart, iend, jstart, jend, kstart, kend
+        real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
+
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        ! Completos a cero: las caras de frontera fisica las lee el
+        ! transporte y nadie las escribe (leccion B1 v10)
+        Gr = 0.0_dp; Gth = 0.0_dp; Gz = 0.0_dp
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    call face_mass_fluxes_noalpha(liq%rho, ur_e, uth_e, uz_e, &
+                                                  m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                    Gr(i,j,k) = Fe; Gth(i,j,k) = Fn; Gz(i,j,k) = Ft
+                    if (m%cell_type(i+1,j,k) /= 0 .and. (cont(i,j,k) .neqv. cont(i+1,j,k))) &
+                        Gr(i,j,k) = donor_face_flux(liq%rho(i,j,k), ur_e(i,j,k), &
+                                                    liq%rho(i+1,j,k), ur_e(i+1,j,k), m%Ar(i,j,k))
+                    if (m%cell_type(i,j+1,k) /= 0 .and. (cont(i,j,k) .neqv. cont(i,j+1,k))) &
+                        Gth(i,j,k) = donor_face_flux(liq%rho(i,j,k), uth_e(i,j,k), &
+                                                     liq%rho(i,j+1,k), uth_e(i,j+1,k), m%Ath(i,j,k))
+                    if (m%cell_type(i,j,k+1) /= 0 .and. (cont(i,j,k) .neqv. cont(i,j,k+1))) &
+                        Gz(i,j,k) = donor_face_flux(liq%rho(i,j,k), uz_e(i,j,k), &
+                                                    liq%rho(i,j,k+1), uz_e(i,j,k+1), m%Az(i,j,k))
+                    if (.not. ws_Fc_valid) cycle
+                    if (ws_Fc_lk_r(i,j,k) == 1) &
+                        Gr(i,j,k) = conservative_noalpha(ws_Fc_r(i,j,k), &
+                            liq%alpha(i,j,k), liq%rho(i,j,k), &
+                            liq%alpha(i+1,j,k), liq%rho(i+1,j,k), Fe)
+                    if (ws_Fc_lk_th(i,j,k) == 1) &
+                        Gth(i,j,k) = conservative_noalpha(ws_Fc_th(i,j,k), &
+                            liq%alpha(i,j,k), liq%rho(i,j,k), &
+                            liq%alpha(i,j+1,k), liq%rho(i,j+1,k), Fn)
+                    if (ws_Fc_lk_z(i,j,k) == 1) &
+                        Gz(i,j,k) = conservative_noalpha(ws_Fc_z(i,j,k), &
+                            liq%alpha(i,j,k), liq%rho(i,j,k), &
+                            liq%alpha(i,j,k+1), liq%rho(i,j,k+1), Ft)
+                end do
+            end do
+        end do
+        call mpi_exchange_halos_3d(Gr,  m%topo)
+        call mpi_exchange_halos_3d(Gth, m%topo)
+        call mpi_exchange_halos_3d(Gz,  m%topo)
+    end subroutine face_fluxes_noalpha_all
+
+    ! Regla del dador en una cara mixta orientada de lo (-) a hi (+):
+    ! quien cede liquido fija la velocidad de la cara (ver arriba)
+    pure function donor_face_flux(rho_lo, u_lo, rho_hi, u_hi, A) result(G)
+        real(dp), intent(in) :: rho_lo, u_lo, rho_hi, u_hi, A
+        real(dp) :: G
+        if (u_lo > 0.0_dp .and. u_hi >= 0.0_dp) then
+            G = rho_lo * u_lo * A                      ! lo dona
+        else if (u_lo <= 0.0_dp .and. u_hi < 0.0_dp) then
+            G = rho_hi * u_hi * A                      ! hi dona
+        else if (u_lo > 0.0_dp .and. u_hi < 0.0_dp) then
+            G = 0.5_dp * (rho_lo * u_lo + rho_hi * u_hi) * A   ! convergen: neto
+        else
+            G = 0.0_dp                                 ! divergen: sin liquido en la cara
+        end if
+    end function donor_face_flux
+
+    ! F/(alpha rho)_f * rho_f; si la cara no tiene liquido (no deberia
+    ! estar enlazada) se conserva la reconstruccion de centro
+    pure function conservative_noalpha(F, a_lo, rho_lo, a_hi, rho_hi, F_center) result(G)
+        real(dp), intent(in) :: F, a_lo, rho_lo, a_hi, rho_hi, F_center
+        real(dp) :: G, arho_f
+        arho_f = 0.5_dp * (a_lo * rho_lo + a_hi * rho_hi)
+        if (arho_f > SMALL) then
+            G = F * 0.5_dp * (rho_lo + rho_hi) / arho_f
+        else
+            G = F_center
+        end if
+    end function conservative_noalpha
+
     subroutine effective_liquid_velocity(liq, gas, sol, m, cfg, ur_e, uth_e, uz_e)
         type(phase_t), intent(in)   :: liq, gas
         type(solid_t), intent(in)   :: sol
@@ -507,11 +662,19 @@ contains
         ! una iteracion atrasada, el Poisson nunca cerraba la divergencia y
         ! p crecia en cada solve: B1 v13 revento a los 5.5 s, en el primer
         ! liquido). Dispersas: el drift relajado de esta iteracion.
-        where (liq_continuous(liq%alpha, sol%alpha_s))
-            ur_e = liq%ur; uth_e = liq%uth; uz_e = liq%uz
-        elsewhere
-            ur_e = ws_ud_r; uth_e = ws_ud_th; uz_e = ws_ud_z
-        end where
+        if (ws_liq_cont_valid) then
+            where (ws_liq_cont)
+                ur_e = liq%ur; uth_e = liq%uth; uz_e = liq%uz
+            elsewhere
+                ur_e = ws_ud_r; uth_e = ws_ud_th; uz_e = ws_ud_z
+            end where
+        else
+            where (liq_continuous(liq%alpha, sol%alpha_s))
+                ur_e = liq%ur; uth_e = liq%uth; uz_e = liq%uz
+            elsewhere
+                ur_e = ws_ud_r; uth_e = ws_ud_th; uz_e = ws_ud_z
+            end where
+        end if
     end subroutine effective_liquid_velocity
 
     ! Flujo donor-cell en una cara orientada de lo (-) a hi (+)

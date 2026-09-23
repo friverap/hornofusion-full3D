@@ -22,6 +22,7 @@ module mod_multiphase
     use mod_fields_3d
     use mod_probe, only: probe_report
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_ut, &
+                             ws_pcorr_g, ws_pcorr_valid, &
                              ws_liq_cont_prev, ws_pv_active, ws_pv_valid
     implicit none
 
@@ -73,12 +74,23 @@ contains
 
         ! Mascara de liquido CONTINUO (Bug 15; halos de alpha ya intercambiados)
         call ensure_workspace(m)
-        ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s)
+        call liquid_continuity_mask(liq, sol, m, ws_liq_cont)
         ws_liq_cont_valid = .true.
         ! Celdas con presion de fluido definida (Bug 16)
         ws_pv_active = (ws_liq_cont .or. gas%alpha >= ALPHA_FLOW_CUTOFF) &
                        .and. (m%cell_type /= 0)
         ws_pv_valid = .true.
+        ! Presion que ve el gas sobre el bano (ver ws_pcorr_g en mod_workspace)
+        ws_pcorr_g = 0.0_dp
+        do k = lbound(ws_pcorr_g,3), ubound(ws_pcorr_g,3)
+            where (ws_liq_cont(:,:,k) .and. sol%alpha_s(:,:,k) < 1.0e-2_dp &
+                   .and. m%cell_type(:,:,k) /= 0)
+                ws_pcorr_g(:,:,k) = liq%rho(:,:,k) * GRAVITY * &
+                    (1.0_dp - cfg%beta_expansion * (liq%T(:,:,k) - cfg%T_ambient)) * &
+                    m%dz(k) * (0.5_dp - liq%alpha(:,:,k))
+            end where
+        end do
+        ws_pcorr_valid = .true.
         call compute_liquid_drift(liq, gas, sol, m, cfg, liq_old)
 
         ! Transicion DISPERSO -> CONTINUO (Bug 15): la celda entra al momento

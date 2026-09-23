@@ -19,7 +19,9 @@ adaptive_dt = false
 charge_bucket1 = false
 heel_mass = 274000.0
 heel_T = 1850.0
-T_initial = 300.0
+# (T_initial solo fija liquido/solido/escoria; el gas arranca en T_ambient
+# y sin arco ni radiacion no se calienta: el banco es isotermo de hecho.)
+T_initial = 1850.0
 
 solve_flow = true
 solve_energy = true
@@ -30,8 +32,9 @@ solve_chemistry = false
 solve_arc = false
 solve_multiphase = true
 
-alpha_p = 0.3
-max_outer = 5
+# Relajacion e iteraciones externas de PRODUCCION (config_production_full)
+alpha_p = 0.7
+max_outer = 10
 max_inner_mom = 3
 max_inner_pres = 200
 

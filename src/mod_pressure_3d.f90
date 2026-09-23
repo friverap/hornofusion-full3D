@@ -84,7 +84,9 @@ contains
                                           residual)
         use mod_workspace, only: ensure_workspace, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
-            aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid
+            aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
+            ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
+            ws_pcorr_g, ws_pcorr_valid
         type(phase_t), intent(inout) :: liq, gas
         ! T del gas del paso anterior: término de COMPRESIBILIDAD del gas
         ! ideal, -alpha_g*(rho(T)-rho(T_old))/dt*V. Sin él, el Poisson
@@ -101,11 +103,23 @@ contains
         integer :: istart, iend, jstart, jend, kstart, kend
         ! Gradientes de presión de CELDA (los mismos que usa momentum)
         real(dp), allocatable :: gpr(:,:,:), gpth(:,:,:), gpz(:,:,:)
+        real(dp), allocatable :: p_g(:,:,:), gpr_g(:,:,:), gpth_g(:,:,:), gpz_g(:,:,:)
         ! Fases ACTIVAS en el acople P-V por celda (Bug 15): gas por el
         ! umbral hidrodinamico; liquido solo donde es fase continua
         logical, allocatable :: act_l(:,:,:), act_g(:,:,:)
+        ! Flujo de Rhie-Chow F* y coeficiente a_nb del LIQUIDO en las caras +
+        ! (este/norte/tope) de cada celda propia, para exportar el flujo
+        ! conservativo F = F* + a_nb (pp_P - pp_nb) tras el CG (Bug 19, F1)
+        real(dp), allocatable :: Fs_r(:,:,:), Fs_th(:,:,:), Fs_z(:,:,:)
+        real(dp), allocatable :: ac_r(:,:,:), ac_th(:,:,:), ac_z(:,:,:)
         integer  :: n_iter_cg
         real(dp) :: cg_res
+        ! Residual de CONTINUIDAD del iterado entrante: desbalance de masa
+        ! sum |Su| (la fuente del Poisson es -div de los flujos de Rhie-Chow
+        ! mas las fuentes fisicas) normalizado por el flujo de masa total por
+        ! caras. El residual del CG que se devolvia antes mide la solucion
+        ! de pp, no si u* conserva masa (siempre <= SOR_TOL_PRESSURE).
+        real(dp) :: flux_ref, sum_su, tmp
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -117,6 +131,13 @@ contains
         allocate(act_l(lbound(sh%pp,1):ubound(sh%pp,1), lbound(sh%pp,2):ubound(sh%pp,2), &
                        lbound(sh%pp,3):ubound(sh%pp,3)))
         allocate(act_g, mold=act_l)
+        allocate(Fs_r, Fs_th, Fs_z, ac_r, ac_th, ac_z, mold=sh%pp)
+        ! Completos a cero (halos incluidos): las caras de frontera fisica
+        ! no las escribe nadie y el transporte de alpha las lee (leccion v10)
+        Fs_r = 0.0_dp; Fs_th = 0.0_dp; Fs_z = 0.0_dp
+        ac_r = 0.0_dp; ac_th = 0.0_dp; ac_z = 0.0_dp
+        ws_Fc_r = 0.0_dp; ws_Fc_th = 0.0_dp; ws_Fc_z = 0.0_dp
+        ws_Fc_lk_r = 0; ws_Fc_lk_th = 0; ws_Fc_lk_z = 0
         if (ws_liq_cont_valid) then
             act_l = ws_liq_cont
         else
@@ -130,50 +151,32 @@ contains
         sh%pp = 0.0_dp
 
         !-----------------------------------------------------------------------
-        ! Gradientes de presión de celda (central en el interior, one-sided
-        ! SOLO en frontera física; mismas fórmulas que momentum)
+        ! Gradientes de presión de celda por fase (central en el interior,
+        ! one-sided SOLO en frontera física; mismas fórmulas que momentum).
+        ! Liquido: p del Poisson. Gas: p + ws_pcorr_g (superficie libre).
         !-----------------------------------------------------------------------
-        do k = kstart, kend
-            do j = jstart, jend
-                jm = j - 1; jp = j + 1
-                do i = istart, iend
-                    if (m%cell_type(i,j,k) == 0) cycle
-
-                    ! Gradientes con las celdas SIN fluido tratadas como
-                    ! pared (Bug 16): su presion no es de fluido y entraba
-                    ! al termino de Rhie-Chow del propio Poisson.
-                    gpr(i,j,k) = pgrad(sh%p(i-1,j,k), sh%p(i,j,k), sh%p(i+1,j,k), &
-                                       m%r(i-1), m%r(i), m%r(i+1), &
-                                       i > istart .and. pv_cell(i-1,j,k), &
-                                       i < iend   .and. pv_cell(i+1,j,k))
-
-                    gpth(i,j,k) = pgrad(sh%p(i,jm,k), sh%p(i,j,k), sh%p(i,jp,k), &
-                                        m%r(i) * m%theta(jm), m%r(i) * m%theta(j), &
-                                        m%r(i) * m%theta(jp), &
-                                        pv_cell(i,jm,k), pv_cell(i,jp,k))
-
-                    gpz(i,j,k) = pgrad(sh%p(i,j,k-1), sh%p(i,j,k), sh%p(i,j,k+1), &
-                                       m%z(k-1), m%z(k), m%z(k+1), &
-                                       (k > kstart .or. .not. at_zmin) .and. pv_cell(i,j,k-1), &
-                                       (k < kend   .or. .not. at_zmax) .and. pv_cell(i,j,k+1))
-                end do
-            end do
-        end do
-
-        call mpi_exchange_halos_3d(gpr, m%topo)
-        call mpi_exchange_halos_3d(gpth, m%topo)
-        call mpi_exchange_halos_3d(gpz, m%topo)
+        call cell_gradients(sh%p, gpr, gpth, gpz)
+        if (cfg%gas_in_poisson .and. cfg%solve_multiphase) then
+            allocate(p_g, gpr_g, gpth_g, gpz_g, mold=sh%pp)
+            if (ws_pcorr_valid) then
+                p_g = sh%p + ws_pcorr_g
+            else
+                p_g = sh%p
+            end if
+            call cell_gradients(p_g, gpr_g, gpth_g, gpz_g)
+        end if
 
         !-----------------------------------------------------------------------
         ! Acumular contribuciones de AMBAS fases (C2.4, reactivado tras C3.4:
         ! con la radiación DO real el gas queda en ~3000-6000 K y su
         ! expansión es absorbible por el Poisson)
         !-----------------------------------------------------------------------
-        call add_phase_contribution(liq, act_l)
+        flux_ref = 0.0_dp
+        call add_phase_contribution(liq, act_l, .true., sh%p, gpr, gpth, gpz)
         ! Gas en el Poisson SOLO con multifase: sin gas momentum resuelto,
         ! sus aP_u* valen 0 y d_f = V/SMALL revienta los coeficientes.
         if (cfg%gas_in_poisson .and. cfg%solve_multiphase) &
-            call add_phase_contribution(gas, act_g)
+            call add_phase_contribution(gas, act_g, .false., p_g, gpr_g, gpth_g, gpz_g)
 
         ! NOTA (cierre 2026): NO añadir aquí la fuente de masa de fusión
         ! del líquido (Su += mdot - rho*dalpha/dt). Se probó: realimenta
@@ -247,6 +250,26 @@ contains
         ! Pressure BCs
         call apply_pressure_bc(aW, aE, aS, aN, aB, aT, aP, Su, m)
 
+        ! Residual de continuidad del iterado entrante (ver flux_ref). Tras
+        ! las BC: las celdas de SALIDA (Dirichlet pp = 0 en los agujeros de
+        ! electrodo) quedan con Su = 0 — su desbalance es el venteo fisico
+        ! que cierra por la frontera, no un residuo (con ellas dentro el
+        ! residual tenia un piso de 3e-2 en outer_conv con 100 outers).
+        sum_su = 0.0_dp
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (act_l(i,j,k) .or. act_g(i,j,k)) sum_su = sum_su + abs(Su(i,j,k))
+                end do
+            end do
+        end do
+        if (m%is_parallel) then
+            call mpi_allreduce_sum(sum_su, tmp, m%topo);   sum_su   = tmp
+            call mpi_allreduce_sum(flux_ref, tmp, m%topo); flux_ref = tmp
+        end if
+        residual = sum_su / max(flux_ref, SMALL)
+
         ! (El ancla big-coefficient fue retirada: con el gas en el Poisson
         ! todo el dominio activo conecta a los Dirichlet del techo y la
         ! compliance regulariza los bolsones aislados. El hoyuelo del ancla
@@ -259,7 +282,39 @@ contains
                        cfg%max_inner_pres, SOR_TOL_PRESSURE, &
                        cg_res, n_iter_cg)
 
-        residual = cg_res
+        ! (residual = desbalance de masa del iterado entrante, calculado
+        ! antes del CG; cg_res queda como diagnostico del solver lineal)
+        if (cg_res /= cg_res) residual = cg_res   ! NaN del CG: propagarlo
+
+        !-------------------------------------------------------------------
+        ! Flujos CONSERVATIVOS del liquido por las caras + (Bug 19, F1):
+        ! F = F* + a_nb (pp_P - pp_nb). Es el flujo cuya divergencia el CG
+        ! acaba de anular (salvo compliance/acustico); el transporte de
+        ! alpha del liquido continuo los usa en vez de reconstruir flujos
+        ! desde velocidades de centro (que NO son solenoidales aunque p
+        ! haya convergido: la causa de que un bano en reposo se llenara y
+        ! drenara solo). Caras propias + halos por intercambio.
+        !-------------------------------------------------------------------
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (ws_Fc_lk_r(i,j,k) == 1) ws_Fc_r(i,j,k) = Fs_r(i,j,k) + &
+                        ac_r(i,j,k) * (sh%pp(i,j,k) - sh%pp(i+1,j,k))
+                    if (ws_Fc_lk_th(i,j,k) == 1) ws_Fc_th(i,j,k) = Fs_th(i,j,k) + &
+                        ac_th(i,j,k) * (sh%pp(i,j,k) - sh%pp(i,j+1,k))
+                    if (ws_Fc_lk_z(i,j,k) == 1) ws_Fc_z(i,j,k) = Fs_z(i,j,k) + &
+                        ac_z(i,j,k) * (sh%pp(i,j,k) - sh%pp(i,j,k+1))
+                end do
+            end do
+        end do
+        call mpi_exchange_halos_3d(ws_Fc_r,  m%topo)
+        call mpi_exchange_halos_3d(ws_Fc_th, m%topo)
+        call mpi_exchange_halos_3d(ws_Fc_z,  m%topo)
+        call mpi_exchange_halos_3d_int(ws_Fc_lk_r,  m%topo)
+        call mpi_exchange_halos_3d_int(ws_Fc_lk_th, m%topo)
+        call mpi_exchange_halos_3d_int(ws_Fc_lk_z,  m%topo)
+        ws_Fc_valid = .true.
 
         call correct_velocities(liq, sh, m, act_l)
         if (cfg%gas_in_poisson .and. cfg%solve_multiphase) &
@@ -307,6 +362,8 @@ contains
         call mpi_exchange_halos_3d(sh%p, m%topo)
 
         deallocate(gpr, gpth, gpz, act_l, act_g)
+        deallocate(Fs_r, Fs_th, Fs_z, ac_r, ac_th, ac_z)
+        if (allocated(p_g)) deallocate(p_g, gpr_g, gpth_g, gpz_g)
 
     contains
 
@@ -333,9 +390,15 @@ contains
         ! contribución de una fase (con su alpha, sus aP de momentum y sus
         ! velocidades)
         !-----------------------------------------------------------------------
-        subroutine add_phase_contribution(ph, act)
+        subroutine add_phase_contribution(ph, act, export, pf, gr, gth, gz)
             type(phase_t), intent(in) :: ph
             logical, intent(in)       :: act(-1:,-1:,-1:)
+            ! Presion y gradientes de celda que ve ESTA fase (el gas lleva la
+            ! correccion de superficie libre ws_pcorr_g)
+            real(dp), intent(in)      :: pf(-1:,-1:,-1:)
+            real(dp), intent(in)      :: gr(-1:,-1:,-1:), gth(-1:,-1:,-1:), gz(-1:,-1:,-1:)
+            ! Guardar F* y a_nb de las caras + (solo el liquido, F1)
+            logical, intent(in)       :: export
 
             integer  :: ii, jj, kk, jjm, jjp
             real(dp) :: d_f, arho_f, u_f, delta
@@ -356,9 +419,10 @@ contains
                             delta  = m%r(ii) - m%r(ii-1)
                             aW(ii,jj,kk) = aW(ii,jj,kk) + arho_f * d_f * m%Ar(ii-1,jj,kk) / delta
                             u_f = 0.5_dp * (ph%ur(ii-1,jj,kk) + ph%ur(ii,jj,kk)) &
-                                + d_f * (0.5_dp*(gpr(ii-1,jj,kk) + gpr(ii,jj,kk)) &
-                                         - (sh%p(ii,jj,kk) - sh%p(ii-1,jj,kk)) / delta)
+                                + d_f * (0.5_dp*(gr(ii-1,jj,kk) + gr(ii,jj,kk)) &
+                                         - (pf(ii,jj,kk) - pf(ii-1,jj,kk)) / delta)
                             Su(ii,jj,kk) = Su(ii,jj,kk) + arho_f * u_f * m%Ar(ii-1,jj,kk)
+                            flux_ref = flux_ref + abs(arho_f * u_f * m%Ar(ii-1,jj,kk))
                         end if
 
                         ! --- Cara Este (i+1/2) ---
@@ -370,9 +434,15 @@ contains
                             delta  = m%r(ii+1) - m%r(ii)
                             aE(ii,jj,kk) = aE(ii,jj,kk) + arho_f * d_f * m%Ar(ii,jj,kk) / delta
                             u_f = 0.5_dp * (ph%ur(ii,jj,kk) + ph%ur(ii+1,jj,kk)) &
-                                + d_f * (0.5_dp*(gpr(ii,jj,kk) + gpr(ii+1,jj,kk)) &
-                                         - (sh%p(ii+1,jj,kk) - sh%p(ii,jj,kk)) / delta)
+                                + d_f * (0.5_dp*(gr(ii,jj,kk) + gr(ii+1,jj,kk)) &
+                                         - (pf(ii+1,jj,kk) - pf(ii,jj,kk)) / delta)
                             Su(ii,jj,kk) = Su(ii,jj,kk) - arho_f * u_f * m%Ar(ii,jj,kk)
+                            flux_ref = flux_ref + abs(arho_f * u_f * m%Ar(ii,jj,kk))
+                            if (export) then
+                                Fs_r(ii,jj,kk) = arho_f * u_f * m%Ar(ii,jj,kk)
+                                ac_r(ii,jj,kk) = arho_f * d_f * m%Ar(ii,jj,kk) / delta
+                                ws_Fc_lk_r(ii,jj,kk) = 1
+                            end if
                         end if
 
                         ! --- Cara Sur (j-1/2) ---
@@ -384,9 +454,10 @@ contains
                             delta  = m%r(ii) * (m%theta(jj) - m%theta(jjm))
                             aS(ii,jj,kk) = aS(ii,jj,kk) + arho_f * d_f * m%Ath(ii,jj,kk) / delta
                             u_f = 0.5_dp * (ph%uth(ii,jjm,kk) + ph%uth(ii,jj,kk)) &
-                                + d_f * (0.5_dp*(gpth(ii,jjm,kk) + gpth(ii,jj,kk)) &
-                                         - (sh%p(ii,jj,kk) - sh%p(ii,jjm,kk)) / delta)
+                                + d_f * (0.5_dp*(gth(ii,jjm,kk) + gth(ii,jj,kk)) &
+                                         - (pf(ii,jj,kk) - pf(ii,jjm,kk)) / delta)
                             Su(ii,jj,kk) = Su(ii,jj,kk) + arho_f * u_f * m%Ath(ii,jj,kk)
+                            flux_ref = flux_ref + abs(arho_f * u_f * m%Ath(ii,jj,kk))
                         end if
 
                         ! --- Cara Norte (j+1/2) ---
@@ -398,9 +469,15 @@ contains
                             delta  = m%r(ii) * (m%theta(jjp) - m%theta(jj))
                             aN(ii,jj,kk) = aN(ii,jj,kk) + arho_f * d_f * m%Ath(ii,jj,kk) / delta
                             u_f = 0.5_dp * (ph%uth(ii,jj,kk) + ph%uth(ii,jjp,kk)) &
-                                + d_f * (0.5_dp*(gpth(ii,jj,kk) + gpth(ii,jjp,kk)) &
-                                         - (sh%p(ii,jjp,kk) - sh%p(ii,jj,kk)) / delta)
+                                + d_f * (0.5_dp*(gth(ii,jj,kk) + gth(ii,jjp,kk)) &
+                                         - (pf(ii,jjp,kk) - pf(ii,jj,kk)) / delta)
                             Su(ii,jj,kk) = Su(ii,jj,kk) - arho_f * u_f * m%Ath(ii,jj,kk)
+                            flux_ref = flux_ref + abs(arho_f * u_f * m%Ath(ii,jj,kk))
+                            if (export) then
+                                Fs_th(ii,jj,kk) = arho_f * u_f * m%Ath(ii,jj,kk)
+                                ac_th(ii,jj,kk) = arho_f * d_f * m%Ath(ii,jj,kk) / delta
+                                ws_Fc_lk_th(ii,jj,kk) = 1
+                            end if
                         end if
 
                         ! --- Cara Inferior (k-1/2) ---
@@ -412,9 +489,10 @@ contains
                             delta  = m%z(kk) - m%z(kk-1)
                             aB(ii,jj,kk) = aB(ii,jj,kk) + arho_f * d_f * m%Az(ii,jj,kk-1) / delta
                             u_f = 0.5_dp * (ph%uz(ii,jj,kk-1) + ph%uz(ii,jj,kk)) &
-                                + d_f * (0.5_dp*(gpz(ii,jj,kk-1) + gpz(ii,jj,kk)) &
-                                         - (sh%p(ii,jj,kk) - sh%p(ii,jj,kk-1)) / delta)
+                                + d_f * (0.5_dp*(gz(ii,jj,kk-1) + gz(ii,jj,kk)) &
+                                         - (pf(ii,jj,kk) - pf(ii,jj,kk-1)) / delta)
                             Su(ii,jj,kk) = Su(ii,jj,kk) + arho_f * u_f * m%Az(ii,jj,kk-1)
+                            flux_ref = flux_ref + abs(arho_f * u_f * m%Az(ii,jj,kk-1))
                         end if
 
                         ! --- Cara Superior (k+1/2) ---
@@ -426,14 +504,58 @@ contains
                             delta  = m%z(kk+1) - m%z(kk)
                             aT(ii,jj,kk) = aT(ii,jj,kk) + arho_f * d_f * m%Az(ii,jj,kk) / delta
                             u_f = 0.5_dp * (ph%uz(ii,jj,kk) + ph%uz(ii,jj,kk+1)) &
-                                + d_f * (0.5_dp*(gpz(ii,jj,kk) + gpz(ii,jj,kk+1)) &
-                                         - (sh%p(ii,jj,kk+1) - sh%p(ii,jj,kk)) / delta)
+                                + d_f * (0.5_dp*(gz(ii,jj,kk) + gz(ii,jj,kk+1)) &
+                                         - (pf(ii,jj,kk+1) - pf(ii,jj,kk)) / delta)
                             Su(ii,jj,kk) = Su(ii,jj,kk) - arho_f * u_f * m%Az(ii,jj,kk)
+                            flux_ref = flux_ref + abs(arho_f * u_f * m%Az(ii,jj,kk))
+                            if (export) then
+                                Fs_z(ii,jj,kk) = arho_f * u_f * m%Az(ii,jj,kk)
+                                ac_z(ii,jj,kk) = arho_f * d_f * m%Az(ii,jj,kk) / delta
+                                ws_Fc_lk_z(ii,jj,kk) = 1
+                            end if
                         end if
                     end do
                 end do
             end do
         end subroutine add_phase_contribution
+
+
+        ! Gradientes de celda de un campo de presion (ver arriba)
+        subroutine cell_gradients(pfld, gr, gth, gz)
+            real(dp), intent(in)  :: pfld(-1:,-1:,-1:)
+            real(dp), intent(out) :: gr(-1:,-1:,-1:), gth(-1:,-1:,-1:), gz(-1:,-1:,-1:)
+            gr = 0.0_dp; gth = 0.0_dp; gz = 0.0_dp
+        do k = kstart, kend
+            do j = jstart, jend
+                jm = j - 1; jp = j + 1
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+
+                    ! Gradientes con las celdas SIN fluido tratadas como
+                    ! pared (Bug 16): su presion no es de fluido y entraba
+                    ! al termino de Rhie-Chow del propio Poisson.
+                    gr(i,j,k) = pgrad(pfld(i-1,j,k), pfld(i,j,k), pfld(i+1,j,k), &
+                                       m%r(i-1), m%r(i), m%r(i+1), &
+                                       i > istart .and. pv_cell(i-1,j,k), &
+                                       i < iend   .and. pv_cell(i+1,j,k))
+
+                    gth(i,j,k) = pgrad(pfld(i,jm,k), pfld(i,j,k), pfld(i,jp,k), &
+                                        m%r(i) * m%theta(jm), m%r(i) * m%theta(j), &
+                                        m%r(i) * m%theta(jp), &
+                                        pv_cell(i,jm,k), pv_cell(i,jp,k))
+
+                    gz(i,j,k) = pgrad(pfld(i,j,k-1), pfld(i,j,k), pfld(i,j,k+1), &
+                                       m%z(k-1), m%z(k), m%z(k+1), &
+                                       (k > kstart .or. .not. at_zmin) .and. pv_cell(i,j,k-1), &
+                                       (k < kend   .or. .not. at_zmax) .and. pv_cell(i,j,k+1))
+                end do
+            end do
+        end do
+
+        call mpi_exchange_halos_3d(gr,  m%topo)
+        call mpi_exchange_halos_3d(gth, m%topo)
+        call mpi_exchange_halos_3d(gz,  m%topo)
+        end subroutine cell_gradients
 
         ! Cara con flujo de ESTA fase: vecino activo en el acople
         logical function link(act, ii, jj, kk)

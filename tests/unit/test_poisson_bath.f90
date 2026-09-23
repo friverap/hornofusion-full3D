@@ -27,7 +27,8 @@ program test_poisson_bath
     use mod_pressure_3d, only: solve_pressure_correction
     use mod_drag_ergun, only: compute_ergun_drag
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
-                             ws_pv_active, ws_pv_valid
+                             ws_pv_active, ws_pv_valid, ws_Fc_r, ws_Fc_th, ws_Fc_z, &
+                             ws_Fc_lk_z, ws_Fc_valid
     implicit none
 
     type(config_t) :: cfg
@@ -38,6 +39,8 @@ program test_poisson_bath
     type(shared_t) :: sh
     real(dp), allocatable :: Kz(:,:,:), drag(:,:,:), p_hyd(:,:,:)
     real(dp) :: r1, r2, r3, res, H, scale_p, ppmax, umax, perr, ztop, g_eff
+    real(dp) :: fmax, scale_f
+    integer  :: nlk
     integer  :: i, j, k, nr, nth, nz
     logical  :: ok
 
@@ -111,6 +114,28 @@ program test_poisson_bath
     end if
     if (perr > 1.0e-9_dp * scale_p) then
         print '(A,ES10.3)', '   FAIL caso 3: p se aparto de la hidrostatica: ', perr
+        ok = .false.
+    end if
+    ! Caso 4 (Plan C F1): los flujos CONSERVATIVOS exportados por el Poisson
+    ! son ~0 en reposo y TODAS las caras internas del bano estan enlazadas
+    ! (escala: masa que moveria g dt por la cara mayor)
+    fmax = 0.0_dp; nlk = 0
+    do k = 1, nz
+        do j = 1, nth
+            do i = 1, nr
+                if (mesh%cell_type(i,j,k) == 0) cycle
+                fmax = max(fmax, abs(ws_Fc_r(i,j,k)), abs(ws_Fc_th(i,j,k)), abs(ws_Fc_z(i,j,k)))
+                if (k < nz .and. ws_Fc_lk_z(i,j,k) == 1) nlk = nlk + 1
+            end do
+        end do
+    end do
+    scale_f = liq%rho(1,1,1) * GRAVITY * cfg%dt * maxval(mesh%Az(1:nr,1:nth,1:nz))
+    if (.not. ws_Fc_valid .or. fmax > 1.0e-9_dp * scale_f) then
+        print '(A,ES10.3,A,ES10.3)', '   FAIL caso 4: |F_c|max = ', fmax, ' frente a rho g dt A = ', scale_f
+        ok = .false.
+    end if
+    if (nlk /= count(mesh%cell_type(1:nr,1:nth,1:nz-1) /= 0 .and. mesh%cell_type(1:nr,1:nth,2:nz) /= 0)) then
+        print '(A,I0)', '   FAIL caso 4: caras verticales del bano sin enlazar; enlazadas = ', nlk
         ok = .false.
     end if
 

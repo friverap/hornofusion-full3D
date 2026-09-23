@@ -71,6 +71,7 @@ contains
                                          ph, ph_other, sh, m, cfg, &
                                          alpha_q, drag_coef, is_gas, comp, residual)
         use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
+            ws_pcorr_g, ws_pcorr_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
             aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
@@ -97,6 +98,9 @@ contains
         real(dp) :: mu_f, vol, alpha_f, rho_vol_dt
         real(dp) :: dp_dr, dp_dth, dp_dz, src_extra, aP_extra
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
+        ! Presion que ve ESTA fase: la del Poisson, y para el gas ademas la
+        ! correccion de superficie libre (ws_pcorr_g, mod_workspace)
+        real(dp), allocatable :: pf(:,:,:)
 
         ! Get loop bounds
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -104,6 +108,12 @@ contains
 
         ! Allocate coefficient arrays (with same dimensions as fields)
         call ensure_workspace(m)
+        allocate(pf, mold=sh%p)
+        if (is_gas .and. ws_pcorr_valid) then
+            pf = sh%p + ws_pcorr_g
+        else
+            pf = sh%p
+        end if
 
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
@@ -201,7 +211,7 @@ contains
 
                     select case (comp)
                     case ('ur')
-                        dp_dr = pgrad(sh%p(i-1,j,k), sh%p(i,j,k), sh%p(i+1,j,k), &
+                        dp_dr = pgrad(pf(i-1,j,k), pf(i,j,k), pf(i+1,j,k), &
                                       m%r(i-1), m%r(i), m%r(i+1), &
                                       i > 1    .and. pv_ok(i-1,j,k), &
                                       i < iend .and. pv_ok(i+1,j,k))
@@ -216,7 +226,7 @@ contains
                         ! correcta también en la costura (el parche
                         ! merge(jp<jm) anterior nunca se activaba: comparaba
                         ! ÍNDICES, y jp=j+1 > jm=j-1 siempre)
-                        dp_dth = pgrad(sh%p(i,jm,k), sh%p(i,j,k), sh%p(i,jp,k), &
+                        dp_dth = pgrad(pf(i,jm,k), pf(i,j,k), pf(i,jp,k), &
                                        m%r(i) * m%theta(jm), m%r(i) * m%theta(j), &
                                        m%r(i) * m%theta(jp), &
                                        pv_ok(i,jm,k), pv_ok(i,jp,k))
@@ -237,7 +247,7 @@ contains
                     case ('uz')
                         ! Central salvo en frontera FÍSICA; en interfaces de
                         ! rank el halo de p es válido (hallazgo 3.6)
-                        dp_dz = pgrad(sh%p(i,j,k-1), sh%p(i,j,k), sh%p(i,j,k+1), &
+                        dp_dz = pgrad(pf(i,j,k-1), pf(i,j,k), pf(i,j,k+1), &
                                       m%z(k-1), m%z(k), m%z(k+1), &
                                       (k > kstart .or. .not. at_zmin) .and. pv_ok(i,j,k-1), &
                                       (k < kend   .or. .not. at_zmax) .and. pv_ok(i,j,k+1))
@@ -273,6 +283,15 @@ contains
         ! Boundary conditions
         call apply_momentum_bc(aW, aE, aS, aN, aB, aT, aP, Su, m, comp)
 
+        ! Residual del ITERADO ENTRANTE (misma semantica que la energia,
+        ! Plan C F1): mide si la velocidad que queda en pie satisface su
+        ! ecuacion de momento. Se calculaba con el campo recien resuelto
+        ! (post-TDMA): ~1e-17 siempre, y con res_cont = residual del CG
+        ! (<= 1e-5 por construccion) el lazo externo declaraba convergencia
+        ! en UNA iteracion en todo regimen de flujo — el acople P-V nunca se
+        ! iteraba (bath_test: outer=1 en todos los pasos).
+        residual = compute_residual_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, vel, m)
+
         ! Solve with MPI-aware TDMA
         call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, vel, m, cfg%max_inner_mom)
 
@@ -287,9 +306,9 @@ contains
         case ('uz');  ph%aP_uz = aP
         end select
 
-        ! Compute residual (MPI-aware)
-        residual = compute_residual_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, vel, m)
 
+
+        deallocate(pf)
 
     contains
 

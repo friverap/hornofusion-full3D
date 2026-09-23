@@ -63,6 +63,33 @@ module mod_workspace
     ! ws_ud_* calculado con RELAJACION desde liq_old (multiphase) en esta
     ! iteracion: el transporte de alpha lo reutiliza en vez de recomputar
     logical, save :: ws_drift_valid = .false.
+    ! Flujos de masa CONSERVATIVOS del liquido continuo [kg/s] por las caras
+    ! + de cada celda (este, norte, tope), exportados por el Poisson
+    ! (Bug 19, Plan C F1): F = F* + a_nb (pp_P - pp_nb), con F* el flujo de
+    ! Rhie-Chow del ensamblado y a_nb el coeficiente de la cara. Su
+    ! divergencia por celda es EXACTAMENTE el residuo del Poisson (mas el
+    ! almacenamiento de compliance/acustico), asi que el transporte de alpha
+    ! que los use no llena ni drena celdas que el Poisson dejo en balance.
+    ! ws_Fc_lk_*: la cara esta ENLAZADA en el Poisson del liquido (ambas
+    ! celdas con liquido continuo); en las demas caras el transporte cae al
+    ! flujo reconstruido de la velocidad efectiva (disperso / drift).
+    real(dp), allocatable :: ws_Fc_r(:,:,:), ws_Fc_th(:,:,:), ws_Fc_z(:,:,:)
+    integer,  allocatable :: ws_Fc_lk_r(:,:,:), ws_Fc_lk_th(:,:,:), ws_Fc_lk_z(:,:,:)  ! 1 = enlazada
+    logical, save :: ws_Fc_valid = .false.
+    ! Correccion de la presion que ve el GAS en una celda de bano (Plan C
+    ! F1): p_gas = p + rho_l g_eff dz (1/2 - alpha_l). El Poisson de mezcla
+    ! tiene una sola p por celda y el momento del liquido la pone sobre SU
+    ! linea hidrostatica; el gas de la celda de encima leia esa p de centro
+    ! (que incluye media carga de liquido) y salia disparado (bath_test:
+    ! 50-200 m/s sobre un bano en reposo, y la niebla arrancada montaba en
+    ! el). Con liquido estratificado en el fondo de la celda (espesor
+    ! alpha_l dz) la p del gas en la interfase es la de la linea del liquido
+    ! evaluada en su tope: p + rho_l g dz (1/2 - alpha_l). Solo celdas de
+    ! liquido continuo fuera del lecho (alpha_s < 1e-2); 0 en las demas.
+    ! Lo usan el momento del gas y su contribucion al Poisson (gradientes
+    ! de celda y de cara).
+    real(dp), allocatable :: ws_pcorr_g(:,:,:)
+    logical, save :: ws_pcorr_valid = .false.
 
 contains
 
@@ -81,6 +108,12 @@ contains
         ws_ud_r = 0.0_dp; ws_ud_th = 0.0_dp; ws_ud_z = 0.0_dp; ws_ut = 0.0_dp
         ws_Fr = 0.0_dp; ws_Fth = 0.0_dp; ws_Fz = 0.0_dp
         ws_Mr = 0.0_dp; ws_Mth = 0.0_dp; ws_Mz = 0.0_dp; ws_lim = 1.0_dp
+        allocate(ws_Fc_r, ws_Fc_th, ws_Fc_z, mold=ws_aW)
+        ws_Fc_r = 0.0_dp; ws_Fc_th = 0.0_dp; ws_Fc_z = 0.0_dp
+        allocate(ws_Fc_lk_r(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
+        allocate(ws_Fc_lk_th, ws_Fc_lk_z, mold=ws_Fc_lk_r)
+        ws_Fc_lk_r = 0; ws_Fc_lk_th = 0; ws_Fc_lk_z = 0
+        allocate(ws_pcorr_g, mold=ws_aW); ws_pcorr_g = 0.0_dp
     end subroutine ensure_workspace
 
 end module mod_workspace
