@@ -29,7 +29,7 @@ contains
         real(dp), intent(in)         :: dt
 
         call compute_melting(sol, liq, m, cfg, dt)
-        call apply_scrap_collapse(sol, m, cfg)
+        call apply_scrap_collapse(sol, liq, m, cfg)
 
         ! Restricción de volumen (C1.9, hallazgo 3.22b): fusión y colapso
         ! cambian alpha_s sin actualizar el gas -> Sum(alpha) quedaba en 0.5

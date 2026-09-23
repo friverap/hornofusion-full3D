@@ -22,8 +22,16 @@ module mod_scrap_collapse
 
 contains
 
-    subroutine apply_scrap_collapse(sol, m, cfg)
+    subroutine apply_scrap_collapse(sol, liq, m, cfg)
         type(solid_t), intent(inout) :: sol
+        ! Liquido (Plan C F1): una celda de BANO (alpha_l >= ALPHA_LIQ_CONT)
+        ! no es hueco — la chatarra descansa sobre el bano en vez de caer
+        ! dentro en un paso. Antes solo se miraba alpha_s: en bath_fill el
+        ! colapso del paso 1 dejo caer 2 capas de chatarra sobre celdas con
+        ! alpha_l = 1 y desplazo 16 t de liquido (5.4 t recortadas bajo
+        ! celdas selladas). El hundimiento real de chatarra en acero liquido
+        ! (drho ~ 4 %) es lento y lo resuelve la fusion, no el colapso.
+        type(phase_t), intent(in)    :: liq
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
 
@@ -33,19 +41,21 @@ contains
         real(dp) :: m_falling, E_falling
         integer  :: lid_falling
         real(dp), allocatable :: m_g(:,:,:), E_g(:,:,:), a_g(:,:,:), T_g(:,:,:)
-        real(dp), allocatable :: mc_g(:,:,:)
+        real(dp), allocatable :: mc_g(:,:,:), al_g(:,:,:)
         integer,  allocatable :: lid_g(:,:,:)
 
         allocate(m_g(m%nr_g, m%nth_g, m%nz_g), E_g(m%nr_g, m%nth_g, m%nz_g))
         allocate(a_g(m%nr_g, m%nth_g, m%nz_g), T_g(m%nr_g, m%nth_g, m%nz_g))
         allocate(lid_g(m%nr_g, m%nth_g, m%nz_g))
         allocate(mc_g(m%nr_g, m%nth_g, m%nz_g))
+        allocate(al_g(m%nr_g, m%nth_g, m%nz_g))
 
         call gather_global_field(sol%m_s, m_g, m)
         call gather_global_field(sol%E_s, E_g, m)
         call gather_global_field(sol%alpha_s, a_g, m)
         call gather_global_field(sol%T_s, T_g, m)
         call gather_global_field(sol%m_C, mc_g, m)
+        call gather_global_field(liq%alpha, al_g, m)
         call gather_global_field_int(sol%layer_id, lid_g, m)
 
         do j = 1, m%nth_g
@@ -60,6 +70,7 @@ contains
                     ! Find lowest empty cell below this one
                     if (m%cell_type_global(i,j,k_below) == 0) cycle
                     if (a_g(i,j,k_below) > 0.01_dp) cycle
+                    if (al_g(i,j,k_below) >= ALPHA_LIQ_CONT) cycle   ! bano debajo
 
                     ! Solid has void below -- it falls
                     ! Find destination: lowest empty cell in column
@@ -67,6 +78,7 @@ contains
                     do while (k_dest > 1)
                         if (m%cell_type_global(i,j,k_dest-1) == 0) exit
                         if (a_g(i,j,k_dest-1) > 0.01_dp) exit
+                        if (al_g(i,j,k_dest-1) >= ALPHA_LIQ_CONT) exit
                         k_dest = k_dest - 1
                     end do
 
@@ -119,7 +131,7 @@ contains
             end do
         end do
 
-        deallocate(m_g, E_g, a_g, T_g, lid_g, mc_g)
+        deallocate(m_g, E_g, a_g, T_g, lid_g, mc_g, al_g)
 
     end subroutine apply_scrap_collapse
 
