@@ -51,6 +51,17 @@ module mod_workspace
     ! presion les impone el Neumann de sus vecinas con fluido.
     logical, allocatable :: ws_pv_active(:,:,:)
     logical, save :: ws_pv_valid = .false.
+    ! Densidad de los FLUIDOS (liquido+gas) al inicio del paso (Bug 19): el
+    ! Poisson resuelve la continuidad de la MEZCLA FLUIDA, y le faltaba su
+    ! transitorio d(rho_f)/dt. Sin el, una celda de bano que se llena o
+    ! drena — sin gas que absorba el cambio de volumen — exige div u = 0 y
+    ! responde con +-MPa. El SOLIDO no entra (no tiene flujo en el Poisson);
+    ! lo que entra por fundirse se resta con ws_mdot.
+    real(dp), allocatable :: ws_rho_fluid_old(:,:,:)
+    logical, save :: ws_rho_mix_valid = .false.
+    ! Fuente de masa de fusion del paso [kg/s], copiada por
+    ! multiphase_iteration (el Poisson no recibe el tipo solid_t).
+    real(dp), allocatable :: ws_mdot(:,:,:)
     ! Velocidad de DRIFT-FLUX del liquido disperso (Bug 15), calculada UNA
     ! vez por iteracion externa en compute_liquid_drift (mod_continuity):
     ! gas + sedimentacion terminal, acotada; en el lecho la sedimentacion
@@ -77,6 +88,8 @@ contains
         ws_liq_cont = .true.
         allocate(ws_liq_cont_prev, ws_pv_active, mold=ws_liq_cont)
         ws_liq_cont_prev = .true.; ws_pv_active = .true.
+        allocate(ws_rho_fluid_old, ws_mdot, mold=ws_aW)
+        ws_rho_fluid_old = 0.0_dp; ws_mdot = 0.0_dp
         allocate(ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, mold=ws_aW)
         ws_ud_r = 0.0_dp; ws_ud_th = 0.0_dp; ws_ud_z = 0.0_dp; ws_ut = 0.0_dp
         ws_Fr = 0.0_dp; ws_Fth = 0.0_dp; ws_Fz = 0.0_dp

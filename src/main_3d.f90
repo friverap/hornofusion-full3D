@@ -49,6 +49,7 @@ program eaf_3d_simulator
     use mod_timers
     use mod_ecs_feed
     use mod_slag_chemistry
+    use mod_workspace, only: ensure_workspace
     implicit none
 
     ! Main variables
@@ -222,6 +223,14 @@ program eaf_3d_simulator
         if (should_print(mesh)) then
             !print '(A,I0,A,F8.2)', ' [DEBUG] Starting step ', step, ' t=', time
         end if
+
+        ! Densidad de mezcla ANCLADA al inicio del paso (Bug 19): el
+        ! transitorio d(rho_m)/dt del Poisson. Se toma ANTES de la fusion y
+        ! el colapso para que la fusion (solido -> liquido a la MISMA
+        ! densidad) salga exactamente neutra: ese fue el error del intento
+        ! historico de meter solo la fuente de fusion en el Su (ganancia >1).
+        call ensure_workspace(mesh)
+        call store_mixture_density(liq, gas, mesh)
 
         ! Store old fields
         liq_old%T   = liq%T;   liq_old%ur  = liq%ur

@@ -22,7 +22,7 @@ module mod_multiphase
     use mod_fields_3d
     use mod_probe, only: probe_report
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_ut, &
-                             ws_liq_cont_prev, ws_pv_active, ws_pv_valid
+                             ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_mdot
     implicit none
 
 contains
@@ -79,6 +79,8 @@ contains
         ws_pv_active = (ws_liq_cont .or. gas%alpha >= ALPHA_FLOW_CUTOFF) &
                        .and. (m%cell_type /= 0)
         ws_pv_valid = .true.
+        ! Fuente de fusion para el transitorio del Poisson (Bug 19)
+        ws_mdot = sol%mdot
         call compute_liquid_drift(liq, gas, sol, m, cfg, liq_old)
 
         ! Transicion DISPERSO -> CONTINUO (Bug 15): la celda entra al momento
