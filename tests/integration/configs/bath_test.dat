@@ -1,0 +1,40 @@
+# Banco rapido del acople P-V en regimen de BANO (Plan C, F0; Bug 19).
+# Charco de LIQUIDO PURO (alpha_l = 1 en varios niveles) con gas encima, en
+# reposo, sin arco ni fusion ni chatarra. Criterios (check_bath.py):
+#   - presion ferrostatica rho_l g h en el charco (+-1 %)
+#   - |u_l| -> 0 (reposo), Delta alpha_l == 0 en las celdas puras
+#   - masa exacta; p_max/u_gas_max del audit acotados
+# Este es el caso minimo que el Poisson SIN transitorio de densidad no
+# puede sostener (B1 v16: 1.8 MPa en las primeras celdas de liquido puro).
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+
+dt = 0.01
+t_final = 1.0
+adaptive_dt = false
+
+charge_bucket1 = false
+heel_mass = 274000.0
+heel_T = 1850.0
+T_initial = 300.0
+
+solve_flow = true
+solve_energy = true
+solve_melting = false
+solve_turb = false
+solve_radiation = false
+solve_chemistry = false
+solve_arc = false
+solve_multiphase = true
+
+alpha_p = 0.3
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 200
+
+audit_freq = 1
+output_freq = 10
+monitor_freq = 10

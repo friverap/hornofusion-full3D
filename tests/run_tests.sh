@@ -126,6 +126,12 @@ full | rebaseline)
     run_case ecs_test 1
     run_case ecs_test 8
     run_case slag_chem_test 8
+    # Bug 19 (Plan C, F0): bancos del bano de liquido puro — reposo (n1/n4)
+    # y llenado por fusion (n4). Sus checks propios (bath:*) llevan xfail
+    # con causa hasta F1/F2; los invariantes duros (nan/bounds) NO.
+    run_case bath_test 1
+    run_case bath_test 4
+    run_case bath_fill 4
 
     for d in "$OUT"/cold_10step_n*; do
         check_invariants "$d" cold_10step
@@ -167,7 +173,19 @@ full | rebaseline)
     run_script "decomposition_ecs" \
         $PY $INT/compare_decomposition.py "$OUT/ecs_test_n1" "$OUT/ecs_test_n8"
     run_script "slag_chem" \
-        $PY $INT/check_slag_chem.py "$OUT/slag_chem_test_n8" --config "$CFG/slag_chem_test.dat" 
+        $PY $INT/check_slag_chem.py "$OUT/slag_chem_test_n8" --config "$CFG/slag_chem_test.dat"
+    for d in "$OUT"/bath_test_n*; do
+        check_invariants "$d" bath_test
+        run_script "bath_test" \
+            $PY $INT/check_bath.py "$d" --config "$CFG/bath_test.dat" \
+            --xfail "$(xfail_ids bath)"
+    done
+    check_invariants "$OUT/bath_fill_n4" bath_fill
+    run_script "bath_fill" \
+        $PY $INT/check_bath.py "$OUT/bath_fill_n4" --config "$CFG/bath_fill.dat" --fill \
+        --xfail "$(xfail_ids bath_fill)"
+    run_script "decomposition_bath" \
+        $PY $INT/compare_decomposition.py "$OUT/bath_test_n1" "$OUT/bath_test_n4"
 
     if [ "$MODE" = "rebaseline" ]; then
         $PY $INT/metrics_snapshot.py "$OUT" --mode rebaseline \
