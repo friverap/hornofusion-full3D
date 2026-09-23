@@ -137,8 +137,12 @@ def main():
             W(f"{n_pk} filas con p>3e5 en los últimos 300 s (pico {pm:.2e} Pa)")
         if pm >= 1.5e6:
             A(f"presión en la cota: p_max={pm:.3e} Pa (P_HYDRO_CAP 2e6) — acople P-V roto")
-        if r["p_max"] > 0 and any(abs(x["p_max"] - r["p_max"]) < 1e-9 * max(r["p_max"], 1.0)
-                                  for x in rows[-200:-20] if x is not r) and r["p_max"] > 1.0e4:
+        # p_max identico entre filas = celda sellada (Bug 16). Se excluye el
+        # valor EN LA COTA: ahi la igualdad la produce el clamp, no una celda
+        # congelada (falso positivo en el regimen de Bug 19).
+        if (1.0e4 < r["p_max"] < 0.99 * 2.0e6
+                and any(abs(x["p_max"] - r["p_max"]) < 1e-9 * r["p_max"]
+                        for x in rows[-200:-20] if x is not r)):
             A(f"p_max congelado en {r['p_max']:.4e} Pa (celda sellada, Bug 16)")
         elif pm > 3.0e5:
             W(f"p_max={pm:.3e} Pa (>3e5; hidrostática del baño ~1e5)")
