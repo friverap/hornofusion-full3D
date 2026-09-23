@@ -23,9 +23,10 @@ audit_cold:energy_balance
 # centro de 0.17 m/s con flujos de cara ~0 (Rhie-Chow con fuerza de
 # cuerpo: el gradiente central y la fuerza de la celda no se balancean
 # exactamente donde p no es lineal — superficie libre y fondo abombado),
-# que mueven d alpha ~2e-3/s en la capa bajo la superficie. Fix previsto
-# (F1b): fuerza de cuerpo balanceada por caras + correccion de Choi/
-# Majumdar al Rhie-Chow (independencia de dt y relajacion).
+# que mueven d alpha ~2e-3/s en la capa bajo la superficie. Es el modo
+# par-impar vertical del esquema colocado (ARCHITECTURE, F1b): la fuerza
+# balanceada por caras NO lo cura (probado, revertido); pendiente la
+# correccion de Choi/Majumdar al Rhie-Chow.
 bath:bath_rest
 bath:bath_alpha_frozen
 # invarianza n1 vs n4 del bano: todos los campos < 1e-3 salvo las
