@@ -29,7 +29,6 @@ module mod_pressure_3d
     use mod_boundary_3d
     use mod_parallel_utils
     use mod_mpi_topology, only: mpi_exchange_halos_3d
-    use mod_workspace, only: ws_rho_fluid_old, ws_rho_mix_valid, ws_mdot, ws_pv_valid
     implicit none
 
     ! Acople P-V del gas, formulación low-Mach (cierre 2026, punto 1):
@@ -85,8 +84,7 @@ contains
                                           residual)
         use mod_workspace, only: ensure_workspace, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
-            aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
-            ws_rho_fluid_old, ws_rho_mix_valid
+            aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid
         type(phase_t), intent(inout) :: liq, gas
         ! T del gas del paso anterior: término de COMPRESIBILIDAD del gas
         ! ideal, -alpha_g*(rho(T)-rho(T_old))/dt*V. Sin él, el Poisson
@@ -193,43 +191,17 @@ contains
         ! alpha por fusión/colapso es de segundo orden aquí).
         if (cfg%gas_compressibility .and. cfg%solve_multiphase) then
         block
-            real(dp) :: src, cap, rho_f
+            real(dp) :: src, cap
             do k = kstart, kend
                 do j = jstart, jend
                     do i = istart, iend
                         if (m%cell_type(i,j,k) == 0) cycle
-                        if (.not. act_l(i,j,k) .and. .not. act_g(i,j,k)) cycle
-                        if (ws_rho_mix_valid .and. ws_pv_valid) then
-                            ! Transitorio de la mezcla FLUIDA menos el fundido
-                            ! (Bug 19):
-                            !   d(a_l rho_l + a_g rho_g)/dt + div(...) = mdot
-                            ! Subsume el termino historico de compresibilidad
-                            ! del gas (a_g fijo, rho_g(T)) y anade el CAMBIO DE
-                            ! COMPOSICION, que era lo que faltaba: una celda de
-                            ! bano que se llena o drena, sin gas que absorba el
-                            ! volumen, exigia div u = 0 y respondia con +-MPa
-                            ! (B1 v16: 1.8 MPa en las primeras celdas de liquido
-                            ! puro, t=75 s).
-                            ! La fusion sale EXACTAMENTE neutra (el termino
-                            ! d(a_l rho_l)/dt que crea cancela con mdot): ese
-                            ! fue el error del intento historico que metia solo
-                            ! mdot (ganancia >1, p x50/paso). El SOLIDO no entra
-                            ! en rho_f — no tiene flujo en el Poisson —, asi que
-                            ! el colapso solo pide el gas que debe llenar el
-                            ! hueco (delta*rho_g, minusculo), no delta*rho_s.
-                            rho_f = liq%alpha(i,j,k) * liq%rho(i,j,k) &
-                                  + gas%alpha(i,j,k) * gas%rho(i,j,k)
-                            src = m%vol(i,j,k) / cfg%dt * &
-                                  (rho_f - ws_rho_fluid_old(i,j,k)) - ws_mdot(i,j,k)
-                            cap = COMP_SRC_CAP * rho_f * m%vol(i,j,k) / cfg%dt
-                        else
-                            if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
-                            src = gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
-                                  (gas%rho(i,j,k) - cfg%rho_gas * cfg%T_ambient &
-                                   / max(gas_T_old(i,j,k), T_MIN_GAS))
-                            cap = COMP_SRC_CAP * gas%alpha(i,j,k) * &
-                                  gas%rho(i,j,k) * m%vol(i,j,k) / cfg%dt
-                        end if
+                        if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
+                        src = gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
+                              (gas%rho(i,j,k) - cfg%rho_gas * cfg%T_ambient &
+                               / max(gas_T_old(i,j,k), T_MIN_GAS))
+                        cap = COMP_SRC_CAP * gas%alpha(i,j,k) * &
+                              gas%rho(i,j,k) * m%vol(i,j,k) / cfg%dt
                         Su(i,j,k) = Su(i,j,k) - max(-cap, min(cap, src))
                     end do
                 end do
@@ -533,29 +505,5 @@ contains
         end do
 
     end subroutine correct_velocities
-
-    !---------------------------------------------------------------------------
-    ! Ancla la densidad de los FLUIDOS al INICIO del paso (llamar desde main
-    ! antes de la fusion y el colapso). Ver Bug 19.
-    !---------------------------------------------------------------------------
-    subroutine store_mixture_density(liq, gas, m)
-        type(phase_t), intent(in) :: liq, gas
-        type(mesh_t),  intent(in) :: m
-        integer :: i, j, k, istart, iend, jstart, jend, kstart, kend
-        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
-        do k = kstart, kend
-            do j = jstart, jend
-                do i = istart, iend
-                    if (m%cell_type(i,j,k) == 0) then
-                        ws_rho_fluid_old(i,j,k) = 0.0_dp
-                    else
-                        ws_rho_fluid_old(i,j,k) = liq%alpha(i,j,k) * liq%rho(i,j,k) &
-                                                + gas%alpha(i,j,k) * gas%rho(i,j,k)
-                    end if
-                end do
-            end do
-        end do
-        ws_rho_mix_valid = .true.
-    end subroutine store_mixture_density
 
 end module mod_pressure_3d
