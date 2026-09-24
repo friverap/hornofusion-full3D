@@ -223,8 +223,8 @@ contains
                         do i = istart, iend
                             if (m%cell_type(i,j,k) == 0) cycle
                             call cell_in_out(i, j, k, inflow, outflow)
-                            room = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k) &
-                                   - alpha_slag(i,j,k) - liq%alpha(i,j,k)) * &
+                            room = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k), alpha_slag(i,j,k)) &
+                                   - liq%alpha(i,j,k)) * &
                                    liq%rho(i,j,k) * m%vol(i,j,k) / dt_sub &
                                    + outflow - sol%mdot(i,j,k)
                             if (inflow > SMALL) then
@@ -304,13 +304,13 @@ contains
                     do i = istart, iend
                         ws_lim(i,j,k) = 0.0_dp
                         if (m%cell_type(i,j,k) == 0) cycle
-                        cap = 1.0_dp - sol%alpha_s(i,j,k) - alpha_slag(i,j,k)
+                        cap = liq_cap(sol%alpha_s(i,j,k), alpha_slag(i,j,k))
                         give = liq%alpha(i,j,k) - cap
                         if (give <= 1.0e-15_dp) cycle
                         exc = max(exc, give)
                         if (m%cell_type(i,j,k+1) == 0) cycle
-                        room_up = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k+1) &
-                                  - alpha_slag(i,j,k+1) - liq%alpha(i,j,k+1)) &
+                        room_up = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k+1), alpha_slag(i,j,k+1)) &
+                                  - liq%alpha(i,j,k+1)) &
                                   * m%vol(i,j,k+1) / m%vol(i,j,k)
                         ws_lim(i,j,k) = min(give, room_up)
                     end do
@@ -358,6 +358,9 @@ contains
                     end if
 
                     a_pre = liq%alpha(i,j,k)
+                    ! (el recorte final usa el hueco FISICO, no el de poro: el gas
+                    ! residual solo limita la ENTRADA y dirige el derrame; el
+                    ! liquido ya presente nunca se borra)
                     liq%alpha(i,j,k) = max(0.0_dp, &
                         min(1.0_dp - sol%alpha_s(i,j,k) - alpha_slag(i,j,k), &
                             liq%alpha(i,j,k)))
@@ -763,6 +766,9 @@ contains
                         cycle
                     end if
                     a_pre = liq%alpha(i,j,k)
+                    ! (el recorte final usa el hueco FISICO, no el de poro: el gas
+                    ! residual solo limita la ENTRADA y dirige el derrame; el
+                    ! liquido ya presente nunca se borra)
                     liq%alpha(i,j,k) = max(0.0_dp, &
                         min(1.0_dp - sol%alpha_s(i,j,k) - alpha_slag(i,j,k), &
                             liq%alpha(i,j,k)))

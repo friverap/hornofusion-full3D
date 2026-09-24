@@ -66,6 +66,18 @@ module mod_constants
     ! de velocidad de ~1e4 m/s que divergían a 1e14. La masa fundida sigue
     ! acumulándose vía la ecuación de alpha hasta cruzar el umbral.
     real(dp), parameter :: ALPHA_FLOW_CUTOFF = 1.0e-2_dp
+    ! Gas RESIDUAL de poro (Plan C F2.7): en una celda del LECHO (alpha_s >=
+    ! 1e-2) el liquido no puede ocupar todo el hueco; queda al menos
+    ! ALPHA_PORE_GAS de gas (> ALPHA_FLOW_CUTOFF, asi el gas sigue activo en
+    ! el Poisson y la celda nunca queda sellada hidraulicamente). Sin esto,
+    ! el fundido que percola desde un charco llenaba el poro hasta expulsar
+    ! el gas y la celda, bloqueada por Ergun y sin gas, respondia a la
+    ! siguiente rafaga con MPa (B1 v21, 34 s; reproductores F2.4/F2.5). El
+    ! exceso se DERRAMA hacia arriba (conservativo, m_spill), nunca se
+    ! recorta. Es una regularizacion del volumen, no de la presion (el canal
+    ! residual de gas tipo residualAlpha en el Poisson dejaba pasar liquido
+    ! a celdas selladas: 1.6 t recortadas en bath_freeze, descartado).
+    real(dp), parameter :: ALPHA_PORE_GAS = 1.5e-2_dp
     ! Fraccion RESIDUAL del solido (cierre de fase evanescente, sep-2026).
     ! Una celda con 0 < alpha_s <= este umbral ya no es un lecho: su masa y
     ! entalpia se entregan al liquido co-localizado (mismo camino que la
@@ -185,6 +197,16 @@ contains
             liq_continuous = (al >= ALPHA_LIQ_CONT)
         end if
     end function liq_continuous
+
+    ! Fraccion de liquido que cabe en la celda (F2.7): hueco menos el gas
+    ! residual de poro en el lecho
+    pure elemental function liq_cap(as, asl) result(c)
+        real(dp), intent(in) :: as, asl
+        real(dp) :: c
+        c = 1.0_dp - as - asl
+        if (as >= 1.0e-2_dp) c = c - ALPHA_PORE_GAS
+        c = max(c, 0.0_dp)
+    end function liq_cap
 
     !---------------------------------------------------------------------------
     ! Velocidad terminal de una gota de liquido en el gas local (Schiller-

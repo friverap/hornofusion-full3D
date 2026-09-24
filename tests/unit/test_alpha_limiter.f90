@@ -67,7 +67,8 @@ program test_alpha_limiter
     sol%mdot = 0.0_dp; sol%alpha_s = 0.0_dp; slag%alpha_sl = 0.0_dp
     liq%alpha = 0.0_dp
     sol%alpha_s(3,4,1) = 1.0_dp
-    sol%alpha_s(3,4,2) = 0.6_dp; liq%alpha(3,4,2) = 0.4_dp
+    ! celda de lecho llena hasta su hueco de poro (F2.7: 1 - a_s - ALPHA_PORE_GAS)
+    sol%alpha_s(3,4,2) = 0.6_dp; liq%alpha(3,4,2) = liq_cap(0.6_dp, 0.0_dp)
     liq%alpha(3,4,3) = 0.5_dp
     a_old = liq%alpha
     m0 = liquid_mass()
@@ -84,7 +85,7 @@ program test_alpha_limiter
         ok = .false.
     end if
     if (abs(liq%alpha(3,4,3) - 0.5_dp) > 1.0e-12_dp .or. &
-        abs(liq%alpha(3,4,2) - 0.4_dp) > 1.0e-12_dp) then
+        abs(liq%alpha(3,4,2) - liq_cap(0.6_dp, 0.0_dp)) > 1.0e-12_dp) then
         print '(A,2F10.6)', '   FAIL caso 1: el liquido no se quedo encima: ', &
             liq%alpha(3,4,3), liq%alpha(3,4,2)
         ok = .false.
@@ -157,17 +158,19 @@ program test_alpha_limiter
         print '(A,ES10.3)', '   FAIL caso 4: el derrame no conservo la masa, err = ', err
         ok = .false.
     end if
-    if (abs(liq%alpha(3,4,2) - 0.8_dp) > 1.0e-12_dp) then
-        print '(A,F10.6)', '   FAIL caso 4: la celda sobrellena no quedo en 0.8: ', liq%alpha(3,4,2)
+    ! el exceso sobre el hueco de poro (F2.7) se derrama: 1 - liq_cap(0.2,0)
+    if (abs(liq%alpha(3,4,2) - liq_cap(0.2_dp, 0.0_dp)) > 1.0e-12_dp) then
+        print '(A,2F10.6)', '   FAIL caso 4: la celda sobrellena no quedo en su hueco de poro: ', &
+            liq%alpha(3,4,2), liq_cap(0.2_dp, 0.0_dp)
         ok = .false.
     end if
-    F_expected = 0.1_dp + 0.2_dp * mesh%vol(3,4,2) / mesh%vol(3,4,3)
+    F_expected = 0.1_dp + (1.0_dp - liq_cap(0.2_dp, 0.0_dp)) * mesh%vol(3,4,2) / mesh%vol(3,4,3)
     if (abs(liq%alpha(3,4,3) - F_expected) > 1.0e-12_dp) then
         print '(A,2F10.6)', '   FAIL caso 4: la celda de arriba no recibio el exceso: ', &
             liq%alpha(3,4,3), F_expected
         ok = .false.
     end if
-    F_expected = 0.2_dp * liq%rho(3,4,2) * mesh%vol(3,4,2) / cfg%dt
+    F_expected = (1.0_dp - liq_cap(0.2_dp, 0.0_dp)) * liq%rho(3,4,2) * mesh%vol(3,4,2) / cfg%dt
     if (abs(ws_Fz(3,4,2) - F_expected) > 1.0e-9_dp * F_expected) then
         print '(A,2ES12.4)', '   FAIL caso 4: ws_Fz no lleva el derrame: ', ws_Fz(3,4,2), F_expected
         ok = .false.
