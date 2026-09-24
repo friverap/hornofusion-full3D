@@ -733,6 +733,8 @@ Además: **presión hidrostática inicial** (`initialize_hydrostatic_pressure`, 
 
 **Resultado en los bancos (n = 4):** `bath_test`: ferrostática 0.9 %, p_max 72 kPa, gas ≤ 21 m/s, masa exacta, Δα en celdas puras 1.1e-3 en 1 s (antes 4.7e-2), corriente fantasma 0.17 m/s **acotada y no creciente** (Liu et al. 2024 documentan picos espurios del mismo tipo en interfases bruscas y los declaran no eliminables con los métodos actuales). `bath_fill`: acero 1e-9, handoff 1e-9, p 71 kPa, gas 102 m/s. `bath_freeze` (40 t congelan en 1 s): p 68 kPa, gas 14 m/s; residuos de contabilidad del limitador bajo congelación masiva de 1e-6 (acero) y 5e-6 (handoff) — pendiente menor. `test_dispersed_liquid` 3b: con el Poisson de volumen la "regla antigua" (gotas en el Poisson) ya no dispara p (ratio 1.002): el mecanismo de MPa era la forma de masa, confirmado.
 
+**Juez de 1 h (2026-09-24):** el reproductor grueso de B1 con el binario F2 (`campaigns/b1_v20c_coarse_f2/VEREDICTO.md`) cruza la ventana 60–90 s con p_max ≤ 3.6 kPa (la F1: 43–117 kPa y gas en la cota a 88 s), gas ≤ 142 m/s, clip 0 y la misma curva de fusión (1255 vs 1256 kg fundidos). Sólo dos filas aisladas de 20–25 kPa durante ráfagas de fusión, disipadas en el snapshot siguiente. F2 pasa a `main`; el siguiente juez es B1 en malla media a 120 s.
+
 ### Bug 20 — Los residuales del lazo externo no medían el iterado (`mod_momentum_3d.f90`, `mod_pressure_3d.f90`)
 
 **Síntoma:** en `bath_test` cada paso hacía `outer = 1` con residuales `(6.8e-17, 8.9e-6, 5.9e-17)`, mientras el líquido "en reposo" se movía a 0.7 m/s.
