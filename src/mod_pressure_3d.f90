@@ -86,7 +86,7 @@ contains
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
-            ws_pcorr_g, ws_pcorr_valid, ws_gas_wall, ws_gas_wall_valid
+            ws_pcorr_g, ws_pcorr_valid
         type(phase_t), intent(inout) :: liq, gas
         ! T del gas del paso anterior: término de COMPRESIBILIDAD del gas
         ! ideal, -alpha_g*(rho(T)-rho(T_old))/dt*V. Sin él, el Poisson
@@ -113,7 +113,6 @@ contains
         real(dp), allocatable :: Fs_r(:,:,:), Fs_th(:,:,:), Fs_z(:,:,:)
         real(dp), allocatable :: ac_r(:,:,:), ac_th(:,:,:), ac_z(:,:,:)
         integer  :: n_iter_cg
-        logical  :: isg_now
         real(dp) :: cg_res
         ! Residual de CONTINUIDAD del iterado entrante: desbalance de VOLUMEN
         ! sum |Su| (la fuente del Poisson es -div de los flujos volumetricos
@@ -417,14 +416,6 @@ contains
             end if
         end function gas_gz
 
-        ! Vecina valida para el gradiente de ESTA fase en cell_gradients:
-        ! liquido -> cualquier fluido (pv_cell); gas -> gas activo (F2.5)
-        pure logical function ph_ok_g(ii, jj, kk)
-            integer, intent(in) :: ii, jj, kk
-            ph_ok_g = pv_cell(ii, jj, kk)
-            if (isg_now .and. ws_gas_wall_valid) ph_ok_g = ph_ok_g .and. .not. ws_gas_wall(ii,jj,kk)
-        end function ph_ok_g
-
         ! La celda tiene presion de fluido definida? (Bug 16)
         pure logical function pv_cell(ii, jj, kk)
             integer, intent(in) :: ii, jj, kk
@@ -589,11 +580,9 @@ contains
         ! Gradientes de celda de un campo de presion (ver arriba)
         subroutine cell_gradients(pfld, isg, gr, gth, gz)
             real(dp), intent(in)  :: pfld(-1:,-1:,-1:)
-            ! Gas: gradiente vertical sin el peso del liquido (F2.3) y vecinas
-            ! sin gas activo tratadas como pared (F2.5; ver pv_ok en momentum)
+            ! Gas: gradiente vertical sin el peso del liquido (F2.3)
             logical,  intent(in)  :: isg
             real(dp), intent(out) :: gr(-1:,-1:,-1:), gth(-1:,-1:,-1:), gz(-1:,-1:,-1:)
-            isg_now = isg
             gr = 0.0_dp; gth = 0.0_dp; gz = 0.0_dp
         do k = kstart, kend
             do j = jstart, jend
@@ -606,21 +595,21 @@ contains
                     ! al termino de Rhie-Chow del propio Poisson.
                     gr(i,j,k) = pgrad(pfld(i-1,j,k), pfld(i,j,k), pfld(i+1,j,k), &
                                        m%r(i-1), m%r(i), m%r(i+1), &
-                                       i > istart .and. ph_ok_g(i-1,j,k), &
-                                       i < iend   .and. ph_ok_g(i+1,j,k))
+                                       i > istart .and. pv_cell(i-1,j,k), &
+                                       i < iend   .and. pv_cell(i+1,j,k))
 
                     gth(i,j,k) = pgrad(pfld(i,jm,k), pfld(i,j,k), pfld(i,jp,k), &
                                         m%r(i) * m%theta(jm), m%r(i) * m%theta(j), &
                                         m%r(i) * m%theta(jp), &
-                                        ph_ok_g(i,jm,k), ph_ok_g(i,jp,k))
+                                        pv_cell(i,jm,k), pv_cell(i,jp,k))
 
                     gz(i,j,k) = pgrad(pfld(i,j,k-1), pfld(i,j,k), pfld(i,j,k+1), &
                                        m%z(k-1), m%z(k), m%z(k+1), &
-                                       (k > kstart .or. .not. at_zmin) .and. ph_ok_g(i,j,k-1), &
-                                       (k < kend   .or. .not. at_zmax) .and. ph_ok_g(i,j,k+1))
+                                       (k > kstart .or. .not. at_zmin) .and. pv_cell(i,j,k-1), &
+                                       (k < kend   .or. .not. at_zmax) .and. pv_cell(i,j,k+1))
                     if (isg) gz(i,j,k) = gas_gz(pfld, i, j, k, &
-                                       (k > kstart .or. .not. at_zmin) .and. ph_ok_g(i,j,k-1), &
-                                       (k < kend   .or. .not. at_zmax) .and. ph_ok_g(i,j,k+1))
+                                       (k > kstart .or. .not. at_zmin) .and. pv_cell(i,j,k-1), &
+                                       (k < kend   .or. .not. at_zmax) .and. pv_cell(i,j,k+1))
                 end do
             end do
         end do

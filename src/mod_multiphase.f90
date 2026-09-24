@@ -22,7 +22,7 @@ module mod_multiphase
     use mod_fields_3d
     use mod_probe, only: probe_report
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_ut, &
-                             ws_pcorr_g, ws_pcorr_valid, ws_gas_wall, ws_gas_wall_valid, &
+                             ws_pcorr_g, ws_pcorr_valid, &
                              ws_liq_cont_prev, ws_pv_active, ws_pv_valid
     implicit none
 
@@ -85,10 +85,6 @@ contains
                        .and. (m%cell_type /= 0)
         ws_pv_valid = .true.
         ws_pcorr_g = 0.0_dp; ws_pcorr_valid = .false.   ! (F2.3: sustituido por gas_pgrad_z)
-        ! Bolsas selladas del lecho (F2.5; ver ws_gas_wall en mod_workspace)
-        ws_gas_wall = (m%cell_type /= 0) .and. (sol%alpha_s >= 1.0e-2_dp) &
-                      .and. (gas%alpha < ALPHA_FLOW_CUTOFF)
-        ws_gas_wall_valid = .true.
         call compute_liquid_drift(liq, gas, sol, m, cfg, liq_old)
 
         ! Transicion DISPERSO -> CONTINUO (Bug 15): la celda entra al momento

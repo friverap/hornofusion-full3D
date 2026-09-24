@@ -90,15 +90,6 @@ module mod_workspace
     ! de celda y de cara).
     real(dp), allocatable :: ws_pcorr_g(:,:,:)
     logical, save :: ws_pcorr_valid = .false.
-    ! Bolsa SELLADA del lecho (F2.5): celda con chatarra (alpha_s >= 1e-2) y
-    ! sin gas activo (alpha_g < ALPHA_FLOW_CUTOFF), p.ej. chatarra empaquetada
-    ! que funde en sitio (alpha_s 0.9 + alpha_l 0.1). Bloqueada por Ergun, su
-    ! fila del Poisson es casi vacia y su p deriva (-10 kPa); NO es presion de
-    ! gas: para el gradiente del GAS es pared (momento y Poisson). Las celdas
-    ! de bano puro (alpha_s < 1e-2) NO entran: el gas de la pelicula de
-    ! superficie necesita ver la linea hidrostatica del bano de abajo.
-    logical, allocatable :: ws_gas_wall(:,:,:)
-    logical, save :: ws_gas_wall_valid = .false.
 
 contains
 
@@ -123,7 +114,6 @@ contains
         allocate(ws_Fc_lk_th, ws_Fc_lk_z, mold=ws_Fc_lk_r)
         ws_Fc_lk_r = 0; ws_Fc_lk_th = 0; ws_Fc_lk_z = 0
         allocate(ws_pcorr_g, mold=ws_aW); ws_pcorr_g = 0.0_dp
-        allocate(ws_gas_wall, mold=ws_liq_cont); ws_gas_wall = .false.
     end subroutine ensure_workspace
 
 end module mod_workspace
