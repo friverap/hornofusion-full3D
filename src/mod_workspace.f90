@@ -63,10 +63,10 @@ module mod_workspace
     ! ws_ud_* calculado con RELAJACION desde liq_old (multiphase) en esta
     ! iteracion: el transporte de alpha lo reutiliza en vez de recomputar
     logical, save :: ws_drift_valid = .false.
-    ! Flujos de masa CONSERVATIVOS del liquido continuo [kg/s] por las caras
-    ! + de cada celda (este, norte, tope), exportados por el Poisson
-    ! (Bug 19, Plan C F1): F = F* + a_nb (pp_P - pp_nb), con F* el flujo de
-    ! Rhie-Chow del ensamblado y a_nb el coeficiente de la cara. Su
+    ! Flujos VOLUMETRICOS conservativos del liquido continuo [m3/s] por las
+    ! caras + de cada celda (este, norte, tope), exportados por el Poisson de
+    ! volumen (Bug 19, Plan C F1/F2): Q = Q* + a_nb (pp_P - pp_nb), con
+    ! Q* = alpha_f u_f A el flujo de Rhie-Chow y a_nb = alpha_f d_f A/delta. Su
     ! divergencia por celda es EXACTAMENTE el residuo del Poisson (mas el
     ! almacenamiento de compliance/acustico), asi que el transporte de alpha
     ! que los use no llena ni drena celdas que el Poisson dejo en balance.

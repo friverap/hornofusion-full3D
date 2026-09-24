@@ -692,4 +692,64 @@ contains
         field(:, nth+2, :) = field(:, 2,     :)
     end subroutine fill_periodic_theta
 
+    !---------------------------------------------------------------------------
+    ! Presion HIDROSTATICA inicial de la mezcla fluida (Plan C F2): integral de
+    ! columna desde el techo (p = 0 en la cara superior) con
+    ! rho_f = alpha_l rho_l (1 - beta (T_l - T_amb)) + alpha_g rho_g, la misma
+    ! fuerza de cuerpo que llevan las ecuaciones de momento. Sin ella, un
+    ! remanente formado arrancaba con p = 0 y el primer paso pedia 50-70 kPa
+    ! de golpe: el gas sobre la superficie salia a 100-300 m/s y arrancaba
+    ! niebla (bath_test en forma de volumen). Patron invariante a la
+    ! descomposicion: gather global + escritura de celdas propias. Con solo
+    ! gas la correccion es de decenas de Pa (rho_g g H).
+    !---------------------------------------------------------------------------
+    subroutine initialize_hydrostatic_pressure(liq, gas, sh, m, cfg)
+        type(phase_t), intent(in)    :: liq, gas
+        type(shared_t), intent(inout) :: sh
+        type(mesh_t), intent(in)     :: m
+        type(config_t), intent(in)   :: cfg
+        real(dp), allocatable :: rf(:,:,:), rf_g(:,:,:), p_g(:,:,:)
+        integer :: i, j, k, il, jl, kl, nzg
+        logical :: owned
+        real(dp) :: p_here
+
+        allocate(rf, mold=liq%alpha)
+        rf = liq%alpha * liq%rho * (1.0_dp - cfg%beta_expansion * (liq%T - cfg%T_ambient)) &
+           + gas%alpha * gas%rho
+        allocate(rf_g(m%nr_g, m%nth_g, m%nz_g), p_g(m%nr_g, m%nth_g, m%nz_g))
+        call gather_global_field(rf, rf_g, m)
+        nzg = m%nz_g
+        p_g = 0.0_dp
+        do j = 1, m%nth_g
+            do i = 1, m%nr_g
+                p_here = 0.0_dp
+                do k = nzg, 1, -1
+                    if (m%cell_type_global(i,j,k) == 0) then
+                        p_g(i,j,k) = 0.0_dp
+                        cycle
+                    end if
+                    ! de la cara superior de la celda a su centro
+                    p_here = p_here + rf_g(i,j,k) * GRAVITY * (m%zf_global(k) - m%z_global(k))
+                    p_g(i,j,k) = p_here
+                    ! del centro a la cara inferior (para la celda de abajo)
+                    p_here = p_here + rf_g(i,j,k) * GRAVITY * (m%z_global(k) - m%zf_global(k-1))
+                end do
+            end do
+        end do
+        do k = 1, nzg
+            do j = 1, m%nth_g
+                do i = 1, m%nr_g
+                    call global_to_local(m, i, j, k, il, jl, kl, owned)
+                    if (owned) sh%p(il,jl,kl) = p_g(i,j,k)
+                end do
+            end do
+        end do
+        call mpi_exchange_halos_3d(sh%p, m%topo)
+        sh%pp = 0.0_dp
+        if (.not. m%is_parallel .or. m%topo%rank == 0) then
+            print '(A,ES10.3,A)', ' [FIELDS] Presion hidrostatica inicial: p_max = ', maxval(p_g), ' Pa'
+        end if
+        deallocate(rf, rf_g, p_g)
+    end subroutine initialize_hydrostatic_pressure
+
 end module mod_fields_3d

@@ -1,0 +1,43 @@
+# Banco (variante FRIA de bath_fill) rapido del acople P-V en regimen de BANO QUE SE LLENA (Plan C, F0).
+# melt_forced + heel: charco de liquido puro debajo y chatarra a 1815 K
+# (> T_liq) encima que funde desde el primer paso, de modo que el bano crece
+# por arriba — el mecanismo exacto que reventaba B1 (Bug 19). Criterios
+# (check_bath.py --fill): p_max acotada por la escala ferrostatica, gas sin
+# tocar U_GAS_MAX, masa de acero exacta.
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+
+dt = 0.01
+t_final = 1.0
+adaptive_dt = false
+
+heel_mass = 180000.0
+# Remanente BAJO el solidus (1600 K): re-solidifica desde el paso 1 dentro de
+# la chatarra (sumidero mdot<0 en celdas bloqueadas por Ergun / selladas)
+heel_T = 1550.0
+# Chatarra FRIA (300 K) con el remanente a 1850 K dentro y encima de ella: el
+# liquido que percola al lecho frio RE-SOLIDIFICA en celdas bloqueadas por
+# Ergun (B1 v19, t=65 s: dipolo de +160/-120 kPa en el charco sobre chatarra
+# fria, gas succionado a 300 m/s). Sin arco: el disparador es el charco frio.
+T_initial = 300.0
+
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = false
+solve_radiation = false
+solve_chemistry = false
+solve_arc = false
+solve_multiphase = true
+
+alpha_p = 0.7
+max_outer = 10
+max_inner_mom = 3
+max_inner_pres = 200
+
+audit_freq = 1
+output_freq = 10
+monitor_freq = 10

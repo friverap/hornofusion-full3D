@@ -548,9 +548,9 @@ contains
     ! Flujo de masa sin alpha (rho_f u_f A) por las caras + de cada celda
     ! propia, halos intercambiados (Bug 19, Plan C F1).
     !   - Cara ENLAZADA en el Poisson del liquido (ambas celdas con liquido
-    !     continuo): el flujo conservativo exportado, F/(alpha rho)_f * rho_f
-    !     — la velocidad de cara de Rhie-Chow que el CG dejo solenoidal. Es
-    !     el mismo alpha_f que llevaba F, asi que G = rho_f u_f A exacto.
+    !     continuo): el flujo volumetrico conservativo exportado, Q, pasado a
+    !     rho_f Q/alpha_f — la velocidad de cara de Rhie-Chow que el CG dejo
+    !     solenoidal. Es el mismo alpha_f que llevaba Q: G = rho_f u_f A.
     !   - Cara MIXTA (continuo | disperso): regla del DADOR. El liquido que
     !     sale de la celda continua lo hace a la velocidad de ESA celda; las
     !     gotas que caen a la continua, a su velocidad de drift. La media
@@ -635,14 +635,15 @@ contains
         end if
     end function donor_face_flux
 
-    ! F/(alpha rho)_f * rho_f; si la cara no tiene liquido (no deberia
-    ! estar enlazada) se conserva la reconstruccion de centro
-    pure function conservative_noalpha(F, a_lo, rho_lo, a_hi, rho_hi, F_center) result(G)
-        real(dp), intent(in) :: F, a_lo, rho_lo, a_hi, rho_hi, F_center
-        real(dp) :: G, arho_f
-        arho_f = 0.5_dp * (a_lo * rho_lo + a_hi * rho_hi)
-        if (arho_f > SMALL) then
-            G = F * 0.5_dp * (rho_lo + rho_hi) / arho_f
+    ! rho_f Q/alpha_f: del flujo VOLUMETRICO Q = alpha_f u_f A del Poisson a
+    ! rho u_f A; si la cara no tiene liquido (no deberia estar enlazada) se
+    ! conserva la reconstruccion de centro
+    pure function conservative_noalpha(Q, a_lo, rho_lo, a_hi, rho_hi, F_center) result(G)
+        real(dp), intent(in) :: Q, a_lo, rho_lo, a_hi, rho_hi, F_center
+        real(dp) :: G, a_f
+        a_f = 0.5_dp * (a_lo + a_hi)
+        if (a_f > SMALL) then
+            G = Q * 0.5_dp * (rho_lo + rho_hi) / a_f
         else
             G = F_center
         end if

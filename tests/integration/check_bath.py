@@ -113,7 +113,8 @@ def main():
         clip = sum(r["m_alpha_clip"] for r in rows[1:])
         dm = rows[-1]["m_liq"] - rows[0]["m_liq"]
         exp = melt - res - clip
-        err = abs(dm - exp) / max(abs(melt), 1.0)
+        # escala: lo fundido, o una millonesima del inventario si no hubo fusion
+        err = abs(dm - exp) / max(abs(melt), 1.0e-6 * rows[0]["m_liq"], 1.0)
         chk.report("bath_melt_handoff", err <= 1.0e-8,  # redondeo de la reduccion MPI (n4: 1.0e-9)
                    f"dm_liq {dm:.3f} vs fundido-resolid-clip {exp:.3f} kg (err {err:.3e})")
     chk.exit()

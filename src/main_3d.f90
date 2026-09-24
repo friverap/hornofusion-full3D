@@ -192,6 +192,9 @@ program eaf_3d_simulator
         call slag_initialize(slag, sol, liq, gas, mesh, cfg)
         call slag_exchange_halos(slag, mesh)
     end if
+    ! Presion hidrostatica inicial de la mezcla fluida (remanente en reposo;
+    ! Plan C F2): evita el golpe de 50-70 kPa del primer paso
+    call initialize_hydrostatic_pressure(liq, gas, sh, mesh, cfg)
 
     ! Write initial state (t=0, step=0)
     call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, 0, 0.0_dp, cfg%output_dir)

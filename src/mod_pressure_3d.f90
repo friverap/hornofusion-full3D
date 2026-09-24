@@ -114,10 +114,10 @@ contains
         real(dp), allocatable :: ac_r(:,:,:), ac_th(:,:,:), ac_z(:,:,:)
         integer  :: n_iter_cg
         real(dp) :: cg_res
-        ! Residual de CONTINUIDAD del iterado entrante: desbalance de masa
-        ! sum |Su| (la fuente del Poisson es -div de los flujos de Rhie-Chow
-        ! mas las fuentes fisicas) normalizado por el flujo de masa total por
-        ! caras. El residual del CG que se devolvia antes mide la solucion
+        ! Residual de CONTINUIDAD del iterado entrante: desbalance de VOLUMEN
+        ! sum |Su| (la fuente del Poisson es -div de los flujos volumetricos
+        ! de Rhie-Chow mas las fuentes fisicas) normalizado por el flujo
+        ! volumetrico total por caras. El residual del CG que se devolvia antes mide la solucion
         ! de pp, no si u* conserva masa (siempre <= SOR_TOL_PRESSURE).
         real(dp) :: flux_ref, sum_su, tmp
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
@@ -167,6 +167,21 @@ contains
         end if
 
         !-----------------------------------------------------------------------
+        ! POISSON DE VOLUMEN (Bug 19, Plan C F2): la ecuacion de presion de un
+        ! modelo multifluido es la suma de las continuidades de fase divididas
+        ! por su densidad, sum_q [d alpha_q/dt + div(alpha_q u_q)] = fuentes
+        ! (volumen), NO la continuidad de la MASA de la mezcla. Con la forma de
+        ! masa, el liquido que entraba a una celda debia compensarse con gas de
+        ! igual MASA (7500x su volumen): imposible -> la unica salida eran MPa
+        ! (celdas de liquido puro de B1 v16; charco sobre chatarra fria de B1
+        ! v19). En volumen: el liquido desplaza igual volumen de gas; la fusion
+        ! y la re-solidificacion (rho_l = rho_s) son exactamente neutras sin
+        ! fuente alguna; la compresibilidad del gas entra como
+        ! (alpha_g/rho_g) D rho_g/Dt. Los coeficientes son alpha_f d_f A/delta y
+        ! el Su, -sum alpha_f u_f A (flujo volumetrico). Los flujos
+        ! conservativos exportados (ws_Fc_*) son volumetricos.
+        !-----------------------------------------------------------------------
+        !-----------------------------------------------------------------------
         ! Acumular contribuciones de AMBAS fases (C2.4, reactivado tras C3.4:
         ! con la radiación DO real el gas queda en ~3000-6000 K y su
         ! expansión es absorbible por el Poisson)
@@ -200,11 +215,11 @@ contains
                     do i = istart, iend
                         if (m%cell_type(i,j,k) == 0) cycle
                         if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
+                        ! Forma de VOLUMEN: (alpha_g/rho_g) (rho(T) - rho(T_old))/dt V
                         src = gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
                               (gas%rho(i,j,k) - cfg%rho_gas * cfg%T_ambient &
-                               / max(gas_T_old(i,j,k), T_MIN_GAS))
-                        cap = COMP_SRC_CAP * gas%alpha(i,j,k) * &
-                              gas%rho(i,j,k) * m%vol(i,j,k) / cfg%dt
+                               / max(gas_T_old(i,j,k), T_MIN_GAS)) / max(gas%rho(i,j,k), SMALL)
+                        cap = COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt
                         Su(i,j,k) = Su(i,j,k) - max(-cap, min(cap, src))
                     end do
                 end do
@@ -230,8 +245,8 @@ contains
                         ! Término acústico low-Mach (ver P0_THERMO arriba)
                         if (cfg%gas_compressibility .and. cfg%solve_multiphase &
                             .and. gas%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF) then
-                            aP(i,j,k) = aP(i,j,k) + gas%alpha(i,j,k) * &
-                                gas%rho(i,j,k) / P0_THERMO * &
+                            ! (volumen: d alpha_g/dp' = alpha_g/P0)
+                            aP(i,j,k) = aP(i,j,k) + gas%alpha(i,j,k) / P0_THERMO * &
                                 m%vol(i,j,k) / cfg%dt
                         end if
                         ! Compresibilidad acústica del LÍQUIDO (física,
@@ -239,8 +254,9 @@ contains
                         ! (sin gas no hay término acústico del gas y la
                         ! compliance sola deja el nivel de p sin física)
                         if (act_l(i,j,k)) then
-                            aP(i,j,k) = aP(i,j,k) + liq%alpha(i,j,k) * &
-                                m%vol(i,j,k) / (C_SOUND_LIQ**2 * cfg%dt)
+                            ! (volumen: alpha_l/(rho_l c^2))
+                            aP(i,j,k) = aP(i,j,k) + liq%alpha(i,j,k) * m%vol(i,j,k) / &
+                                (liq%rho(i,j,k) * C_SOUND_LIQ**2 * cfg%dt)
                         end if
                     end if
                 end do
@@ -287,8 +303,8 @@ contains
         if (cg_res /= cg_res) residual = cg_res   ! NaN del CG: propagarlo
 
         !-------------------------------------------------------------------
-        ! Flujos CONSERVATIVOS del liquido por las caras + (Bug 19, F1):
-        ! F = F* + a_nb (pp_P - pp_nb). Es el flujo cuya divergencia el CG
+        ! Flujos CONSERVATIVOS (volumetricos, m3/s) del liquido por las caras
+        ! + (Bug 19, F1/F2): Q = Q* + a_nb (pp_P - pp_nb). Es el flujo cuya divergencia el CG
         ! acaba de anular (salvo compliance/acustico); el transporte de
         ! alpha del liquido continuo los usa en vez de reconstruir flujos
         ! desde velocidades de centro (que NO son solenoidales aunque p
@@ -397,11 +413,11 @@ contains
             ! correccion de superficie libre ws_pcorr_g)
             real(dp), intent(in)      :: pf(-1:,-1:,-1:)
             real(dp), intent(in)      :: gr(-1:,-1:,-1:), gth(-1:,-1:,-1:), gz(-1:,-1:,-1:)
-            ! Guardar F* y a_nb de las caras + (solo el liquido, F1)
+            ! Guardar Q* y a_nb de las caras + (solo el liquido, F1)
             logical, intent(in)       :: export
 
             integer  :: ii, jj, kk, jjm, jjp
-            real(dp) :: d_f, arho_f, u_f, delta
+            real(dp) :: d_f, af, u_f, delta
 
             do kk = kstart, kend
                 do jj = jstart, jend
@@ -414,33 +430,31 @@ contains
                         if (link(act, ii-1, jj, kk)) then
                             d_f    = 0.5_dp * (m%vol(ii,jj,kk)  / max(ph%aP_ur(ii,jj,kk),  SMALL) + &
                                                m%vol(ii-1,jj,kk)/ max(ph%aP_ur(ii-1,jj,kk),SMALL))
-                            arho_f = 0.5_dp * (ph%alpha(ii,jj,kk)*ph%rho(ii,jj,kk) + &
-                                               ph%alpha(ii-1,jj,kk)*ph%rho(ii-1,jj,kk))
+                            af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii-1,jj,kk))
                             delta  = m%r(ii) - m%r(ii-1)
-                            aW(ii,jj,kk) = aW(ii,jj,kk) + arho_f * d_f * m%Ar(ii-1,jj,kk) / delta
+                            aW(ii,jj,kk) = aW(ii,jj,kk) + af * d_f * m%Ar(ii-1,jj,kk) / delta
                             u_f = 0.5_dp * (ph%ur(ii-1,jj,kk) + ph%ur(ii,jj,kk)) &
                                 + d_f * (0.5_dp*(gr(ii-1,jj,kk) + gr(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii-1,jj,kk)) / delta)
-                            Su(ii,jj,kk) = Su(ii,jj,kk) + arho_f * u_f * m%Ar(ii-1,jj,kk)
-                            flux_ref = flux_ref + abs(arho_f * u_f * m%Ar(ii-1,jj,kk))
+                            Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Ar(ii-1,jj,kk)
+                            flux_ref = flux_ref + abs(af * u_f * m%Ar(ii-1,jj,kk))
                         end if
 
                         ! --- Cara Este (i+1/2) ---
                         if (link(act, ii+1, jj, kk)) then
                             d_f    = 0.5_dp * (m%vol(ii,jj,kk)  / max(ph%aP_ur(ii,jj,kk),  SMALL) + &
                                                m%vol(ii+1,jj,kk)/ max(ph%aP_ur(ii+1,jj,kk),SMALL))
-                            arho_f = 0.5_dp * (ph%alpha(ii,jj,kk)*ph%rho(ii,jj,kk) + &
-                                               ph%alpha(ii+1,jj,kk)*ph%rho(ii+1,jj,kk))
+                            af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii+1,jj,kk))
                             delta  = m%r(ii+1) - m%r(ii)
-                            aE(ii,jj,kk) = aE(ii,jj,kk) + arho_f * d_f * m%Ar(ii,jj,kk) / delta
+                            aE(ii,jj,kk) = aE(ii,jj,kk) + af * d_f * m%Ar(ii,jj,kk) / delta
                             u_f = 0.5_dp * (ph%ur(ii,jj,kk) + ph%ur(ii+1,jj,kk)) &
                                 + d_f * (0.5_dp*(gr(ii,jj,kk) + gr(ii+1,jj,kk)) &
                                          - (pf(ii+1,jj,kk) - pf(ii,jj,kk)) / delta)
-                            Su(ii,jj,kk) = Su(ii,jj,kk) - arho_f * u_f * m%Ar(ii,jj,kk)
-                            flux_ref = flux_ref + abs(arho_f * u_f * m%Ar(ii,jj,kk))
+                            Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Ar(ii,jj,kk)
+                            flux_ref = flux_ref + abs(af * u_f * m%Ar(ii,jj,kk))
                             if (export) then
-                                Fs_r(ii,jj,kk) = arho_f * u_f * m%Ar(ii,jj,kk)
-                                ac_r(ii,jj,kk) = arho_f * d_f * m%Ar(ii,jj,kk) / delta
+                                Fs_r(ii,jj,kk) = af * u_f * m%Ar(ii,jj,kk)
+                                ac_r(ii,jj,kk) = af * d_f * m%Ar(ii,jj,kk) / delta
                                 ws_Fc_lk_r(ii,jj,kk) = 1
                             end if
                         end if
@@ -449,33 +463,31 @@ contains
                         if (link(act, ii, jjm, kk)) then
                             d_f    = 0.5_dp * (m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
                                                m%vol(ii,jjm,kk)/ max(ph%aP_uth(ii,jjm,kk),SMALL))
-                            arho_f = 0.5_dp * (ph%alpha(ii,jj,kk)*ph%rho(ii,jj,kk) + &
-                                               ph%alpha(ii,jjm,kk)*ph%rho(ii,jjm,kk))
+                            af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jjm,kk))
                             delta  = m%r(ii) * (m%theta(jj) - m%theta(jjm))
-                            aS(ii,jj,kk) = aS(ii,jj,kk) + arho_f * d_f * m%Ath(ii,jj,kk) / delta
+                            aS(ii,jj,kk) = aS(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
                             u_f = 0.5_dp * (ph%uth(ii,jjm,kk) + ph%uth(ii,jj,kk)) &
                                 + d_f * (0.5_dp*(gth(ii,jjm,kk) + gth(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii,jjm,kk)) / delta)
-                            Su(ii,jj,kk) = Su(ii,jj,kk) + arho_f * u_f * m%Ath(ii,jj,kk)
-                            flux_ref = flux_ref + abs(arho_f * u_f * m%Ath(ii,jj,kk))
+                            Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Ath(ii,jj,kk)
+                            flux_ref = flux_ref + abs(af * u_f * m%Ath(ii,jj,kk))
                         end if
 
                         ! --- Cara Norte (j+1/2) ---
                         if (link(act, ii, jjp, kk)) then
                             d_f    = 0.5_dp * (m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
                                                m%vol(ii,jjp,kk)/ max(ph%aP_uth(ii,jjp,kk),SMALL))
-                            arho_f = 0.5_dp * (ph%alpha(ii,jj,kk)*ph%rho(ii,jj,kk) + &
-                                               ph%alpha(ii,jjp,kk)*ph%rho(ii,jjp,kk))
+                            af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jjp,kk))
                             delta  = m%r(ii) * (m%theta(jjp) - m%theta(jj))
-                            aN(ii,jj,kk) = aN(ii,jj,kk) + arho_f * d_f * m%Ath(ii,jj,kk) / delta
+                            aN(ii,jj,kk) = aN(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
                             u_f = 0.5_dp * (ph%uth(ii,jj,kk) + ph%uth(ii,jjp,kk)) &
                                 + d_f * (0.5_dp*(gth(ii,jj,kk) + gth(ii,jjp,kk)) &
                                          - (pf(ii,jjp,kk) - pf(ii,jj,kk)) / delta)
-                            Su(ii,jj,kk) = Su(ii,jj,kk) - arho_f * u_f * m%Ath(ii,jj,kk)
-                            flux_ref = flux_ref + abs(arho_f * u_f * m%Ath(ii,jj,kk))
+                            Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Ath(ii,jj,kk)
+                            flux_ref = flux_ref + abs(af * u_f * m%Ath(ii,jj,kk))
                             if (export) then
-                                Fs_th(ii,jj,kk) = arho_f * u_f * m%Ath(ii,jj,kk)
-                                ac_th(ii,jj,kk) = arho_f * d_f * m%Ath(ii,jj,kk) / delta
+                                Fs_th(ii,jj,kk) = af * u_f * m%Ath(ii,jj,kk)
+                                ac_th(ii,jj,kk) = af * d_f * m%Ath(ii,jj,kk) / delta
                                 ws_Fc_lk_th(ii,jj,kk) = 1
                             end if
                         end if
@@ -484,33 +496,31 @@ contains
                         if (link(act, ii, jj, kk-1)) then
                             d_f    = 0.5_dp * (m%vol(ii,jj,kk)  / max(ph%aP_uz(ii,jj,kk),  SMALL) + &
                                                m%vol(ii,jj,kk-1)/ max(ph%aP_uz(ii,jj,kk-1),SMALL))
-                            arho_f = 0.5_dp * (ph%alpha(ii,jj,kk)*ph%rho(ii,jj,kk) + &
-                                               ph%alpha(ii,jj,kk-1)*ph%rho(ii,jj,kk-1))
+                            af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jj,kk-1))
                             delta  = m%z(kk) - m%z(kk-1)
-                            aB(ii,jj,kk) = aB(ii,jj,kk) + arho_f * d_f * m%Az(ii,jj,kk-1) / delta
+                            aB(ii,jj,kk) = aB(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk-1) / delta
                             u_f = 0.5_dp * (ph%uz(ii,jj,kk-1) + ph%uz(ii,jj,kk)) &
                                 + d_f * (0.5_dp*(gz(ii,jj,kk-1) + gz(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii,jj,kk-1)) / delta)
-                            Su(ii,jj,kk) = Su(ii,jj,kk) + arho_f * u_f * m%Az(ii,jj,kk-1)
-                            flux_ref = flux_ref + abs(arho_f * u_f * m%Az(ii,jj,kk-1))
+                            Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Az(ii,jj,kk-1)
+                            flux_ref = flux_ref + abs(af * u_f * m%Az(ii,jj,kk-1))
                         end if
 
                         ! --- Cara Superior (k+1/2) ---
                         if (link(act, ii, jj, kk+1)) then
                             d_f    = 0.5_dp * (m%vol(ii,jj,kk)  / max(ph%aP_uz(ii,jj,kk),  SMALL) + &
                                                m%vol(ii,jj,kk+1)/ max(ph%aP_uz(ii,jj,kk+1),SMALL))
-                            arho_f = 0.5_dp * (ph%alpha(ii,jj,kk)*ph%rho(ii,jj,kk) + &
-                                               ph%alpha(ii,jj,kk+1)*ph%rho(ii,jj,kk+1))
+                            af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jj,kk+1))
                             delta  = m%z(kk+1) - m%z(kk)
-                            aT(ii,jj,kk) = aT(ii,jj,kk) + arho_f * d_f * m%Az(ii,jj,kk) / delta
+                            aT(ii,jj,kk) = aT(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk) / delta
                             u_f = 0.5_dp * (ph%uz(ii,jj,kk) + ph%uz(ii,jj,kk+1)) &
                                 + d_f * (0.5_dp*(gz(ii,jj,kk) + gz(ii,jj,kk+1)) &
                                          - (pf(ii,jj,kk+1) - pf(ii,jj,kk)) / delta)
-                            Su(ii,jj,kk) = Su(ii,jj,kk) - arho_f * u_f * m%Az(ii,jj,kk)
-                            flux_ref = flux_ref + abs(arho_f * u_f * m%Az(ii,jj,kk))
+                            Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Az(ii,jj,kk)
+                            flux_ref = flux_ref + abs(af * u_f * m%Az(ii,jj,kk))
                             if (export) then
-                                Fs_z(ii,jj,kk) = arho_f * u_f * m%Az(ii,jj,kk)
-                                ac_z(ii,jj,kk) = arho_f * d_f * m%Az(ii,jj,kk) / delta
+                                Fs_z(ii,jj,kk) = af * u_f * m%Az(ii,jj,kk)
+                                ac_z(ii,jj,kk) = af * d_f * m%Az(ii,jj,kk) / delta
                                 ws_Fc_lk_z(ii,jj,kk) = 1
                             end if
                         end if
