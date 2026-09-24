@@ -155,15 +155,11 @@ contains
         ! one-sided SOLO en frontera física; mismas fórmulas que momentum).
         ! Liquido: p del Poisson. Gas: p + ws_pcorr_g (superficie libre).
         !-----------------------------------------------------------------------
-        call cell_gradients(sh%p, gpr, gpth, gpz)
+        call cell_gradients(sh%p, .false., gpr, gpth, gpz)
         if (cfg%gas_in_poisson .and. cfg%solve_multiphase) then
             allocate(p_g, gpr_g, gpth_g, gpz_g, mold=sh%pp)
-            if (ws_pcorr_valid) then
-                p_g = sh%p + ws_pcorr_g
-            else
-                p_g = sh%p
-            end if
-            call cell_gradients(p_g, gpr_g, gpth_g, gpz_g)
+            p_g = sh%p   ! (F2.3: superficie libre via gas_gz / liq_weight_f)
+            call cell_gradients(p_g, .true., gpr_g, gpth_g, gpz_g)
         end if
 
         !-----------------------------------------------------------------------
@@ -187,11 +183,11 @@ contains
         ! expansión es absorbible por el Poisson)
         !-----------------------------------------------------------------------
         flux_ref = 0.0_dp
-        call add_phase_contribution(liq, act_l, .true., sh%p, gpr, gpth, gpz)
+        call add_phase_contribution(liq, act_l, .true., sh%p, gpr, gpth, gpz, .false.)
         ! Gas en el Poisson SOLO con multifase: sin gas momentum resuelto,
         ! sus aP_u* valen 0 y d_f = V/SMALL revienta los coeficientes.
         if (cfg%gas_in_poisson .and. cfg%solve_multiphase) &
-            call add_phase_contribution(gas, act_g, .false., p_g, gpr_g, gpth_g, gpz_g)
+            call add_phase_contribution(gas, act_g, .false., p_g, gpr_g, gpth_g, gpz_g, .true.)
 
         ! NOTA (cierre 2026): NO añadir aquí la fuente de masa de fusión
         ! del líquido (Su += mdot - rho*dalpha/dt). Se probó: realimenta
@@ -383,6 +379,43 @@ contains
 
     contains
 
+        ! Peso del liquido en la cara (ka,kb) [N/m3], con Boussinesq (F2.3)
+        pure function liq_weight_f(ii, jj, ka, kb) result(w)
+            integer, intent(in) :: ii, jj, ka, kb
+            real(dp) :: w
+            ! Solo liquido CONTINUO (act_l): ver nota en mod_momentum_3d
+            w = 0.5_dp * GRAVITY * ( &
+                merge(1.0_dp, 0.0_dp, act_l(ii,jj,ka)) * &
+                liq%alpha(ii,jj,ka) * liq%rho(ii,jj,ka) * &
+                    (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,ka) - cfg%T_ambient)) + &
+                merge(1.0_dp, 0.0_dp, act_l(ii,jj,kb)) * &
+                liq%alpha(ii,jj,kb) * liq%rho(ii,jj,kb) * &
+                    (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,kb) - cfg%T_ambient)))
+        end function liq_weight_f
+
+        ! Gradiente vertical de celda que ve el GAS: caras sin el peso del
+        ! liquido, media de las existentes (mismo esquema que momentum)
+        pure function gas_gz(pfld, ii, jj, kk, okm, okp) result(g)
+            real(dp), intent(in) :: pfld(-1:,-1:,-1:)
+            integer, intent(in)  :: ii, jj, kk
+            logical, intent(in)  :: okm, okp
+            real(dp) :: g, gb, gt
+            gb = 0.0_dp; gt = 0.0_dp
+            if (okm) gb = (pfld(ii,jj,kk) - pfld(ii,jj,kk-1)) / (m%z(kk) - m%z(kk-1)) &
+                          + liq_weight_f(ii, jj, kk-1, kk)
+            if (okp) gt = (pfld(ii,jj,kk+1) - pfld(ii,jj,kk)) / (m%z(kk+1) - m%z(kk)) &
+                          + liq_weight_f(ii, jj, kk, kk+1)
+            if (okm .and. okp) then
+                g = 0.5_dp * (gb + gt)
+            else if (okp) then
+                g = gt
+            else if (okm) then
+                g = gb
+            else
+                g = 0.0_dp
+            end if
+        end function gas_gz
+
         ! La celda tiene presion de fluido definida? (Bug 16)
         pure logical function pv_cell(ii, jj, kk)
             integer, intent(in) :: ii, jj, kk
@@ -406,9 +439,15 @@ contains
         ! contribución de una fase (con su alpha, sus aP de momentum y sus
         ! velocidades)
         !-----------------------------------------------------------------------
-        subroutine add_phase_contribution(ph, act, export, pf, gr, gth, gz)
+        ! d_f = (alpha V/aP)_f (alpharAU de OpenFOAM, alpha/D de Liu 2024,
+        ! F2.1): el predictor lleva -alpha grad p V, asi que la respuesta
+        ! de la velocidad a la presion es alpha V/aP, no V/aP (era 1/alpha
+        ! veces demasiado fuerte fuera de las celdas puras).
+        subroutine add_phase_contribution(ph, act, export, pf, gr, gth, gz, isg)
             type(phase_t), intent(in) :: ph
             logical, intent(in)       :: act(-1:,-1:,-1:)
+            ! Fase gas: caras verticales sin el peso del liquido (F2.3)
+            logical, intent(in)       :: isg
             ! Presion y gradientes de celda que ve ESTA fase (el gas lleva la
             ! correccion de superficie libre ws_pcorr_g)
             real(dp), intent(in)      :: pf(-1:,-1:,-1:)
@@ -428,8 +467,8 @@ contains
 
                         ! --- Cara Oeste (i-1/2) ---
                         if (link(act, ii-1, jj, kk)) then
-                            d_f    = 0.5_dp * (m%vol(ii,jj,kk)  / max(ph%aP_ur(ii,jj,kk),  SMALL) + &
-                                               m%vol(ii-1,jj,kk)/ max(ph%aP_ur(ii-1,jj,kk),SMALL))
+                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL) + &
+                                               ph%alpha(ii-1,jj,kk) * m%vol(ii-1,jj,kk) / max(ph%aP_ur(ii-1,jj,kk), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii-1,jj,kk))
                             delta  = m%r(ii) - m%r(ii-1)
                             aW(ii,jj,kk) = aW(ii,jj,kk) + af * d_f * m%Ar(ii-1,jj,kk) / delta
@@ -442,8 +481,8 @@ contains
 
                         ! --- Cara Este (i+1/2) ---
                         if (link(act, ii+1, jj, kk)) then
-                            d_f    = 0.5_dp * (m%vol(ii,jj,kk)  / max(ph%aP_ur(ii,jj,kk),  SMALL) + &
-                                               m%vol(ii+1,jj,kk)/ max(ph%aP_ur(ii+1,jj,kk),SMALL))
+                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL) + &
+                                               ph%alpha(ii+1,jj,kk) * m%vol(ii+1,jj,kk) / max(ph%aP_ur(ii+1,jj,kk), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii+1,jj,kk))
                             delta  = m%r(ii+1) - m%r(ii)
                             aE(ii,jj,kk) = aE(ii,jj,kk) + af * d_f * m%Ar(ii,jj,kk) / delta
@@ -461,8 +500,8 @@ contains
 
                         ! --- Cara Sur (j-1/2) ---
                         if (link(act, ii, jjm, kk)) then
-                            d_f    = 0.5_dp * (m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
-                                               m%vol(ii,jjm,kk)/ max(ph%aP_uth(ii,jjm,kk),SMALL))
+                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
+                                               ph%alpha(ii,jjm,kk) * m%vol(ii,jjm,kk) / max(ph%aP_uth(ii,jjm,kk), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jjm,kk))
                             delta  = m%r(ii) * (m%theta(jj) - m%theta(jjm))
                             aS(ii,jj,kk) = aS(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
@@ -475,8 +514,8 @@ contains
 
                         ! --- Cara Norte (j+1/2) ---
                         if (link(act, ii, jjp, kk)) then
-                            d_f    = 0.5_dp * (m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
-                                               m%vol(ii,jjp,kk)/ max(ph%aP_uth(ii,jjp,kk),SMALL))
+                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
+                                               ph%alpha(ii,jjp,kk) * m%vol(ii,jjp,kk) / max(ph%aP_uth(ii,jjp,kk), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jjp,kk))
                             delta  = m%r(ii) * (m%theta(jjp) - m%theta(jj))
                             aN(ii,jj,kk) = aN(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
@@ -494,28 +533,30 @@ contains
 
                         ! --- Cara Inferior (k-1/2) ---
                         if (link(act, ii, jj, kk-1)) then
-                            d_f    = 0.5_dp * (m%vol(ii,jj,kk)  / max(ph%aP_uz(ii,jj,kk),  SMALL) + &
-                                               m%vol(ii,jj,kk-1)/ max(ph%aP_uz(ii,jj,kk-1),SMALL))
+                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL) + &
+                                               ph%alpha(ii,jj,kk-1) * m%vol(ii,jj,kk-1) / max(ph%aP_uz(ii,jj,kk-1), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jj,kk-1))
                             delta  = m%z(kk) - m%z(kk-1)
                             aB(ii,jj,kk) = aB(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk-1) / delta
                             u_f = 0.5_dp * (ph%uz(ii,jj,kk-1) + ph%uz(ii,jj,kk)) &
                                 + d_f * (0.5_dp*(gz(ii,jj,kk-1) + gz(ii,jj,kk)) &
-                                         - (pf(ii,jj,kk) - pf(ii,jj,kk-1)) / delta)
+                                         - (pf(ii,jj,kk) - pf(ii,jj,kk-1)) / delta &
+                                         - merge(liq_weight_f(ii,jj,kk-1,kk), 0.0_dp, isg))
                             Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Az(ii,jj,kk-1)
                             flux_ref = flux_ref + abs(af * u_f * m%Az(ii,jj,kk-1))
                         end if
 
                         ! --- Cara Superior (k+1/2) ---
                         if (link(act, ii, jj, kk+1)) then
-                            d_f    = 0.5_dp * (m%vol(ii,jj,kk)  / max(ph%aP_uz(ii,jj,kk),  SMALL) + &
-                                               m%vol(ii,jj,kk+1)/ max(ph%aP_uz(ii,jj,kk+1),SMALL))
+                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL) + &
+                                               ph%alpha(ii,jj,kk+1) * m%vol(ii,jj,kk+1) / max(ph%aP_uz(ii,jj,kk+1), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jj,kk+1))
                             delta  = m%z(kk+1) - m%z(kk)
                             aT(ii,jj,kk) = aT(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk) / delta
                             u_f = 0.5_dp * (ph%uz(ii,jj,kk) + ph%uz(ii,jj,kk+1)) &
                                 + d_f * (0.5_dp*(gz(ii,jj,kk) + gz(ii,jj,kk+1)) &
-                                         - (pf(ii,jj,kk+1) - pf(ii,jj,kk)) / delta)
+                                         - (pf(ii,jj,kk+1) - pf(ii,jj,kk)) / delta &
+                                         - merge(liq_weight_f(ii,jj,kk,kk+1), 0.0_dp, isg))
                             Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Az(ii,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Az(ii,jj,kk))
                             if (export) then
@@ -531,8 +572,10 @@ contains
 
 
         ! Gradientes de celda de un campo de presion (ver arriba)
-        subroutine cell_gradients(pfld, gr, gth, gz)
+        subroutine cell_gradients(pfld, isg, gr, gth, gz)
             real(dp), intent(in)  :: pfld(-1:,-1:,-1:)
+            ! Gas: gradiente vertical sin el peso del liquido (F2.3)
+            logical,  intent(in)  :: isg
             real(dp), intent(out) :: gr(-1:,-1:,-1:), gth(-1:,-1:,-1:), gz(-1:,-1:,-1:)
             gr = 0.0_dp; gth = 0.0_dp; gz = 0.0_dp
         do k = kstart, kend
@@ -556,6 +599,9 @@ contains
 
                     gz(i,j,k) = pgrad(pfld(i,j,k-1), pfld(i,j,k), pfld(i,j,k+1), &
                                        m%z(k-1), m%z(k), m%z(k+1), &
+                                       (k > kstart .or. .not. at_zmin) .and. pv_cell(i,j,k-1), &
+                                       (k < kend   .or. .not. at_zmax) .and. pv_cell(i,j,k+1))
+                    if (isg) gz(i,j,k) = gas_gz(pfld, i, j, k, &
                                        (k > kstart .or. .not. at_zmin) .and. pv_cell(i,j,k-1), &
                                        (k < kend   .or. .not. at_zmax) .and. pv_cell(i,j,k+1))
                 end do
@@ -588,6 +634,7 @@ contains
 
         integer :: i, j, k, jm, jp
         integer :: istart, iend, jstart, jend, kstart, kend
+        ! d = alpha V/aP (F2.1): mismo operador que el predictor (-alpha grad p V)
         real(dp) :: d_coeff
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
         logical  :: skip_r, skip_z
@@ -611,14 +658,14 @@ contains
                     skip_r = (i == istart .and. at_rmin) .or. &
                              (i == iend   .and. at_rmax)
                     if (.not. skip_r .and. abs(ph%aP_ur(i,j,k)) > SMALL) then
-                        d_coeff = m%vol(i,j,k) / ph%aP_ur(i,j,k)
+                        d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_ur(i,j,k)
                         ph%ur(i,j,k) = ph%ur(i,j,k) - d_coeff * &
                             (sh%pp(i+1,j,k) - sh%pp(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
                     end if
 
                     ! u_theta correction
                     if (abs(ph%aP_uth(i,j,k)) > SMALL) then
-                        d_coeff = m%vol(i,j,k) / ph%aP_uth(i,j,k)
+                        d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_uth(i,j,k)
                         ph%uth(i,j,k) = ph%uth(i,j,k) - d_coeff * &
                             (sh%pp(i,jp,k) - sh%pp(i,jm,k)) / &
                             (m%r(i) * (m%theta(jp) - m%theta(jm)))
@@ -628,7 +675,7 @@ contains
                     skip_z = (k == kstart .and. at_zmin) .or. &
                              (k == kend   .and. at_zmax)
                     if (.not. skip_z .and. abs(ph%aP_uz(i,j,k)) > SMALL) then
-                        d_coeff = m%vol(i,j,k) / ph%aP_uz(i,j,k)
+                        d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_uz(i,j,k)
                         ph%uz(i,j,k) = ph%uz(i,j,k) - d_coeff * &
                             (sh%pp(i,j,k+1) - sh%pp(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
                     end if

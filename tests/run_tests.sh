@@ -132,6 +132,7 @@ full | rebaseline)
     run_case bath_test 1
     run_case bath_test 4
     run_case bath_fill 4
+    run_case bath_freeze 4
 
     for d in "$OUT"/cold_10step_n*; do
         check_invariants "$d" cold_10step
@@ -184,6 +185,10 @@ full | rebaseline)
     run_script "bath_fill" \
         $PY $INT/check_bath.py "$OUT/bath_fill_n4" --config "$CFG/bath_fill.dat" --fill \
         --xfail "$(xfail_ids bath_fill)"
+    check_invariants "$OUT/bath_freeze_n4" bath_freeze
+    run_script "bath_freeze" \
+        $PY $INT/check_bath.py "$OUT/bath_freeze_n4" --config "$CFG/bath_freeze.dat" --fill \
+        --xfail "$(xfail_ids bath_freeze)"
     run_script "decomposition_bath" \
         $PY $INT/compare_decomposition.py "$OUT/bath_test_n1" "$OUT/bath_test_n4"
 

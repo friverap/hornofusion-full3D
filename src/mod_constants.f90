@@ -128,7 +128,7 @@ module mod_constants
 
     ! SOR pressure solver defaults
     real(dp), parameter :: SOR_OMEGA        = 1.5_dp
-    real(dp), parameter :: SOR_TOL_PRESSURE = 1.0e-5_dp
+    real(dp), parameter :: SOR_TOL_PRESSURE = 1.0e-8_dp
     integer,  parameter :: SOR_HALO_EVERY   = 2   ! halo exchange interval (iters)
     integer,  parameter :: SOR_CHECK_EVERY  = 10  ! global residual check interval
 

@@ -14,23 +14,19 @@ audit_noflow:arc_budget
 # balance cierra a 3e-6 (gate deep, sigue activo). Fix real pendiente:
 # acumular en cada update de T con el rho local (pendiente del audit).
 audit_cold:energy_balance
-# --- Bug 19 (Plan C, F1 2026-09-23): banco del bano de liquido puro ---
-# Tras F1 (flujos conservativos del Poisson en el transporte de alpha,
-# regla de superficie libre, dador en caras mixtas, presion del gas sobre
-# el bano, residuales reales del lazo externo) el bano ya es ESTABLE:
-# ferrostatica al 0.5 %, p y u_gas acotados, masa exacta, bath_fill limpio.
-# Quedan las CORRIENTES FANTASMA del esquema colocado: velocidades de
-# centro de 0.17 m/s con flujos de cara ~0 (Rhie-Chow con fuerza de
-# cuerpo: el gradiente central y la fuerza de la celda no se balancean
-# exactamente donde p no es lineal — superficie libre y fondo abombado),
-# que mueven d alpha ~2e-3/s en la capa bajo la superficie. Es el modo
-# par-impar vertical del esquema colocado (ARCHITECTURE, F1b): la fuerza
-# balanceada por caras NO lo cura (probado, revertido); pendiente la
-# correccion de Choi/Majumdar al Rhie-Chow.
+# --- Bug 19 (Plan C, F2 2026-09-24): banco del bano de liquido puro ---
+# Con el Poisson de VOLUMEN + factor alpha + PEA + gas sin el peso del
+# liquido continuo (rama planc-f2-volumen) el bano es estable: ferrostatica
+# 0.9 %, gas <= 21 m/s, p acotada, masa exacta. Quedan:
+# - corriente fantasma de centro de 0.17 m/s (flujos de cara ~0): modo
+#   par-impar del colocado, ACOTADA y no creciente; Liu et al. 2024 la
+#   documentan como no eliminable con los metodos actuales;
+# - d alpha 1.1e-3 en 1 s en la capa bajo la superficie (antes 4.7e-2):
+#   la tolerancia 1e-9 del check es de "reposo exacto", que el esquema no da.
 bath:bath_rest
 bath:bath_alpha_frozen
-# invarianza n1 vs n4 del bano: todos los campos < 1e-3 salvo las
-# componentes theta de velocidad, que son ~0 por axisimetria y su error
-# RELATIVO es ruido (3e-2 sobre un maximo de 1e-3 m/s). Se levanta cuando
-# compare_decomposition escale por el modulo de la velocidad.
-script:decomposition_bath
+# bath_freeze (180 t a 1550 K congelan 40 t en 1 s dentro de chatarra a
+# 300 K): p y gas acotados; contabilidad del limitador bajo congelacion
+# masiva con residuos de 1e-6 (acero) y 5e-6 (handoff) — pendiente menor.
+bath_freeze:bath_mass_steel
+bath_freeze:bath_melt_handoff

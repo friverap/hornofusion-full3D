@@ -643,3 +643,11 @@ El acople de momento con el gas es el arrastre físico de la gota, exacto en el 
 - **Colapso de chatarra.** Una celda de baño no es hueco: la chatarra descansa sobre el líquido y la consume la fusión.
 - **Limitación conocida (F1b).** El esquema colocado deja velocidades de centro no nulas (≈0.2 m/s) con flujos de cara nulos en un baño en reposo donde p no es lineal (superficie, fondo abombado): fuerza de cuerpo balanceada por caras y corrección de Choi/Majumdar pendientes.
 
+## Ecuación de presión de volumen y superficie libre (Plan C F2, sep-2026)
+
+- **Ecuación de presión.** Suma de las continuidades de fase divididas por su densidad (GCBA de Darwish–Moukalled; `multiphaseEulerFoam`): `Σ_q[∂α_q/∂t + div(α_q u_q)] = −(α_g/ρ_g)Dρ_g/Dt`. Los coeficientes de cara son `α_f (α V/aP)_f A/δ` por fase y la fuente `−Σ_f α_f u_f A` (flujo volumétrico de Rhie–Chow). La fusión y la re-solidificación (ρ_l = ρ_s) son exactamente neutras sin fuente alguna; el líquido que entra a una celda desplaza igual **volumen** de gas. La forma de masa de la mezcla (que el código tuvo hasta F1) exigía gas de igual masa, 7500× su volumen: era el origen de las presiones de MPa al formarse el baño.
+- **Corrección de velocidad** `u' = −(α V/aP)∇p'` y `d_f = (αV/aP)_f` en el Rhie–Chow: consistentes con el predictor `−α∇p`.
+- **Acople del arrastre.** Eliminación parcial (Spalding; Karema & Lo) por celda tras los solves de momento, con las soluciones sin relajar: `u_l' = (aP_g H_l + KV H_g)/det`, `u_g' = (aP_l H_g + KV H_l)/det`. Necesaria donde `K` es grande (celdas de superficie, `TAU_LG`).
+- **Superficie libre.** Con una sola presión por celda, la celda de superficie está sobre la línea hidrostática de la mezcla; el gas contiguo no debe sentir ese salto como fuerza (sería la flotación de la fase ligera en la mezcla, física para burbujas pero espuria en una interfase grande). En las caras verticales el gas usa `∇p_f + (α_lρ_l)_f g_eff` con α_l sólo del líquido **continuo**; el disperso (niebla) conserva el gradiente de mezcla, cuya flotación compensa el arrastre de las gotas.
+- **Estado inicial.** Presión hidrostática de la mezcla por integración de columna desde el techo (patrón gather global).
+

@@ -42,6 +42,10 @@ contains
         real(dp) :: res_ur_l, res_uth_l, res_uz_l
         real(dp) :: res_ur_g, res_uth_g, res_uz_g
         real(dp) :: res_cont, res_energy_l, res_energy_g
+        ! Velocidades del liquido USADAS por el solve del gas (PEA, F2.2)
+        real(dp), allocatable :: ul_used_r(:,:,:), ul_used_th(:,:,:), ul_used_z(:,:,:)
+        ! Solucion SIN relajar del momento del liquido (para el PEA)
+        real(dp), allocatable :: ul_sol_r(:,:,:), ul_sol_th(:,:,:), ul_sol_z(:,:,:)
 
         ! Copias del ITERADO externo anterior para la sub-relajación (C2.1).
         ! Workspace persistente (save): se realoca solo si cambia el tamaño.
@@ -80,17 +84,7 @@ contains
         ws_pv_active = (ws_liq_cont .or. gas%alpha >= ALPHA_FLOW_CUTOFF) &
                        .and. (m%cell_type /= 0)
         ws_pv_valid = .true.
-        ! Presion que ve el gas sobre el bano (ver ws_pcorr_g en mod_workspace)
-        ws_pcorr_g = 0.0_dp
-        do k = lbound(ws_pcorr_g,3), ubound(ws_pcorr_g,3)
-            where (ws_liq_cont(:,:,k) .and. sol%alpha_s(:,:,k) < 1.0e-2_dp &
-                   .and. m%cell_type(:,:,k) /= 0)
-                ws_pcorr_g(:,:,k) = liq%rho(:,:,k) * GRAVITY * &
-                    (1.0_dp - cfg%beta_expansion * (liq%T(:,:,k) - cfg%T_ambient)) * &
-                    m%dz(k) * (0.5_dp - liq%alpha(:,:,k))
-            end where
-        end do
-        ws_pcorr_valid = .true.
+        ws_pcorr_g = 0.0_dp; ws_pcorr_valid = .false.   ! (F2.3: sustituido por gas_pgrad_z)
         call compute_liquid_drift(liq, gas, sol, m, cfg, liq_old)
 
         ! Transicion DISPERSO -> CONTINUO (Bug 15): la celda entra al momento
@@ -145,6 +139,8 @@ contains
         ! Liquid momentum
         call solve_momentum_3d(liq, liq_old, gas, Kexch, sh, m, cfg, liq%alpha, &
                                drag_coef, .false., res_ur_l, res_uth_l, res_uz_l)
+        allocate(ul_sol_r, ul_sol_th, ul_sol_z, mold=liq%ur)
+        ul_sol_r = liq%ur; ul_sol_th = liq%uth; ul_sol_z = liq%uz
         call relax_field(liq%ur,  p_lur, cfg%alpha_u, m)
         call relax_field(liq%uth, p_lth, cfg%alpha_u, m)
         call relax_field(liq%uz,  p_luz, cfg%alpha_u, m)
@@ -164,8 +160,28 @@ contains
         ! Nota: la versión explícita anterior aplicaba al gas una FUERZA
         ! proporcional a la velocidad del LÍQUIDO; implícito, el coeficiente
         ! actúa sobre la velocidad propia de cada fase.
+        allocate(ul_used_r, ul_used_th, ul_used_z, mold=liq%ur)
+        ul_used_r = liq%ur; ul_used_th = liq%uth; ul_used_z = liq%uz
         call solve_momentum_3d(gas, gas_old, liq, Kexch, sh, m, cfg, gas%alpha, &
                                drag_gas, .true., res_ur_g, res_uth_g, res_uz_g)
+        ! Eliminacion parcial del arrastre (PEA; Spalding 1980, Karema & Lo
+        ! 1999, Darwish & Moukalled 2001 ec. 29) en la etapa de momento y
+        ! sobre las soluciones SIN relajar (la identidad H = aP u - K V
+        ! u_otro solo vale para la solucion del TDMA): el liquido se resolvio
+        ! con el gas de la iteracion anterior (p_g) y el gas con el liquido
+        ! relajado (ul_used). Con K = 1.8e5 en las celdas de superficie
+        ! (tau_gas ~ 3 us << dt) ese desfase secuencial diverge (bath_test:
+        ! modo theta en el anillo del eje). Luego cada fase se relaja contra
+        ! su iterado anterior como siempre.
+        liq%ur = ul_sol_r; liq%uth = ul_sol_th; liq%uz = ul_sol_z
+        call partial_elimination(liq, gas, Kexch, p_gur, p_gth, p_guz, &
+                                 ul_used_r, ul_used_th, ul_used_z, m)
+        deallocate(ul_used_r, ul_used_th, ul_used_z, ul_sol_r, ul_sol_th, ul_sol_z)
+        call relax_field(liq%ur,  p_lur, cfg%alpha_u, m)
+        call relax_field(liq%uth, p_lth, cfg%alpha_u, m)
+        call relax_field(liq%uz,  p_luz, cfg%alpha_u, m)
+        call cap_liquid_velocity(liq, m)
+        call phase_exchange_halos(liq, m)
         call relax_field(gas%ur,  p_gur, cfg%alpha_u, m)
         call relax_field(gas%uth, p_gth, cfg%alpha_u, m)
         call relax_field(gas%uz,  p_guz, cfg%alpha_u, m)
@@ -334,5 +350,56 @@ contains
         end do
         call phase_exchange_halos(liq, m)
     end subroutine reset_new_continuous
+
+    !---------------------------------------------------------------------------
+    ! PEA para dos fases (F2.2). Por celda y componente, con
+    !   H_l = aP_l u_l - K V u_g,usado   (todo lo que no es el acople)
+    !   H_g = aP_g u_g - K V u_l,usado
+    ! se resuelve  aP_l u_l' - K V u_g' = H_l ;  aP_g u_g' - K V u_l' = H_g:
+    !   u_l' = (aP_g H_l + K V H_g)/det,  u_g' = (aP_l H_g + K V H_l)/det,
+    !   det = aP_l aP_g - (K V)^2 > 0  (aP_k ya incluye K V en la diagonal).
+    ! Solo donde ambas fases tienen ecuacion de momento (liquido continuo
+    ! y gas sobre el umbral); en el resto no hay desfase que eliminar.
+    !---------------------------------------------------------------------------
+    subroutine partial_elimination(liq, gas, Kexch, ug_r, ug_th, ug_z, &
+                                   ul_r, ul_th, ul_z, m)
+        type(phase_t), intent(inout) :: liq, gas
+        real(dp), intent(in) :: Kexch(-1:,-1:,-1:)
+        real(dp), intent(in) :: ug_r(-1:,-1:,-1:), ug_th(-1:,-1:,-1:), ug_z(-1:,-1:,-1:)
+        real(dp), intent(in) :: ul_r(-1:,-1:,-1:), ul_th(-1:,-1:,-1:), ul_z(-1:,-1:,-1:)
+        type(mesh_t), intent(in) :: m
+        integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
+        real(dp) :: KV
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (.not. ws_liq_cont(i,j,k)) cycle
+                    if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
+                    KV = Kexch(i,j,k) * m%vol(i,j,k)
+                    if (KV <= SMALL) cycle
+                    call pea2(liq%ur(i,j,k),  gas%ur(i,j,k),  liq%aP_ur(i,j,k),  gas%aP_ur(i,j,k),  KV, ug_r(i,j,k),  ul_r(i,j,k))
+                    call pea2(liq%uth(i,j,k), gas%uth(i,j,k), liq%aP_uth(i,j,k), gas%aP_uth(i,j,k), KV, ug_th(i,j,k), ul_th(i,j,k))
+                    call pea2(liq%uz(i,j,k),  gas%uz(i,j,k),  liq%aP_uz(i,j,k),  gas%aP_uz(i,j,k),  KV, ug_z(i,j,k),  ul_z(i,j,k))
+                end do
+            end do
+        end do
+        call phase_exchange_halos(liq, m)
+        call phase_exchange_halos(gas, m)
+    contains
+        pure subroutine pea2(ul, ug, apl, apg, KV, ug_used, ul_used)
+            real(dp), intent(inout) :: ul, ug
+            real(dp), intent(in)    :: apl, apg, KV, ug_used, ul_used
+            real(dp) :: Hl, Hg, det
+            if (apl <= SMALL .or. apg <= SMALL) return
+            det = apl * apg - KV * KV
+            if (det <= SMALL) return
+            Hl = apl * ul - KV * ug_used
+            Hg = apg * ug - KV * ul_used
+            ul = (apg * Hl + KV * Hg) / det
+            ug = (apl * Hg + KV * Hl) / det
+        end subroutine pea2
+    end subroutine partial_elimination
 
 end module mod_multiphase

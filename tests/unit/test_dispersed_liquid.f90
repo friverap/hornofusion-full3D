@@ -136,8 +136,13 @@ program test_dispersed_liquid
     res = maxval(abs(sh%p(1:nr,1:nth,1:nz))) / pscale
     print '(A,ES10.3,A,ES10.3)', '   info caso 3b: p_max regla antigua / p_max fix = ', res, &
         '   p_max antigua = ', maxval(abs(sh%p(1:nr,1:nth,1:nz)))
-    if (res < 10.0_dp) then
-        print '(A)', '   FAIL caso 3b: la regla antigua no reproduce la punta de presion (el test no discrimina)'
+    ! Con el Poisson de MASA la regla antigua daba dp/p ~ 80 (la gota a 20 m/s
+    ! exigia gas de igual masa). Con el Poisson de VOLUMEN (Plan C F2) la
+    ! misma gota ya no dispara la presion: el control negativo deja de ser
+    ! discriminante y queda como informacion; lo que se exige es que la
+    ! regla antigua no sea PEOR que el fix por mas de 10x (acotado).
+    if (res > 10.0_dp) then
+        print '(A)', '   FAIL caso 3b: con Poisson de volumen la regla antigua no deberia disparar p'
         ok = .false.
     end if
 

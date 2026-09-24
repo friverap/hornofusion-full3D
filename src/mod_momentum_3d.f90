@@ -97,7 +97,7 @@ contains
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: mu_f, vol, alpha_f, rho_vol_dt
         real(dp) :: dp_dr, dp_dth, dp_dz, src_extra, aP_extra
-        logical  :: at_rmin, at_rmax, at_zmin, at_zmax
+        logical  :: at_rmin, at_rmax, at_zmin, at_zmax, ok_bot, ok_top
         ! Presion que ve ESTA fase: la del Poisson, y para el gas ademas la
         ! correccion de superficie libre (ws_pcorr_g, mod_workspace)
         real(dp), allocatable :: pf(:,:,:)
@@ -109,11 +109,7 @@ contains
         ! Allocate coefficient arrays (with same dimensions as fields)
         call ensure_workspace(m)
         allocate(pf, mold=sh%p)
-        if (is_gas .and. ws_pcorr_valid) then
-            pf = sh%p + ws_pcorr_g
-        else
-            pf = sh%p
-        end if
+        pf = sh%p   ! (F2.3: la superficie libre se trata en gas_pgrad_z, no en p)
 
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
@@ -247,10 +243,27 @@ contains
                     case ('uz')
                         ! Central salvo en frontera FÍSICA; en interfaces de
                         ! rank el halo de p es válido (hallazgo 3.6)
-                        dp_dz = pgrad(pf(i,j,k-1), pf(i,j,k), pf(i,j,k+1), &
-                                      m%z(k-1), m%z(k), m%z(k+1), &
-                                      (k > kstart .or. .not. at_zmin) .and. pv_ok(i,j,k-1), &
-                                      (k < kend   .or. .not. at_zmax) .and. pv_ok(i,j,k+1))
+                        ok_bot = (k > kstart .or. .not. at_zmin) .and. pv_ok(i,j,k-1)
+                        ok_top = (k < kend   .or. .not. at_zmax) .and. pv_ok(i,j,k+1)
+                        if (is_gas) then
+                            ! El GAS no carga el peso del liquido (F2.3): en
+                            ! las caras verticales su gradiente es
+                            ! (p_N - p_P)/dz + (alpha_l rho_l)_f g_eff. Con
+                            ! una sola p por celda, la p de una celda con
+                            ! liquido esta sobre la linea hidrostatica de
+                            ! la MEZCLA; el gas de al lado leia ese salto
+                            ! como fuerza (chorro fantasma de 25 m/s sobre
+                            ! un bano en reposo, bath_test). Es la flotacion
+                            ! de la fase ligera en la mezcla, fisica para
+                            ! burbujas pero espuria en una interfase grande
+                            ! (AIAD/LIM la suprimen con arrastre); aqui se
+                            ! quita del gradiente. Media de las caras que
+                            ! existen, como pgrad.
+                            dp_dz = gas_pgrad_z(i, j, k, ok_bot, ok_top)
+                        else
+                            dp_dz = pgrad(pf(i,j,k-1), pf(i,j,k), pf(i,j,k+1), &
+                                          m%z(k-1), m%z(k), m%z(k+1), ok_bot, ok_top)
+                        end if
                         ! Gravity + arc impingement; Boussinesq SOLO líquido
                         ! (rho constante): el gas ya tiene flotabilidad vía
                         ! rho(T) de gas ideal (hallazgo 3.13)
@@ -321,6 +334,55 @@ contains
                 pv_ok = (m%cell_type(ii,jj,kk) /= 0)
             end if
         end function pv_ok
+
+        ! Peso del liquido por unidad de volumen en la cara entre (k-1,k)
+        ! (media de celdas, con Boussinesq del liquido)
+        pure function liq_weight_f(ii, jj, ka, kb) result(w)
+            integer, intent(in) :: ii, jj, ka, kb
+            real(dp) :: w
+            ! Solo el liquido CONTINUO (bano, pelicula: interfase grande,
+            ! morfologia AIAD): el disperso (niebla) SI carga al gas via
+            ! el arrastre de las gotas, con la flotacion de la mezcla que lo
+            ! compensa (test_dispersed_liquid caso 4).
+            w = 0.5_dp * GRAVITY * ( &
+                merge(1.0_dp, 0.0_dp, cont_ok(ii,jj,ka)) * &
+                ph_other%alpha(ii,jj,ka) * ph_other%rho(ii,jj,ka) * &
+                    (1.0_dp - cfg%beta_expansion * (ph_other%T(ii,jj,ka) - cfg%T_ambient)) + &
+                merge(1.0_dp, 0.0_dp, cont_ok(ii,jj,kb)) * &
+                ph_other%alpha(ii,jj,kb) * ph_other%rho(ii,jj,kb) * &
+                    (1.0_dp - cfg%beta_expansion * (ph_other%T(ii,jj,kb) - cfg%T_ambient)))
+        end function liq_weight_f
+
+        pure logical function cont_ok(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            if (ws_liq_cont_valid) then
+                cont_ok = ws_liq_cont(ii,jj,kk)
+            else
+                cont_ok = (ph_other%alpha(ii,jj,kk) >= ALPHA_LIQ_CONT)
+            end if
+        end function cont_ok
+
+        ! Gradiente vertical que ve el gas: caras con el peso del liquido
+        ! restado (ver arriba); media de las caras existentes
+        pure function gas_pgrad_z(ii, jj, kk, okm, okp) result(g)
+            integer, intent(in) :: ii, jj, kk
+            logical, intent(in) :: okm, okp
+            real(dp) :: g, gb, gt
+            gb = 0.0_dp; gt = 0.0_dp
+            if (okm) gb = (pf(ii,jj,kk) - pf(ii,jj,kk-1)) / (m%z(kk) - m%z(kk-1)) &
+                          + liq_weight_f(ii, jj, kk-1, kk)
+            if (okp) gt = (pf(ii,jj,kk+1) - pf(ii,jj,kk)) / (m%z(kk+1) - m%z(kk)) &
+                          + liq_weight_f(ii, jj, kk, kk+1)
+            if (okm .and. okp) then
+                g = 0.5_dp * (gb + gt)
+            else if (okp) then
+                g = gt
+            else if (okm) then
+                g = gb
+            else
+                g = 0.0_dp
+            end if
+        end function gas_pgrad_z
 
     end subroutine solve_momentum_component
 

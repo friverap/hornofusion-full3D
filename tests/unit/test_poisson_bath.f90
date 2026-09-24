@@ -129,9 +129,10 @@ program test_poisson_bath
             end do
         end do
     end do
-    scale_f = liq%rho(1,1,1) * GRAVITY * cfg%dt * maxval(mesh%Az(1:nr,1:nth,1:nz))
+    ! flujos VOLUMETRICOS (m3/s): escala g dt A
+    scale_f = GRAVITY * cfg%dt * maxval(mesh%Az(1:nr,1:nth,1:nz))
     if (.not. ws_Fc_valid .or. fmax > 1.0e-9_dp * scale_f) then
-        print '(A,ES10.3,A,ES10.3)', '   FAIL caso 4: |F_c|max = ', fmax, ' frente a rho g dt A = ', scale_f
+        print '(A,ES10.3,A,ES10.3)', '   FAIL caso 4: |F_c|max = ', fmax, ' frente a g dt A = ', scale_f
         ok = .false.
     end if
     if (nlk /= count(mesh%cell_type(1:nr,1:nth,1:nz-1) /= 0 .and. mesh%cell_type(1:nr,1:nth,2:nz) /= 0)) then
