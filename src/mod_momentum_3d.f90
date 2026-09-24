@@ -71,7 +71,7 @@ contains
                                          ph, ph_other, sh, m, cfg, &
                                          alpha_q, drag_coef, is_gas, comp, residual)
         use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
-            ws_pcorr_g, ws_pcorr_valid, &
+            ws_pcorr_g, ws_pcorr_valid, ws_gas_wall, ws_gas_wall_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
             aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
@@ -326,12 +326,23 @@ contains
     contains
 
         ! La celda tiene presion de fluido definida? (Bug 16)
+        ! Vecina con presion de fluido para ESTA fase. Liquido: cualquier
+        ! fluido continuo (ws_pv_active, Bug 16). GAS (F2.5): solo vecinas
+        ! con gas activo — una bolsa de liquido sellada dentro de chatarra
+        ! empaquetada (alpha_l + alpha_s = 1, bloqueada por Ergun) tiene una
+        ! p que no es de gas (deriva a -10 kPa) y el gas de encima la leia
+        ! como gradiente: 240-300 m/s (reproductor grueso F2.4, t = 45 y
+        ! 87 s). Para el gas esa celda es pared, como en el Poisson
+        ! (link exige gas activo a ambos lados).
         pure logical function pv_ok(ii, jj, kk)
             integer, intent(in) :: ii, jj, kk
-            if (ws_pv_valid) then
+            if (m%cell_type(ii,jj,kk) == 0) then
+                pv_ok = .false.
+            else if (ws_pv_valid) then
                 pv_ok = ws_pv_active(ii,jj,kk)
+                if (is_gas .and. ws_gas_wall_valid) pv_ok = pv_ok .and. .not. ws_gas_wall(ii,jj,kk)
             else
-                pv_ok = (m%cell_type(ii,jj,kk) /= 0)
+                pv_ok = .true.
             end if
         end function pv_ok
 
