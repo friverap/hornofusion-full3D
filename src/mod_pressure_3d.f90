@@ -456,7 +456,7 @@ contains
             logical, intent(in)       :: export
 
             integer  :: ii, jj, kk, jjm, jjp
-            real(dp) :: d_f, af, u_f, delta, dmP, dmN, wP, wN
+            real(dp) :: d_f, af, u_f, delta
 
             do kk = kstart, kend
                 do jj = jstart, jend
@@ -467,14 +467,13 @@ contains
 
                         ! --- Cara Oeste (i-1/2) ---
                         if (link(act, ii-1, jj, kk)) then
-                            dmP = ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL)
-                            dmN = ph%alpha(ii-1,jj,kk) * m%vol(ii-1,jj,kk) / max(ph%aP_ur(ii-1,jj,kk), SMALL)
-                            call mobility_face(dmP, dmN, d_f, wP, wN, .not. isg)
+                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL) + &
+                                               ph%alpha(ii-1,jj,kk) * m%vol(ii-1,jj,kk) / max(ph%aP_ur(ii-1,jj,kk), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii-1,jj,kk))
                             delta  = m%r(ii) - m%r(ii-1)
                             aW(ii,jj,kk) = aW(ii,jj,kk) + af * d_f * m%Ar(ii-1,jj,kk) / delta
-                            u_f = (wN * ph%ur(ii-1,jj,kk) + wP * ph%ur(ii,jj,kk)) &
-                                + d_f * ((wN*gr(ii-1,jj,kk) + wP*gr(ii,jj,kk)) &
+                            u_f = 0.5_dp * (ph%ur(ii-1,jj,kk) + ph%ur(ii,jj,kk)) &
+                                + d_f * (0.5_dp*(gr(ii-1,jj,kk) + gr(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii-1,jj,kk)) / delta)
                             Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Ar(ii-1,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Ar(ii-1,jj,kk))
@@ -482,14 +481,13 @@ contains
 
                         ! --- Cara Este (i+1/2) ---
                         if (link(act, ii+1, jj, kk)) then
-                            dmP = ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL)
-                            dmN = ph%alpha(ii+1,jj,kk) * m%vol(ii+1,jj,kk) / max(ph%aP_ur(ii+1,jj,kk), SMALL)
-                            call mobility_face(dmP, dmN, d_f, wP, wN, .not. isg)
+                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL) + &
+                                               ph%alpha(ii+1,jj,kk) * m%vol(ii+1,jj,kk) / max(ph%aP_ur(ii+1,jj,kk), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii+1,jj,kk))
                             delta  = m%r(ii+1) - m%r(ii)
                             aE(ii,jj,kk) = aE(ii,jj,kk) + af * d_f * m%Ar(ii,jj,kk) / delta
-                            u_f = (wP * ph%ur(ii,jj,kk) + wN * ph%ur(ii+1,jj,kk)) &
-                                + d_f * ((wP*gr(ii,jj,kk) + wN*gr(ii+1,jj,kk)) &
+                            u_f = 0.5_dp * (ph%ur(ii,jj,kk) + ph%ur(ii+1,jj,kk)) &
+                                + d_f * (0.5_dp*(gr(ii,jj,kk) + gr(ii+1,jj,kk)) &
                                          - (pf(ii+1,jj,kk) - pf(ii,jj,kk)) / delta)
                             Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Ar(ii,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Ar(ii,jj,kk))
@@ -502,14 +500,13 @@ contains
 
                         ! --- Cara Sur (j-1/2) ---
                         if (link(act, ii, jjm, kk)) then
-                            dmP = ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL)
-                            dmN = ph%alpha(ii,jjm,kk) * m%vol(ii,jjm,kk) / max(ph%aP_uth(ii,jjm,kk), SMALL)
-                            call mobility_face(dmP, dmN, d_f, wP, wN, .not. isg)
+                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
+                                               ph%alpha(ii,jjm,kk) * m%vol(ii,jjm,kk) / max(ph%aP_uth(ii,jjm,kk), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jjm,kk))
                             delta  = m%r(ii) * (m%theta(jj) - m%theta(jjm))
                             aS(ii,jj,kk) = aS(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
-                            u_f = (wN * ph%uth(ii,jjm,kk) + wP * ph%uth(ii,jj,kk)) &
-                                + d_f * ((wN*gth(ii,jjm,kk) + wP*gth(ii,jj,kk)) &
+                            u_f = 0.5_dp * (ph%uth(ii,jjm,kk) + ph%uth(ii,jj,kk)) &
+                                + d_f * (0.5_dp*(gth(ii,jjm,kk) + gth(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii,jjm,kk)) / delta)
                             Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Ath(ii,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Ath(ii,jj,kk))
@@ -517,14 +514,13 @@ contains
 
                         ! --- Cara Norte (j+1/2) ---
                         if (link(act, ii, jjp, kk)) then
-                            dmP = ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL)
-                            dmN = ph%alpha(ii,jjp,kk) * m%vol(ii,jjp,kk) / max(ph%aP_uth(ii,jjp,kk), SMALL)
-                            call mobility_face(dmP, dmN, d_f, wP, wN, .not. isg)
+                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
+                                               ph%alpha(ii,jjp,kk) * m%vol(ii,jjp,kk) / max(ph%aP_uth(ii,jjp,kk), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jjp,kk))
                             delta  = m%r(ii) * (m%theta(jjp) - m%theta(jj))
                             aN(ii,jj,kk) = aN(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
-                            u_f = (wP * ph%uth(ii,jj,kk) + wN * ph%uth(ii,jjp,kk)) &
-                                + d_f * ((wP*gth(ii,jj,kk) + wN*gth(ii,jjp,kk)) &
+                            u_f = 0.5_dp * (ph%uth(ii,jj,kk) + ph%uth(ii,jjp,kk)) &
+                                + d_f * (0.5_dp*(gth(ii,jj,kk) + gth(ii,jjp,kk)) &
                                          - (pf(ii,jjp,kk) - pf(ii,jj,kk)) / delta)
                             Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Ath(ii,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Ath(ii,jj,kk))
@@ -537,14 +533,13 @@ contains
 
                         ! --- Cara Inferior (k-1/2) ---
                         if (link(act, ii, jj, kk-1)) then
-                            dmP = ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL)
-                            dmN = ph%alpha(ii,jj,kk-1) * m%vol(ii,jj,kk-1) / max(ph%aP_uz(ii,jj,kk-1), SMALL)
-                            call mobility_face(dmP, dmN, d_f, wP, wN, .not. isg)
+                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL) + &
+                                               ph%alpha(ii,jj,kk-1) * m%vol(ii,jj,kk-1) / max(ph%aP_uz(ii,jj,kk-1), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jj,kk-1))
                             delta  = m%z(kk) - m%z(kk-1)
                             aB(ii,jj,kk) = aB(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk-1) / delta
-                            u_f = (wN * ph%uz(ii,jj,kk-1) + wP * ph%uz(ii,jj,kk)) &
-                                + d_f * ((wN*gz(ii,jj,kk-1) + wP*gz(ii,jj,kk)) &
+                            u_f = 0.5_dp * (ph%uz(ii,jj,kk-1) + ph%uz(ii,jj,kk)) &
+                                + d_f * (0.5_dp*(gz(ii,jj,kk-1) + gz(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii,jj,kk-1)) / delta &
                                          - merge(liq_weight_f(ii,jj,kk-1,kk), 0.0_dp, isg))
                             Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Az(ii,jj,kk-1)
@@ -553,14 +548,13 @@ contains
 
                         ! --- Cara Superior (k+1/2) ---
                         if (link(act, ii, jj, kk+1)) then
-                            dmP = ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL)
-                            dmN = ph%alpha(ii,jj,kk+1) * m%vol(ii,jj,kk+1) / max(ph%aP_uz(ii,jj,kk+1), SMALL)
-                            call mobility_face(dmP, dmN, d_f, wP, wN, .not. isg)
+                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL) + &
+                                               ph%alpha(ii,jj,kk+1) * m%vol(ii,jj,kk+1) / max(ph%aP_uz(ii,jj,kk+1), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jj,kk+1))
                             delta  = m%z(kk+1) - m%z(kk)
                             aT(ii,jj,kk) = aT(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk) / delta
-                            u_f = (wP * ph%uz(ii,jj,kk) + wN * ph%uz(ii,jj,kk+1)) &
-                                + d_f * ((wP*gz(ii,jj,kk) + wN*gz(ii,jj,kk+1)) &
+                            u_f = 0.5_dp * (ph%uz(ii,jj,kk) + ph%uz(ii,jj,kk+1)) &
+                                + d_f * (0.5_dp*(gz(ii,jj,kk) + gz(ii,jj,kk+1)) &
                                          - (pf(ii,jj,kk+1) - pf(ii,jj,kk)) / delta &
                                          - merge(liq_weight_f(ii,jj,kk,kk+1), 0.0_dp, isg))
                             Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Az(ii,jj,kk)
@@ -618,39 +612,6 @@ contains
         call mpi_exchange_halos_3d(gth, m%topo)
         call mpi_exchange_halos_3d(gz,  m%topo)
         end subroutine cell_gradients
-
-        ! Interpolacion de cara PONDERADA POR MOVILIDAD (F2.4, MWIM): d_f
-        ! armonico y pesos wP = dmN/(dmP+dmN), wN = dmP/(dmP+dmN) para la velocidad
-        ! y el gradiente de celda — el lado BLOQUEADO manda, como
-        ! conductancias en serie. Con la media aritmetica, una cara entre
-        ! una celda libre (charco, d grande) y una bloqueada por Ergun (d ~ 0)
-        ! quedaba medio abierta: el charco vertia al lecho a la mitad de su
-        ! movilidad, la celda de lecho (demas caras bloqueadas) se llenaba
-        ! hasta que el gas dejaba de ser activo y quedaba sellada con MPa
-        ! (B1 v21, t = 34-37 s: "water packing"). Si ambas d son ~0 la cara
-        ! queda cerrada (pesos 1/2, d_f = 0).
-        ! SOLO para el liquido: es la fase que el lecho bloquea (Ergun). Para
-        ! el gas se conserva la media aritmetica: con la armonica, la cara
-        ! gas entre la celda de superficie (gas esclavizado por K, d ~ 0) y la
-        ! celda de encima quedaba cerrada, el Poisson dejaba de ver la
-        ! velocidad vertical de esa celda y el gas se disparaba sin
-        ! realimentacion de presion (bath_fill: 300 m/s uniformes en k=5).
-        pure subroutine mobility_face(dmP, dmN, d_f, wP, wN, harmonic)
-            real(dp), intent(in)  :: dmP, dmN
-            logical,  intent(in)  :: harmonic
-            real(dp), intent(out) :: d_f, wP, wN
-            real(dp) :: ssum
-            ssum = dmP + dmN
-            if (harmonic .and. ssum > SMALL) then
-                d_f = 2.0_dp * dmP * dmN / ssum
-                wP  = dmN / ssum
-                wN  = dmP / ssum
-            else if (harmonic) then
-                d_f = 0.0_dp; wP = 0.5_dp; wN = 0.5_dp
-            else
-                d_f = 0.5_dp * ssum; wP = 0.5_dp; wN = 0.5_dp
-            end if
-        end subroutine mobility_face
 
         ! Cara con flujo de ESTA fase: vecino activo en el acople
         logical function link(act, ii, jj, kk)
