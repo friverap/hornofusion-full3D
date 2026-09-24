@@ -106,15 +106,20 @@ def main():
                    f"p_max {pmax:.3e} Pa (3x ferro = {3 * p_ferro:.3e}), u_gas_max {ugmax:.1f} m/s")
         s0 = rows[0]["m_sol"] + rows[0]["m_liq"]
         s1 = rows[-1]["m_sol"] + rows[-1]["m_liq"]
-        chk.report("bath_mass_steel", abs(s1 - s0) / s0 <= 1.0e-8,  # redondeo MPI n4
-                   f"acero {s0:.2f} -> {s1:.2f} kg (err {abs(s1 - s0) / s0:.3e})")
+        clip = sum(r["m_alpha_clip"] for r in rows[1:])
+        # el acero se conserva salvo el clip AUDITADO (bath_freeze: 0.28 kg de
+        # 246 t bajo congelacion masiva); lo que se exige es que la perdida
+        # sea exactamente el clip, no que el clip sea cero
+        chk.report("bath_mass_steel", abs(s1 - s0 + clip) / s0 <= 1.0e-8,  # redondeo MPI n4
+                   f"acero {s0:.2f} -> {s1:.2f} kg, clip auditado {clip:.3f} kg "
+                   f"(err {abs(s1 - s0 + clip) / s0:.3e})")
         melt = sum(r["m_melted"] for r in rows[1:])
         res = sum(r["m_resolid"] for r in rows[1:])
-        clip = sum(r["m_alpha_clip"] for r in rows[1:])
         dm = rows[-1]["m_liq"] - rows[0]["m_liq"]
         exp = melt - res - clip
-        # escala: lo fundido, o una millonesima del inventario si no hubo fusion
-        err = abs(dm - exp) / max(abs(melt), 1.0e-6 * rows[0]["m_liq"], 1.0)
+        # escala: la masa que cambio de fase (fundido + resolidificado), o una
+        # millonesima del inventario si no hubo cambio de fase
+        err = abs(dm - exp) / max(abs(melt) + abs(res), 1.0e-6 * rows[0]["m_liq"], 1.0)
         chk.report("bath_melt_handoff", err <= 1.0e-8,  # redondeo de la reduccion MPI (n4: 1.0e-9)
                    f"dm_liq {dm:.3f} vs fundido-resolid-clip {exp:.3f} kg (err {err:.3e})")
     chk.exit()

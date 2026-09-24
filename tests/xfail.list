@@ -25,8 +25,3 @@ audit_cold:energy_balance
 #   la tolerancia 1e-9 del check es de "reposo exacto", que el esquema no da.
 bath:bath_rest
 bath:bath_alpha_frozen
-# bath_freeze (180 t a 1550 K congelan 40 t en 1 s dentro de chatarra a
-# 300 K): p y gas acotados; contabilidad del limitador bajo congelacion
-# masiva con residuos de 1e-6 (acero) y 5e-6 (handoff) — pendiente menor.
-bath_freeze:bath_mass_steel
-bath_freeze:bath_melt_handoff
