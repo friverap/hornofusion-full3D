@@ -78,6 +78,8 @@ module mod_types_3d
         integer :: audit_freq   ! frecuencia de audit.csv (pasos); 0 = off
         integer :: n_beams      ! rayos MC por electrodo por paso; 0 = MC off
         character(len=256) :: output_dir
+        ! Reinicio desde snapshot HDF5 ('' = arranque frio)
+        character(len=256) :: restart_file
 
         ! Charge recipe
         integer :: n_layers_b1, n_layers_b2

@@ -57,6 +57,13 @@ eaf3d_00000200.h5
 ├── /fields                        Campos físicos (arrays 3D)
 │   └── ... (ver sección 3)
 │
+├── /restart                       Complemento para REANUDAR (sección 5b)
+│   ├── E_solid, m_C, layer_id     Entalpía [J], carbono [kg], capa (int32)
+│   ├── m_slag, E_slag, m_FeO, m_CaO, m_SiO2, m_MgO, m_C_slag   Escoria [kg, J]
+│   ├── mu_t, rho_gas, mu_eff_liquid   Propiedades al final del paso
+│   └── attrs: dt, elec_z_tip[3], elec_arc_length[3], elec_arc_R[3],
+│              elec_arc_power[3], elec_bore_in_done[3]
+│
 └── /metadata                      Atributos escalares
     ├── time     float64            Tiempo simulado [s]
     ├── step     int32              Número de paso
@@ -180,6 +187,28 @@ with h5py.File('eaf3d_00000200.h5', 'r') as f:
     step   = f['/metadata'].attrs['step']    # número de paso
     nprocs = f['/metadata'].attrs['nprocs']  # MPI processes
 ```
+
+---
+
+## 5b. Reinicio desde snapshot (/restart)
+
+Todo snapshot es un **estado completo**: con `restart_file = <ruta>.h5` en el
+config, `mod_restart` lee `/fields` + `/restart` + `/metadata` y la corrida
+continúa desde ese paso y tiempo (mismo `nr×ntheta×nz`; el número de ranks
+puede cambiar, la lectura es por hyperslab). Lo que no se guarda se recalcula
+en el primer paso (aP, fuentes `S_*`, `pp`, workspace). El reinicio es
+**bit a bit** respecto a la corrida continua con el mismo número de ranks
+(test `restart_*` en `tests/run_tests.sh`; con distinto número, 4e-9 tras
+5 pasos: la no-invarianza de descomposición habitual): por eso `/restart` guarda `rho_gas` y `mu_eff_liquid`
+tal como quedan al final del paso (la corrida continua arranca el paso con
+las propiedades de la última iteración externa, previas a la interfase y al
+k-ε; recomputarlas de T desviaba p un 15 % en el lecho).
+
+Snapshots anteriores a 2026-09-25 (sin `/restart`) se aceptan con
+reconstrucción aproximada y aviso en stdout: `E_s` desde `T_s`,
+`m_C = carbon_frac·m_s`, `layer_id = 0`, escoria desde `alpha_slag`/`T_slag`
+y las fracciones `X_*`, `mu_t = 0`, `dt` del config, electrodos con bore-in
+terminado y arco a `ARC_LENGTH_SET` sobre la chatarra.
 
 ---
 

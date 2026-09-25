@@ -159,6 +159,27 @@ Formato de cada línea del monitor:
       20     10.00  1.31E+05  1.2E-05  0.0E+00  2.1E-02    5
 ```
 
+### D) Reanudar una corrida desde un snapshot
+
+```bash
+# config idéntico al de la corrida original + dos claves:
+cp campaigns/b1_v24_f28_120s/config.dat scratchpad/b1_restart.dat
+cat >> scratchpad/b1_restart.dat <<EOF
+output_dir   = /ruta/nueva/salida
+restart_file = /Users/frariv/Horno/hornofusion-full3D/campaigns/b1_v24_f28_120s/eaf3d_00015000.h5
+EOF
+mpirun -n 12 ./bin/eaf3d_mpi scratchpad/b1_restart.dat
+```
+
+El estado completo (campos, sólido, escoria, electrodos, `dt`, paso y
+tiempo) viene del snapshot; la carga, el remanente y la hidrostática inicial
+no se repiten. `t_final` sigue siendo absoluto. El primer archivo escrito es
+una copia del estado reanudado (mismo número de paso) y `audit.csv` arranca
+en ese paso. Uso típico: iterar sobre un instante caro (el episodio de 34 s
+de B1 está a ~3 h del arranque en la malla media; desde el snapshot de 30 s
+son minutos). Detalles y reconstrucción de snapshots antiguos en
+`docs/OUTPUT.md` §5b.
+
 ---
 
 ## 5. Estructura de directorios de salida

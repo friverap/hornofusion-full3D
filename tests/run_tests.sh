@@ -60,6 +60,39 @@ run_case() {
 }
 
 #------------------------------------------------------------------------------
+# run_restart_case <base> <np_base> <np> <step>
+#   Reanuda <base> desde tests/out/<base>_n<np_base>/eaf3d_<step>.h5 con <np>
+#   ranks hasta el mismo t_final y compara el snapshot final con la corrida
+#   continua (compare_decomposition): el reinicio debe ser un estado
+#   COMPLETO — BIT A BIT (1e-12) con el mismo nº de ranks; con distinto nº
+#   la tolerancia es la de la invarianza de descomposición (1e-3; medido
+#   4e-9 tras 5 pasos). Vive en tests/out/restart/ (fuera del golden).
+#------------------------------------------------------------------------------
+run_restart_case() {
+    local base=$1 npb=$2 np=$3 st=$4
+    local src=$OUT/${base}_n${npb}
+    local dir=$OUT/restart/${base}_n${npb}_to_n${np}_s${st}
+    local snap
+    snap=$(printf '%s/eaf3d_%08d.h5' "$src" "$st")
+    [ -f "$snap" ] || { echo "FAIL: falta el snapshot $snap"; note_fail; return 1; }
+    rm -rf "$dir" && mkdir -p "$dir"
+    local tmpcfg=$dir/config.dat
+    cp "$CFG/$base.dat" "$tmpcfg"
+    printf '\noutput_dir = %s\nrestart_file = %s\n' "$dir" "$snap" >> "$tmpcfg"
+    echo "== reinicio $base desde paso $st (n$npb -> n$np)"
+    if ! mpirun -n "$np" "$BIN" "$tmpcfg" > "$dir/run.log" 2>&1; then
+        echo "FAIL: el reinicio $base n$np terminó con error (ver $dir/run.log)"
+        tail -5 "$dir/run.log"
+        note_fail
+        return 1
+    fi
+    local rtol=1e-12
+    [ "$np" = "$npb" ] || rtol=1e-3
+    run_script "restart_${base}_n${npb}_to_n${np}" \
+        $PY $INT/compare_decomposition.py "$dir" "$src" --rtol $rtol
+}
+
+#------------------------------------------------------------------------------
 # run_script <xfail_id> <cmd...>  -> maneja XFAIL/XPASS de scripts completos
 #------------------------------------------------------------------------------
 run_script() {
@@ -110,6 +143,8 @@ quick)
             echo ">> FAIL métricas golden"
             note_fail
         fi
+        # Reinicio desde el snapshot intermedio (paso 5): estado completo
+        run_restart_case cold_10step 8 8 5
     }
     ;;
 
@@ -191,6 +226,11 @@ full | rebaseline)
         --xfail "$(xfail_ids bath_freeze)"
     run_script "decomposition_bath" \
         $PY $INT/compare_decomposition.py "$OUT/bath_test_n1" "$OUT/bath_test_n4"
+    # Reinicio desde snapshot: mismo numero de ranks y distinto (lectura por
+    # hyperslab), y sobre el regimen de fusion (melt_forced, paso 6 de 11)
+    run_restart_case cold_10step 8 8 5
+    run_restart_case cold_10step 8 4 5
+    run_restart_case melt_forced 8 8 6
 
     if [ "$MODE" = "rebaseline" ]; then
         $PY $INT/metrics_snapshot.py "$OUT" --mode rebaseline \

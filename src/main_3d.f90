@@ -20,6 +20,7 @@ program eaf_3d_simulator
     use mod_mesh_3d
     use mod_fields_3d
     use mod_output_hdf5
+    use mod_restart
     use mod_probe, only: probe_report, probe_set_step, probe_active
     use mod_solver_3d
     use mod_boundary_3d
@@ -87,6 +88,8 @@ program eaf_3d_simulator
     ! Config and input files
     character(len=256) :: config_file
     integer :: nargs
+    ! Reinicio desde snapshot (restart_file en el config)
+    logical :: restarting
 
     !===================================================================
     ! INITIALIZATION
@@ -177,38 +180,50 @@ program eaf_3d_simulator
         print *, ' [MAIN] Writing initial state...'
     end if
 
-    ! Load first bucket (omitible para tests de carga continua pura;
-    ! NOTA hallazgo E1.3: charge_scrap asigna NIVELES enteros con el vfrac
-    ! de la capa aunque la capa pida menos volumen — la masa cargada excede
-    ! la receta (~5x medido). Revisar en B1 (benchmark Ugarte).)
-    if (cfg%charge_bucket1) then
-        call charge_scrap(sol, gas, mesh, cfg, 1)
-    end if
-    call init_heel(liq, gas, sol, mesh, cfg)
-    call phase_exchange_halos(liq, mesh)
+    time = 0.0_dp
+    step = 0
+    restarting = len_trim(cfg%restart_file) > 0
 
-    ! Initialize slag layer (above scrap surface)
-    if (cfg%solve_slag) then
-        call slag_initialize(slag, sol, liq, gas, mesh, cfg)
-        call slag_exchange_halos(slag, mesh)
-    end if
-    ! Presion hidrostatica inicial de la mezcla fluida (remanente en reposo;
-    ! Plan C F2): evita el golpe de 50-70 kPa del primer paso
-    call initialize_hydrostatic_pressure(liq, gas, sh, mesh, cfg)
+    if (.not. restarting) then
+        ! Load first bucket (omitible para tests de carga continua pura;
+        ! NOTA hallazgo E1.3: charge_scrap asigna NIVELES enteros con el vfrac
+        ! de la capa aunque la capa pida menos volumen — la masa cargada excede
+        ! la receta (~5x medido). Revisar en B1 (benchmark Ugarte).)
+        if (cfg%charge_bucket1) then
+            call charge_scrap(sol, gas, mesh, cfg, 1)
+        end if
+        call init_heel(liq, gas, sol, mesh, cfg)
+        call phase_exchange_halos(liq, mesh)
 
-    ! Write initial state (t=0, step=0)
-    call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, 0, 0.0_dp, cfg%output_dir)
+        ! Initialize slag layer (above scrap surface)
+        if (cfg%solve_slag) then
+            call slag_initialize(slag, sol, liq, gas, mesh, cfg)
+            call slag_exchange_halos(slag, mesh)
+        end if
+        ! Presion hidrostatica inicial de la mezcla fluida (remanente en reposo;
+        ! Plan C F2): evita el golpe de 50-70 kPa del primer paso
+        call initialize_hydrostatic_pressure(liq, gas, sh, mesh, cfg)
+    else
+        ! Reinicio: el estado completo (campos, solido, escoria, electrodos,
+        ! dt, paso y tiempo) viene del snapshot; la carga, el remanente y la
+        ! hidrostatica inicial NO se repiten. La receta y los perfiles si se
+        ! leyeron (cubeta 2, ECS, adiciones siguen gobernados por el tiempo).
+        call restart_read(cfg%restart_file, mesh, cfg, liq, gas, sol, slag, &
+                          sh, elec, step, time)
+    end if
+
+    ! Write initial state (t=0, step=0; o el estado reanudado)
+    call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, elec, cfg%dt, &
+                             step, time, cfg%output_dir)
 
     ! Auditoría de balances: encabezado + línea del estado inicial
     if (cfg%audit_freq > 0) then
-        call audit_init(liq, gas, sol, slag, sh, elec, mesh, cfg)
+        call audit_init(liq, gas, sol, slag, sh, elec, mesh, cfg, step, time)
     end if
 
     !===================================================================
     ! TIME LOOP
     !===================================================================
-    time = 0.0_dp
-    step = 0
     conv%converged = .false.
 
     if (should_print(mesh)) then
@@ -466,8 +481,8 @@ program eaf_3d_simulator
                 call audit_write_step(liq, gas, sol, slag, sh, elec, mesh, &
                                       cfg, step, time)
             end if
-            call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, step, &
-                                     time, cfg%output_dir)
+            call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, elec, cfg%dt, &
+                                     step, time, cfg%output_dir)
             call mpi_finalize_topology(mesh%topo)
             stop 3
         end if
@@ -491,7 +506,8 @@ program eaf_3d_simulator
 
         if (mod(step, cfg%output_freq) == 0) then
             call timer_start(T_IO)
-            call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, step, time, cfg%output_dir)
+            call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, elec, cfg%dt, &
+                                     step, time, cfg%output_dir)
             call timer_stop(T_IO)
         end if
         
@@ -511,7 +527,8 @@ program eaf_3d_simulator
         print *, '============================================================'
     end if
 
-    call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, step, time, cfg%output_dir)
+    call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, elec, cfg%dt, &
+                             step, time, cfg%output_dir)
 
     ! Cleanup
     call phase_destroy(liq)

@@ -116,6 +116,7 @@ contains
         cfg%monitor_freq = 10
         cfg%audit_freq   = 1
         cfg%output_dir   = 'output'
+        cfg%restart_file = ''
 
         ! Slag
         cfg%rho_slag     = 2800.0_dp
@@ -278,6 +279,7 @@ contains
         case ('monitor_freq'); call parse_int(val, key, cfg%monitor_freq)
         case ('audit_freq');   call parse_int(val, key, cfg%audit_freq)
         case ('output_dir');   cfg%output_dir = trim(val)
+        case ('restart_file'); cfg%restart_file = trim(val)
         ! Bucket timing
         case ('t_bucket2_charge'); call parse_real(val, key, cfg%t_bucket2_charge)
         ! Arc heat partition fractions
@@ -463,6 +465,8 @@ contains
         print '(A,I5,A,I5,A,I5,A,I10)', '  Mesh: ', cfg%nr, ' x ', cfg%ntheta, &
               ' x ', cfg%nz, ' = ', cfg%nr * cfg%ntheta * cfg%nz
         print '(A,ES10.3,A,ES10.3)', '  dt=', cfg%dt, '  t_final=', cfg%t_final
+        if (len_trim(cfg%restart_file) > 0) &
+            print '(A,A)', '  restart_file=', trim(cfg%restart_file)
         print '(A,I3,A,F5.2)', '  max_outer=', cfg%max_outer, '  alpha_u=', cfg%alpha_u
         print '(A,F8.1,A,F8.1,A,F8.1)', '  rho_steel=', cfg%rho_steel, &
               '  T_sol=', cfg%T_solidus, '  T_liq=', cfg%T_liquidus

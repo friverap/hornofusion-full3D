@@ -33,6 +33,7 @@ STAGE=v1 make test-rebaseline   # regenera el golden de métricas (una vez por e
 | `integration/check_invariants.py` | NaN, 0≤α≤1, Σα∈{0,1}, cotas de T e Y, k/ε≥0 |
 | `integration/check_melt.py` | Conservación de masa en fusión: Δm_liq = −Δm_sol |
 | `integration/compare_decomposition.py` | Invarianza al nº de ranks MPI |
+| `run_restart_case` (en `run_tests.sh`) | Reinicio desde snapshot (`restart_file`): reanuda `cold_10step` desde el paso 5 (n8→n8 en quick; n8→n4 y `melt_forced` paso 6 en full) y exige snapshot final BIT A BIT (`compare_decomposition` a 1e-12) contra la corrida continua con el mismo nº de ranks; con distinto nº aplica la tolerancia de descomposición (1e-3; medido 4e-9). Vive en `tests/out/restart/` (fuera del golden) |
 | `integration/check_symmetry.py` | Invarianza a rotación de 120° |
 | `integration/check_audit.py` | Balances de `audit.csv` (existe desde C0.2) |
 | `integration/metrics_snapshot.py` | Golden de métricas escalares |

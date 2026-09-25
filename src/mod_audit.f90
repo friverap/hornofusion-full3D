@@ -114,7 +114,7 @@ contains
     ! Crea audit.csv con encabezado y escribe la línea del estado inicial
     ! (paso 0: solo inventarios; llamar DESPUÉS de charge_scrap/slag_init)
     !---------------------------------------------------------------------------
-    subroutine audit_init(liq, gas, sol, slag, sh, elec, m, cfg)
+    subroutine audit_init(liq, gas, sol, slag, sh, elec, m, cfg, step, time)
         type(phase_t), intent(in)     :: liq, gas
         type(solid_t), intent(in)     :: sol
         type(slag_t),  intent(in)     :: slag
@@ -122,6 +122,10 @@ contains
         type(electrode_t), intent(in) :: elec(:)
         type(mesh_t), intent(in)      :: m
         type(config_t), intent(in)    :: cfg
+        ! Estado inicial (0, 0.0 en arranque frio; el paso y tiempo del
+        ! snapshot en un reinicio)
+        integer, intent(in)           :: step
+        real(dp), intent(in)          :: time
 
         integer :: iu
 
@@ -148,7 +152,7 @@ contains
         end if
         acc = 0.0_dp
         call audit_write_step(liq, gas, sol, slag, sh, elec, m, cfg, &
-                              0, 0.0_dp)
+                              step, time)
     end subroutine audit_init
 
     !---------------------------------------------------------------------------

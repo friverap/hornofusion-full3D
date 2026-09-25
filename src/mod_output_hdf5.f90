@@ -20,12 +20,18 @@ contains
     !---------------------------------------------------------------------------
     ! Write complete HDF5 snapshot (mesh + all fields) in parallel
     !---------------------------------------------------------------------------
-    subroutine write_hdf5_parallel(m, liq, gas, sol, slag, sh, step, time, output_dir)
+    ! elec y dt van al grupo /restart: con ellos el snapshot es un estado
+    ! COMPLETO desde el que reanudar (mod_restart); los campos de /fields
+    ! solos no bastan (E_s, m_C, layer_id, escoria, electrodos, dt).
+    subroutine write_hdf5_parallel(m, liq, gas, sol, slag, sh, elec, dt, &
+                                   step, time, output_dir)
         type(mesh_t), intent(in) :: m
         type(phase_t), intent(in) :: liq, gas
         type(solid_t), intent(in) :: sol
         type(slag_t),  intent(in) :: slag
         type(shared_t), intent(in) :: sh
+        type(electrode_t), intent(in) :: elec(:)
+        real(dp), intent(in) :: dt
         integer, intent(in) :: step
         real(dp), intent(in) :: time
         character(len=*), intent(in) :: output_dir
@@ -71,6 +77,9 @@ contains
         ! Write all field variables
         call write_fields_group(file_id, m, liq, gas, sol, slag, sh, plist_xfer)
         
+        ! Estado que NO esta en /fields pero hace falta para reanudar
+        call write_restart_group(file_id, m, liq, gas, sol, slag, sh, elec, dt, plist_xfer)
+
         ! Write metadata (attributes)
         call write_metadata(file_id, m, step, time)
         
@@ -229,6 +238,149 @@ contains
         
     end subroutine write_fields_group
     
+    !---------------------------------------------------------------------------
+    ! Grupo /restart: complemento de /fields para que el snapshot sea un
+    ! estado completo. Todo lo demas (propiedades, aP, fuentes S_*, pp,
+    ! workspace) se recalcula en el primer paso tras reanudar.
+    !   E_solid, m_C, layer_id      : solido (entalpia, carbono, capa)
+    !   m_slag, E_slag, m_<X>       : escoria (masa, energia, componentes)
+    !   mu_t                        : viscosidad turbulenta (k-eps)
+    !   attrs dt, elec_*            : paso adaptativo y estado de electrodos
+    !---------------------------------------------------------------------------
+    subroutine write_restart_group(file_id, m, liq, gas, sol, slag, sh, elec, dt, plist_xfer)
+        integer(HID_T), intent(in) :: file_id, plist_xfer
+        type(mesh_t), intent(in) :: m
+        type(phase_t), intent(in) :: liq, gas
+        type(solid_t), intent(in) :: sol
+        type(slag_t),  intent(in) :: slag
+        type(shared_t), intent(in) :: sh
+        type(electrode_t), intent(in) :: elec(:)
+        real(dp), intent(in) :: dt
+
+        integer(HID_T) :: group_id, aspace_id, attr_id
+        integer(HSIZE_T) :: adims(1)
+        integer :: error, e, ne
+        real(dp), allocatable :: rv(:)
+        integer,  allocatable :: iv(:)
+        character(len=9), parameter :: XNAME(N_SLAG_COMP) = &
+            ['m_FeO    ', 'm_CaO    ', 'm_SiO2   ', 'm_MgO    ', 'm_C_slag ']
+        integer :: c
+
+        call h5gcreate_f(file_id, '/restart', group_id, error)
+        call check_h5(error, 'h5gcreate_f: /restart', m%topo%rank)
+
+        call write_3d_field(group_id, 'E_solid', sol%E_s, m, plist_xfer)
+        call write_3d_field(group_id, 'm_C',     sol%m_C, m, plist_xfer)
+        call write_3d_field_int(group_id, 'layer_id', sol%layer_id, m, plist_xfer)
+        call write_3d_field(group_id, 'm_slag',  slag%m_sl, m, plist_xfer)
+        call write_3d_field(group_id, 'E_slag',  slag%E_sl, m, plist_xfer)
+        do c = 1, N_SLAG_COMP
+            call write_3d_field(group_id, trim(XNAME(c)), slag%m_X(:,:,:,c), m, plist_xfer)
+        end do
+        call write_3d_field(group_id, 'mu_t', sh%mu_t, m, plist_xfer)
+        ! Propiedades tal como quedan al FINAL del paso: update_properties
+        ! corre dentro del lazo externo, asi que rho_g (y mu_eff del liquido)
+        ! del paso siguiente son las de la ultima iteracion, NO las de la T
+        ! final (la interfase y el k-eps las modifican despues). Guardarlas
+        ! hace el reinicio bit a bit; recomputarlas de T lo desviaba un 15 %
+        ! en p dentro del lecho.
+        call write_3d_field(group_id, 'rho_gas',       gas%rho,    m, plist_xfer)
+        call write_3d_field(group_id, 'mu_eff_liquid', liq%mu_eff, m, plist_xfer)
+
+        ! Atributos escalares y por electrodo (metadatos: todos los ranks)
+        adims(1) = 1
+        call h5screate_simple_f(1, adims, aspace_id, error)
+        call h5acreate_f(group_id, 'dt', H5T_NATIVE_DOUBLE, aspace_id, attr_id, error)
+        call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, dt, adims, error)
+        call h5aclose_f(attr_id, error)
+        call h5sclose_f(aspace_id, error)
+
+        ne = size(elec)
+        allocate(rv(ne), iv(ne))
+        adims(1) = ne
+        call h5screate_simple_f(1, adims, aspace_id, error)
+        rv = [(elec(e)%z_tip, e = 1, ne)]
+        call write_attr_real(group_id, 'elec_z_tip', rv, aspace_id, adims)
+        rv = [(elec(e)%arc_length, e = 1, ne)]
+        call write_attr_real(group_id, 'elec_arc_length', rv, aspace_id, adims)
+        rv = [(elec(e)%arc_R, e = 1, ne)]
+        call write_attr_real(group_id, 'elec_arc_R', rv, aspace_id, adims)
+        rv = [(elec(e)%arc_power, e = 1, ne)]
+        call write_attr_real(group_id, 'elec_arc_power', rv, aspace_id, adims)
+        iv = merge(1, 0, [(elec(e)%bore_in_done, e = 1, ne)])
+        call h5acreate_f(group_id, 'elec_bore_in_done', H5T_NATIVE_INTEGER, &
+                         aspace_id, attr_id, error)
+        call h5awrite_f(attr_id, H5T_NATIVE_INTEGER, iv, adims, error)
+        call h5aclose_f(attr_id, error)
+        call h5sclose_f(aspace_id, error)
+        deallocate(rv, iv)
+
+        call h5gclose_f(group_id, error)
+    end subroutine write_restart_group
+
+    subroutine write_attr_real(loc_id, name, vals, aspace_id, adims)
+        integer(HID_T), intent(in) :: loc_id, aspace_id
+        character(len=*), intent(in) :: name
+        real(dp), intent(in) :: vals(:)
+        integer(HSIZE_T), intent(in) :: adims(1)
+
+        integer(HID_T) :: attr_id
+        integer :: error
+
+        call h5acreate_f(loc_id, name, H5T_NATIVE_DOUBLE, aspace_id, attr_id, error)
+        call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, vals, adims, error)
+        call h5aclose_f(attr_id, error)
+    end subroutine write_attr_real
+
+    !---------------------------------------------------------------------------
+    ! Campo 3D ENTERO (layer_id) con el mismo hyperslab que write_3d_field
+    !---------------------------------------------------------------------------
+    subroutine write_3d_field_int(group_id, name, field, m, plist_xfer)
+        integer(HID_T), intent(in) :: group_id, plist_xfer
+        character(len=*), intent(in) :: name
+        integer, intent(in) :: field(-1:,-1:,-1:)
+        type(mesh_t), intent(in) :: m
+
+        integer(HID_T) :: dspace_global_id, dspace_local_id, dset_id
+        integer(HSIZE_T) :: dims_global(3), dims_local(3), offset(3)
+        integer :: error
+        integer, allocatable :: field_local(:,:,:)
+
+        if (m%is_parallel) then
+            dims_global = [m%topo%nr_global, m%topo%nth_global, m%topo%nz_global]
+            dims_local  = [m%topo%iloc, m%topo%jloc, m%topo%kloc]
+            offset = [m%topo%iglobal_start - 1, m%topo%jglobal_start - 1, &
+                      m%topo%kglobal_start - 1]
+            allocate(field_local(dims_local(1), dims_local(2), dims_local(3)))
+            field_local = field(m%topo%istart:m%topo%iend, m%topo%jstart:m%topo%jend, &
+                                m%topo%kstart:m%topo%kend)
+            call h5screate_simple_f(3, dims_global, dspace_global_id, error)
+            call h5screate_simple_f(3, dims_local, dspace_local_id, error)
+            call h5dcreate_f(group_id, name, H5T_NATIVE_INTEGER, &
+                             dspace_global_id, dset_id, error)
+            call check_h5(error, 'h5dcreate_f: '//name, m%topo%rank)
+            call h5sselect_hyperslab_f(dspace_global_id, H5S_SELECT_SET_F, &
+                                       offset, dims_local, error)
+            call h5dwrite_f(dset_id, H5T_NATIVE_INTEGER, field_local, dims_local, error, &
+                            mem_space_id=dspace_local_id, file_space_id=dspace_global_id, &
+                            xfer_prp=plist_xfer)
+            call check_h5(error, 'h5dwrite_f: '//name, m%topo%rank)
+            call h5sclose_f(dspace_local_id, error)
+            call h5sclose_f(dspace_global_id, error)
+            call h5dclose_f(dset_id, error)
+            deallocate(field_local)
+        else
+            dims_global = [m%nr, m%ntheta, m%nz]
+            call h5screate_simple_f(3, dims_global, dspace_global_id, error)
+            call h5dcreate_f(group_id, name, H5T_NATIVE_INTEGER, &
+                             dspace_global_id, dset_id, error)
+            call h5dwrite_f(dset_id, H5T_NATIVE_INTEGER, field(1:m%nr, 1:m%ntheta, 1:m%nz), &
+                            dims_global, error)
+            call h5dclose_f(dset_id, error)
+            call h5sclose_f(dspace_global_id, error)
+        end if
+    end subroutine write_3d_field_int
+
     !---------------------------------------------------------------------------
     ! Write a single 3D field with parallel hyperslab
     !---------------------------------------------------------------------------

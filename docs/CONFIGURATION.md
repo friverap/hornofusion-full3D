@@ -322,6 +322,7 @@ Si el archivo no existe, se usa la receta por defecto:
 | `output_freq` | int | 100 | Cada cuántos pasos escribir un snapshot HDF5 |
 | `monitor_freq` | int | 10 | Cada cuántos pasos escribir una línea en monitor.log |
 | `output_dir` | string | 'output' | Directorio de salida (se crea con `mkdir -p`) |
+| `restart_file` | string | '' | Snapshot HDF5 desde el que REANUDAR (misma malla; nº de ranks libre). Se leen campos, sólido, escoria, electrodos, `dt`, paso y tiempo; la carga inicial, el remanente y la hidrostática inicial NO se repiten. El audit arranca de cero en el nuevo `output_dir`. Ver `docs/RUNNING.md` §4-D |
 
 > El directorio de salida se crea automáticamente solo por el rank 0.  
 > Con `mpirun`, verificar que el directorio exista antes de lanzar si hay problemas de permisos.
