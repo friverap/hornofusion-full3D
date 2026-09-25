@@ -86,7 +86,7 @@ contains
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
-            ws_pcorr_g, ws_pcorr_valid
+            ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid
         type(phase_t), intent(inout) :: liq, gas
         ! T del gas del paso anterior: término de COMPRESIBILIDAD del gas
         ! ideal, -alpha_g*(rho(T)-rho(T_old))/dt*V. Sin él, el Poisson
@@ -471,12 +471,14 @@ contains
                                                ph%alpha(ii-1,jj,kk) * m%vol(ii-1,jj,kk) / max(ph%aP_ur(ii-1,jj,kk), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii-1,jj,kk))
                             delta  = m%r(ii) - m%r(ii-1)
-                            aW(ii,jj,kk) = aW(ii,jj,kk) + af * d_f * m%Ar(ii-1,jj,kk) / delta
                             u_f = 0.5_dp * (ph%ur(ii-1,jj,kk) + ph%ur(ii,jj,kk)) &
                                 + d_f * (0.5_dp*(gr(ii-1,jj,kk) + gr(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii-1,jj,kk)) / delta)
+                            if (face_open(isg, u_f, rm(ii-1,jj,kk), rm(ii,jj,kk))) then
+                            aW(ii,jj,kk) = aW(ii,jj,kk) + af * d_f * m%Ar(ii-1,jj,kk) / delta
                             Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Ar(ii-1,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Ar(ii-1,jj,kk))
+                            end if
                         end if
 
                         ! --- Cara Este (i+1/2) ---
@@ -485,16 +487,18 @@ contains
                                                ph%alpha(ii+1,jj,kk) * m%vol(ii+1,jj,kk) / max(ph%aP_ur(ii+1,jj,kk), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii+1,jj,kk))
                             delta  = m%r(ii+1) - m%r(ii)
-                            aE(ii,jj,kk) = aE(ii,jj,kk) + af * d_f * m%Ar(ii,jj,kk) / delta
                             u_f = 0.5_dp * (ph%ur(ii,jj,kk) + ph%ur(ii+1,jj,kk)) &
                                 + d_f * (0.5_dp*(gr(ii,jj,kk) + gr(ii+1,jj,kk)) &
                                          - (pf(ii+1,jj,kk) - pf(ii,jj,kk)) / delta)
+                            if (face_open(isg, u_f, rm(ii,jj,kk), rm(ii+1,jj,kk))) then
+                            aE(ii,jj,kk) = aE(ii,jj,kk) + af * d_f * m%Ar(ii,jj,kk) / delta
                             Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Ar(ii,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Ar(ii,jj,kk))
                             if (export) then
                                 Fs_r(ii,jj,kk) = af * u_f * m%Ar(ii,jj,kk)
                                 ac_r(ii,jj,kk) = af * d_f * m%Ar(ii,jj,kk) / delta
                                 ws_Fc_lk_r(ii,jj,kk) = 1
+                            end if
                             end if
                         end if
 
@@ -504,12 +508,14 @@ contains
                                                ph%alpha(ii,jjm,kk) * m%vol(ii,jjm,kk) / max(ph%aP_uth(ii,jjm,kk), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jjm,kk))
                             delta  = m%r(ii) * (m%theta(jj) - m%theta(jjm))
-                            aS(ii,jj,kk) = aS(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
                             u_f = 0.5_dp * (ph%uth(ii,jjm,kk) + ph%uth(ii,jj,kk)) &
                                 + d_f * (0.5_dp*(gth(ii,jjm,kk) + gth(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii,jjm,kk)) / delta)
+                            if (face_open(isg, u_f, rm(ii,jjm,kk), rm(ii,jj,kk))) then
+                            aS(ii,jj,kk) = aS(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
                             Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Ath(ii,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Ath(ii,jj,kk))
+                            end if
                         end if
 
                         ! --- Cara Norte (j+1/2) ---
@@ -518,16 +524,18 @@ contains
                                                ph%alpha(ii,jjp,kk) * m%vol(ii,jjp,kk) / max(ph%aP_uth(ii,jjp,kk), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jjp,kk))
                             delta  = m%r(ii) * (m%theta(jjp) - m%theta(jj))
-                            aN(ii,jj,kk) = aN(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
                             u_f = 0.5_dp * (ph%uth(ii,jj,kk) + ph%uth(ii,jjp,kk)) &
                                 + d_f * (0.5_dp*(gth(ii,jj,kk) + gth(ii,jjp,kk)) &
                                          - (pf(ii,jjp,kk) - pf(ii,jj,kk)) / delta)
+                            if (face_open(isg, u_f, rm(ii,jj,kk), rm(ii,jjp,kk))) then
+                            aN(ii,jj,kk) = aN(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
                             Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Ath(ii,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Ath(ii,jj,kk))
                             if (export) then
                                 Fs_th(ii,jj,kk) = af * u_f * m%Ath(ii,jj,kk)
                                 ac_th(ii,jj,kk) = af * d_f * m%Ath(ii,jj,kk) / delta
                                 ws_Fc_lk_th(ii,jj,kk) = 1
+                            end if
                             end if
                         end if
 
@@ -537,13 +545,15 @@ contains
                                                ph%alpha(ii,jj,kk-1) * m%vol(ii,jj,kk-1) / max(ph%aP_uz(ii,jj,kk-1), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jj,kk-1))
                             delta  = m%z(kk) - m%z(kk-1)
-                            aB(ii,jj,kk) = aB(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk-1) / delta
                             u_f = 0.5_dp * (ph%uz(ii,jj,kk-1) + ph%uz(ii,jj,kk)) &
                                 + d_f * (0.5_dp*(gz(ii,jj,kk-1) + gz(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii,jj,kk-1)) / delta &
                                          - merge(liq_weight_f(ii,jj,kk-1,kk), 0.0_dp, isg))
+                            if (face_open(isg, u_f, rm(ii,jj,kk-1), rm(ii,jj,kk))) then
+                            aB(ii,jj,kk) = aB(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk-1) / delta
                             Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Az(ii,jj,kk-1)
                             flux_ref = flux_ref + abs(af * u_f * m%Az(ii,jj,kk-1))
+                            end if
                         end if
 
                         ! --- Cara Superior (k+1/2) ---
@@ -552,17 +562,19 @@ contains
                                                ph%alpha(ii,jj,kk+1) * m%vol(ii,jj,kk+1) / max(ph%aP_uz(ii,jj,kk+1), SMALL))
                             af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jj,kk+1))
                             delta  = m%z(kk+1) - m%z(kk)
-                            aT(ii,jj,kk) = aT(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk) / delta
                             u_f = 0.5_dp * (ph%uz(ii,jj,kk) + ph%uz(ii,jj,kk+1)) &
                                 + d_f * (0.5_dp*(gz(ii,jj,kk) + gz(ii,jj,kk+1)) &
                                          - (pf(ii,jj,kk+1) - pf(ii,jj,kk)) / delta &
                                          - merge(liq_weight_f(ii,jj,kk,kk+1), 0.0_dp, isg))
+                            if (face_open(isg, u_f, rm(ii,jj,kk), rm(ii,jj,kk+1))) then
+                            aT(ii,jj,kk) = aT(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk) / delta
                             Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Az(ii,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Az(ii,jj,kk))
                             if (export) then
                                 Fs_z(ii,jj,kk) = af * u_f * m%Az(ii,jj,kk)
                                 ac_z(ii,jj,kk) = af * d_f * m%Az(ii,jj,kk) / delta
                                 ws_Fc_lk_z(ii,jj,kk) = 1
+                            end if
                             end if
                         end if
                     end do
@@ -612,6 +624,27 @@ contains
         call mpi_exchange_halos_3d(gth, m%topo)
         call mpi_exchange_halos_3d(gz,  m%topo)
         end subroutine cell_gradients
+
+        ! Cara del liquido ABIERTA en el Poisson (F2.8): cerrada (a = 0,
+        ! Q* = 0, simetrico) si la celda receptora, segun el signo de u_f,
+        ! es una celda del lecho sin hueco de poro (ws_liq_room <= eps). Asi
+        ! la ecuacion de presion dice lo mismo que el limitador. El gas y
+        ! las celdas de bano puro (hueco 1 por definicion) no se tocan.
+        pure logical function face_open(isg, u_f, room_neg, room_pos)
+            logical,  intent(in) :: isg
+            real(dp), intent(in) :: u_f, room_neg, room_pos
+            real(dp), parameter :: ROOM_EPS = 1.0e-4_dp
+            face_open = .true.
+            if (isg .or. .not. ws_liq_room_valid) return
+            if (u_f > 0.0_dp .and. room_pos <= ROOM_EPS) face_open = .false.
+            if (u_f < 0.0_dp .and. room_neg <= ROOM_EPS) face_open = .false.
+        end function face_open
+
+        pure function rm(ii, jj, kk) result(r)
+            integer, intent(in) :: ii, jj, kk
+            real(dp) :: r
+            r = ws_liq_room(ii,jj,kk)
+        end function rm
 
         ! Cara con flujo de ESTA fase: vecino activo en el acople
         logical function link(act, ii, jj, kk)

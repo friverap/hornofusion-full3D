@@ -73,7 +73,7 @@ contains
         ! Se itera hasta convergencia (B1 v9: con 3 barridos fijos, el
         ! drenaje súbito de 425 s recortó 2.6 t en columnas de 10 celdas).
         integer, parameter :: N_LIM_MAX = 256
-        integer, parameter :: N_SPILL_MAX = 64
+        integer, parameter :: N_SPILL_MAX = 128   ! >= nz de produccion (84): la cascada avanza una celda por pasada
         integer :: ilim, ipass, n_it_max
         real(dp) :: inflow, outflow, room, dlim, dlim_glob, clip_call
         real(dp) :: dlim_exit, cap, exc, room_up, give, exc_glob, spill_call
@@ -309,8 +309,17 @@ contains
                         if (give <= 1.0e-15_dp) cycle
                         exc = max(exc, give)
                         if (m%cell_type(i,j,k+1) == 0) cycle
-                        room_up = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k+1), alpha_slag(i,j,k+1)) &
-                                  - liq%alpha(i,j,k+1)) &
+                        ! Cascada (F2.8): la de arriba puede llenarse hasta su
+                        ! hueco FISICO (por encima de su cap de poro) y cede el
+                        ! exceso en la pasada siguiente. Con el hueco de poro
+                        ! como tope, una columna del lecho exactamente en su cap
+                        ! bloqueaba el derrame de la celda de abajo y el exceso
+                        ! (congelacion, fusion en sitio) acababa en el clip
+                        ! (bath_freeze: 2.4 t); con el Poisson cerrado hacia las
+                        ! celdas en cap (face_open) el derrame es el unico
+                        ! camino y tiene que empujar a traves de la columna.
+                        room_up = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k+1) &
+                                  - alpha_slag(i,j,k+1) - liq%alpha(i,j,k+1)) &
                                   * m%vol(i,j,k+1) / m%vol(i,j,k)
                         ws_lim(i,j,k) = min(give, room_up)
                     end do

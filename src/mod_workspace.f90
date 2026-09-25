@@ -90,6 +90,15 @@ module mod_workspace
     ! de celda y de cara).
     real(dp), allocatable :: ws_pcorr_g(:,:,:)
     logical, save :: ws_pcorr_valid = .false.
+    ! Hueco de poro que le queda al liquido en cada celda del LECHO (F2.8):
+    ! liq_cap - alpha_l si alpha_s >= 1e-2, 1 en el resto. La cara del
+    ! Poisson del liquido hacia una celda del lecho sin hueco se CIERRA
+    ! (a = 0, Q* = 0, simetrico), para que la ecuacion de presion diga lo
+    ! mismo que el limitador: B1 v22 (t = 34 s) tenia 12 celdas exactamente
+    ! en su cap de poro con 70-360 kPa porque el Poisson seguia empujando
+    ! liquido que el limitador rechazaba (water packing).
+    real(dp), allocatable :: ws_liq_room(:,:,:)
+    logical, save :: ws_liq_room_valid = .false.
 
 contains
 
@@ -114,6 +123,7 @@ contains
         allocate(ws_Fc_lk_th, ws_Fc_lk_z, mold=ws_Fc_lk_r)
         ws_Fc_lk_r = 0; ws_Fc_lk_th = 0; ws_Fc_lk_z = 0
         allocate(ws_pcorr_g, mold=ws_aW); ws_pcorr_g = 0.0_dp
+        allocate(ws_liq_room, mold=ws_aW); ws_liq_room = 1.0_dp
     end subroutine ensure_workspace
 
 end module mod_workspace
