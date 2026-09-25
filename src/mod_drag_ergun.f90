@@ -6,7 +6,7 @@
 !
 ! Ergun correlations:
 !   K = d_p^2 * epsilon^3 / (150*(1-epsilon)^2)
-!   C_F = 1.75 / (d_p * epsilon^3)
+!   coef = A + B|v|, A = 150 mu (1-eps)^2/(d_p^2 eps^3), B = 1.75 rho (1-eps)/(d_p eps^3)
 !
 ! where epsilon = 1 - alpha_s (porosity), d_p = particle diameter.
 !
@@ -35,8 +35,8 @@ contains
         real(dp), intent(out)      :: drag_coef(-1:,-1:,-1:)  ! >= 0 [kg/(m^3 s)]
 
         integer :: i, j, k
-        real(dp) :: eps, alpha_s, K_perm, C_F
-        real(dp) :: vmag, d_p, mu_f, rho_f
+        real(dp) :: alpha_s, A, B
+        real(dp) :: vmag, d_p
 
         d_p = cfg%d_particle
         drag_coef = 0.0_dp
@@ -49,20 +49,11 @@ contains
                     alpha_s = sol%alpha_s(i,j,k)
                     if (alpha_s < 1.0e-6_dp) cycle
 
-                    eps = 1.0_dp - alpha_s
-                    eps = max(eps, 0.01_dp)
-
-                    ! Ergun permeability and Forchheimer coefficient
-                    K_perm = d_p**2 * eps**3 / (150.0_dp * (1.0_dp - eps)**2 + SMALL)
-                    C_F = 1.75_dp / (d_p * eps**3 + SMALL)
-
-                    mu_f  = ph%mu(i,j,k)
-                    rho_f = ph%rho(i,j,k)
-
+                    ! Ergun (1952): coef = A + B |v| con la unica definicion de
+                    ! los coeficientes (mod_constants::ergun_coefficients)
+                    call ergun_coefficients(alpha_s, ph%rho(i,j,k), ph%mu(i,j,k), d_p, A, B)
                     vmag = sqrt(ph%ur(i,j,k)**2 + ph%uth(i,j,k)**2 + ph%uz(i,j,k)**2)
-
-                    drag_coef(i,j,k) = mu_f / (K_perm + SMALL) &
-                                     + C_F * rho_f * vmag / (sqrt(K_perm) + SMALL)
+                    drag_coef(i,j,k) = A + B * vmag
                 end do
             end do
         end do

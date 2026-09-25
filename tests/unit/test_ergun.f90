@@ -2,10 +2,13 @@
 ! test_ergun.f90 - Unit test del coeficiente de arrastre de Ergun
 !
 ! Contrato C1.4: compute_ergun_drag devuelve el COEFICIENTE positivo
-! coef = mu/K + C_F*rho*|v|/sqrt(K)  [kg/(m^3 s)] para tratamiento implícito
-! en momentum (aP += coef*vol). Verificación contra cálculo independiente:
-!   K   = d_p^2 * eps^3 / (150*(1-eps)^2)
-!   C_F = 1.75 / (d_p * eps^3)
+! coef = A + B*|v|  [kg/(m^3 s)] para tratamiento implícito en momentum
+! (aP += coef*vol). Verificación contra la correlación de Ergun (1952)
+! escrita a mano en su forma original (caída de presión por unidad de
+! longitud de un lecho de porosidad eps):
+!   dp/L = 150 mu (1-eps)^2 u/(d_p^2 eps^3) + 1.75 rho (1-eps) u^2/(d_p eps^3)
+! Hasta 2026-09-25 el código y este test usaban C_F = 1.75/(d_p eps^3)
+! con /sqrt(K): 1/m en vez de adimensional, ~500x de más en Forchheimer.
 ! Los arrays llevan halos (-1:n+2) como en producción (regla GFortran de
 ! cotas inferiores).
 !===============================================================================
@@ -21,7 +24,7 @@ program test_ergun
     type(phase_t)  :: ph
     type(solid_t)  :: sol
     real(dp), allocatable :: coef(:,:,:)
-    real(dp) :: eps, K, C_F, vmag, want
+    real(dp) :: eps, vmag, want, A, B, d
     logical  :: ok
 
     call config_set_defaults(cfg)   ! d_particle = 0.10 m
@@ -39,12 +42,17 @@ program test_ergun
 
     call compute_ergun_drag(ph, sol, m, cfg, coef)
 
-    ! Cálculo independiente
-    eps  = 0.5_dp
-    K    = cfg%d_particle**2 * eps**3 / (150.0_dp * (1.0_dp - eps)**2)
-    C_F  = 1.75_dp / (cfg%d_particle * eps**3)
+    ! Cálculo independiente (Ergun 1952, forma original)
+    eps  = 0.5_dp; d = cfg%d_particle
+    A    = 150.0_dp * 6.0e-3_dp * (1.0_dp - eps)**2 / (d**2 * eps**3)
+    B    = 1.75_dp * 7500.0_dp * (1.0_dp - eps) / (d * eps**3)
     vmag = sqrt(0.1_dp**2 + 0.05_dp**2 + 0.2_dp**2)
-    want = 6.0e-3_dp / K + C_F * 7500.0_dp * vmag / sqrt(K)
+    want = A + B * vmag
+    ! Valores a mano (d = 0.10 m, eps = 0.5): A = 180 kg/(m3 s), B = 5.25e5 kg/m4
+    if (abs(A - 180.0_dp) > 1.0e-9_dp .or. abs(B - 5.25e5_dp) > 1.0e-6_dp) then
+        print '(A,2ES12.4)', '   FAIL Ergun a mano: A, B = ', A, B
+        stop 1
+    end if
 
     ok = .true.
     if (abs(coef(1,1,1) - want) > 1.0e-9_dp * want) then

@@ -367,13 +367,22 @@ F_θ  = J_z × B_θ × sin(θ_offset)    [N/m³]
 ### Correlación de Ergun
 
 ```
-S_drag = -(A + B|u|) × u
+S_drag = -(A + B|u|) × u          (ε = 1 − α_s, porosidad del lecho)
 
-A = 150 μ (1 - α_s)² / (d_p² α_s³)    [Pa·s/m²]
-B = 1.75 ρ  (1 - α_s)  / (d_p   α_s³)  [kg/m³]
+A = 150 μ (1 − ε)² / (d_p² ε³)    [kg/(m³·s)]
+B = 1.75 ρ (1 − ε)  / (d_p  ε³)    [kg/m⁴]
 ```
 
 donde `d_p = 0.10 m` (tamaño característico del fragmento de chatarra).
+Es la correlación de Ergun (1952) en su forma original y la ÚNICA
+definición del código (`mod_constants::ergun_coefficients`: momento de
+ambas fases, velocidad de percolación del líquido disperso, `test_ergun`).
+Hasta 2026-09-25 el término de Forchheimer se escribía `C_F ρ|u|/√K` con
+`C_F = 1.75/(d_p ε³)` (1/m) en lugar del adimensional `1.75/√(150 ε³)`:
+quedaba `√150/(d_p ε^1.5)` veces mayor (~500–800× con d_p = 0.075–0.10 m).
+Con ello el líquido percolaba a 2–3 mm/s (Ergun: 0.1–0.2 m/s) y el gas de
+poro no podía ventear por el lecho, origen de las "bolsas hidráulicamente
+bloqueadas" que respondían con kPa–MPa (Bug 18/19).
 
 La fuerza de arrastre se aplica al fluido (gas o líquido) en las celdas donde `α_s > 0`.
 

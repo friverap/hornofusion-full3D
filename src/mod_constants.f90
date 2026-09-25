@@ -265,16 +265,35 @@ contains
     ! congelaba en la chatarra fria de abajo (B1 v14: 8 kg de bano a 30 s
     ! frente a 89 kg de la referencia v11).
     !---------------------------------------------------------------------------
+    !---------------------------------------------------------------------------
+    ! Coeficientes de Ergun (1952) del lecho de particulas d_p con fraccion
+    ! solida alpha_s (porosidad eps = 1 - alpha_s), para el fluido (rho, mu):
+    !   grad p = A u + B u |u|,   A = 150 mu (1-eps)^2 / (d_p^2 eps^3)  [kg/(m3 s)]
+    !                             B = 1.75 rho (1-eps) / (d_p eps^3)    [kg/m4]
+    ! Es la UNICA definicion (momento, percolacion, tests). Hasta el 25-sep-2026
+    ! el Forchheimer se escribia C_F rho |u| / sqrt(K) con C_F = 1.75/(d_p eps^3)
+    ! [1/m] en vez del adimensional 1.75/sqrt(150 eps^3): el termino quedaba
+    ! sqrt(150)/(d_p eps^1.5) veces (~500-800x con d_p = 0.075-0.10 m) mayor
+    ! que Ergun. Consecuencias medidas: percolacion del liquido de 2-3 mm/s
+    ! (Ergun: 0.1-0.2 m/s), gas de poro incapaz de ventear por el lecho y
+    ! "bolsas hidraulicamente bloqueadas" que respondian con kPa-MPa
+    ! (B1 v16-v27, Bug 18/19).
+    !---------------------------------------------------------------------------
+    pure subroutine ergun_coefficients(alpha_s, rho, mu, d_p, A, B)
+        real(dp), intent(in)  :: alpha_s, rho, mu, d_p
+        real(dp), intent(out) :: A, B
+        real(dp) :: eps
+        eps = max(1.0_dp - alpha_s, 0.01_dp)
+        A = 150.0_dp * mu * (1.0_dp - eps)**2 / (d_p**2 * eps**3 + SMALL)
+        B = 1.75_dp * rho * (1.0_dp - eps) / (d_p * eps**3 + SMALL)
+    end subroutine ergun_coefficients
+
     pure function percolation_velocity(alpha_l, alpha_s, rho_l, rho_g, mu_l, d_p) result(u)
         real(dp), intent(in) :: alpha_l, alpha_s, rho_l, rho_g, mu_l, d_p
-        real(dp) :: u, eps, K_perm, C_F, A, B, C
+        real(dp) :: u, A, B, C
         u = 0.0_dp
         if (alpha_l <= 0.0_dp .or. d_p <= 0.0_dp) return
-        eps    = max(1.0_dp - alpha_s, 0.01_dp)
-        K_perm = d_p**2 * eps**3 / (150.0_dp * (1.0_dp - eps)**2 + SMALL)
-        C_F    = 1.75_dp / (d_p * eps**3 + SMALL)
-        A = mu_l / (K_perm + SMALL)
-        B = C_F * rho_l / (sqrt(K_perm) + SMALL)
+        call ergun_coefficients(alpha_s, rho_l, mu_l, d_p, A, B)
         C = alpha_l * max(rho_l - rho_g, 0.0_dp) * GRAVITY
         u = 2.0_dp * C / (A + sqrt(A*A + 4.0_dp * B * C))
         u = min(u, U_SETTLE_MAX)
