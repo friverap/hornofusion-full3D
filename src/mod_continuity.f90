@@ -463,7 +463,7 @@ contains
         type(config_t), intent(in)  :: cfg
         type(phase_t), intent(in), optional :: liq_old
         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: u_t, tr, tth, tz, f
+        real(dp) :: u_t, tr, tth, tz, f, as_eff
         call ensure_workspace(m)
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         ws_ud_r = liq%ur; ws_ud_th = liq%uth; ws_ud_z = liq%uz; ws_ut = 0.0_dp
@@ -480,12 +480,25 @@ contains
                         ws_ud_r(i,j,k) = 0.0_dp; ws_ud_th(i,j,k) = 0.0_dp; ws_ud_z(i,j,k) = 0.0_dp
                         cycle
                     end if
-                    if (sol%alpha_s(i,j,k) >= 1.0e-2_dp) then
-                        ! LECHO: percolacion al balance de Ergun (el estado
+                    ! LECHO o EN CONTACTO con el lecho (F2.14, 2026-09-26): la
+                    ! celda tiene chatarra propia (aunque sea residual) o descansa
+                    ! sobre una celda del lecho. En los modelos de lecho empacado
+                    ! (Austin-Nogami-Yagi 1997, TFM de lechos de goteo) el arrastre
+                    ! liquido-solido crece como 1/alpha_l^2 y la velocidad del
+                    ! liquido tiende a la del SOLIDO cuando alpha_l -> 0: el
+                    ! liquido disperso sobre chatarra es pelicula/goteo, nunca
+                    ! gotas montadas en el gas. Con el umbral 1e-2 la celda recien
+                    ! fundida (alpha_s 0.003-0.01) bajo el arco se trataba como
+                    ! freeboard y su liquido llovia al lecho a la velocidad del
+                    ! jet (20 m/s): rafagas de 25-84 kPa en B1 v30.
+                    as_eff = max(sol%alpha_s(i,j,k), sol%alpha_s(i,j,k-1))
+                    if (sol%alpha_s(i,j,k) > ALPHA_SOLID_RESID .or. &
+                        sol%alpha_s(i,j,k-1) >= 1.0e-2_dp) then
+                        ! percolacion al balance de Ergun (el estado
                         ! estacionario de SU PROPIA ecuacion de momento);
                         ! relajacion instantanea (tau = alpha_l rho_l /
                         ! drag_Ergun ~ 1e-4 s << dt) y no monta en el gas.
-                        u_t = percolation_velocity(liq%alpha(i,j,k), sol%alpha_s(i,j,k), &
+                        u_t = percolation_velocity(liq%alpha(i,j,k), as_eff, &
                                   liq%rho(i,j,k), gas%rho(i,j,k), liq%mu(i,j,k), cfg%d_particle)
                         ws_ut(i,j,k) = u_t
                         ws_ud_r(i,j,k) = 0.0_dp; ws_ud_th(i,j,k) = 0.0_dp
