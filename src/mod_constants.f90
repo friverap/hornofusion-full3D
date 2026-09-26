@@ -200,6 +200,18 @@ contains
 
     ! Fraccion de liquido que cabe en la celda (F2.7): hueco menos el gas
     ! residual de poro en el lecho
+    ! Gas RESIDUAL de poro sin liquido (F2.7 lo deja siempre >= ALPHA_PORE_GAS
+    ! para que la celda no se selle): en una celda casi solida es un poro
+    ! cerrado calentado a volumen constante y su compresibilidad integraba
+    ! p ~ P0 (T/T0 - 1) (B1 v30, 111 kPa en el fondo bajo los arcos). No es
+    ! fase fluida del acople P-V (candidato A, 2026-09-26).
+    pure elemental function pore_gas_only(as, al, ag) result(q)
+        real(dp), intent(in) :: as, al, ag
+        logical :: q
+        q = (as >= 1.0e-2_dp) .and. (al < ALPHA_FLOW_CUTOFF) .and. &
+            (ag <= 1.05_dp * ALPHA_PORE_GAS)
+    end function pore_gas_only
+
     pure elemental function liq_cap(as, asl) result(c)
         real(dp), intent(in) :: as, asl
         real(dp) :: c

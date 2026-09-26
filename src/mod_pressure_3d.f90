@@ -86,7 +86,7 @@ contains
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
-            ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid
+            ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, ws_pv_active, ws_pv_valid
         type(phase_t), intent(inout) :: liq, gas
         ! T del gas del paso anterior: término de COMPRESIBILIDAD del gas
         ! ideal, -alpha_g*(rho(T)-rho(T_old))/dt*V. Sin él, el Poisson
@@ -144,6 +144,8 @@ contains
             act_l = (liq%alpha >= ALPHA_FLOW_CUTOFF)
         end if
         act_g = (gas%alpha >= ALPHA_FLOW_CUTOFF)
+        ! Gas residual de poro solo: no es fluido del acople (candidato A)
+        if (ws_pv_valid) act_g = act_g .and. ws_pv_active
 
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
@@ -210,7 +212,7 @@ contains
                 do j = jstart, jend
                     do i = istart, iend
                         if (m%cell_type(i,j,k) == 0) cycle
-                        if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
+                        if (.not. act_g(i,j,k)) cycle
                         ! Forma de VOLUMEN: (alpha_g/rho_g) (rho(T) - rho(T_old))/dt V
                         src = gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
                               (gas%rho(i,j,k) - cfg%rho_gas * cfg%T_ambient &
@@ -240,7 +242,7 @@ contains
                                     (1.0_dp + PP_COMPLIANCE)
                         ! Término acústico low-Mach (ver P0_THERMO arriba)
                         if (cfg%gas_compressibility .and. cfg%solve_multiphase &
-                            .and. gas%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF) then
+                            .and. act_g(i,j,k)) then
                             ! (volumen: d alpha_g/dp' = alpha_g/P0)
                             aP(i,j,k) = aP(i,j,k) + gas%alpha(i,j,k) / P0_THERMO * &
                                 m%vol(i,j,k) / cfg%dt

@@ -81,7 +81,8 @@ contains
         call liquid_continuity_mask(liq, sol, m, ws_liq_cont)
         ws_liq_cont_valid = .true.
         ! Celdas con presion de fluido definida (Bug 16)
-        ws_pv_active = (ws_liq_cont .or. gas%alpha >= ALPHA_FLOW_CUTOFF) &
+        ws_pv_active = (ws_liq_cont .or. (gas%alpha >= ALPHA_FLOW_CUTOFF .and. &
+                        .not. pore_gas_only(sol%alpha_s, liq%alpha, gas%alpha))) &
                        .and. (m%cell_type /= 0)
         ws_pv_valid = .true.
         ws_pcorr_g = 0.0_dp; ws_pcorr_valid = .false.   ! (F2.3: sustituido por gas_pgrad_z)
