@@ -171,6 +171,19 @@ module mod_constants
     ! de una correlación de arrastre de gotas).
     real(dp), parameter :: TAU_LG = 0.01_dp   ! s
 
+    ! Cizalla interfacial de SUPERFICIE LIBRE (AIAD; Hoehne-Egorov, HZDR;
+    ! ANSYS AIAD): donde el liquido NO es niebla suspendida en gas — charco,
+    ! pelicula, o liquido dentro/sobre el lecho — el intercambio de momento
+    ! gas-liquido es la cizalla en la interfase,
+    !     K_fs = C_FS_SHEAR rho_g |u_g - u_l| |grad alpha_l|   [kg/(m3 s)],
+    ! con |grad alpha_l| como densidad de area interfacial. NO es el
+    ! arrastre de regimen disperso: la cizalla no iguala velocidades.
+    ! Con TAU_LG en una celda 30 % liquido sobre el lecho bajo el arco,
+    ! K = 1.6e5 arrastraba el charco a la velocidad del chorro (20 m/s) en
+    ! ~7 pasos y lo estrellaba contra la celda del lecho en cap: 134 kPa
+    ! (B1 v31, t = 113.5 s). C_FS_SHEAR = 1/2 C_D con C_D ~ 1.
+    real(dp), parameter :: C_FS_SHEAR = 0.5_dp
+
     ! Reparto del presupuesto radiativo del arco (C1.6): fracción de
     ! P_total*frac_rad que se distribuye vía Monte Carlo; el resto se
     ! deposita directo en la superficie de chatarra. Antes el MC era

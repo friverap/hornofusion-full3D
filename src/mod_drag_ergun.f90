@@ -23,11 +23,21 @@ module mod_drag_ergun
 
 contains
 
-    subroutine compute_ergun_drag(ph, sol, m, cfg, drag_coef)
+    ! on_bed (F2.15, 2026-09-27): usar el alpha_s EFECTIVO max(propio, de la
+    ! celda de abajo). Una celda sin chatarra propia que descansa sobre el
+    ! lecho es una pelicula drenando hacia el: su sumidero de momento es la
+    ! resistencia del lecho al que drena, no el arrastre del gas. Sin esto
+    ! quedaba sin freno alguno (Ergun 0 por alpha_s = 0) y caia en caida libre
+    ! hasta U_LIQ_MAX sobre la celda del lecho en cap. Es la MISMA regla que
+    ! F2.14 aplica al drift del liquido disperso, de modo que las dos ramas
+    ! (continua y dispersa) coinciden en el umbral ALPHA_LIQ_CONT. Solo para
+    ! el LIQUIDO: el gas de la celda de encima no drena al lecho.
+    subroutine compute_ergun_drag(ph, sol, m, cfg, drag_coef, on_bed)
         type(phase_t), intent(in)  :: ph
         type(solid_t), intent(in)  :: sol
         type(mesh_t), intent(in)   :: m
         type(config_t), intent(in) :: cfg
+        logical, intent(in), optional :: on_bed
         ! Cota inferior explícita: los arrays con halos tienen LB=-1 y un
         ! dummy (:,:,:) los remapearía a 1 desplazando el campo +2 celdas
         ! (regla GFortran, ver CLAUDE.md). El contrato anterior (:,:,:) tenía
@@ -37,7 +47,10 @@ contains
         integer :: i, j, k
         real(dp) :: alpha_s, A, B
         real(dp) :: vmag, d_p
+        logical  :: use_below
 
+        use_below = .false.
+        if (present(on_bed)) use_below = on_bed
         d_p = cfg%d_particle
         drag_coef = 0.0_dp
 
@@ -47,6 +60,10 @@ contains
                     if (m%cell_type(i,j,k) == 0) cycle
 
                     alpha_s = sol%alpha_s(i,j,k)
+                    if (use_below .and. alpha_s < 1.0e-2_dp) then
+                        if (m%cell_type(i,j,k-1) /= 0) &
+                            alpha_s = max(alpha_s, sol%alpha_s(i,j,k-1))
+                    end if
                     if (alpha_s < 1.0e-6_dp) cycle
 
                     ! Ergun (1952): coef = A + B |v| con la unica definicion de

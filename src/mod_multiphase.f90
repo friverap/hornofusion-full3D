@@ -104,7 +104,7 @@ contains
         ws_liq_cont_prev = ws_liq_cont
 
         ! Compute Ergun drag coefficient from solid (Picard con |v| del líquido)
-        call compute_ergun_drag(liq, sol, m, cfg, drag_coef)
+        call compute_ergun_drag(liq, sol, m, cfg, drag_coef, on_bed=.true.)
         ! Ergun del GAS con sus propias rho, mu y |v| (Bug 15, addendum 3):
         ! el coeficiente del liquido (rho_l = 7500, |v_l|) aplicado al gas
         ! daba, en cuanto el liquido disperso se movia a ~1 m/s por el
@@ -117,7 +117,7 @@ contains
         call compute_ergun_drag(gas, sol, m, cfg, drag_gas)
 
 
-        ! Coeficiente de intercambio gas-líquido: K = a_l*a_g*rho_l/TAU_LG
+        ! Coeficiente de intercambio gas-líquido (ver F2.15 abajo)
         ! (régimen disperso; ver mod_constants::TAU_LG)
         ! Donde el liquido es DISPERSO (Bug 15) el arrastre es el FISICO de
         ! una gota a velocidad terminal: K = alpha_l (rho_l - rho_g) g / u_t,
@@ -131,7 +131,22 @@ contains
         do k = lbound(Kexch,3)+2, ubound(Kexch,3)-2
             do j = lbound(Kexch,2)+2, ubound(Kexch,2)-2
                 do i = lbound(Kexch,1)+2, ubound(Kexch,1)-2
-                    if (ws_liq_cont(i,j,k)) then
+                    ! F2.15 (2026-09-27): MORFOLOGIA del acople en el LECHO
+                    ! (AIAD). El liquido que esta dentro del lecho o descansa
+                    ! sobre el no es niebla suspendida en gas: su peso lo
+                    ! lleva Ergun contra el solido y con el gas solo
+                    ! intercambia CIZALLA de interfase. Con el TAU_LG de
+                    ! regimen disperso, una celda 30 % liquido sobre el lecho
+                    ! bajo el arco quedaba atada al chorro (u_l/u_g = 0.99
+                    ! medido) y caia a 20 m/s sobre la celda del lecho en cap:
+                    ! 134 kPa (B1 v31, 113.5 s). Fuera del lecho el charco
+                    ! libre conserva el acople anterior: es lo unico que frena
+                    ! al gas sobre un bano en reposo (bath_test: con cizalla
+                    ! sola el gas se va a 143 m/s).
+                    if (sol%alpha_s(i,j,k) > ALPHA_SOLID_RESID .or. &
+                        sol%alpha_s(i,j,k-1) >= 1.0e-2_dp) then
+                        Kexch(i,j,k) = fs_shear(i, j, k)
+                    else if (ws_liq_cont(i,j,k)) then
                         Kexch(i,j,k) = liq%alpha(i,j,k) * gas%alpha(i,j,k) * &
                                        liq%rho(i,j,k) / TAU_LG
                     else if (ws_ut(i,j,k) > SMALL .and. liq%alpha(i,j,k) > 0.0_dp) then
@@ -257,6 +272,29 @@ contains
         conv%res_uz   = max(res_uz_l, res_uz_g)
         conv%res_cont = res_cont
         conv%res_energy = max(res_energy_l, res_energy_g)
+
+    contains
+
+        ! Cizalla interfacial de superficie libre (F2.15, AIAD):
+        !   K_fs = C_FS_SHEAR rho_g |u_g - u_l| |grad alpha_l|
+        ! |grad alpha_l| es la densidad de area interfacial (AIAD); sin
+        ! interfase (gradiente nulo) no hay intercambio, que es lo correcto
+        ! dentro de un charco o de una bolsa de gas homogenea.
+        pure function fs_shear(ii, jj, kk) result(K)
+            integer, intent(in) :: ii, jj, kk
+            real(dp) :: K, du, ga, gr_, gth_, gz_
+            du = sqrt((gas%ur(ii,jj,kk)  - liq%ur(ii,jj,kk))**2 + &
+                      (gas%uth(ii,jj,kk) - liq%uth(ii,jj,kk))**2 + &
+                      (gas%uz(ii,jj,kk)  - liq%uz(ii,jj,kk))**2)
+            gr_  = 0.5_dp * (liq%alpha(ii+1,jj,kk) - liq%alpha(ii-1,jj,kk)) / &
+                   max(m%r(ii+1) - m%r(ii-1), SMALL) * 2.0_dp
+            gth_ = 0.5_dp * (liq%alpha(ii,jj+1,kk) - liq%alpha(ii,jj-1,kk)) / &
+                   max(m%r(ii) * (m%theta(jj+1) - m%theta(jj-1)), SMALL) * 2.0_dp
+            gz_  = 0.5_dp * (liq%alpha(ii,jj,kk+1) - liq%alpha(ii,jj,kk-1)) / &
+                   max(m%z(kk+1) - m%z(kk-1), SMALL) * 2.0_dp
+            ga = sqrt(gr_*gr_ + gth_*gth_ + gz_*gz_)
+            K = C_FS_SHEAR * gas%rho(ii,jj,kk) * du * ga
+        end function fs_shear
 
     end subroutine multiphase_iteration
 
