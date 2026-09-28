@@ -14,7 +14,10 @@ audit_noflow:arc_budget
 # balance cierra a 3e-6 (gate deep, sigue activo). Fix real pendiente:
 # acumular en cada update de T con el rho local (pendiente del audit).
 audit_cold:energy_balance
-# --- Bug 19 (Plan C, F2 2026-09-24): banco del bano de liquido puro ---
+# --- Bug 19 CERRADO (2026-09-27; B1 v32: cero episodios, p_max 5.35 kPa en
+# 120 s de malla media, ninguna cota activada). Lo que queda aqui es de OTRA
+# familia: el modo par-impar del esquema colocado, acotado y no creciente ---
+# --- Banco del bano de liquido puro (Plan C, F2 2026-09-24) ---
 # Con el Poisson de VOLUMEN + factor alpha + PEA + gas sin el peso del
 # liquido continuo (rama planc-f2-volumen) el bano es estable: ferrostatica
 # 0.9 %, gas <= 21 m/s, p acotada, masa exacta. Quedan:
