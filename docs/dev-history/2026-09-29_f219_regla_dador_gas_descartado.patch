@@ -1,0 +1,325 @@
+diff --git a/src/mod_multiphase.f90 b/src/mod_multiphase.f90
+index 54a59f8..f29e9aa 100644
+--- a/src/mod_multiphase.f90
++++ b/src/mod_multiphase.f90
+@@ -22,7 +22,7 @@ module mod_multiphase
+     use mod_fields_3d
+     use mod_probe, only: probe_report
+     use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
+-    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_gas_perc, ws_gas_perc_valid, ws_ut, &
++    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
+                              ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, &
+                              ws_liq_cont_prev, ws_pv_active, ws_pv_valid
+     implicit none
+@@ -116,7 +116,7 @@ contains
+ 
+         ! Percolacion del gas (F2.16) y, con ella, las celdas que tienen
+         ! presion de fluido (Bug 16). El gas atrapado no la tiene.
+-        call gas_percolation_mask(gas, sol, m, cfg, drag_gas, ws_gas_perc)
++        call gas_percolation_mask(gas, sol, m, cfg, drag_gas, ws_gas_perc, ws_gas_reach)
+         ws_gas_perc_valid = .true.
+         ws_pv_active = (ws_liq_cont .or. &
+                         (gas%alpha >= ALPHA_FLOW_CUTOFF .and. ws_gas_perc)) &
+@@ -479,15 +479,19 @@ contains
+     ! de celdas propias). Si no hay semilla (ninguna celda movil arriba) NO se
+     ! atrapa nada: el criterio nunca puede amurallar el dominio entero.
+     !---------------------------------------------------------------------------
+-    subroutine gas_percolation_mask(gas, sol, m, cfg, drag_gas, perc)
++    subroutine gas_percolation_mask(gas, sol, m, cfg, drag_gas, perc, reach)
+         type(phase_t), intent(in)  :: gas
+         type(solid_t), intent(in)  :: sol
+         type(mesh_t), intent(in)   :: m
+         type(config_t), intent(in) :: cfg
+         real(dp), intent(in)       :: drag_gas(-1:,-1:,-1:)
+         logical, intent(out)       :: perc(-1:,-1:,-1:)
++        ! F2.19: celdas donde el gas PUEDE entrar (percolantes + una capa de
++        ! vecinas fuera del lecho). Criterio geometrico, no de flujo.
++        logical, intent(out)       :: reach(-1:,-1:,-1:)
+ 
+         integer, allocatable :: mob_loc(:,:,:), mob_g(:,:,:), seen(:,:,:)
++        integer, allocatable :: free_loc(:,:,:), free_g(:,:,:), rch(:,:,:)
+         integer, allocatable :: qi(:), qj(:), qk(:)
+         integer :: i, j, k, istart, iend, jstart, jend, kstart, kend
+         integer :: ig, jg, kg, nrg, nthg, nzg, head, tail, nq, d, ii, jj, kk
+@@ -498,7 +502,9 @@ contains
+         nrg = m%nr_g; nthg = m%nth_g; nzg = m%nz_g
+         allocate(mob_loc(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
+         allocate(mob_g(nrg, nthg, nzg), seen(nrg, nthg, nzg))
+-        mob_loc = 0
++        allocate(free_loc(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
++        allocate(free_g(nrg, nthg, nzg), rch(nrg, nthg, nzg))
++        mob_loc = 0; free_loc = 0
+         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+         do k = kstart, kend
+             do j = jstart, jend
+@@ -511,7 +517,16 @@ contains
+                 end do
+             end do
+         end do
++        do k = kstart, kend
++            do j = jstart, jend
++                do i = istart, iend
++                    if (m%cell_type(i,j,k) == 0) cycle
++                    if (sol%alpha_s(i,j,k) < 1.0e-2_dp) free_loc(i,j,k) = 1
++                end do
++            end do
++        end do
+         call gather_global_field_int(mob_loc, mob_g, m)
++        call gather_global_field_int(free_loc, free_g, m)
+ 
+         ! Barrido en anchura desde el freeboard (plano superior)
+         seen = 0
+@@ -548,19 +563,43 @@ contains
+             end do
+         end if
+ 
++        ! Dilatacion de UNA capa (F2.19): el gas puede entrar a una celda
++        ! vecina de gas percolante si no esta en el lecho. No propaga: una
++        ! celda de bano puro es receptora, no conducto.
++        rch = seen
++        do kg = 1, nzg
++            do jg = 1, nthg
++                do ig = 1, nrg
++                    if (seen(ig,jg,kg) == 1 .or. free_g(ig,jg,kg) /= 1) cycle
++                    do d = 1, 6
++                        ii = ig + DIR(1,d); jj = jg + DIR(2,d); kk = kg + DIR(3,d)
++                        if (jj < 1)    jj = nthg
++                        if (jj > nthg) jj = 1
++                        if (ii < 1 .or. ii > nrg) cycle
++                        if (kk < 1 .or. kk > nzg) cycle
++                        if (seen(ii,jj,kk) == 1) then
++                            rch(ig,jg,kg) = 1; exit
++                        end if
++                    end do
++                end do
++            end do
++        end do
++
+         ! Escritura de celdas propias (+ halos por intercambio)
+-        perc = .true.
++        perc = .true.; reach = .true.
+         do k = kstart, kend
+             do j = jstart, jend
+                 do i = istart, iend
+                     if (m%cell_type(i,j,k) == 0) cycle
+                     call local_to_global(m, i, j, k, ig, jg, kg)
+                     perc(i,j,k) = (seen(ig,jg,kg) == 1)
++                    reach(i,j,k) = (rch(ig,jg,kg) == 1)
+                 end do
+             end do
+         end do
+-        deallocate(mob_loc, mob_g, seen, qi, qj, qk)
++        deallocate(mob_loc, mob_g, seen, qi, qj, qk, free_loc, free_g, rch)
+         call exchange_logical_halos(perc, m)
++        call exchange_logical_halos(reach, m)
+     end subroutine gas_percolation_mask
+ 
+     pure subroutine local_to_global(m, i, j, k, ig, jg, kg)
+diff --git a/src/mod_pressure_3d.f90 b/src/mod_pressure_3d.f90
+index 9d78ca2..1afa65c 100644
+--- a/src/mod_pressure_3d.f90
++++ b/src/mod_pressure_3d.f90
+@@ -87,6 +87,7 @@ contains
+             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
+             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
+             ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, ws_pv_active, ws_pv_valid, &
++            ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, &
+             ws_gas_perc, ws_gas_perc_valid
+         type(phase_t), intent(inout) :: liq, gas
+         ! T del gas del paso anterior: término de COMPRESIBILIDAD del gas
+@@ -153,6 +154,17 @@ contains
+         ! atrapado queda fuera: ni coeficientes ni compresibilidad.
+         act_g = (gas%alpha >= ALPHA_FLOW_CUTOFF)
+         if (ws_pv_valid) act_g = act_g .and. ws_pv_active
++        ! F2.19: el gas entra al sistema tambien donde TODAVIA no lo hay pero
++        ! puede llegar (ws_gas_reach). Sin esto, una celda de bano puro que
++        ! cede liquido no tiene cara de gas enlazada y el Poisson la frena con
++        ! una succion de MPa (B1 v33, t = 204.99 s). En esas caras el gas usa
++        ! la REGLA DEL DADOR (ver vanish_face): la velocidad y la movilidad
++        ! son las del lado que si tiene gas, nunca la media con el cero
++        ! ficticio del lado vacio — esa media era el flujo espurio que
++        ! destruia el bano en reposo cuando se abrio la cara sin mas.
++        if (ws_gas_perc_valid) &
++            act_g = act_g .or. (ws_gas_reach .and. gas%alpha < ALPHA_FLOW_CUTOFF &
++                                .and. m%cell_type /= 0)
+         ag_eff = gas%alpha
+ 
+         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
+@@ -470,7 +482,7 @@ contains
+             logical, intent(in)       :: export
+ 
+             integer  :: ii, jj, kk, jjm, jjp
+-            real(dp) :: d_f, af, u_f, delta
++            real(dp) :: d_f, af, u_f, delta, dmP, dmN, wP, wN
+ 
+             do kk = kstart, kend
+                 do jj = jstart, jend
+@@ -481,12 +493,14 @@ contains
+ 
+                         ! --- Cara Oeste (i-1/2) ---
+                         if (link(act, ii-1, jj, kk)) then
+-                            d_f    = 0.5_dp * (aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL) + &
+-                                               aef(ii-1,jj,kk) * m%vol(ii-1,jj,kk) / max(ph%aP_ur(ii-1,jj,kk), SMALL))
++                            dmP = aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL)
++                            dmN = aef(ii-1,jj,kk) * m%vol(ii-1,jj,kk) / max(ph%aP_ur(ii-1,jj,kk), SMALL)
++                            call vanish_face(isg, aef(ii,jj,kk), aef(ii-1,jj,kk), wP, wN)
++                            d_f = wP*dmP + wN*dmN
+                             af = 0.5_dp * (aef(ii,jj,kk) + aef(ii-1,jj,kk))
+                             delta  = m%r(ii) - m%r(ii-1)
+-                            u_f = 0.5_dp * (ph%ur(ii-1,jj,kk) + ph%ur(ii,jj,kk)) &
+-                                + d_f * (0.5_dp*(gr(ii-1,jj,kk) + gr(ii,jj,kk)) &
++                            u_f = (wN * ph%ur(ii-1,jj,kk) + wP * ph%ur(ii,jj,kk)) &
++                                + d_f * ((wN*gr(ii-1,jj,kk) + wP*gr(ii,jj,kk)) &
+                                          - (pf(ii,jj,kk) - pf(ii-1,jj,kk)) / delta)
+                             if (face_open(isg, u_f, rm(ii-1,jj,kk), rm(ii,jj,kk))) then
+                             aW(ii,jj,kk) = aW(ii,jj,kk) + af * d_f * m%Ar(ii-1,jj,kk) / delta
+@@ -497,12 +511,14 @@ contains
+ 
+                         ! --- Cara Este (i+1/2) ---
+                         if (link(act, ii+1, jj, kk)) then
+-                            d_f    = 0.5_dp * (aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL) + &
+-                                               aef(ii+1,jj,kk) * m%vol(ii+1,jj,kk) / max(ph%aP_ur(ii+1,jj,kk), SMALL))
++                            dmP = aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL)
++                            dmN = aef(ii+1,jj,kk) * m%vol(ii+1,jj,kk) / max(ph%aP_ur(ii+1,jj,kk), SMALL)
++                            call vanish_face(isg, aef(ii,jj,kk), aef(ii+1,jj,kk), wP, wN)
++                            d_f = wP*dmP + wN*dmN
+                             af = 0.5_dp * (aef(ii,jj,kk) + aef(ii+1,jj,kk))
+                             delta  = m%r(ii+1) - m%r(ii)
+-                            u_f = 0.5_dp * (ph%ur(ii,jj,kk) + ph%ur(ii+1,jj,kk)) &
+-                                + d_f * (0.5_dp*(gr(ii,jj,kk) + gr(ii+1,jj,kk)) &
++                            u_f = (wP * ph%ur(ii,jj,kk) + wN * ph%ur(ii+1,jj,kk)) &
++                                + d_f * ((wP*gr(ii,jj,kk) + wN*gr(ii+1,jj,kk)) &
+                                          - (pf(ii+1,jj,kk) - pf(ii,jj,kk)) / delta)
+                             if (face_open(isg, u_f, rm(ii,jj,kk), rm(ii+1,jj,kk))) then
+                             aE(ii,jj,kk) = aE(ii,jj,kk) + af * d_f * m%Ar(ii,jj,kk) / delta
+@@ -518,12 +534,14 @@ contains
+ 
+                         ! --- Cara Sur (j-1/2) ---
+                         if (link(act, ii, jjm, kk)) then
+-                            d_f    = 0.5_dp * (aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
+-                                               aef(ii,jjm,kk) * m%vol(ii,jjm,kk) / max(ph%aP_uth(ii,jjm,kk), SMALL))
++                            dmP = aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL)
++                            dmN = aef(ii,jjm,kk) * m%vol(ii,jjm,kk) / max(ph%aP_uth(ii,jjm,kk), SMALL)
++                            call vanish_face(isg, aef(ii,jj,kk), aef(ii,jjm,kk), wP, wN)
++                            d_f = wP*dmP + wN*dmN
+                             af = 0.5_dp * (aef(ii,jj,kk) + aef(ii,jjm,kk))
+                             delta  = m%r(ii) * (m%theta(jj) - m%theta(jjm))
+-                            u_f = 0.5_dp * (ph%uth(ii,jjm,kk) + ph%uth(ii,jj,kk)) &
+-                                + d_f * (0.5_dp*(gth(ii,jjm,kk) + gth(ii,jj,kk)) &
++                            u_f = (wN * ph%uth(ii,jjm,kk) + wP * ph%uth(ii,jj,kk)) &
++                                + d_f * ((wN*gth(ii,jjm,kk) + wP*gth(ii,jj,kk)) &
+                                          - (pf(ii,jj,kk) - pf(ii,jjm,kk)) / delta)
+                             if (face_open(isg, u_f, rm(ii,jjm,kk), rm(ii,jj,kk))) then
+                             aS(ii,jj,kk) = aS(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
+@@ -534,12 +552,14 @@ contains
+ 
+                         ! --- Cara Norte (j+1/2) ---
+                         if (link(act, ii, jjp, kk)) then
+-                            d_f    = 0.5_dp * (aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
+-                                               aef(ii,jjp,kk) * m%vol(ii,jjp,kk) / max(ph%aP_uth(ii,jjp,kk), SMALL))
++                            dmP = aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL)
++                            dmN = aef(ii,jjp,kk) * m%vol(ii,jjp,kk) / max(ph%aP_uth(ii,jjp,kk), SMALL)
++                            call vanish_face(isg, aef(ii,jj,kk), aef(ii,jjp,kk), wP, wN)
++                            d_f = wP*dmP + wN*dmN
+                             af = 0.5_dp * (aef(ii,jj,kk) + aef(ii,jjp,kk))
+                             delta  = m%r(ii) * (m%theta(jjp) - m%theta(jj))
+-                            u_f = 0.5_dp * (ph%uth(ii,jj,kk) + ph%uth(ii,jjp,kk)) &
+-                                + d_f * (0.5_dp*(gth(ii,jj,kk) + gth(ii,jjp,kk)) &
++                            u_f = (wP * ph%uth(ii,jj,kk) + wN * ph%uth(ii,jjp,kk)) &
++                                + d_f * ((wP*gth(ii,jj,kk) + wN*gth(ii,jjp,kk)) &
+                                          - (pf(ii,jjp,kk) - pf(ii,jj,kk)) / delta)
+                             if (face_open(isg, u_f, rm(ii,jj,kk), rm(ii,jjp,kk))) then
+                             aN(ii,jj,kk) = aN(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
+@@ -555,12 +575,14 @@ contains
+ 
+                         ! --- Cara Inferior (k-1/2) ---
+                         if (link(act, ii, jj, kk-1)) then
+-                            d_f    = 0.5_dp * (aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL) + &
+-                                               aef(ii,jj,kk-1) * m%vol(ii,jj,kk-1) / max(ph%aP_uz(ii,jj,kk-1), SMALL))
++                            dmP = aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL)
++                            dmN = aef(ii,jj,kk-1) * m%vol(ii,jj,kk-1) / max(ph%aP_uz(ii,jj,kk-1), SMALL)
++                            call vanish_face(isg, aef(ii,jj,kk), aef(ii,jj,kk-1), wP, wN)
++                            d_f = wP*dmP + wN*dmN
+                             af = 0.5_dp * (aef(ii,jj,kk) + aef(ii,jj,kk-1))
+                             delta  = m%z(kk) - m%z(kk-1)
+-                            u_f = 0.5_dp * (ph%uz(ii,jj,kk-1) + ph%uz(ii,jj,kk)) &
+-                                + d_f * (0.5_dp*(gz(ii,jj,kk-1) + gz(ii,jj,kk)) &
++                            u_f = (wN * ph%uz(ii,jj,kk-1) + wP * ph%uz(ii,jj,kk)) &
++                                + d_f * ((wN*gz(ii,jj,kk-1) + wP*gz(ii,jj,kk)) &
+                                          - (pf(ii,jj,kk) - pf(ii,jj,kk-1)) / delta &
+                                          - merge(liq_weight_f(ii,jj,kk-1,kk), 0.0_dp, isg))
+                             if (face_open(isg, u_f, rm(ii,jj,kk-1), rm(ii,jj,kk))) then
+@@ -572,12 +594,14 @@ contains
+ 
+                         ! --- Cara Superior (k+1/2) ---
+                         if (link(act, ii, jj, kk+1)) then
+-                            d_f    = 0.5_dp * (aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL) + &
+-                                               aef(ii,jj,kk+1) * m%vol(ii,jj,kk+1) / max(ph%aP_uz(ii,jj,kk+1), SMALL))
++                            dmP = aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL)
++                            dmN = aef(ii,jj,kk+1) * m%vol(ii,jj,kk+1) / max(ph%aP_uz(ii,jj,kk+1), SMALL)
++                            call vanish_face(isg, aef(ii,jj,kk), aef(ii,jj,kk+1), wP, wN)
++                            d_f = wP*dmP + wN*dmN
+                             af = 0.5_dp * (aef(ii,jj,kk) + aef(ii,jj,kk+1))
+                             delta  = m%z(kk+1) - m%z(kk)
+-                            u_f = 0.5_dp * (ph%uz(ii,jj,kk) + ph%uz(ii,jj,kk+1)) &
+-                                + d_f * (0.5_dp*(gz(ii,jj,kk) + gz(ii,jj,kk+1)) &
++                            u_f = (wP * ph%uz(ii,jj,kk) + wN * ph%uz(ii,jj,kk+1)) &
++                                + d_f * ((wP*gz(ii,jj,kk) + wN*gz(ii,jj,kk+1)) &
+                                          - (pf(ii,jj,kk+1) - pf(ii,jj,kk)) / delta &
+                                          - merge(liq_weight_f(ii,jj,kk,kk+1), 0.0_dp, isg))
+                             if (face_open(isg, u_f, rm(ii,jj,kk), rm(ii,jj,kk+1))) then
+@@ -639,6 +663,26 @@ contains
+         call mpi_exchange_halos_3d(gz,  m%topo)
+         end subroutine cell_gradients
+ 
++        ! Pesos de interpolacion de cara para una fase que puede FALTAR en un
++        ! lado (F2.19, regla del dador). Normalmente 1/2 y 1/2. Si la fase
++        ! (solo el gas) esta por debajo del umbral en una de las dos celdas, la
++        ! cara toma los valores del lado que SI la tiene: su velocidad y su
++        ! movilidad. Promediar con el cero ficticio del lado vacio inyectaba
++        ! medio caudal de gas a traves de la superficie de un bano en reposo y
++        ! lo destruia (intento descartado, docs/dev-history F2.17).
++        pure subroutine vanish_face(isgas, aP_, aN_, wP, wN)
++            logical,  intent(in)  :: isgas
++            real(dp), intent(in)  :: aP_, aN_
++            real(dp), intent(out) :: wP, wN
++            wP = 0.5_dp; wN = 0.5_dp
++            if (.not. isgas) return
++            if (aP_ < ALPHA_FLOW_CUTOFF .and. aN_ >= ALPHA_FLOW_CUTOFF) then
++                wP = 0.0_dp; wN = 1.0_dp
++            else if (aN_ < ALPHA_FLOW_CUTOFF .and. aP_ >= ALPHA_FLOW_CUTOFF) then
++                wP = 1.0_dp; wN = 0.0_dp
++            end if
++        end subroutine vanish_face
++
+         ! Cara del liquido ABIERTA en el Poisson (F2.8): cerrada (a = 0,
+         ! Q* = 0, simetrico) si la celda receptora, segun el signo de u_f,
+         ! es una celda del lecho sin hueco de poro (ws_liq_room <= eps). Asi
+diff --git a/src/mod_workspace.f90 b/src/mod_workspace.f90
+index d215242..ddc2101 100644
+--- a/src/mod_workspace.f90
++++ b/src/mod_workspace.f90
+@@ -108,6 +108,13 @@ module mod_workspace
+     ! vecina con alpha_g = 0.16 que si tenia movilidad local (B1 v33,
+     ! t = 204 s: 1.38 MPa).
+     logical, allocatable :: ws_gas_perc(:,:,:)
++    ! Celdas a las que el gas PUEDE llegar (F2.19): las percolantes mas una
++    ! capa de vecinas fuera del lecho, aunque hoy no tengan gas. Es una
++    ! propiedad GEOMETRICA (no depende del flujo), asi que actua a tiempo:
++    ! una celda de bano puro que va a ceder liquido ya esta marcada antes de
++    ! empezar a drenar. F2.18 lo intento con un criterio de drenaje y llegaba
++    ! siempre un paso tarde.
++    logical, allocatable :: ws_gas_reach(:,:,:)
+     logical, save :: ws_gas_perc_valid = .false.
+ 
+ contains
+@@ -132,7 +139,8 @@ contains
+         allocate(ws_Fc_lk_r(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
+         allocate(ws_Fc_lk_th, ws_Fc_lk_z, mold=ws_Fc_lk_r)
+         ws_Fc_lk_r = 0; ws_Fc_lk_th = 0; ws_Fc_lk_z = 0
+-        allocate(ws_gas_perc, mold=ws_liq_cont); ws_gas_perc = .true.
++        allocate(ws_gas_perc, ws_gas_reach, mold=ws_liq_cont)
++        ws_gas_perc = .true.; ws_gas_reach = .true.
+         allocate(ws_pcorr_g, mold=ws_aW); ws_pcorr_g = 0.0_dp
+         allocate(ws_liq_room, mold=ws_aW); ws_liq_room = 1.0_dp
+     end subroutine ensure_workspace
