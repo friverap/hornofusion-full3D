@@ -1,0 +1,153 @@
+diff --git a/src/mod_constants.f90 b/src/mod_constants.f90
+index faa73a9..b5d84ae 100644
+--- a/src/mod_constants.f90
++++ b/src/mod_constants.f90
+@@ -194,6 +194,14 @@ module mod_constants
+     ! menos del 12 %.
+     real(dp), parameter :: GAS_MOB_MIN = 1.0e-2_dp
+ 
++    ! Drenaje que obliga a abrir la cara del gas (F2.18): divergencia del
++    ! liquido de la celda, div(alpha_l u_l) [1/s]. Una celda de bano puro que
++    ! cede liquido a una vecina drena a ~15 1/s (medido: alpha_l 1.000 ->
++    ! 0.955 en un paso de 2 ms); un bano en REPOSO esta en ~1e-6. El umbral
++    ! cae en medio de esos dos ordenes y es lo que deja intacto el bano quieto
++    ! (abrir la cara siempre destruia bath_test).
++    real(dp), parameter :: LIQ_DRAIN_MIN = 1.0_dp
++
+ 
+     ! Reparto del presupuesto radiativo del arco (C1.6): fracción de
+     ! P_total*frac_rad que se distribuye vía Monte Carlo; el resto se
+diff --git a/src/mod_multiphase.f90 b/src/mod_multiphase.f90
+index 54a59f8..8ce74a9 100644
+--- a/src/mod_multiphase.f90
++++ b/src/mod_multiphase.f90
+@@ -22,7 +22,7 @@ module mod_multiphase
+     use mod_fields_3d
+     use mod_probe, only: probe_report
+     use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
+-    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_gas_perc, ws_gas_perc_valid, ws_ut, &
++    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_gas_perc, ws_gas_perc_valid, ws_bed, ws_ut, &
+                              ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, &
+                              ws_liq_cont_prev, ws_pv_active, ws_pv_valid
+     implicit none
+@@ -118,6 +118,7 @@ contains
+         ! presion de fluido (Bug 16). El gas atrapado no la tiene.
+         call gas_percolation_mask(gas, sol, m, cfg, drag_gas, ws_gas_perc)
+         ws_gas_perc_valid = .true.
++        ws_bed = (sol%alpha_s >= 1.0e-2_dp)
+         ws_pv_active = (ws_liq_cont .or. &
+                         (gas%alpha >= ALPHA_FLOW_CUTOFF .and. ws_gas_perc)) &
+                        .and. (m%cell_type /= 0)
+diff --git a/src/mod_pressure_3d.f90 b/src/mod_pressure_3d.f90
+index 9d78ca2..2c3d92a 100644
+--- a/src/mod_pressure_3d.f90
++++ b/src/mod_pressure_3d.f90
+@@ -87,7 +87,7 @@ contains
+             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
+             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
+             ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, ws_pv_active, ws_pv_valid, &
+-            ws_gas_perc, ws_gas_perc_valid
++            ws_gas_perc, ws_gas_perc_valid, ws_bed
+         type(phase_t), intent(inout) :: liq, gas
+         ! T del gas del paso anterior: término de COMPRESIBILIDAD del gas
+         ! ideal, -alpha_g*(rho(T)-rho(T_old))/dt*V. Sin él, el Poisson
+@@ -155,6 +155,60 @@ contains
+         if (ws_pv_valid) act_g = act_g .and. ws_pv_active
+         ag_eff = gas%alpha
+ 
++        !-------------------------------------------------------------------
++        ! F2.18: la celda de bano puro que DRENA necesita que el gas entre.
++        ! Con alpha_g = 0 su cara de gas no esta enlazada, asi que al ceder
++        ! liquido a una vecina el Poisson no tiene con que sustituirlo y frena
++        ! el liquido con una succion de MPa (B1 v33, t = 204.99 s: alpha_l
++        ! 1.000 -> 0.955 en un paso, -2 MPa y el gas de encima en la cota).
++        ! El criterio es de CELDA, no de cara, para que la matriz siga
++        ! simetrica (las dos filas de la cara deciden lo mismo), y lleva tres
++        ! condiciones que juntas dejan el bano en reposo intacto:
++        !   - la celda esta drenando (div(alpha_l u_l) > LIQ_DRAIN_MIN);
++        !   - tiene una vecina con gas activo y PERCOLANTE (el gas puede
++        !     llegar de verdad: nunca se abre un camino dentro del lecho);
++        !   - no es del lecho.
++        ! Abrir la cara sin la condicion de drenaje destruye bath_test, y
++        ! darle al gas una fraccion residual rompe la ferrostatica un 13 %
++        ! (ambos probados y descartados, docs/dev-history).
++        !-------------------------------------------------------------------
++        if (ws_gas_perc_valid) then
++        block
++            real(dp) :: divl, af_
++            logical  :: hay_gas
++            do k = kstart, kend
++                do j = jstart, jend
++                    do i = istart, iend
++                        if (m%cell_type(i,j,k) == 0) cycle
++                        if (act_g(i,j,k)) cycle
++                        if (gas%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF) cycle
++                        if (ws_bed(i,j,k)) cycle
++                        if (liq%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
++                        hay_gas = gas_nb(i-1,j,k) .or. gas_nb(i+1,j,k) .or. &
++                                  gas_nb(i,j-1,k) .or. gas_nb(i,j+1,k) .or. &
++                                  gas_nb(i,j,k-1) .or. gas_nb(i,j,k+1)
++                        if (.not. hay_gas) cycle
++                        ! divergencia del liquido con velocidades de centro
++                        divl = 0.0_dp
++                        af_ = 0.5_dp*(liq%alpha(i,j,k) + liq%alpha(i+1,j,k))
++                        divl = divl + af_*0.5_dp*(liq%ur(i,j,k)+liq%ur(i+1,j,k))*m%Ar(i,j,k)
++                        af_ = 0.5_dp*(liq%alpha(i,j,k) + liq%alpha(i-1,j,k))
++                        divl = divl - af_*0.5_dp*(liq%ur(i-1,j,k)+liq%ur(i,j,k))*m%Ar(i-1,j,k)
++                        af_ = 0.5_dp*(liq%alpha(i,j,k) + liq%alpha(i,j+1,k))
++                        divl = divl + af_*0.5_dp*(liq%uth(i,j,k)+liq%uth(i,j+1,k))*m%Ath(i,j,k)
++                        af_ = 0.5_dp*(liq%alpha(i,j,k) + liq%alpha(i,j-1,k))
++                        divl = divl - af_*0.5_dp*(liq%uth(i,j-1,k)+liq%uth(i,j,k))*m%Ath(i,j,k)
++                        af_ = 0.5_dp*(liq%alpha(i,j,k) + liq%alpha(i,j,k+1))
++                        divl = divl + af_*0.5_dp*(liq%uz(i,j,k)+liq%uz(i,j,k+1))*m%Az(i,j,k)
++                        af_ = 0.5_dp*(liq%alpha(i,j,k) + liq%alpha(i,j,k-1))
++                        divl = divl - af_*0.5_dp*(liq%uz(i,j,k-1)+liq%uz(i,j,k))*m%Az(i,j,k-1)
++                        if (divl / m%vol(i,j,k) > LIQ_DRAIN_MIN) act_g(i,j,k) = .true.
++                    end do
++                end do
++            end do
++        end block
++        end if
++
+         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
+         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
+         gpr = 0.0_dp; gpth = 0.0_dp; gpz = 0.0_dp
+@@ -660,6 +714,14 @@ contains
+             r = ws_liq_room(ii,jj,kk)
+         end function rm
+ 
++        ! Vecina con gas ACTIVO y PERCOLANTE (F2.18)
++        logical function gas_nb(ii, jj, kk)
++            integer, intent(in) :: ii, jj, kk
++            gas_nb = (m%cell_type(ii,jj,kk) /= 0) .and. &
++                     (gas%alpha(ii,jj,kk) >= ALPHA_FLOW_CUTOFF) .and. &
++                     ws_gas_perc(ii,jj,kk)
++        end function gas_nb
++
+         ! Cara con flujo de ESTA fase: vecino activo en el acople
+         logical function link(act, ii, jj, kk)
+             logical, intent(in) :: act(-1:,-1:,-1:)
+diff --git a/src/mod_workspace.f90 b/src/mod_workspace.f90
+index d215242..f57cc0c 100644
+--- a/src/mod_workspace.f90
++++ b/src/mod_workspace.f90
+@@ -108,6 +108,9 @@ module mod_workspace
+     ! vecina con alpha_g = 0.16 que si tenia movilidad local (B1 v33,
+     ! t = 204 s: 1.38 MPa).
+     logical, allocatable :: ws_gas_perc(:,:,:)
++    ! Celda del LECHO (alpha_s >= 1e-2). La fija multiphase_iteration, donde
++    ! esta el solido; el Poisson la necesita y no recibe sol.
++    logical, allocatable :: ws_bed(:,:,:)
+     logical, save :: ws_gas_perc_valid = .false.
+ 
+ contains
+@@ -132,7 +135,8 @@ contains
+         allocate(ws_Fc_lk_r(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
+         allocate(ws_Fc_lk_th, ws_Fc_lk_z, mold=ws_Fc_lk_r)
+         ws_Fc_lk_r = 0; ws_Fc_lk_th = 0; ws_Fc_lk_z = 0
+-        allocate(ws_gas_perc, mold=ws_liq_cont); ws_gas_perc = .true.
++        allocate(ws_gas_perc, ws_bed, mold=ws_liq_cont)
++        ws_gas_perc = .true.; ws_bed = .false.
+         allocate(ws_pcorr_g, mold=ws_aW); ws_pcorr_g = 0.0_dp
+         allocate(ws_liq_room, mold=ws_aW); ws_liq_room = 1.0_dp
+     end subroutine ensure_workspace
