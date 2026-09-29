@@ -184,6 +184,17 @@ module mod_constants
     ! (B1 v31, t = 113.5 s). C_FS_SHEAR = 1/2 C_D con C_D ~ 1.
     real(dp), parameter :: C_FS_SHEAR = 0.5_dp
 
+    ! Movilidad del gas en una celda (F2.16): fraccion de su balance de
+    ! momento que NO se lleva el arrastre del lecho,
+    !     mob = (alpha_g rho_g/dt) / (alpha_g rho_g/dt + drag_Ergun).
+    ! mob ~ 1 gas libre; mob -> 0 gas inmovilizado por la chatarra. La
+    ! distribucion es BIMODAL (medido en B1 v33: el grueso del gas activo
+    ! entre 0.4 y 1.0, la cola bloqueada en 1e-5..1e-6), asi que el umbral
+    ! no es critico: entre 1e-2 y 1e-4 el conteo de celdas bloqueadas cambia
+    ! menos del 12 %.
+    real(dp), parameter :: GAS_MOB_MIN = 1.0e-2_dp
+
+
     ! Reparto del presupuesto radiativo del arco (C1.6): fracción de
     ! P_total*frac_rad que se distribuye vía Monte Carlo; el resto se
     ! deposita directo en la superficie de chatarra. Antes el MC era
@@ -213,18 +224,6 @@ contains
 
     ! Fraccion de liquido que cabe en la celda (F2.7): hueco menos el gas
     ! residual de poro en el lecho
-    ! Gas RESIDUAL de poro sin liquido (F2.7 lo deja siempre >= ALPHA_PORE_GAS
-    ! para que la celda no se selle): en una celda casi solida es un poro
-    ! cerrado calentado a volumen constante y su compresibilidad integraba
-    ! p ~ P0 (T/T0 - 1) (B1 v30, 111 kPa en el fondo bajo los arcos). No es
-    ! fase fluida del acople P-V (candidato A, 2026-09-26).
-    pure elemental function pore_gas_only(as, al, ag) result(q)
-        real(dp), intent(in) :: as, al, ag
-        logical :: q
-        q = (as >= 1.0e-2_dp) .and. (al < ALPHA_FLOW_CUTOFF) .and. &
-            (ag <= 1.05_dp * ALPHA_PORE_GAS)
-    end function pore_gas_only
-
     pure elemental function liq_cap(as, asl) result(c)
         real(dp), intent(in) :: as, asl
         real(dp) :: c

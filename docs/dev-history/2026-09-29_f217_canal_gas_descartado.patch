@@ -1,0 +1,199 @@
+diff --git a/src/mod_momentum_3d.f90 b/src/mod_momentum_3d.f90
+index 50fdb0e..754b96d 100644
+--- a/src/mod_momentum_3d.f90
++++ b/src/mod_momentum_3d.f90
+@@ -149,7 +149,20 @@ contains
+                         end if
+                     end if
+                     if (alpha_q(i,j,k) < ALPHA_FLOW_CUTOFF) then
+-                        aP(i,j,k) = 1.0_dp
++                        if (is_gas) then
++                            ! aP FISICO para el gas que aun no existe en la
++                            ! celda (F2.17): con el aP ficticio de 1 la
++                            ! movilidad d = alpha V/aP quedaba en ~1e-6 y el
++                            ! canal residual del Poisson nacia cerrado. Con el
++                            ! transitorio + Ergun, d = dt/rho_g, que es la
++                            ! movilidad fisica del gas. La velocidad sigue
++                            ! siendo 0 (Su = 0), como antes.
++                            aP(i,j,k) = max(alpha_q(i,j,k), ALPHA_GAS_RESID) &
++                                        * ph%rho(i,j,k) * vol / cfg%dt &
++                                        + drag_coef(i,j,k) * vol
++                        else
++                            aP(i,j,k) = 1.0_dp
++                        end if
+                         Su(i,j,k) = 0.0_dp
+                         cycle
+                     end if
+diff --git a/src/mod_pressure_3d.f90 b/src/mod_pressure_3d.f90
+index c912329..d7bf47e 100644
+--- a/src/mod_pressure_3d.f90
++++ b/src/mod_pressure_3d.f90
+@@ -86,7 +86,8 @@ contains
+             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
+             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
+             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
+-            ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, ws_pv_active, ws_pv_valid
++            ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, ws_pv_active, ws_pv_valid, &
++            ws_gas_perc, ws_gas_reach, ws_gas_perc_valid
+         type(phase_t), intent(inout) :: liq, gas
+         ! T del gas del paso anterior: término de COMPRESIBILIDAD del gas
+         ! ideal, -alpha_g*(rho(T)-rho(T_old))/dt*V. Sin él, el Poisson
+@@ -110,6 +111,8 @@ contains
+         ! Flujo de Rhie-Chow F* y coeficiente a_nb del LIQUIDO en las caras +
+         ! (este/norte/tope) de cada celda propia, para exportar el flujo
+         ! conservativo F = F* + a_nb (pp_P - pp_nb) tras el CG (Bug 19, F1)
++        ! Fraccion del gas en los coeficientes de cara (F2.17: la REAL)
++        real(dp), allocatable :: ag_eff(:,:,:)
+         real(dp), allocatable :: Fs_r(:,:,:), Fs_th(:,:,:), Fs_z(:,:,:)
+         real(dp), allocatable :: ac_r(:,:,:), ac_th(:,:,:), ac_z(:,:,:)
+         integer  :: n_iter_cg
+@@ -131,6 +134,7 @@ contains
+         allocate(act_l(lbound(sh%pp,1):ubound(sh%pp,1), lbound(sh%pp,2):ubound(sh%pp,2), &
+                        lbound(sh%pp,3):ubound(sh%pp,3)))
+         allocate(act_g, mold=act_l)
++        allocate(ag_eff, mold=sh%pp)
+         allocate(Fs_r, Fs_th, Fs_z, ac_r, ac_th, ac_z, mold=sh%pp)
+         ! Completos a cero (halos incluidos): las caras de frontera fisica
+         ! no las escribe nadie y el transporte de alpha las lee (leccion v10)
+@@ -143,9 +147,25 @@ contains
+         else
+             act_l = (liq%alpha >= ALPHA_FLOW_CUTOFF)
+         end if
++        ! Gas del acople (F2.16/F2.17): activo donde hay gas que percola, y
++        ! tambien — con el CANAL RESIDUAL — donde el gas puede entrar aunque
++        ! hoy no lo haya (celda de bano puro que cede liquido). El gas
++        ! atrapado queda fuera: ni coeficientes ni compresibilidad.
+         act_g = (gas%alpha >= ALPHA_FLOW_CUTOFF)
+-        ! Gas residual de poro solo: no es fluido del acople (candidato A)
+         if (ws_pv_valid) act_g = act_g .and. ws_pv_active
++        ! El gas entra al sistema tambien en las celdas donde TODAVIA no hay
++        ! gas pero puede llegar (F2.17): asi la cara entre una celda de bano
++        ! puro y el gas de encima CONDUCE y el gas puede ocupar el hueco que
++        ! deja el liquido al drenar. La fraccion de cara es la real,
++        ! af = (alpha_P + alpha_N)/2: en el interior del bano ambas son 0 y no
++        ! hay contribucion (la ferrostatica queda intacta); en la interfase
++        ! vale la mitad del gas de arriba. NO se inventa fraccion de gas: darle
++        ! un alpha residual rompia la ferrostatica del bano en un 13 %
++        ! (bath_hydrostatic), que es la version del flujo fantasma de F2.6.
++        ag_eff = gas%alpha
++        if (ws_gas_perc_valid) &
++            act_g = act_g .or. (ws_gas_reach .and. gas%alpha < ALPHA_FLOW_CUTOFF &
++                                .and. m%cell_type /= 0)
+ 
+         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
+         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
+@@ -185,11 +205,11 @@ contains
+         ! expansión es absorbible por el Poisson)
+         !-----------------------------------------------------------------------
+         flux_ref = 0.0_dp
+-        call add_phase_contribution(liq, act_l, .true., sh%p, gpr, gpth, gpz, .false.)
++        call add_phase_contribution(liq, liq%alpha, act_l, .true., sh%p, gpr, gpth, gpz, .false.)
+         ! Gas en el Poisson SOLO con multifase: sin gas momentum resuelto,
+         ! sus aP_u* valen 0 y d_f = V/SMALL revienta los coeficientes.
+         if (cfg%gas_in_poisson .and. cfg%solve_multiphase) &
+-            call add_phase_contribution(gas, act_g, .false., p_g, gpr_g, gpth_g, gpz_g, .true.)
++            call add_phase_contribution(gas, ag_eff, act_g, .false., p_g, gpr_g, gpth_g, gpz_g, .true.)
+ 
+         ! NOTA (cierre 2026): NO añadir aquí la fuente de masa de fusión
+         ! del líquido (Su += mdot - rho*dalpha/dt). Se probó: realimenta
+@@ -375,7 +395,7 @@ contains
+         end block
+         call mpi_exchange_halos_3d(sh%p, m%topo)
+ 
+-        deallocate(gpr, gpth, gpz, act_l, act_g)
++        deallocate(gpr, gpth, gpz, act_l, act_g, ag_eff)
+         deallocate(Fs_r, Fs_th, Fs_z, ac_r, ac_th, ac_z)
+         if (allocated(p_g)) deallocate(p_g, gpr_g, gpth_g, gpz_g)
+ 
+@@ -445,8 +465,12 @@ contains
+         ! F2.1): el predictor lleva -alpha grad p V, asi que la respuesta
+         ! de la velocidad a la presion es alpha V/aP, no V/aP (era 1/alpha
+         ! veces demasiado fuerte fuera de las celdas puras).
+-        subroutine add_phase_contribution(ph, act, export, pf, gr, gth, gz, isg)
++        subroutine add_phase_contribution(ph, aef, act, export, pf, gr, gth, gz, isg)
+             type(phase_t), intent(in) :: ph
++            ! Fraccion efectiva en los COEFICIENTES (F2.17): para el gas puede
++            ! ser el canal residual donde todavia no hay gas. La masa y la
++            ! compresibilidad siguen usando aef.
++            real(dp), intent(in)      :: aef(-1:,-1:,-1:)
+             logical, intent(in)       :: act(-1:,-1:,-1:)
+             ! Fase gas: caras verticales sin el peso del liquido (F2.3)
+             logical, intent(in)       :: isg
+@@ -469,9 +493,9 @@ contains
+ 
+                         ! --- Cara Oeste (i-1/2) ---
+                         if (link(act, ii-1, jj, kk)) then
+-                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL) + &
+-                                               ph%alpha(ii-1,jj,kk) * m%vol(ii-1,jj,kk) / max(ph%aP_ur(ii-1,jj,kk), SMALL))
+-                            af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii-1,jj,kk))
++                            d_f    = 0.5_dp * (aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL) + &
++                                               aef(ii-1,jj,kk) * m%vol(ii-1,jj,kk) / max(ph%aP_ur(ii-1,jj,kk), SMALL))
++                            af = 0.5_dp * (aef(ii,jj,kk) + aef(ii-1,jj,kk))
+                             delta  = m%r(ii) - m%r(ii-1)
+                             u_f = 0.5_dp * (ph%ur(ii-1,jj,kk) + ph%ur(ii,jj,kk)) &
+                                 + d_f * (0.5_dp*(gr(ii-1,jj,kk) + gr(ii,jj,kk)) &
+@@ -485,9 +509,9 @@ contains
+ 
+                         ! --- Cara Este (i+1/2) ---
+                         if (link(act, ii+1, jj, kk)) then
+-                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL) + &
+-                                               ph%alpha(ii+1,jj,kk) * m%vol(ii+1,jj,kk) / max(ph%aP_ur(ii+1,jj,kk), SMALL))
+-                            af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii+1,jj,kk))
++                            d_f    = 0.5_dp * (aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_ur(ii,jj,kk), SMALL) + &
++                                               aef(ii+1,jj,kk) * m%vol(ii+1,jj,kk) / max(ph%aP_ur(ii+1,jj,kk), SMALL))
++                            af = 0.5_dp * (aef(ii,jj,kk) + aef(ii+1,jj,kk))
+                             delta  = m%r(ii+1) - m%r(ii)
+                             u_f = 0.5_dp * (ph%ur(ii,jj,kk) + ph%ur(ii+1,jj,kk)) &
+                                 + d_f * (0.5_dp*(gr(ii,jj,kk) + gr(ii+1,jj,kk)) &
+@@ -506,9 +530,9 @@ contains
+ 
+                         ! --- Cara Sur (j-1/2) ---
+                         if (link(act, ii, jjm, kk)) then
+-                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
+-                                               ph%alpha(ii,jjm,kk) * m%vol(ii,jjm,kk) / max(ph%aP_uth(ii,jjm,kk), SMALL))
+-                            af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jjm,kk))
++                            d_f    = 0.5_dp * (aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
++                                               aef(ii,jjm,kk) * m%vol(ii,jjm,kk) / max(ph%aP_uth(ii,jjm,kk), SMALL))
++                            af = 0.5_dp * (aef(ii,jj,kk) + aef(ii,jjm,kk))
+                             delta  = m%r(ii) * (m%theta(jj) - m%theta(jjm))
+                             u_f = 0.5_dp * (ph%uth(ii,jjm,kk) + ph%uth(ii,jj,kk)) &
+                                 + d_f * (0.5_dp*(gth(ii,jjm,kk) + gth(ii,jj,kk)) &
+@@ -522,9 +546,9 @@ contains
+ 
+                         ! --- Cara Norte (j+1/2) ---
+                         if (link(act, ii, jjp, kk)) then
+-                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
+-                                               ph%alpha(ii,jjp,kk) * m%vol(ii,jjp,kk) / max(ph%aP_uth(ii,jjp,kk), SMALL))
+-                            af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jjp,kk))
++                            d_f    = 0.5_dp * (aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uth(ii,jj,kk), SMALL) + &
++                                               aef(ii,jjp,kk) * m%vol(ii,jjp,kk) / max(ph%aP_uth(ii,jjp,kk), SMALL))
++                            af = 0.5_dp * (aef(ii,jj,kk) + aef(ii,jjp,kk))
+                             delta  = m%r(ii) * (m%theta(jjp) - m%theta(jj))
+                             u_f = 0.5_dp * (ph%uth(ii,jj,kk) + ph%uth(ii,jjp,kk)) &
+                                 + d_f * (0.5_dp*(gth(ii,jj,kk) + gth(ii,jjp,kk)) &
+@@ -543,9 +567,9 @@ contains
+ 
+                         ! --- Cara Inferior (k-1/2) ---
+                         if (link(act, ii, jj, kk-1)) then
+-                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL) + &
+-                                               ph%alpha(ii,jj,kk-1) * m%vol(ii,jj,kk-1) / max(ph%aP_uz(ii,jj,kk-1), SMALL))
+-                            af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jj,kk-1))
++                            d_f    = 0.5_dp * (aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL) + &
++                                               aef(ii,jj,kk-1) * m%vol(ii,jj,kk-1) / max(ph%aP_uz(ii,jj,kk-1), SMALL))
++                            af = 0.5_dp * (aef(ii,jj,kk) + aef(ii,jj,kk-1))
+                             delta  = m%z(kk) - m%z(kk-1)
+                             u_f = 0.5_dp * (ph%uz(ii,jj,kk-1) + ph%uz(ii,jj,kk)) &
+                                 + d_f * (0.5_dp*(gz(ii,jj,kk-1) + gz(ii,jj,kk)) &
+@@ -560,9 +584,9 @@ contains
+ 
+                         ! --- Cara Superior (k+1/2) ---
+                         if (link(act, ii, jj, kk+1)) then
+-                            d_f    = 0.5_dp * (ph%alpha(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL) + &
+-                                               ph%alpha(ii,jj,kk+1) * m%vol(ii,jj,kk+1) / max(ph%aP_uz(ii,jj,kk+1), SMALL))
+-                            af = 0.5_dp * (ph%alpha(ii,jj,kk) + ph%alpha(ii,jj,kk+1))
++                            d_f    = 0.5_dp * (aef(ii,jj,kk) * m%vol(ii,jj,kk) / max(ph%aP_uz(ii,jj,kk), SMALL) + &
++                                               aef(ii,jj,kk+1) * m%vol(ii,jj,kk+1) / max(ph%aP_uz(ii,jj,kk+1), SMALL))
++                            af = 0.5_dp * (aef(ii,jj,kk) + aef(ii,jj,kk+1))
+                             delta  = m%z(kk+1) - m%z(kk)
+                             u_f = 0.5_dp * (ph%uz(ii,jj,kk) + ph%uz(ii,jj,kk+1)) &
+                                 + d_f * (0.5_dp*(gz(ii,jj,kk) + gz(ii,jj,kk+1)) &

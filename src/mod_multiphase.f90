@@ -21,7 +21,8 @@ module mod_multiphase
     use mod_properties_3d
     use mod_fields_3d
     use mod_probe, only: probe_report
-    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_ut, &
+    use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
+    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_gas_perc, ws_gas_perc_valid, ws_ut, &
                              ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, &
                              ws_liq_cont_prev, ws_pv_active, ws_pv_valid
     implicit none
@@ -80,11 +81,8 @@ contains
         call ensure_workspace(m)
         call liquid_continuity_mask(liq, sol, m, ws_liq_cont)
         ws_liq_cont_valid = .true.
-        ! Celdas con presion de fluido definida (Bug 16)
-        ws_pv_active = (ws_liq_cont .or. (gas%alpha >= ALPHA_FLOW_CUTOFF .and. &
-                        .not. pore_gas_only(sol%alpha_s, liq%alpha, gas%alpha))) &
-                       .and. (m%cell_type /= 0)
-        ws_pv_valid = .true.
+        ! (la mascara de presion de fluido, ws_pv_active, se fija mas abajo:
+        !  necesita el arrastre de Ergun del gas para la percolacion, F2.16)
         ws_pcorr_g = 0.0_dp; ws_pcorr_valid = .false.   ! (F2.3: sustituido por gas_pgrad_z)
         ! Hueco de poro del liquido en el lecho (F2.8; ver ws_liq_room)
         where (sol%alpha_s >= 1.0e-2_dp)
@@ -116,6 +114,14 @@ contains
         end if
         call compute_ergun_drag(gas, sol, m, cfg, drag_gas)
 
+        ! Percolacion del gas (F2.16) y, con ella, las celdas que tienen
+        ! presion de fluido (Bug 16). El gas atrapado no la tiene.
+        call gas_percolation_mask(gas, sol, m, cfg, drag_gas, ws_gas_perc)
+        ws_gas_perc_valid = .true.
+        ws_pv_active = (ws_liq_cont .or. &
+                        (gas%alpha >= ALPHA_FLOW_CUTOFF .and. ws_gas_perc)) &
+                       .and. (m%cell_type /= 0)
+        ws_pv_valid = .true.
 
         ! Coeficiente de intercambio gas-líquido (ver F2.15 abajo)
         ! (régimen disperso; ver mod_constants::TAU_LG)
@@ -447,5 +453,147 @@ contains
             ug = (apl * Hg + KV * Hl) / det
         end subroutine pea2
     end subroutine partial_elimination
+
+    !---------------------------------------------------------------------------
+    ! Percolacion del gas (F2.16, 2026-09-29)
+    !
+    ! Hilfer (Phys. Rev. E 58 (1998) 2090) divide cada fase fluida de un medio
+    ! poroso en una subfase CONECTADA (percolante) y otra DESCONECTADA
+    ! (atrapada), y define la conectada como "the region inside of which an
+    ! external applied pressure gradient can propagate"; las desconectadas son
+    ! INMOVILES (v = 0) y su presion "is generally not continuous and hence not
+    ! differentiable", por lo que no participa del campo de presion conectado.
+    ! Esa es exactamente la patologia de B1 v33: bolsas de gas en el lecho que
+    ! se calientan, no pueden ventear y acumulan p ~ P0 (T/T0 - 1) hasta la
+    ! cota, y cuyas vecinas leen esa presion como gradiente.
+    !
+    ! Criterio, de CAMINO y no local (la leccion de F2.13, que probaba celda a
+    ! celda y al declarar pared a las celdas del piso de poro encerraba a una
+    ! vecina que si tenia movilidad local):
+    !   - movil: gas activo cuyo arrastre de Ergun no domina su inercia,
+    !     mob = (alpha_g rho_g/dt)/(alpha_g rho_g/dt + drag) > GAS_MOB_MIN;
+    !   - percola: conectada al FREEBOARD (plano superior) por un camino de
+    !     celdas moviles a traves de caras (theta periodico, r sin eje).
+    ! Barrido global sobre el campo reunido (patron invariante a la
+    ! descomposicion: gather + mismo recorrido en todos los ranks + escritura
+    ! de celdas propias). Si no hay semilla (ninguna celda movil arriba) NO se
+    ! atrapa nada: el criterio nunca puede amurallar el dominio entero.
+    !---------------------------------------------------------------------------
+    subroutine gas_percolation_mask(gas, sol, m, cfg, drag_gas, perc)
+        type(phase_t), intent(in)  :: gas
+        type(solid_t), intent(in)  :: sol
+        type(mesh_t), intent(in)   :: m
+        type(config_t), intent(in) :: cfg
+        real(dp), intent(in)       :: drag_gas(-1:,-1:,-1:)
+        logical, intent(out)       :: perc(-1:,-1:,-1:)
+
+        integer, allocatable :: mob_loc(:,:,:), mob_g(:,:,:), seen(:,:,:)
+        integer, allocatable :: qi(:), qj(:), qk(:)
+        integer :: i, j, k, istart, iend, jstart, jend, kstart, kend
+        integer :: ig, jg, kg, nrg, nthg, nzg, head, tail, nq, d, ii, jj, kk
+        real(dp) :: tr, mob
+        integer, parameter :: DIR(3,6) = reshape( &
+            [ 1,0,0,  -1,0,0,  0,1,0,  0,-1,0,  0,0,1,  0,0,-1 ], [3,6])
+
+        nrg = m%nr_g; nthg = m%nth_g; nzg = m%nz_g
+        allocate(mob_loc(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
+        allocate(mob_g(nrg, nthg, nzg), seen(nrg, nthg, nzg))
+        mob_loc = 0
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
+                    tr = gas%alpha(i,j,k) * gas%rho(i,j,k) / cfg%dt
+                    mob = tr / max(tr + max(drag_gas(i,j,k), 0.0_dp), SMALL)
+                    if (mob > GAS_MOB_MIN) mob_loc(i,j,k) = 1
+                end do
+            end do
+        end do
+        call gather_global_field_int(mob_loc, mob_g, m)
+
+        ! Barrido en anchura desde el freeboard (plano superior)
+        seen = 0
+        nq = nrg * nthg * nzg
+        allocate(qi(nq), qj(nq), qk(nq))
+        head = 1; tail = 0
+        do jg = 1, nthg
+            do ig = 1, nrg
+                if (mob_g(ig,jg,nzg) == 1) then
+                    seen(ig,jg,nzg) = 1
+                    tail = tail + 1; qi(tail) = ig; qj(tail) = jg; qk(tail) = nzg
+                end if
+            end do
+        end do
+        if (tail == 0) then
+            ! sin salida al exterior no se atrapa nada (guarda: nunca amurallar)
+            seen = mob_g
+        else
+            do while (head <= tail)
+                ig = qi(head); jg = qj(head); kg = qk(head); head = head + 1
+                do d = 1, 6
+                    ii = ig + DIR(1,d)
+                    jj = jg + DIR(2,d)
+                    kk = kg + DIR(3,d)
+                    if (jj < 1)    jj = nthg      ! theta periodico
+                    if (jj > nthg) jj = 1
+                    if (ii < 1 .or. ii > nrg) cycle
+                    if (kk < 1 .or. kk > nzg) cycle
+                    if (mob_g(ii,jj,kk) == 1 .and. seen(ii,jj,kk) == 0) then
+                        seen(ii,jj,kk) = 1
+                        tail = tail + 1; qi(tail) = ii; qj(tail) = jj; qk(tail) = kk
+                    end if
+                end do
+            end do
+        end if
+
+        ! Escritura de celdas propias (+ halos por intercambio)
+        perc = .true.
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    call local_to_global(m, i, j, k, ig, jg, kg)
+                    perc(i,j,k) = (seen(ig,jg,kg) == 1)
+                end do
+            end do
+        end do
+        deallocate(mob_loc, mob_g, seen, qi, qj, qk)
+        call exchange_logical_halos(perc, m)
+    end subroutine gas_percolation_mask
+
+    pure subroutine local_to_global(m, i, j, k, ig, jg, kg)
+        type(mesh_t), intent(in) :: m
+        integer, intent(in)  :: i, j, k
+        integer, intent(out) :: ig, jg, kg
+        if (m%is_parallel) then
+            ig = m%topo%iglobal_start + (i - m%topo%istart)
+            jg = m%topo%jglobal_start + (j - m%topo%jstart)
+            kg = m%topo%kglobal_start + (k - m%topo%kstart)
+        else
+            ig = i; jg = j; kg = k
+        end if
+    end subroutine local_to_global
+
+    ! Halos de una mascara logica (via entero: no hay intercambio logico)
+    subroutine exchange_logical_halos(mask, m)
+        logical, intent(inout)   :: mask(-1:,-1:,-1:)
+        type(mesh_t), intent(in) :: m
+        integer, allocatable :: tmp(:,:,:)
+        allocate(tmp(lbound(mask,1):ubound(mask,1), lbound(mask,2):ubound(mask,2), &
+                     lbound(mask,3):ubound(mask,3)))
+        tmp = merge(1, 0, mask)
+        if (m%is_parallel) then
+            call mpi_exchange_halos_3d_int(tmp, m%topo)
+        else
+            tmp(:, -1, :)            = tmp(:, m%ntheta-1, :)
+            tmp(:, 0, :)             = tmp(:, m%ntheta,   :)
+            tmp(:, m%ntheta+1, :)    = tmp(:, 1,          :)
+            tmp(:, m%ntheta+2, :)    = tmp(:, 2,          :)
+        end if
+        mask = (tmp == 1)
+        deallocate(tmp)
+    end subroutine exchange_logical_halos
 
 end module mod_multiphase

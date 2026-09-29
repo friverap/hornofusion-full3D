@@ -99,6 +99,16 @@ module mod_workspace
     ! liquido que el limitador rechazaba (water packing).
     real(dp), allocatable :: ws_liq_room(:,:,:)
     logical, save :: ws_liq_room_valid = .false.
+    ! Gas PERCOLANTE (F2.16, Hilfer 1998): el gas de la celda esta conectado
+    ! al freeboard por un camino de celdas cuyo gas puede moverse. El gas NO
+    ! percolante es una subfase DESCONECTADA (atrapada): inmovil, su presion
+    ! no es parte del campo conectado y no debe entrar al acople P-V. El
+    ! criterio es de CAMINO, no local: F2.13 lo probaba celda a celda y al
+    ! declarar pared a las celdas del piso de poro dejaba encerrada a una
+    ! vecina con alpha_g = 0.16 que si tenia movilidad local (B1 v33,
+    ! t = 204 s: 1.38 MPa).
+    logical, allocatable :: ws_gas_perc(:,:,:)
+    logical, save :: ws_gas_perc_valid = .false.
 
 contains
 
@@ -122,6 +132,7 @@ contains
         allocate(ws_Fc_lk_r(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         allocate(ws_Fc_lk_th, ws_Fc_lk_z, mold=ws_Fc_lk_r)
         ws_Fc_lk_r = 0; ws_Fc_lk_th = 0; ws_Fc_lk_z = 0
+        allocate(ws_gas_perc, mold=ws_liq_cont); ws_gas_perc = .true.
         allocate(ws_pcorr_g, mold=ws_aW); ws_pcorr_g = 0.0_dp
         allocate(ws_liq_room, mold=ws_aW); ws_liq_room = 1.0_dp
     end subroutine ensure_workspace
