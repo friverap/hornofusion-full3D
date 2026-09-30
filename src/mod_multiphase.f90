@@ -22,7 +22,7 @@ module mod_multiphase
     use mod_fields_3d
     use mod_probe, only: probe_report
     use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
-    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_gas_perc, ws_gas_perc_valid, ws_ut, &
+    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
                              ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, &
                              ws_liq_cont_prev, ws_pv_active, ws_pv_valid
     implicit none
@@ -116,7 +116,7 @@ contains
 
         ! Percolacion del gas (F2.16) y, con ella, las celdas que tienen
         ! presion de fluido (Bug 16). El gas atrapado no la tiene.
-        call gas_percolation_mask(gas, sol, m, cfg, drag_gas, ws_gas_perc)
+        call gas_percolation_mask(gas, sol, m, cfg, drag_gas, ws_gas_perc, ws_gas_reach)
         ws_gas_perc_valid = .true.
         ws_pv_active = (ws_liq_cont .or. &
                         (gas%alpha >= ALPHA_FLOW_CUTOFF .and. ws_gas_perc)) &
@@ -479,15 +479,18 @@ contains
     ! de celdas propias). Si no hay semilla (ninguna celda movil arriba) NO se
     ! atrapa nada: el criterio nunca puede amurallar el dominio entero.
     !---------------------------------------------------------------------------
-    subroutine gas_percolation_mask(gas, sol, m, cfg, drag_gas, perc)
+    subroutine gas_percolation_mask(gas, sol, m, cfg, drag_gas, perc, reach)
         type(phase_t), intent(in)  :: gas
         type(solid_t), intent(in)  :: sol
         type(mesh_t), intent(in)   :: m
         type(config_t), intent(in) :: cfg
         real(dp), intent(in)       :: drag_gas(-1:,-1:,-1:)
         logical, intent(out)       :: perc(-1:,-1:,-1:)
+        ! F2.21: donde el gas PUEDE entrar (percolantes + una capa fuera del lecho)
+        logical, intent(out)       :: reach(-1:,-1:,-1:)
 
         integer, allocatable :: mob_loc(:,:,:), mob_g(:,:,:), seen(:,:,:)
+        integer, allocatable :: free_loc(:,:,:), free_g(:,:,:), rch(:,:,:)
         integer, allocatable :: qi(:), qj(:), qk(:)
         integer :: i, j, k, istart, iend, jstart, jend, kstart, kend
         integer :: ig, jg, kg, nrg, nthg, nzg, head, tail, nq, d, ii, jj, kk
@@ -498,7 +501,9 @@ contains
         nrg = m%nr_g; nthg = m%nth_g; nzg = m%nz_g
         allocate(mob_loc(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         allocate(mob_g(nrg, nthg, nzg), seen(nrg, nthg, nzg))
-        mob_loc = 0
+        allocate(free_loc(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
+        allocate(free_g(nrg, nthg, nzg), rch(nrg, nthg, nzg))
+        mob_loc = 0; free_loc = 0
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         do k = kstart, kend
             do j = jstart, jend
@@ -511,7 +516,16 @@ contains
                 end do
             end do
         end do
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (sol%alpha_s(i,j,k) < 1.0e-2_dp) free_loc(i,j,k) = 1
+                end do
+            end do
+        end do
         call gather_global_field_int(mob_loc, mob_g, m)
+        call gather_global_field_int(free_loc, free_g, m)
 
         ! Barrido en anchura desde el freeboard (plano superior)
         seen = 0
@@ -548,19 +562,43 @@ contains
             end do
         end if
 
+        ! Dilatacion de UNA capa: el gas puede entrar a una celda vecina de
+        ! gas percolante si no esta en el lecho. No propaga: una celda de bano
+        ! puro es receptora, no conducto.
+        rch = seen
+        do kg = 1, nzg
+            do jg = 1, nthg
+                do ig = 1, nrg
+                    if (seen(ig,jg,kg) == 1 .or. free_g(ig,jg,kg) /= 1) cycle
+                    do d = 1, 6
+                        ii = ig + DIR(1,d); jj = jg + DIR(2,d); kk = kg + DIR(3,d)
+                        if (jj < 1)    jj = nthg
+                        if (jj > nthg) jj = 1
+                        if (ii < 1 .or. ii > nrg) cycle
+                        if (kk < 1 .or. kk > nzg) cycle
+                        if (seen(ii,jj,kk) == 1) then
+                            rch(ig,jg,kg) = 1; exit
+                        end if
+                    end do
+                end do
+            end do
+        end do
+
         ! Escritura de celdas propias (+ halos por intercambio)
-        perc = .true.
+        perc = .true.; reach = .true.
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     call local_to_global(m, i, j, k, ig, jg, kg)
                     perc(i,j,k) = (seen(ig,jg,kg) == 1)
+                    reach(i,j,k) = (rch(ig,jg,kg) == 1)
                 end do
             end do
         end do
-        deallocate(mob_loc, mob_g, seen, qi, qj, qk)
+        deallocate(mob_loc, mob_g, seen, qi, qj, qk, free_loc, free_g, rch)
         call exchange_logical_halos(perc, m)
+        call exchange_logical_halos(reach, m)
     end subroutine gas_percolation_mask
 
     pure subroutine local_to_global(m, i, j, k, ig, jg, kg)

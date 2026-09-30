@@ -778,7 +778,24 @@ Juez de reinicio desde 110 s: el episodio de 134 kPa desaparece (p_max 3.6 kPa, 
 | (c) F2.18 compuerta de drenaje | 72 kPa (pasa) | 0.87 % (pasa) | pasan — pero el pico sólo baja a 0.34 MPa |
 | (d) F2.19 dador + alcance | 202 kPa | **1.7 %** (tol 1 %) | pasan |
 
-La ferrostática del interfaz sí está bien planteada —el peso ½ de `liq_weight_f` es exacto cuando la interfase coincide con la cara, comprobado a mano: 30 kPa/m de peso contra 30 kPa/m de gradiente— así que lo que queda es el transitorio con el que `bath_test` asienta el charco, no el equilibrio. **Conclusión operativa: el mecanismo sigue abierto y la colada larga no es ejecutable.** Lo que las cuatro medidas acotan para el siguiente intento: la apertura debe ser geométrica (reactiva llega tarde), con regla del dador (la media inyecta caudal), y falta que no perturbe el asentamiento de un charco libre — probablemente limitando `ws_gas_reach` a celdas cuya vecina de gas percolante esté *por encima* (interfase de superficie libre) en vez de en cualquier dirección. **Hasta resolverlo la colada larga no es ejecutable**, y v33 quedó detenida en t = 449 s.
+La ferrostática del interfaz sí está bien planteada —el peso ½ de `liq_weight_f` es exacto cuando la interfase coincide con la cara, comprobado a mano: 30 kPa/m de peso contra 30 kPa/m de gradiente— así que lo que queda es el transitorio con el que `bath_test` asienta el charco, no el equilibrio. **F2.20/F2.21 — tratamiento de FASE EVANESCENTE, y el mecanismo cierra (2026-09-29).** La búsqueda en la literatura correcta lo resolvió: esto es la *phase appearance and disappearance* de la termohidráulica nuclear, y no es un defecto de implementación sino una degeneración conocida del modelo de dos fluidos — al desvanecerse una fase el sistema **pierde la hiperbolicidad** (la fase minoritaria obedece una dinámica sin presión cuyo jacobiano no es diagonalizable, y dos autovectores colapsan; Ndjinga et al., *J. Sci. Comput.* 56 (2013), arXiv 1110.0597). Los códigos del área no paran la fase que desaparece: CATHARE y NEPTUNE mantienen las tres ecuaciones de ambas fases con fracciones residuales (1e-5) y **acondicionan los términos de fricción «to provide a proper mechanical model for the coupling of the residual phases»** (Bestion 2000; Guelfi et al., *NSE* 156 (2007) 281), y la extensión AUSM+ a dos fluidos **ata la velocidad de la fase evanescente a la de la otra mediante una función suave** por debajo de α_min = 1e-4 (Paillère, Corre y García Cascales, *Computers & Fluids* 32 (2003) 891).
+
+Nuestra guarda de momento hacía exactamente lo contrario: ponía **u = 0** a la fase por debajo de `ALPHA_FLOW_CUTOFF`, y ese cero artificial es lo que hacía fracasar los cuatro intentos anteriores — en la cara, el promedio ½(0 + u_vecino) inyectaba medio caudal de gas a través de la superficie de un baño en reposo. Dos piezas:
+
+- **F2.20**: la fase por debajo del umbral recibe la velocidad de la otra fase (`Su = aP·vel_other`) y un `aP` **físico** `max(α, ALPHA_PHASE_MIN)·ρ·V/Δt + (Ergun + K)·V` en lugar del ficticio 1, que es el acondicionamiento de CATHARE. El líquido disperso ya seguía esta regla desde el Bug 15 (su velocidad es el drift, no cero); esto se la da también al gas.
+- **F2.21**: `ws_gas_reach` (percolantes más una capa de vecinas fuera del lecho) mete al gas en el sistema **también donde todavía no lo hay pero puede llegar**, que es lo que permite a la celda de baño puro recibir gas al drenar. Es geométrico, así que la cara existe antes de que la celda empiece a drenar; el criterio reactivo de F2.18 llegaba siempre un paso tarde.
+
+**Medido.** Juez de reinicio desde 200 s, ventana 200–210 s donde v33 murió:
+
+| | v33 (roto) | sólo F2.20 | **F2.20 + F2.21** |
+|---|---|---|---|
+| p_max | 2 MPa | 2 MPa | **9.9 kPa** |
+| filas > 20 kPa | 7.1 % | 15 picos | **0** |
+| gas en la cota | 13.1 % | 6 filas | **0** |
+
+Y una consecuencia que confirma el diagnóstico: en `bath_test` la deriva de composición de un baño en reposo pasa de 1.1e-3 a **0.000 exacto**, así que `bath_alpha_frozen` sale de `xfail.list` — lo que se daba por limitación del esquema colocado era en realidad la inconsistencia de aparición de fase. Golden v31.
+
+**Lo que queda.** En 200–210 s el líquido todavía toca `U_LIQ_MAX` el 8.8 % de las filas (v33: 11.4 %) a partir de 209.1 s, y aparece un clip auditado de 0.42 kg. Son las columnas del arco de siempre y hay que caracterizarlos antes de relanzar la colada larga; la diferencia con antes es que ahora no hay excursión de presión que los explique.
 
 ### Bug 21 — Coeficiente de Forchheimer de Ergun con unidades erróneas: el lecho era ~500–800× más resistente que Ergun (`mod_constants.f90`, `mod_drag_ergun.f90`)
 

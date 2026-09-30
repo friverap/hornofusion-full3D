@@ -108,6 +108,11 @@ module mod_workspace
     ! vecina con alpha_g = 0.16 que si tenia movilidad local (B1 v33,
     ! t = 204 s: 1.38 MPa).
     logical, allocatable :: ws_gas_perc(:,:,:)
+    ! Celdas a las que el gas PUEDE llegar (F2.21): percolantes mas una capa
+    ! de vecinas fuera del lecho. Es GEOMETRICO (no depende del flujo), asi
+    ! que la cara existe ANTES de que la celda empiece a drenar; un criterio
+    ! reactivo llega siempre un paso tarde (F2.18).
+    logical, allocatable :: ws_gas_reach(:,:,:)
     logical, save :: ws_gas_perc_valid = .false.
 
 contains
@@ -132,7 +137,8 @@ contains
         allocate(ws_Fc_lk_r(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         allocate(ws_Fc_lk_th, ws_Fc_lk_z, mold=ws_Fc_lk_r)
         ws_Fc_lk_r = 0; ws_Fc_lk_th = 0; ws_Fc_lk_z = 0
-        allocate(ws_gas_perc, mold=ws_liq_cont); ws_gas_perc = .true.
+        allocate(ws_gas_perc, ws_gas_reach, mold=ws_liq_cont)
+        ws_gas_perc = .true.; ws_gas_reach = .true.
         allocate(ws_pcorr_g, mold=ws_aW); ws_pcorr_g = 0.0_dp
         allocate(ws_liq_room, mold=ws_aW); ws_liq_room = 1.0_dp
     end subroutine ensure_workspace

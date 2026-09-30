@@ -87,6 +87,7 @@ contains
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
             ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, ws_pv_active, ws_pv_valid, &
+            ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, &
             ws_gas_perc, ws_gas_perc_valid
         type(phase_t), intent(inout) :: liq, gas
         ! T del gas del paso anterior: término de COMPRESIBILIDAD del gas
@@ -153,6 +154,18 @@ contains
         ! atrapado queda fuera: ni coeficientes ni compresibilidad.
         act_g = (gas%alpha >= ALPHA_FLOW_CUTOFF)
         if (ws_pv_valid) act_g = act_g .and. ws_pv_active
+        ! F2.21: el gas entra al sistema tambien donde TODAVIA no lo hay pero
+        ! puede llegar. CATHARE/NEPTUNE resuelven las ecuaciones de ambas
+        ! fases aunque una desaparezca; aqui eso significa que la cara entre
+        ! una celda de bano puro y el gas de encima EXISTE, de modo que el gas
+        ! puede ocupar el hueco que deja el liquido al drenar. Lo que hace que
+        ! esto no destruya un bano en reposo (cuatro intentos fallidos,
+        ! docs/dev-history F2.17-F2.19) es F2.20: la velocidad de la fase
+        ! evanescente esta atada a la de la otra fase, no puesta a cero, asi
+        ! que en un charco quieto la cara ve u ~ 0 y no inyecta caudal.
+        if (ws_gas_perc_valid) &
+            act_g = act_g .or. (ws_gas_reach .and. gas%alpha < ALPHA_FLOW_CUTOFF &
+                                .and. m%cell_type /= 0)
         ag_eff = gas%alpha
 
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp

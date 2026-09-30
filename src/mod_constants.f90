@@ -194,6 +194,15 @@ module mod_constants
     ! menos del 12 %.
     real(dp), parameter :: GAS_MOB_MIN = 1.0e-2_dp
 
+    ! Fraccion residual de una fase EVANESCENTE (F2.20; CATHARE usa 1e-5,
+    ! NEPTUNE lo mismo, AUSM+ para dos fluidos 1e-4). Solo entra en el aP de
+    ! momento para que la movilidad de la fase residual sea la fisica
+    ! (d = dt/rho) en vez del aP ficticio de 1: es el "numerical conditioning
+    ! of the interfacial and wall friction source terms in order to provide a
+    ! proper mechanical model for the coupling of the residual phases" de
+    ! CATHARE. No es masa: la fraccion real no se toca.
+    real(dp), parameter :: ALPHA_PHASE_MIN = 1.0e-5_dp
+
 
     ! Reparto del presupuesto radiativo del arco (C1.6): fracción de
     ! P_total*frac_rad que se distribuye vía Monte Carlo; el resto se

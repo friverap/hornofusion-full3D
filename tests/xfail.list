@@ -24,7 +24,9 @@ audit_cold:energy_balance
 # - corriente fantasma de centro de 0.17 m/s (flujos de cara ~0): modo
 #   par-impar del colocado, ACOTADA y no creciente; Liu et al. 2024 la
 #   documentan como no eliminable con los metodos actuales;
-# - d alpha 1.1e-3 en 1 s en la capa bajo la superficie (antes 4.7e-2):
-#   la tolerancia 1e-9 del check es de "reposo exacto", que el esquema no da.
+#   (bath_alpha_frozen se RETIRO el 29-sep-2026: con el tratamiento de fase
+#   evanescente — velocidad atada a la otra fase en vez de cero, F2.20 — el
+#   d alpha de un bano en reposo pasa de 1.1e-3 a 0.000 EXACTO. La deriva de
+#   composicion que se daba por inevitable era la inconsistencia de aparicion
+#   de fase, no el esquema colocado.)
 bath:bath_rest
-bath:bath_alpha_frozen

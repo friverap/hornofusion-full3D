@@ -149,8 +149,28 @@ contains
                         end if
                     end if
                     if (alpha_q(i,j,k) < ALPHA_FLOW_CUTOFF) then
-                        aP(i,j,k) = 1.0_dp
-                        Su(i,j,k) = 0.0_dp
+                        ! FASE EVANESCENTE (F2.20). El modelo de dos fluidos
+                        ! pierde la hiperbolicidad cuando una fase desaparece
+                        ! (la minoritaria obedece una dinamica sin presion, su
+                        ! jacobiano no es diagonalizable): es la "phase
+                        ! appearance and disappearance" de la termohidraulica
+                        ! nuclear. La literatura NO la para: AUSM+ para dos
+                        ! fluidos (Paillere et al. 2003) ATA su velocidad a la
+                        ! de la otra fase por debajo de alpha_min, y CATHARE /
+                        ! NEPTUNE acondicionan los terminos de friccion para
+                        ! dar "a proper mechanical model for the coupling of
+                        ! the residual phases". Poner u = 0 era un cero
+                        ! ARTIFICIAL: en la cara, el promedio con la velocidad
+                        ! del vecino inyectaba medio caudal a traves de la
+                        ! superficie de un bano en reposo (cuatro intentos
+                        ! fallidos en docs/dev-history, F2.17-F2.19).
+                        ! El liquido disperso ya seguia esta regla desde el
+                        ! Bug 15 (su velocidad es el drift, no cero); esto se
+                        ! la da tambien al gas.
+                        aP(i,j,k) = max(alpha_q(i,j,k), ALPHA_PHASE_MIN) &
+                                    * ph%rho(i,j,k) * vol / cfg%dt &
+                                    + (drag_coef(i,j,k) + Kexch(i,j,k)) * vol
+                        Su(i,j,k) = aP(i,j,k) * vel_other(i,j,k)
                         cycle
                     end if
 
