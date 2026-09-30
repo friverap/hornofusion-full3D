@@ -1,0 +1,191 @@
+diff --git a/src/mod_constants.f90 b/src/mod_constants.f90
+index e7ceff4..6e3194a 100644
+--- a/src/mod_constants.f90
++++ b/src/mod_constants.f90
+@@ -184,6 +184,39 @@ module mod_constants
+     ! (B1 v31, t = 113.5 s). C_FS_SHEAR = 1/2 C_D con C_D ~ 1.
+     real(dp), parameter :: C_FS_SHEAR = 0.5_dp
+ 
++    ! --- F2.22 (29-sep-2026): AIAD de verdad, y MEZCLA en vez de interruptor.
++    !
++    ! Dos defectos de la forma anterior, ambos medidos en el colapso que
++    ! arranca cuando el arco perfora el lecho (ver docs/ARCHITECTURE.md):
++    !
++    ! (a) La eleccion de morfologia era un INTERRUPTOR DURO sobre alpha_s
++    !     (propio > 1e-4 o de abajo >= 1e-2). Al cruzarlo, K saltaba una
++    !     mediana de 1.5e8 veces. Ningun codigo Euler-Euler hace eso:
++    !     AIAD (Hoehne & Vallee, WIT Trans. Eng. Sci. 63 (2010) 123, ecs.
++    !     6-9) MEZCLA los coeficientes con una logistica
++    !         f = [1 + exp(a (alpha - alpha_lim))]^-1
++    !     y GENTOP (Haensch et al., Int. J. Multiphase Flow 47 (2012) 171)
++    !     con la tanh equivalente; ambos con alpha_lim = 0.3 y a = 50-70
++    !     (ancho 10-90 % de ln(81)/a ~ 0.06-0.09 en fraccion de volumen).
++    !     TRACE/RELAP interpolan sobre bandas de 0.2-0.3. Nunca un umbral.
++    !
++    ! (b) La cizalla usaba un C_D fijo en una ley CUADRATICA, y con
++    !     |grad alpha_l| como unica area daba K ~ 50 en malla media: nada.
++    !     AIAD define el arrastre de superficie libre como una FRICCION
++    !     (Hoehne & Mehlhoop, Int. J. Multiphase Flow 62 (2014) 1, ecs.
++    !     7-8; ANSYS Fluent Theory Guide 14.5.20, ecs. 14-465/14-470):
++    !         A_fs   = 2 alpha_l alpha_g |grad alpha_l - grad alpha_g|
++    !         C_D,fs = max(C_FS_FLOOR, 2 (alpha_l tau_l + alpha_g tau_g)
++    !                                    / (rho_l u_slip^2))
++    !         K      = C_D,fs A_fs (1/2) rho_mix |u_slip|
++    !     con tau_q = mu_eff_q |u_slip|/delta el esfuerzo de pared de la
++    !     capa limite a cada lado. El 1/u_slip^2 CANCELA la cuadratica: la
++    !     fuerza queda lineal en Delta u, que es lo que debe ser una
++    !     friccion. El max() es un PISO, no un techo.
++    real(dp), parameter :: ALPHA_AIAD_LIM = 0.3_dp   ! centro de la mezcla
++    real(dp), parameter :: A_AIAD         = 50.0_dp  ! pendiente (Fluent)
++    real(dp), parameter :: C_FS_FLOOR     = 0.01_dp  ! piso de C_D,fs (AIAD)
++
+     ! Movilidad del gas en una celda (F2.16): fraccion de su balance de
+     ! momento que NO se lleva el arrastre del lecho,
+     !     mob = (alpha_g rho_g/dt) / (alpha_g rho_g/dt + drag_Ergun).
+diff --git a/src/mod_multiphase.f90 b/src/mod_multiphase.f90
+index d1e7ab3..5391b12 100644
+--- a/src/mod_multiphase.f90
++++ b/src/mod_multiphase.f90
+@@ -43,6 +43,7 @@ contains
+         real(dp) :: res_ur_l, res_uth_l, res_uz_l
+         real(dp) :: res_ur_g, res_uth_g, res_uz_g
+         real(dp) :: res_cont, res_energy_l, res_energy_g
++        real(dp) :: al_c, xb, f_disp, K_disp   ! F2.22 mezcla de morfologia
+         ! Velocidades del liquido USADAS por el solve del gas (PEA, F2.2)
+         real(dp), allocatable :: ul_used_r(:,:,:), ul_used_th(:,:,:), ul_used_z(:,:,:)
+         ! Solucion SIN relajar del momento del liquido (para el PEA)
+@@ -137,30 +138,34 @@ contains
+         do k = lbound(Kexch,3)+2, ubound(Kexch,3)-2
+             do j = lbound(Kexch,2)+2, ubound(Kexch,2)-2
+                 do i = lbound(Kexch,1)+2, ubound(Kexch,1)-2
+-                    ! F2.15 (2026-09-27): MORFOLOGIA del acople en el LECHO
+-                    ! (AIAD). El liquido que esta dentro del lecho o descansa
+-                    ! sobre el no es niebla suspendida en gas: su peso lo
+-                    ! lleva Ergun contra el solido y con el gas solo
+-                    ! intercambia CIZALLA de interfase. Con el TAU_LG de
+-                    ! regimen disperso, una celda 30 % liquido sobre el lecho
+-                    ! bajo el arco quedaba atada al chorro (u_l/u_g = 0.99
+-                    ! medido) y caia a 20 m/s sobre la celda del lecho en cap:
+-                    ! 134 kPa (B1 v31, 113.5 s). Fuera del lecho el charco
+-                    ! libre conserva el acople anterior: es lo unico que frena
+-                    ! al gas sobre un bano en reposo (bath_test: con cizalla
+-                    ! sola el gas se va a 143 m/s).
+-                    if (sol%alpha_s(i,j,k) > ALPHA_SOLID_RESID .or. &
+-                        sol%alpha_s(i,j,k-1) >= 1.0e-2_dp) then
+-                        Kexch(i,j,k) = fs_shear(i, j, k)
+-                    else if (ws_liq_cont(i,j,k)) then
+-                        Kexch(i,j,k) = liq%alpha(i,j,k) * gas%alpha(i,j,k) * &
+-                                       liq%rho(i,j,k) / TAU_LG
+-                    else if (ws_ut(i,j,k) > SMALL .and. liq%alpha(i,j,k) > 0.0_dp) then
+-                        Kexch(i,j,k) = liq%alpha(i,j,k) * &
+-                            max(liq%rho(i,j,k) - gas%rho(i,j,k), 0.0_dp) * GRAVITY / ws_ut(i,j,k)
++                    ! F2.22 (2026-09-29): MEZCLA de morfologia (AIAD ec. 9),
++                    ! nunca un interruptor. f_disp es el peso de la morfologia
++                    ! DISPERSA (gotas suspendidas en gas) y 1 - f_disp el de
++                    ! la SUPERFICIE LIBRE (charco, pelicula, bano, liquido
++                    ! sobre el lecho); se mezclan los COEFICIENTES.
++                    !
++                    ! Lo que sustituye: un interruptor duro sobre alpha_s que
++                    ! saltaba una mediana de 1.5e8 veces al cruzar 1e-2, mas
++                    ! una relajacion dispersa alpha_l alpha_g rho_l/TAU_LG
++                    ! para el charco libre. Medido: en cuanto el arco perfora
++                    ! el lecho, la celda de bano cae al lado disperso, el gas
++                    ! queda soldado al liquido (K/inercia_gas 500-4600 POR
++                    ! PASO) y el chorro del arco se aniquila en una celda;
++                    ! el liquido arranca en exponencial con e-folding de 50 ms
++                    ! hasta U_LIQ_MAX y el colapso se extiende a toda la
++                    ! superficie del bano (v33: 3 celdas a 250 s, 1143 a 400 s,
++                    ! las tres centinelas en la cota el 100 % de los pasos).
++                    al_c = liq%alpha(i,j,k)
++                    xb = A_AIAD * (al_c - ALPHA_AIAD_LIM)
++                    f_disp = 1.0_dp / (1.0_dp + exp(min(max(xb, -60.0_dp), 60.0_dp)))
++                    if (ws_ut(i,j,k) > SMALL .and. al_c > 0.0_dp) then
++                        K_disp = al_c * max(liq%rho(i,j,k) - gas%rho(i,j,k), &
++                                            0.0_dp) * GRAVITY / ws_ut(i,j,k)
+                     else
+-                        Kexch(i,j,k) = 0.0_dp
++                        K_disp = 0.0_dp
+                     end if
++                    Kexch(i,j,k) = (1.0_dp - f_disp) * fs_drag(i, j, k) &
++                                   + f_disp * K_disp
+                 end do
+             end do
+         end do
+@@ -281,26 +286,61 @@ contains
+ 
+     contains
+ 
+-        ! Cizalla interfacial de superficie libre (F2.15, AIAD):
+-        !   K_fs = C_FS_SHEAR rho_g |u_g - u_l| |grad alpha_l|
+-        ! |grad alpha_l| es la densidad de area interfacial (AIAD); sin
+-        ! interfase (gradiente nulo) no hay intercambio, que es lo correcto
+-        ! dentro de un charco o de una bolsa de gas homogenea.
+-        pure function fs_shear(ii, jj, kk) result(K)
++        ! Arrastre de SUPERFICIE LIBRE de AIAD (F2.22), en su forma de
++        ! FRICCION (Hoehne & Mehlhoop, Int. J. Multiphase Flow 62 (2014) 1,
++        ! ecs. 7-8; ANSYS Fluent Theory Guide 14.5.20, ecs. 14-465/14-470):
++        !
++        !   A_fs   = 2 alpha_l alpha_g |grad alpha_l - grad alpha_g|
++        !   tau_q  = mu_eff_q |u_slip| / delta        (capa limite de cada lado)
++        !   C_D,fs = max(C_FS_FLOOR, 2 (alpha_l tau_l + alpha_g tau_g)
++        !                              / (rho_l u_slip^2))
++        !   K      = C_D,fs A_fs (1/2) rho_mix |u_slip|
++        !
++        ! El 1/u_slip^2 de C_D cancela la cuadratica: la fuerza queda LINEAL
++        ! en Delta u, que es lo que debe ser una friccion de pared. El max()
++        ! es un PISO (AIAD nunca teme que el acople sea demasiado fuerte: su
++        ! objetivo declarado es casi-no-deslizamiento en la interfase).
++        ! El factor 2 alpha_l alpha_g anula el area en celdas puras y la
++        ! maximiza en alpha = 0.5 — lo que la forma anterior C |grad alpha|
++        ! no tenia, y por lo que daba K ~ 50 (nada) en malla media.
++        !
++        ! Escalas medidas en una celda de superficie de bano: K ~ 1e3, o sea
++        ! K/inercia_gas ~ 20 por paso (el gas SI queda atado al bano, que es
++        ! lo que exige bath_test) y K/inercia_liquido ~ 5e-4 por paso (el
++        ! liquido NO se lo lleva el chorro, que es lo que rompia el modelo).
++        pure function fs_drag(ii, jj, kk) result(K)
+             integer, intent(in) :: ii, jj, kk
+-            real(dp) :: K, du, ga, gr_, gth_, gz_
++            real(dp) :: K, du, ga, A_fs, C_fs, rho_mix, delta, tl, tg
++            real(dp) :: al, ag, dr_, dth_, dz_
++            al = liq%alpha(ii,jj,kk); ag = gas%alpha(ii,jj,kk)
++            K = 0.0_dp
++            if (al <= SMALL .or. ag <= SMALL) return
+             du = sqrt((gas%ur(ii,jj,kk)  - liq%ur(ii,jj,kk))**2 + &
+                       (gas%uth(ii,jj,kk) - liq%uth(ii,jj,kk))**2 + &
+                       (gas%uz(ii,jj,kk)  - liq%uz(ii,jj,kk))**2)
+-            gr_  = 0.5_dp * (liq%alpha(ii+1,jj,kk) - liq%alpha(ii-1,jj,kk)) / &
+-                   max(m%r(ii+1) - m%r(ii-1), SMALL) * 2.0_dp
+-            gth_ = 0.5_dp * (liq%alpha(ii,jj+1,kk) - liq%alpha(ii,jj-1,kk)) / &
+-                   max(m%r(ii) * (m%theta(jj+1) - m%theta(jj-1)), SMALL) * 2.0_dp
+-            gz_  = 0.5_dp * (liq%alpha(ii,jj,kk+1) - liq%alpha(ii,jj,kk-1)) / &
+-                   max(m%z(kk+1) - m%z(kk-1), SMALL) * 2.0_dp
+-            ga = sqrt(gr_*gr_ + gth_*gth_ + gz_*gz_)
+-            K = C_FS_SHEAR * gas%rho(ii,jj,kk) * du * ga
+-        end function fs_shear
++            if (du <= SMALL) return
++            ! |grad alpha_l - grad alpha_g|, diferencias centradas
++            dr_  = ((liq%alpha(ii+1,jj,kk) - gas%alpha(ii+1,jj,kk)) - &
++                    (liq%alpha(ii-1,jj,kk) - gas%alpha(ii-1,jj,kk))) / &
++                   max(m%r(ii+1) - m%r(ii-1), SMALL)
++            dth_ = ((liq%alpha(ii,jj+1,kk) - gas%alpha(ii,jj+1,kk)) - &
++                    (liq%alpha(ii,jj-1,kk) - gas%alpha(ii,jj-1,kk))) / &
++                   max(m%r(ii) * (m%theta(jj+1) - m%theta(jj-1)), SMALL)
++            dz_  = ((liq%alpha(ii,jj,kk+1) - gas%alpha(ii,jj,kk+1)) - &
++                    (liq%alpha(ii,jj,kk-1) - gas%alpha(ii,jj,kk-1))) / &
++                   max(m%z(kk+1) - m%z(kk-1), SMALL)
++            ga = sqrt(dr_*dr_ + dth_*dth_ + dz_*dz_)
++            if (ga <= SMALL) return
++            A_fs = 2.0_dp * al * ag * ga
++            delta = max(m%vol(ii,jj,kk), SMALL) ** (1.0_dp/3.0_dp)
++            tl = liq%mu_eff(ii,jj,kk) * du / delta
++            tg = gas%mu_eff(ii,jj,kk) * du / delta
++            C_fs = max(C_FS_FLOOR, 2.0_dp * (al*tl + ag*tg) / &
++                                   (liq%rho(ii,jj,kk) * du * du))
++            rho_mix = (al * liq%rho(ii,jj,kk) + ag * gas%rho(ii,jj,kk)) / &
++                      max(al + ag, SMALL)
++            K = C_fs * A_fs * 0.5_dp * rho_mix * du
++        end function fs_drag
+ 
+     end subroutine multiphase_iteration
+ 
