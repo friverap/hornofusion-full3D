@@ -21,6 +21,7 @@ module mod_momentum_3d
     use mod_boundary_3d
     use mod_parallel_utils
     use mod_face_flux
+    use mod_probe, only: probe_active_now, probe_current_step
     implicit none
 
 contains
@@ -101,6 +102,9 @@ contains
         ! Presion que ve ESTA fase: la del Poisson, y para el gas ademas la
         ! correccion de superficie libre (ws_pcorr_g, mod_workspace)
         real(dp), allocatable :: pf(:,:,:)
+        ! Sonda de balance de momento de una celda (cfg%probe_cell_*)
+        integer  :: pi_, pj_, pk_
+        logical  :: probe_here, probe_own
 
         ! Get loop bounds
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -113,6 +117,17 @@ contains
 
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
+
+        ! Sonda de BALANCE: solo uz del liquido, dentro de la ventana de
+        ! pasos y en el rank duenio de la celda pedida.
+        probe_here = .false.; pi_ = 0; pj_ = 0; pk_ = 0
+        if (cfg%probe_cell_k > 0 .and. comp == 'uz' .and. .not. is_gas) then
+            if (probe_active_now(cfg)) then
+                call global_to_local(m, cfg%probe_cell_i, cfg%probe_cell_j, &
+                                     cfg%probe_cell_k, pi_, pj_, pk_, probe_own)
+                probe_here = probe_own
+            end if
+        end if
 
         ! Loop over local cells only
         do k = kstart, kend
@@ -177,40 +192,98 @@ contains
                     rho_vol_dt = alpha_f * ph%rho(i,j,k) * vol / cfg%dt
 
                     ! Diffusion coefficients (viscous)
+                    ! F2.24 (2026-09-29): la fraccion de fase de la CARA es la
+                    ! media ARMONICA de las dos celdas (aface), no la de la
+                    ! celda propia. Es la MISMA regla que ya rige en la
+                    ! energia ("una celda sin fase no intercambia esa fase con
+                    ! nadie", mod_energy_3d::aface): simetrica, telescopa, y
+                    ! NULA hacia una vecina sin la fase.
+                    !
+                    ! Con alpha_P sola, una celda de bano (alpha_l = 0.58)
+                    ! tenia conductancia viscosa PLENA hacia la celda de
+                    ! arriba con alpha_l = 0, y esa celda vacia lleva la
+                    ! velocidad de DRIFT del liquido disperso, que con gotas
+                    ! de 2 mm en gas a 2000 K vale -49.7 m/s (U_SETTLE_MAX).
+                    ! Medido con la sonda de momento en el arranque del
+                    ! colapso (celda 13,1,6 de la malla media, 208.8-209.1 s):
+                    ! a_nb crece de 2.4 a 959 mientras aP no se mueve, y la
+                    ! superficie del bano es arrastrada de 0 a U_LIQ_MAX en
+                    ! 0.24 s. Ninguna fuerza local lo explica (presion +18,
+                    ! gravedad -66, arrastre del gas -4.7e3 frente a aP 5.6e3).
                     Dw = 0.0_dp; De = 0.0_dp; Ds = 0.0_dp; Dn = 0.0_dp
                     Db = 0.0_dp; Dt = 0.0_dp
                     ! West
                     if (m%cell_type(i-1,j,k) /= 0) then
                             mu_f = 0.5_dp * (ph%mu_eff(i,j,k) + ph%mu_eff(i-1,j,k))
-                            Dw = alpha_f * mu_f * m%Ar(i-1,j,k) / (0.5_dp*(m%dr(i)+m%dr(i-1)))
+                            Dw = aface(alpha_q(i,j,k), alpha_q(i-1,j,k)) * mu_f &
+                                 * m%Ar(i-1,j,k) / (0.5_dp*(m%dr(i)+m%dr(i-1)))
                         end if
                     ! East
                     if (m%cell_type(i+1,j,k) /= 0) then
                             mu_f = 0.5_dp * (ph%mu_eff(i,j,k) + ph%mu_eff(i+1,j,k))
-                            De = alpha_f * mu_f * m%Ar(i,j,k) / (0.5_dp*(m%dr(i)+m%dr(i+1)))
+                            De = aface(alpha_q(i,j,k), alpha_q(i+1,j,k)) * mu_f &
+                                 * m%Ar(i,j,k) / (0.5_dp*(m%dr(i)+m%dr(i+1)))
                         end if
                     ! South (theta-)
                     mu_f = 0.5_dp * (ph%mu_eff(i,j,k) + ph%mu_eff(i,jm,k))
-                    Ds = alpha_f * mu_f * m%Ath(i,j,k) / &
+                    Ds = aface(alpha_q(i,j,k), alpha_q(i,jm,k)) * mu_f * m%Ath(i,j,k) / &
                          (m%r(i) * 0.5_dp*(m%dtheta(j)+m%dtheta(jm)))
                     ! North (theta+)
                     mu_f = 0.5_dp * (ph%mu_eff(i,j,k) + ph%mu_eff(i,jp,k))
-                    Dn = alpha_f * mu_f * m%Ath(i,j,k) / &
+                    Dn = aface(alpha_q(i,j,k), alpha_q(i,jp,k)) * mu_f * m%Ath(i,j,k) / &
                          (m%r(i) * 0.5_dp*(m%dtheta(j)+m%dtheta(jp)))
                     ! Bottom
                     if (m%cell_type(i,j,k-1) /= 0) then
                             mu_f = 0.5_dp * (ph%mu_eff(i,j,k) + ph%mu_eff(i,j,k-1))
-                            Db = alpha_f * mu_f * m%Az(i,j,k-1) / (0.5_dp*(m%dz(k)+m%dz(k-1)))
+                            Db = aface(alpha_q(i,j,k), alpha_q(i,j,k-1)) * mu_f &
+                                 * m%Az(i,j,k-1) / (0.5_dp*(m%dz(k)+m%dz(k-1)))
                         end if
                     ! Top
                     if (m%cell_type(i,j,k+1) /= 0) then
                             mu_f = 0.5_dp * (ph%mu_eff(i,j,k) + ph%mu_eff(i,j,k+1))
-                            Dt = alpha_f * mu_f * m%Az(i,j,k) / (0.5_dp*(m%dz(k)+m%dz(k+1)))
+                            Dt = aface(alpha_q(i,j,k), alpha_q(i,j,k+1)) * mu_f &
+                                 * m%Az(i,j,k) / (0.5_dp*(m%dz(k)+m%dz(k+1)))
                         end if
 
-                    ! Flujos convectivos de cara únicos (C2.2)
-                    call face_mass_fluxes(alpha_q, ph%rho, ph%ur, ph%uth, &
-                        ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                    ! Flujos convectivos de cara (C2.2) con alpha DONOR-CELL
+                    ! (F2.24, 2026-09-29). Es la misma correccion que ya lleva
+                    ! la energia del liquido: la interpolacion SIMETRICA de
+                    ! alpha hace que una celda VACIA "entregue" 1/2 alpha_P rho
+                    ! u de caudal fantasma a traves de la cara, y ese
+                    ! coeficiente multiplica la velocidad de la celda vacia.
+                    !
+                    ! En momento eso es una REALIMENTACION POSITIVA, no solo
+                    ! una inconsistencia: el coeficiente de la cara superior
+                    ! vale aT = D + (1/2) alpha_P rho |u_P| A, o sea que CRECE
+                    ! con la propia velocidad, y multiplica la velocidad de
+                    ! drift de la celda vacia (-49.7 m/s = U_SETTLE_MAX para
+                    ! gotas de 2 mm en gas a 2000 K). El termino entra al
+                    ! segundo miembro como C u_P con C = 49.7 (1/2) alpha_P
+                    ! rho A ~ 1.2e3 frente a aP ~ 6.3e3: 18 % de ganancia por
+                    ! iteracion. Medido con la sonda de momento en el arranque
+                    ! del colapso (celda 13,1,6, 208.8-209.1 s): a_nb crece de
+                    ! 2.4 a 959 mientras aP no se mueve, la velocidad media de
+                    ! las vecinas es -24 m/s con la celda aun a -0.85, y la
+                    ! superficie del bano llega a U_LIQ_MAX en 0.24 s con un
+                    ! e-folding de 50 ms. Con donor-cell, una vecina sin fase
+                    ! no entrega nada: F = 0.
+                    ! Solo el LIQUIDO: es la fase cuyas celdas vacias llevan
+                    ! una velocidad de DRIFT grande (-49.7 m/s). El gas
+                    ! conserva la forma simetrica: cambiarsela tambien lleva
+                    ! el gas de bath_fill a U_GAS_MAX (medido).
+                    if (is_gas) then
+                        call face_mass_fluxes(alpha_q, ph%rho, ph%ur, ph%uth, &
+                            ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                    else
+                        call face_mass_fluxes_noalpha(ph%rho, ph%ur, ph%uth, &
+                            ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
+                        Fw = donor_a(Fw, alpha_q(i-1,j,k), alpha_q(i,j,k))
+                        Fe = donor_a(Fe, alpha_q(i,j,k),   alpha_q(i+1,j,k))
+                        Fs = donor_a(Fs, alpha_q(i,jm,k),  alpha_q(i,j,k))
+                        Fn = donor_a(Fn, alpha_q(i,j,k),   alpha_q(i,jp,k))
+                        Fb = donor_a(Fb, alpha_q(i,j,k-1), alpha_q(i,j,k))
+                        Ft = donor_a(Ft, alpha_q(i,j,k),   alpha_q(i,j,k+1))
+                    end if
 
                     ! Upwind coefficients
                     aW(i,j,k) = Dw + max( Fw, 0.0_dp)
@@ -309,6 +382,29 @@ contains
                                + aB(i,j,k) + aT(i,j,k) + rho_vol_dt &
                                + drag_coef(i,j,k) * vol + aP_extra &
                                + Kexch(i,j,k) * vol
+
+                    if (probe_here) then
+                        if (i == pi_ .and. j == pj_ .and. k == pk_) then
+                            write(*,'(A,I8,A,3I4,A,ES11.3,A,ES11.3,A,ES11.3, &
+                                     &A,ES11.3,A,ES11.3,A,ES11.3,A,ES11.3, &
+                                     &A,ES11.3,A,ES11.3,A,ES11.3,A,ES11.3)') &
+                                '[PROBE-MOM] paso', probe_current_step(), &
+                                ' celda', cfg%probe_cell_i, cfg%probe_cell_j, &
+                                cfg%probe_cell_k, &
+                                ' al=', alpha_q(i,j,k), &
+                                ' uz=', vel(i,j,k), &
+                                ' uz_otra=', vel_other(i,j,k), &
+                                ' | transit=', rho_vol_dt * vel_old(i,j,k), &
+                                ' presion=', -alpha_f * dp_dz * vol, &
+                                ' grav+arco=', src_extra * vol, &
+                                ' K*u_otra=', Kexch(i,j,k) * vel_other(i,j,k) * vol, &
+                                ' | aP=', aP(i,j,k), &
+                                ' a_nb=', aW(i,j,k)+aE(i,j,k)+aS(i,j,k)+aN(i,j,k) &
+                                          +aB(i,j,k)+aT(i,j,k), &
+                                ' Ergun*V=', drag_coef(i,j,k) * vol, &
+                                ' K*V=', Kexch(i,j,k) * vol
+                        end if
+                    end if
                 end do
             end do
         end do
@@ -344,6 +440,28 @@ contains
         deallocate(pf)
 
     contains
+
+        ! Flujo de masa donor-cell en una cara orientada de 'lo' (lado -)
+        ! a 'hi' (lado +): F>0 va de lo a hi y lleva alpha_lo; F<0 lleva
+        ! alpha_hi. Misma definicion que mod_energy_3d::donor.
+        pure function donor_a(F, a_lo, a_hi) result(Fd)
+            real(dp), intent(in) :: F, a_lo, a_hi
+            real(dp) :: Fd
+            if (F >= 0.0_dp) then
+                Fd = F * a_lo
+            else
+                Fd = F * a_hi
+            end if
+        end function donor_a
+
+        ! Fraccion de fase EN LA CARA para la conductancia difusiva:
+        ! media armonica (simetrica -> telescopa; NULA si un lado no
+        ! tiene la fase). Misma definicion que mod_energy_3d::aface.
+        pure function aface(a1, a2) result(af)
+            real(dp), intent(in) :: a1, a2
+            real(dp) :: af
+            af = 2.0_dp * a1 * a2 / max(a1 + a2, SMALL)
+        end function aface
 
         ! La celda tiene presion de fluido definida? (Bug 16)
         pure logical function pv_ok(ii, jj, kk)

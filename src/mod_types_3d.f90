@@ -58,6 +58,10 @@ module mod_types_3d
         real(dp) :: d_droplet
         real(dp) :: iph_dt_safety
         integer  :: probe_step_from, probe_step_to
+        ! Sonda de BALANCE de momento de UNA celda (indices GLOBALES,
+        ! 1-based; 0 = desactivada). Dentro de la ventana de pasos
+        ! imprime cada termino de la ecuacion de uz del liquido.
+        integer  :: probe_cell_i, probe_cell_j, probe_cell_k
 
         ! Arc
         real(dp) :: arc_tau, arc_w, arc_sigma_cond, arc_T_ref

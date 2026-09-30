@@ -116,7 +116,60 @@ arco perfora el lecho, y eso ocurre a los ~205 s de una colada de 5040 s.
 
 ---
 
+---
+
+# CORRECCION (29-sep-2026, misma sesion): la "causa raiz" de arriba era FALSA
+
+La seccion "CAUSA RAIZ" que sigue mas abajo afirmaba que la celda de
+superficie libre siente el 58 % de su peso sin equilibrar por un defecto de
+**balanced-force**. **Es incorrecto.** Se comprobo con dos medidas en
+`bath_test` a t = 0, en reposo exacto:
+
+1. **El campo de presion SI es consistente.** Es el hidrostato de la MEZCLA
+   con densidad de cara aritmetica, y la g implicita sale identica en las
+   tres caras del bano (8.984, 8.984, 8.985 m/s2). No hay error de
+   discretizacion en el gradiente.
+
+2. **La fuerza neta sobre el liquido de una celda mixta es FISICA.** Es la
+   flotacion relativa de la fase dentro de la mezcla,
+   `F_q = alpha_q (rho_mezcla - rho_q) g`: predicha -16 262 N/m3 y medida
+   -14 988 en la celda de superficie; **exactamente cero en las celdas
+   puras**. Es el termino que separa las fases, no un residuo numerico.
+
+Lo que la equilibra es el arrastre de interfase. Con TAU_LG = 0.01 s el
+coeficiente vale K = 1.81e5 en esa celda y la equilibra con un deslizamiento
+de **0.09 m/s**. Es decir: **TAU_LG no era una muleta que tapaba un bug; es
+el cierre de interfase RESUELTA** que la literatura llama Strubelj & Tiselj
+(2011) y que Fluent expone como `time-scale-drag`, cuyo proposito declarado
+es forzar casi-no-deslizamiento donde la interfase esta resuelta.
+
+Por eso el intento F2.22 original (sustituirlo por la friccion de AIAD,
+K ~ 1e3) rompia la hidrostatica: dejaba el cierre 200 veces mas debil que la
+flotacion que debe sostener.
+
+**Lo que SI sigue en pie de la caracterizacion**: el fenomeno, su disparo, su
+arranque exponencial y su propagacion (secciones 1 a 5 de este documento).
+Y sigue en pie que el interruptor duro de morfologia es indefendible: el
+salto de 1.5e8 no lo hace ningun codigo Euler-Euler.
+
+**F2.22 rehecha** conserva la magnitud del cierre de interfase y quita solo
+el interruptor:
+
+    f_disp = [1 + exp(A_AIAD (alpha_l - ALPHA_AIAD_LIM))]^-1     (AIAD ec. 6)
+    K_int  = alpha_l alpha_g rho_mezcla / TAU_LG                 (Strubelj-Tiselj)
+    K_disp = alpha_l (rho_l - rho_g) g / u_t                     (gota)
+    Kexch  = (1 - f_disp) K_int + f_disp K_disp                  (AIAD ec. 9)
+
+con la densidad de MEZCLA en vez de rho_l (Strubelj & Tiselj ec. 4). La rama
+de cizalla de F2.15 desaparece. Bancos: los tres pasan y bath_test queda
+igual que la base (hidrostatica 0.860 % frente a 0.869 %, reposo 0.158 frente
+a 0.165 m/s, gas 20.8 frente a 20.8).
+
+---
+
 # CAUSA RAIZ (encontrada el 29-sep-2026 al probar F2.22)
+
+> **OBSOLETO: ver la CORRECCION de arriba.** Se conserva por trazabilidad.
 
 ## El estado de reposo no es un equilibrio de las ecuaciones discretas
 
@@ -163,7 +216,7 @@ acople rigido; la fuerza residual es el termino continuo que lo alimenta.
 
 ## F2.22 (implementada, probada y BLOQUEADA)
 
-Parche completo en `docs/dev-history/2026-09-29_f222_aiad_mezcla_bloqueada.patch`.
+Parche completo en `docs/dev-history/2026-09-29_f222_friccion_aiad_descartada.patch`.
 Sustituye el interruptor duro por la mezcla logistica de AIAD
 (`f = [1 + exp(a(alpha_l - 0.3))]^-1`, a = 50) y la cizalla ad-hoc por el
 arrastre de superficie libre de AIAD en su forma de FRICCION
@@ -200,3 +253,173 @@ commitea sola**: va junto con el arreglo de balanced-force.
    arXiv:1503.04685 ecs. 7-8), para que el sumidero no se desvanezca justo
    cuando el liquido escasea. Deja de ser critico una vez hecho (1).
 4. Rejuzgar con el reinicio en 200-211 s y solo entonces relanzar la colada.
+
+---
+
+# F2.22 de DOS vias: DESCARTADA (juez del 29-sep)
+
+Primera version de la mezcla: dos morfologias (interfase resuelta y dispersa),
+logistica sobre alpha_l, **sin rama de lecho**. Los tres bancos de bano pasaban
+y bath_test quedaba igual que la base, asi que parecia lista.
+
+**Fallo en el horno en 0.8 s.** Reinicio de v33 en 200 s: la presion sube
+LINEAL de 4.5 a 63 kPa mientras la base se queda en 4.4 kPa.
+
+Causa, medida sobre el snapshot de 200 s en las 185 celdas de lecho con gas de
+poro y algo de liquido:
+
+| K gas-liquido | mediana | p90 | K/inercia_gas por paso | celdas con >1 |
+|---|---|---|---|---|
+| cizalla F2.15 (antes) | 0.169 | 1.25 | 0.02 | 0 % |
+| mezcla de dos vias    | 87.5  | 436  | 4.61 | 74 % |
+
+Razon nueva/antigua: **mediana 644x**. Al quitar la rama de lecho, el gas de
+poro queda SOLDADO al liquido inmovil de la chatarra, no puede ventear, se
+calienta y su compresibilidad integra `p ~ P0 (T/T0 - 1)`. Es exactamente la
+patologia que F2.13 y F2.16 resolvieron, reintroducida por la puerta de atras.
+
+**Leccion**: la cizalla de F2.15 tenia una magnitud minuscula (K ~ 0.2) y eso
+parecia un defecto, pero **es su funcion**: en el lecho el peso del liquido lo
+lleva Ergun contra la chatarra y el gas de poro tiene que quedar libre para
+ventear. No hay que "arreglar" su magnitud; hay que dejar de conmutar a ella
+de golpe.
+
+# F2.22 de TRES vias (la que queda)
+
+Tres morfologias y dos logisticas, como el f_B/f_D/f_FS de AIAD:
+
+    f_bed  = [1 + exp(A_AIAD (ALPHA_AIAD_LIM - alpha_s_eff))]^-1
+    f_disp = [1 + exp(A_AIAD (alpha_l - ALPHA_AIAD_LIM))]^-1
+    K = f_bed K_cizalla
+        + (1 - f_bed) [ (1 - f_disp) K_interfase + f_disp K_gota ]
+
+con `K_interfase = alpha_l alpha_g rho_MEZCLA / TAU_LG` (Strubelj & Tiselj,
+densidad de mezcla segun su ec. 4), `ALPHA_AIAD_LIM = 0.3` y `A_AIAD = 50`
+(los valores de Fluent para AIAD).
+
+La distribucion de alpha_s es fuertemente BIMODAL (a 400 s: 1456 celdas en
+alpha_s = 0, 986 en alpha_s >= 0.35, **3** en medio), asi que la mezcla
+reproduce el lecho actual casi exactamente y solo suaviza el transito, que es
+donde estaba el salto de 1.5e8.
+
+Bancos: los tres pasan; bath_test identico a la base (hidrostatica 0.860 %,
+reposo 0.158 m/s, gas 20.8 m/s) y bath_freeze mejora (gas 12.7 frente a 23.0).
+Primer segundo del horno: sigue a la base celda por celda (4466 frente a 4468
+Pa), sin rastro del ramp de presion de la version de dos vias.
+
+---
+
+# CAUSA RAIZ REAL (F2.24, 29-sep): caudal FANTASMA de la vecina vacia
+
+Encontrada instrumentando el arranque con una sonda de BALANCE DE MOMENTO por
+celda (`cfg%probe_cell_i/j/k`, nueva en `mod_momentum_3d`), sobre un reinicio
+en 208 s de la malla media.
+
+## La medida
+
+La celda que arranca es la (13,1,6) de la malla media (Fortran, 1-based), bajo
+un electrodo. Su vecina de abajo se funde: alpha_s pasa de **0.30 a 0.0012 en
+0.2 s**. En ese tramo:
+
+| t (s) | uz_l | a_nb | aP | Ergun*V |
+|---|---|---|---|---|
+| 208.80 | -0.04 |   2.4 | 8.3e3 | 3.4e3 |
+| 208.90 | -0.85 |  46.8 | 7.2e3 | 2.3e3 |
+| 209.00 | -7.47 |   406 | 7.3e3 | 1.9e3 |
+| 209.08 | -19.91|   959 | 6.3e3 |   900 |
+
+**`a_nb` crece 400 veces mientras `aP` no se mueve.** Ninguna fuerza local lo
+explica: presion +18, gravedad -66, arrastre del gas -4.7e3 frente a aP 5.6e3.
+La velocidad media de las vecinas, despejada del balance, es **-24 m/s cuando
+la celda aun va a -0.85**.
+
+Las celdas de ARRIBA tienen `alpha_l = 0.000` y llevan `uz_l = -49.7 m/s`: es
+la velocidad de drift del liquido disperso, `settling_velocity(d_droplet)` con
+gotas de 2 mm en gas a 2000 K, acotada por `U_SETTLE_MAX`. La masa implicada es
+0.0006 kg — irrelevante. La VELOCIDAD no lo es.
+
+## El lazo
+
+`face_mass_fluxes` interpola alpha SIMETRICAMENTE, asi que en una cara con la
+vecina vacia el caudal no es cero sino la mitad del propio:
+
+    Ft = 1/2 (alpha_P rho u_P + 0) A        -> aT = D + 1/2 alpha_P rho |u_P| A
+
+El coeficiente de la cara **crece con la propia velocidad** y multiplica la
+velocidad de la celda vacia. En el segundo miembro eso es `C u_P` con
+
+    C = 49.7 * 1/2 * alpha_P * rho_l * A ~ 1.2e3    frente a aP ~ 6.3e3
+
+o sea **18 % de ganancia por iteracion**: realimentacion positiva pura. De ahi
+el e-folding de 50 ms y los cinco e-folding de 0.19 a 20 m/s en 0.24 s.
+
+Es **el mismo defecto que ya se corrigio en la energia del liquido** ("la
+interpolacion simetrica de alpha hacia que una celda vacia entregara
+1/2 alpha_P rho u de masa fantasma a su T rancia"), no corregido en momento.
+Ahi era un sumidero de energia; aqui es una inestabilidad.
+
+## El arreglo
+
+`face_mass_fluxes_noalpha` + alpha DONOR-CELL para el LIQUIDO, igual que la
+energia. Una vecina sin fase no entrega nada: F = 0, y la velocidad que lleve
+esa celda deja de importar — que es lo robusto, porque el debate sobre que
+valor darle a una fase evanescente (u = 0 de antes, drift de ahora, atada de
+F2.20) se vuelve irrelevante para sus vecinas.
+
+El GAS conserva la forma simetrica: cambiarsela tambien lleva el gas de
+`bath_fill` a U_GAS_MAX (medido). Es coherente con el diagnostico: la fase con
+celdas vacias que llevan una velocidad grande es el liquido.
+
+Se aplico ademas la media ARMONICA de alpha en las conductancias difusivas de
+momento (`aface`, la misma de la energia), por la misma regla general. Efecto
+en el arranque: **bit a bit nulo** — el `a_nb` de esta celda es integramente
+convectivo. Se conserva por correccion, no por efecto.
+
+## Resultado
+
+Bancos: `bath_fill` y `bath_freeze` pasan; `bath_test` deja la hidrostatica al
+filo (1.05e-2 frente a una tolerancia de 1e-2; antes 8.6e-3) y el reposo en
+0.175 m/s (antes 0.158).
+
+Arranque del horno (reinicio en 208 s, malla media, 14 ranks):
+
+| t (s) | sin donor | con donor |
+|---|---|---|
+| 208.80 | 0.09 | 0.09 |
+| 208.85 | 0.21 | 0.09 |
+| 208.90 | 0.86 | 0.12 |
+
+El crecimiento exponencial queda suprimido.
+
+## Veredicto del juez (reinicio en 208 s, hasta 212 s, malla media, 14 ranks)
+
+| tramo | base (F2.22b sin donor) | F2.24 |
+|---|---|---|
+| 208-209 s | u_liq 0.86, p 4.6 kPa | u_liq 0.83, p 4.66 kPa |
+| 209-210 s | **cota desde 209.066** | u_liq 7.40, p 4.90 kPa |
+| 210-211 s | p hasta 27 kPa, gas 232 | u_liq 8.16, p 7.70 kPa, gas 108 |
+| 211-212 s | (la base ya no era valida) | u_liq **7.00**, p 7.49 kPa, gas 108 |
+
+**Ninguna centinela se activa, y el liquido SATURA**: sube a 8.16 m/s y baja a
+7.00. La aceleracion residual va de 8.8 a 6.3 m/s2, o sea caida libre con
+arrastre: el fundido drenando al crater que abrio el arco. Esa es la fisica
+que se busca, no una inestabilidad.
+
+## Coste, declarado
+
+`bath_hydrostatic` pasa a XFAIL (1.05e-2 frente a tolerancia 1e-2). El banco
+YA estaba al filo (0.9 %) y su corriente fantasma de 0.17 m/s ya era xfail
+(`bath_rest`): con el bano de solo 3 celdas de ese banco, la misma corriente
+par-impar mueve la ferrostatica medida un 1 %. No es un fenomeno nuevo. Las
+dos entradas se retiran juntas cuando se cierre esa corriente.
+
+`make test-full` en verde con esa entrada; golden v32; los 22 tests unitarios
+pasan; invarianza MPI n1/n8 y simetria 120 % intactas.
+
+## Lo que queda
+
+1. Juez largo desde 200 s y, si aguanta, relanzar la colada completa.
+2. F2.23 (Ergun del liquido en forma de Attou/Boyer) pasa a OPCIONAL: ya no es
+   el sumidero que falta, porque la inestabilidad no era de falta de arrastre.
+3. Hilo abierto: la corriente par-impar del bano (`bath_rest`), que ahora
+   arrastra tambien a `bath_hydrostatic`.

@@ -30,3 +30,16 @@ audit_cold:energy_balance
 #   composicion que se daba por inevitable era la inconsistencia de aparicion
 #   de fase, no el esquema colocado.)
 bath:bath_rest
+# - ferrostatica: el banco ya estaba AL FILO (0.9 % con tolerancia del 1 %,
+#   ver arriba). Con el caudal DONOR-CELL del liquido en momento (F2.24,
+#   29-sep-2026) la corriente fantasma sube de 0.158 a 0.175 m/s y el error
+#   pasa a 1.05 %. NO es un fenomeno nuevo: es la MISMA corriente par-impar
+#   ya listada, que con el bano de solo 3 celdas de este banco mueve la
+#   ferrostatica medida un 1 %. La contrapartida esta medida: F2.24 elimina
+#   la realimentacion positiva del 18 % por iteracion que llevaba la
+#   superficie del bano a U_LIQ_MAX en 0.24 s en cuanto el arco perforaba el
+#   lecho (juez de 208-212 s: la base entra en la cota en 209.066 y llega a
+#   27 kPa; con F2.24 ninguna cota se activa y el liquido satura en 8.2 m/s
+#   y baja a 7.0). Se retira cuando se cierre bath_rest: las dos son la
+#   misma corriente.
+bath:bath_hydrostatic

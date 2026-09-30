@@ -84,6 +84,9 @@ contains
         ! sonda de diagnostico (mod_probe): desactivada por defecto
         cfg%probe_step_from = 0
         cfg%probe_step_to   = 0
+        cfg%probe_cell_i = 0
+        cfg%probe_cell_j = 0
+        cfg%probe_cell_k = 0
 
         ! Arc
         cfg%arc_tau       = ARC_TAU
@@ -260,6 +263,9 @@ contains
         case ('iph_dt_safety'); call parse_real(val, key, cfg%iph_dt_safety)
         case ('probe_step_from'); call parse_int(val, key, cfg%probe_step_from)
         case ('probe_step_to');   call parse_int(val, key, cfg%probe_step_to)
+        case ('probe_cell_i');    call parse_int(val, key, cfg%probe_cell_i)
+        case ('probe_cell_j');    call parse_int(val, key, cfg%probe_cell_j)
+        case ('probe_cell_k');    call parse_int(val, key, cfg%probe_cell_k)
         case ('emissivity'); call parse_real(val, key, cfg%emissivity)
         case ('T_initial');  call parse_real(val, key, cfg%T_initial)
         case ('T_ambient');  call parse_real(val, key, cfg%T_ambient)

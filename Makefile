@@ -26,10 +26,10 @@ SRCS = \
 	$(SRCDIR)/mod_solver_3d.f90 \
 	$(SRCDIR)/mod_energy_3d.f90 \
 	$(SRCDIR)/mod_properties_3d.f90 \
+	$(SRCDIR)/mod_probe.f90 \
 	$(SRCDIR)/mod_momentum_3d.f90 \
 	$(SRCDIR)/mod_pressure_3d.f90 \
 	$(SRCDIR)/mod_drag_ergun.f90 \
-	$(SRCDIR)/mod_probe.f90 \
        $(SRCDIR)/mod_continuity.f90 \
 	$(SRCDIR)/mod_melting_3d.f90 \
 	$(SRCDIR)/mod_scrap_collapse.f90 \
@@ -95,7 +95,7 @@ $(OBJDIR)/mod_solver_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(
 $(OBJDIR)/mod_boundary_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_energy_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o $(OBJDIR)/mod_audit.o
 $(OBJDIR)/mod_properties_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
-$(OBJDIR)/mod_momentum_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o
+$(OBJDIR)/mod_momentum_3d.o: $(OBJDIR)/mod_probe.o $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o
 $(OBJDIR)/mod_pressure_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_workspace.o
 $(OBJDIR)/mod_drag_ergun.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_continuity.o: $(OBJDIR)/mod_probe.o $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_audit.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o

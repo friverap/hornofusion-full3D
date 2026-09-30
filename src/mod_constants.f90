@@ -184,6 +184,40 @@ module mod_constants
     ! (B1 v31, t = 113.5 s). C_FS_SHEAR = 1/2 C_D con C_D ~ 1.
     real(dp), parameter :: C_FS_SHEAR = 0.5_dp
 
+    ! --- F2.22 (29-sep-2026): MEZCLA de morfologia, no interruptor.
+    !
+    ! El interruptor duro de F2.15 (cizalla si hay chatarra propia > 1e-4 o
+    ! de abajo >= 1e-2; relajacion dispersa si no) saltaba una mediana de
+    ! 1.5e8 veces al cruzarlo. Ningun codigo Euler-Euler hace eso: AIAD
+    ! (Hoehne & Vallee, WIT Trans. Eng. Sci. 63 (2010) 123, ecs. 6-9) MEZCLA
+    ! los coeficientes con una logistica
+    !     f = [1 + exp(a (alpha - alpha_lim))]^-1
+    ! y GENTOP (Haensch et al., Int. J. Multiphase Flow 47 (2012) 171) con la
+    ! tanh equivalente; ambos con alpha_lim = 0.3 y a = 50 (Fluent) a 70.
+    ! TRACE/RELAP interpolan sobre bandas de 0.2-0.3. Nunca un umbral.
+    !
+    ! MEDIDO (bath_test, t = 0, en reposo exacto): el campo de presion es el
+    ! hidrostato de la MEZCLA con densidad de cara aritmetica (g implicita
+    ! 8.984 identica en las tres caras). La fuerza neta sobre el liquido de
+    ! una celda mixta NO es cero y NO es un error de discretizacion: es la
+    ! flotacion relativa de la fase pesada dentro de la mezcla,
+    !     F_q = alpha_q (rho_mezcla - rho_q) g
+    ! (predicha -16262 N/m3, medida -14988; en las celdas puras el neto es
+    ! cero). Lo que la equilibra es el arrastre de interfase. Por eso el
+    ! cierre de interfase RESUELTA no se puede debilitar: con la friccion de
+    ! AIAD (K ~ 1e3) la celda de superficie se separa y bath_test pierde la
+    ! hidrostatica. La relajacion alpha_l alpha_g rho/TAU_LG es el cierre de
+    ! Strubelj & Tiselj (2011) — el `time-scale-drag` de Fluent, estandar
+    ! para interfase resuelta en malla gruesa —, y con TAU_LG = 0.01 s
+    ! equilibra esa flotacion con un deslizamiento de 0.09 m/s.
+    !
+    ! Lo que SI se corrige: (i) la densidad es la de MEZCLA, no rho_l
+    !     rho_ab = (rho_a r_a + rho_b r_b)/(r_a + r_b)
+    ! (Strubelj & Tiselj 2011, ec. 4; Meller et al., HZDR), y (ii) el cierre
+    ! se MEZCLA con el arrastre de gota en vez de conmutar.
+    real(dp), parameter :: ALPHA_AIAD_LIM = 0.3_dp   ! centro de la mezcla
+    real(dp), parameter :: A_AIAD         = 50.0_dp  ! pendiente (Fluent)
+
     ! Movilidad del gas en una celda (F2.16): fraccion de su balance de
     ! momento que NO se lleva el arrastre del lecho,
     !     mob = (alpha_g rho_g/dt) / (alpha_g rho_g/dt + drag_Ergun).

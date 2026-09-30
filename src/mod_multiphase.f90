@@ -43,6 +43,7 @@ contains
         real(dp) :: res_ur_l, res_uth_l, res_uz_l
         real(dp) :: res_ur_g, res_uth_g, res_uz_g
         real(dp) :: res_cont, res_energy_l, res_energy_g
+        real(dp) :: al_c, ag_c, as_e, xb, f_bed, f_disp, K_int, K_disp, rho_mix  ! F2.22
         ! Velocidades del liquido USADAS por el solve del gas (PEA, F2.2)
         real(dp), allocatable :: ul_used_r(:,:,:), ul_used_th(:,:,:), ul_used_z(:,:,:)
         ! Solucion SIN relajar del momento del liquido (para el PEA)
@@ -137,30 +138,55 @@ contains
         do k = lbound(Kexch,3)+2, ubound(Kexch,3)-2
             do j = lbound(Kexch,2)+2, ubound(Kexch,2)-2
                 do i = lbound(Kexch,1)+2, ubound(Kexch,1)-2
-                    ! F2.15 (2026-09-27): MORFOLOGIA del acople en el LECHO
-                    ! (AIAD). El liquido que esta dentro del lecho o descansa
-                    ! sobre el no es niebla suspendida en gas: su peso lo
-                    ! lleva Ergun contra el solido y con el gas solo
-                    ! intercambia CIZALLA de interfase. Con el TAU_LG de
-                    ! regimen disperso, una celda 30 % liquido sobre el lecho
-                    ! bajo el arco quedaba atada al chorro (u_l/u_g = 0.99
-                    ! medido) y caia a 20 m/s sobre la celda del lecho en cap:
-                    ! 134 kPa (B1 v31, 113.5 s). Fuera del lecho el charco
-                    ! libre conserva el acople anterior: es lo unico que frena
-                    ! al gas sobre un bano en reposo (bath_test: con cizalla
-                    ! sola el gas se va a 143 m/s).
-                    if (sol%alpha_s(i,j,k) > ALPHA_SOLID_RESID .or. &
-                        sol%alpha_s(i,j,k-1) >= 1.0e-2_dp) then
-                        Kexch(i,j,k) = fs_shear(i, j, k)
-                    else if (ws_liq_cont(i,j,k)) then
-                        Kexch(i,j,k) = liq%alpha(i,j,k) * gas%alpha(i,j,k) * &
-                                       liq%rho(i,j,k) / TAU_LG
-                    else if (ws_ut(i,j,k) > SMALL .and. liq%alpha(i,j,k) > 0.0_dp) then
-                        Kexch(i,j,k) = liq%alpha(i,j,k) * &
-                            max(liq%rho(i,j,k) - gas%rho(i,j,k), 0.0_dp) * GRAVITY / ws_ut(i,j,k)
+                    ! F2.22 (2026-09-29): MEZCLA de morfologia (AIAD ecs.
+                    ! 6-9), nunca un interruptor. TRES morfologias, dos
+                    ! logisticas, como el f_B/f_D/f_FS de AIAD:
+                    !
+                    !   LECHO (goteo): hay esqueleto solido. El peso del
+                    !     liquido lo lleva Ergun contra la chatarra y con el
+                    !     gas solo hay cizalla de pelicula. K ~ 0.2 medido:
+                    !     el gas de poro queda LIBRE para ventear, que es la
+                    !     condicion de F2.13/F2.16.
+                    !   INTERFASE RESUELTA (sin solido, liquido abundante):
+                    !     cierre de Strubelj & Tiselj, alpha_l alpha_g
+                    !     rho_MEZCLA/TAU_LG. Es lo que equilibra la flotacion
+                    !     relativa alpha_q (rho_mez - rho_q) g de una celda
+                    !     mixta (medido en bath_test: la sostiene con 0.09
+                    !     m/s de deslizamiento).
+                    !   DISPERSA (sin solido, poco liquido): arrastre fisico
+                    !     de la gota a velocidad terminal.
+                    !
+                    ! Lo que sustituye: un interruptor sobre alpha_s que
+                    ! saltaba una mediana de 1.5e8 veces al cruzar 1e-2. En
+                    ! cuanto el arco perforaba el lecho la celda de bano
+                    ! cambiaba de rama de golpe y el colapso se extendia a
+                    ! toda la superficie (v33: 3 celdas a 250 s, 1143 a 400 s).
+                    !
+                    ! Por que la logistica del LECHO no se puede quitar
+                    ! (medido, juez F2.22 de dos vias, 29-sep): sin ella el
+                    ! gas de poro pasa de K/inercia 0.02 a 4.6 POR PASO (644x
+                    ! la mediana), queda soldado al liquido inmovil del lecho,
+                    ! no puede ventear, se calienta y su compresibilidad
+                    ! integra presion: 4.5 -> 63 kPa lineales en 0.8 s.
+                    al_c = liq%alpha(i,j,k)
+                    ag_c = gas%alpha(i,j,k)
+                    as_e = max(sol%alpha_s(i,j,k), sol%alpha_s(i,j,k-1))
+                    xb = A_AIAD * (ALPHA_AIAD_LIM - as_e)
+                    f_bed = 1.0_dp / (1.0_dp + exp(min(max(xb, -60.0_dp), 60.0_dp)))
+                    xb = A_AIAD * (al_c - ALPHA_AIAD_LIM)
+                    f_disp = 1.0_dp / (1.0_dp + exp(min(max(xb, -60.0_dp), 60.0_dp)))
+                    rho_mix = (al_c * liq%rho(i,j,k) + ag_c * gas%rho(i,j,k)) &
+                              / max(al_c + ag_c, SMALL)
+                    K_int = al_c * ag_c * rho_mix / TAU_LG
+                    if (ws_ut(i,j,k) > SMALL .and. al_c > 0.0_dp) then
+                        K_disp = al_c * max(liq%rho(i,j,k) - gas%rho(i,j,k), &
+                                            0.0_dp) * GRAVITY / ws_ut(i,j,k)
                     else
-                        Kexch(i,j,k) = 0.0_dp
+                        K_disp = 0.0_dp
                     end if
+                    Kexch(i,j,k) = f_bed * fs_shear(i, j, k) &
+                        + (1.0_dp - f_bed) * ((1.0_dp - f_disp) * K_int &
+                                              + f_disp * K_disp)
                 end do
             end do
         end do
