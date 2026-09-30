@@ -423,3 +423,30 @@ pasan; invarianza MPI n1/n8 y simetria 120 % intactas.
    el sumidero que falta, porque la inestabilidad no era de falta de arrastre.
 3. Hilo abierto: la corriente par-impar del bano (`bath_rest`), que ahora
    arrastra tambien a `bath_hydrostatic`.
+
+## Juez LARGO (200 -> 230 s, malla media, 14 ranks, audit_freq 1)
+
+Cubre entera la ventana que destruyo v33 (colapso desde 205.53 s; a 260 s las
+tres centinelas en la cota el 100 % de los pasos).
+
+| tramo | p_max | u_gas | u_liq | m_liq |
+|---|---|---|---|---|
+| 200-205 | 7.1 kPa | 104 | 1.24 | 920 |
+| 205-210 | 14.3 kPa | 113 | 7.44 | 1128 |
+| 210-215 | 7.3 kPa | 108 | 8.24 | 1209 |
+| 215-220 | 4.0 kPa | 102 | 1.19 | 1344 |
+| 220-225 | 4.5 kPa | 104 | 14.39 | 1491 |
+| 225-230 | 4.5 kPa | 103 | 9.16 | 1470 |
+
+- **Ninguna centinela se activa en los 30 s**: ni `U_LIQ_MAX`, ni `U_GAS_MAX`,
+  ni `P_HYDRO_CAP`. v33 en el mismo tramo llevaba 7.3 % de los pasos con el
+  liquido en la cota, 23.4 % con el gas, y p_max de 2 MPa.
+- La presion PICA en 14.3 kPa durante la rafaga de fusion y VUELVE a 4.5 kPa.
+  El liquido pica en 14.4 m/s y baja a 9.2. Nada crece de forma monotona.
+- El bano se forma de 920 a 1470 kg de manera continua.
+- Clip auditado: 0.2504 kg, confinado a UN episodio (206.83-209.48 s, el de la
+  rafaga de fusion) y exactamente cero en los 20 s siguientes. Es el 0.05 % de
+  lo fundido en la ventana.
+- Masa total 65751.2 -> 65751.0 kg en 30 s (3e-6 relativo).
+
+Con esto la colada completa se puede relanzar.
