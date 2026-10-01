@@ -1,0 +1,209 @@
+diff --git a/Makefile b/Makefile
+index e7e3319..0d464d2 100644
+--- a/Makefile
++++ b/Makefile
+@@ -98,7 +98,7 @@ $(OBJDIR)/mod_properties_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.
+ $(OBJDIR)/mod_momentum_3d.o: $(OBJDIR)/mod_probe.o $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o
+ $(OBJDIR)/mod_pressure_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_workspace.o
+ $(OBJDIR)/mod_drag_ergun.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
+-$(OBJDIR)/mod_continuity.o: $(OBJDIR)/mod_probe.o $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_audit.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o
++$(OBJDIR)/mod_continuity.o: $(OBJDIR)/mod_probe.o $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_audit.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o $(OBJDIR)/mod_boundary_3d.o
+ $(OBJDIR)/mod_melting_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_audit.o
+ $(OBJDIR)/mod_scrap_collapse.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_melting_3d.o
+ $(OBJDIR)/mod_interphase_ht.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_melting_3d.o $(OBJDIR)/mod_audit.o
+diff --git a/src/mod_constants.f90 b/src/mod_constants.f90
+index fa038a3..ee1bc9d 100644
+--- a/src/mod_constants.f90
++++ b/src/mod_constants.f90
+@@ -218,6 +218,17 @@ module mod_constants
+     real(dp), parameter :: ALPHA_AIAD_LIM = 0.3_dp   ! centro de la mezcla
+     real(dp), parameter :: A_AIAD         = 50.0_dp  ! pendiente (Fluent)
+ 
++    ! Banda de HISTERESIS de la continuidad del liquido (F2.26, 1-oct-2026).
++    ! La decision continua/dispersa es BINARIA (hay o no ecuacion de momento
++    ! y participacion en el Poisson), asi que no se puede mezclar: lo que la
++    ! literatura usa para evitar el castaneteo en el umbral es una BANDA.
++    ! OpenFOAM `blendingMethods::linear` mezcla entre
++    ! minPartlyContinuousAlpha y minFullyContinuousAlpha (tipico 0.3 y 0.7);
++    ! aqui la banda es [ALPHA_LIQ_HYST, ALPHA_LIQ_CONT] y la memoria es el
++    ! estado del iterado anterior: una celda que YA era continua lo sigue
++    ! siendo mientras su alpha_l no caiga por debajo de ALPHA_LIQ_HYST.
++    real(dp), parameter :: ALPHA_LIQ_HYST = 0.2_dp
++
+     ! Movilidad del gas en una celda (F2.16): fraccion de su balance de
+     ! momento que NO se lleva el arrastre del lecho,
+     !     mob = (alpha_g rho_g/dt) / (alpha_g rho_g/dt + drag_Ergun).
+diff --git a/src/mod_continuity.f90 b/src/mod_continuity.f90
+index c956c3c..dbfc0e1 100644
+--- a/src/mod_continuity.f90
++++ b/src/mod_continuity.f90
+@@ -25,6 +25,7 @@ module mod_continuity
+     use mod_types_3d
+     use mod_solver_3d
+     use mod_parallel_utils
++    use mod_boundary_3d, only: physical_boundary_flags
+     use mod_probe, only: probe_active_now, probe_current_step
+     use mod_face_flux
+     use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d
+@@ -463,9 +464,11 @@ contains
+         type(config_t), intent(in)  :: cfg
+         type(phase_t), intent(in), optional :: liq_old
+         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
++        logical  :: at_rmin, at_rmax, at_zmin, at_zmax
+         real(dp) :: u_t, tr, tth, tz, f, as_eff
+         call ensure_workspace(m)
+         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
++        call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
+         ws_ud_r = liq%ur; ws_ud_th = liq%uth; ws_ud_z = liq%uz; ws_ut = 0.0_dp
+         do k = kstart, kend
+             do j = jstart, jend
+@@ -507,9 +510,45 @@ contains
+                     end if
+                     u_t = settling_velocity(cfg%d_droplet, liq%rho(i,j,k), &
+                                             gas%rho(i,j,k), gas%mu(i,j,k))
++                    ws_ut(i,j,k) = u_t
++                    ! SOBRE EL BANO (F2.27, 1-oct-2026): la celda descansa
++                    ! sobre liquido CONTINUO. Una pelicula o unas gotas que
++                    ! caen sobre un bano se INCORPORAN a el: su velocidad
++                    ! tiende a la del liquido de abajo, no a la del gas. Es
++                    ! el MISMO argumento de F2.14 (Austin-Nogami-Yagi: el
++                    ! liquido tiende a la velocidad del SOLIDO cuando
++                    ! alpha_l -> 0) con el bano en el papel del solido, y
++                    ! cierra el hueco simetrico que quedaba: habia regla para
++                    ! el liquido que descansa sobre el LECHO y no para el que
++                    ! descansa sobre el BANO.
++                    !
++                    ! Sin esto, al volverse dispersa la pelicula por F2.26 su
++                    ! drift pasaba a ser gas + sedimentacion y llegaba a 48
++                    ! m/s (U_SETTLE_MAX) sobre un bano en reposo exacto. El
++                    ! comportamiento correcto es que se quede: la celda
++                    ! acumula alpha_l segun va llegando fundido y, al cruzar
++                    ! ALPHA_LIQ_CONT, pasa a ser bano por si misma. Asi sube
++                    ! el nivel del bano, que es lo que debe pasar.
++                    !
++                    ! ws_ut se deja en la velocidad terminal: es lo que fija
++                    ! el arrastre de GOTA sobre el gas (la celda es dispersa,
++                    ! su propia velocidad va prescrita por el drift).
++                    ! La vecina de abajo tiene que ser una celda REAL: en el
++                    ! rank del piso, k-1 es el halo de frontera FISICA, que el
++                    ! intercambio MPI no escribe (la leccion de B1 v10). Y bajo
++                    ! el piso no hay bano, asi que saltarla es ademas correcto
++                    ! e invariante a la descomposicion.
++                    if (.not. (k == kstart .and. at_zmin)) then
++                        if (m%cell_type(i,j,k-1) /= 0 .and. &
++                            liq%alpha(i,j,k-1) >= ALPHA_LIQ_CONT) then
++                            ws_ud_r(i,j,k)  = liq%ur(i,j,k-1)
++                            ws_ud_th(i,j,k) = liq%uth(i,j,k-1)
++                            ws_ud_z(i,j,k)  = liq%uz(i,j,k-1)
++                            cycle
++                        end if
++                    end if
+                     call drift_velocity(gas%ur(i,j,k), gas%uth(i,j,k), gas%uz(i,j,k), u_t, &
+                                         tr, tth, tz)
+-                    ws_ut(i,j,k) = u_t
+                     if (present(liq_old)) then
+                         ! relajacion de particula hacia el objetivo (freeboard)
+                         f = min(1.0_dp, cfg%dt * GRAVITY / max(u_t, SMALL))
+@@ -550,23 +589,49 @@ contains
+     ! una capa de celdas. Se evalua tambien en halos (funcion local de alpha
+     ! y alpha_s ya intercambiados) => coherente entre ranks sin intercambio.
+     !---------------------------------------------------------------------------
++    !---------------------------------------------------------------------------
++    ! Mascara de liquido CONTINUO. Criterio LOCAL con banda de HISTERESIS
++    ! (F2.26, 1-oct-2026).
++    !
++    ! Lo que sustituye: la "regla de superficie libre" de F1, que promovia a
++    ! continua cualquier celda con alpha_l >= ALPHA_FLOW_CUTOFF (1e-2) apoyada
++    ! sobre una celda de bano. Esa regla de VECINO no tiene precedente en
++    ! ningun codigo Euler-Euler revisado: OpenFOAM (blendingMethods::linear),
++    ! AIAD (alpha_lim = 0.3), GENTOP (gradiente adimensionalizado por dx) y
++    ! Porombka & Schlottke (2025, cociente espesor/celda) deciden morfologia
++    ! de forma LOCAL, y cuando detectan superficie libre eso selecciona el
++    ! CIERRE DE ARRASTRE, nunca el derecho a tener ecuacion de momento propia.
++    !
++    ! Lo que costaba: una PELICULA de 4 mm (alpha_l = 0.037) apoyada sobre una
++    ! celda de bano en reposo exacto quedaba con momento propio, sin Ergun (no
++    ! hay chatarra) y con un arrastre minusculo, y CAIA LIBREMENTE a traves
++    ! del bano: -7.2 m/s2 medidos, de cero a U_LIQ_MAX en 2.8 s (B1 v34,
++    ! deriva de 225 a 293 s). GENTOP describe la misma patologia: "a situation
++    ! might occur where the volume fraction of the continuous gas is much
++    ! smaller than 1, which violates any physical sense".
++    !
++    ! Lo que la regla SI resolvia, y aqui se conserva de otra forma: sin ella
++    ! la celda de superficie castaneteaba entre continua y dispersa al cruzar
++    ! ALPHA_LIQ_CONT, y al pasar a dispersa su cara con el bano se desenlazaba
++    ! del Poisson (F1). El remedio de la literatura para el castaneteo es una
++    ! BANDA, no un vecino: una celda que ya era continua lo sigue siendo
++    ! mientras alpha_l >= ALPHA_LIQ_HYST. La memoria es el valor ENTRANTE de
++    ! `cont` (el del iterado externo anterior), por eso es intent(inout).
++    !---------------------------------------------------------------------------
+     subroutine liquid_continuity_mask(liq, sol, m, cont)
+         type(phase_t), intent(in) :: liq
+         type(solid_t), intent(in) :: sol
+         type(mesh_t), intent(in)  :: m
+-        logical, intent(out)      :: cont(-1:,-1:,-1:)
+-        integer :: k, klo, khi
++        logical, intent(inout)    :: cont(-1:,-1:,-1:)
++        logical, allocatable :: was(:,:,:)
++        allocate(was, mold=cont)
++        was = cont
+         cont = liq_continuous(liq%alpha, sol%alpha_s)
+-        klo = lbound(cont,3) + 1; khi = ubound(cont,3)
+-        do k = khi, klo, -1
+-            where (.not. cont(:,:,k) .and. m%cell_type(:,:,k) /= 0 &
+-                   .and. liq%alpha(:,:,k) >= ALPHA_FLOW_CUTOFF &
+-                   .and. m%cell_type(:,:,k-1) /= 0 &
+-                   .and. liq_continuous(liq%alpha(:,:,k-1), sol%alpha_s(:,:,k-1)) &
+-                   .and. liq%alpha(:,:,k-1) >= ALPHA_LIQ_CONT)
+-                cont(:,:,k) = .true.
+-            end where
+-        end do
++        where (was .and. .not. cont .and. m%cell_type /= 0 &
++               .and. liq%alpha >= ALPHA_LIQ_HYST)
++            cont = .true.
++        end where
++        deallocate(was)
+     end subroutine liquid_continuity_mask
+ 
+     !---------------------------------------------------------------------------
+diff --git a/src/mod_multiphase.f90 b/src/mod_multiphase.f90
+index 148bc3a..91e760f 100644
+--- a/src/mod_multiphase.f90
++++ b/src/mod_multiphase.f90
+@@ -175,6 +175,36 @@ contains
+                     f_bed = 1.0_dp / (1.0_dp + exp(min(max(xb, -60.0_dp), 60.0_dp)))
+                     xb = A_AIAD * (al_c - ALPHA_AIAD_LIM)
+                     f_disp = 1.0_dp / (1.0_dp + exp(min(max(xb, -60.0_dp), 60.0_dp)))
++                    ! F2.25 (2026-10-01): la morfologia del arrastre tiene que
++                    ! ser COHERENTE con la clasificacion de continuidad. Una
++                    ! celda que el modelo trata como liquido CONTINUO —
++                    ! ecuacion de momento propia y participacion en el
++                    ! Poisson — NO puede recibir el cierre de GOTA.
++                    !
++                    ! Sin esto, una PELICULA apoyada sobre el bano (continua
++                    ! por la regla de superficie libre, con alpha_l muy por
++                    ! debajo de ALPHA_AIAD_LIM) quedaba clasificada como
++                    ! niebla por la logistica: sin Ergun (no hay chatarra),
++                    ! con el caudal donor-cell casi sin intercambio con el
++                    ! bano de abajo, y con el arrastre de gota — 46 veces mas
++                    ! debil que el de interfase — como unico sumidero. Medido
++                    ! en B1 v34 (i=12, k=5, sobre una celda de bano en reposo
++                    ! exacto): presion +3289, peso -12142, neto -8853 N/m3
++                    ! contra una inercia de 1237 kg/m3, o sea -7.2 m/s2, CAIDA
++                    ! LIBRE. Desde el reposo llega a U_LIQ_MAX en 2.8 s; la
++                    ! colada derivo de 1.6 a 20 m/s entre 225 y 293 s.
++                    !
++                    ! La literatura separa los dos conceptos y nunca los
++                    ! contradice: el detector de interfase (AIAD, GENTOP,
++                    ! blending de OpenFOAM) elige el CIERRE DE ARRASTRE, y la
++                    ! fraccion local decide si hay ecuacion de momento. Aqui
++                    ! la regla de superficie libre decide continuidad (y se
++                    ! conserva: sin ella la celda de superficie oscilaba al
++                    ! cruzar 0.3 y se desenlazaba del Poisson, F1), asi que
++                    ! el arrastre debe seguirla.
++                    if (ws_liq_cont_valid) then
++                        if (ws_liq_cont(i,j,k)) f_disp = 0.0_dp
++                    end if
+                     rho_mix = (al_c * liq%rho(i,j,k) + ag_c * gas%rho(i,j,k)) &
+                               / max(al_c + ag_c, SMALL)
+                     K_int = al_c * ag_c * rho_mix / TAU_LG

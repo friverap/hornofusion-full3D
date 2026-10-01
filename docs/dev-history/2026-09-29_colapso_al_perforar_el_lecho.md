@@ -450,3 +450,175 @@ tres centinelas en la cota el 100 % de los pasos).
 - Masa total 65751.2 -> 65751.0 kg en 30 s (3e-6 relativo).
 
 Con esto la colada completa se puede relanzar.
+
+---
+
+# SEGUNDA FALLA (30-sep / 1-oct): la PELICULA sobre el bano
+
+La colada B1 v34, lanzada con F2.22 + F2.24, corrio **limpia 225 s** — muy por
+encima de los 205 s en los que colapsaba v33 — y despues derivo despacio hasta
+activar `U_LIQ_MAX` a los **293.21 s**. Perfil por tramos:
+
+| tramo (s) | p_max | u_gas | u_liq | m_liq |
+|---|---|---|---|---|
+| 0–225   | ≤ 5.2 kPa | ≤ 111 | ≤ 1.60 | 960 |
+| 225–250 | 7.1 kPa | 115 | 10.26 | 1517 |
+| 250–275 | 5.3 kPa | 119 | 18.41 | 1644 |
+| 275–300 | **81 kPa** | 218 | 20.00 | 2183 |
+
+No es la inestabilidad rapida de F2.24 (e-folding de 50 ms): es una **deriva
+lenta** sobre 50 s. Mecanismo distinto.
+
+## El estado incoherente
+
+Las celdas que se disparan son siempre las mismas: `i = 12` (el radio de paso
+de los electrodos), `k = 5`, **peliculas delgadas de liquido apoyadas sobre una
+celda de bano lleno** (`alpha_l = 1.000` debajo, en reposo exacto).
+
+Esas celdas son CONTINUAS por la **regla de superficie libre** de
+`liquid_continuity_mask`: basta `alpha_l >= ALPHA_FLOW_CUTOFF` (1e-2) y que la
+de abajo sea bano. Asi que tienen ecuacion de momento propia y entran al
+Poisson. Pero **F2.22 decide su morfologia de arrastre solo con alpha_l**, y
+con `alpha_l = 0.165` la logistica de AIAD da `f_disp = 0.999`: el cierre que
+reciben es el de GOTA.
+
+**El modelo las trata como liquido continuo para el momento y como niebla para
+el arrastre.** Medido a t = 250 s sobre las 5 celdas en ese estado: el cierre
+de interfase seria **46 veces** mas fuerte que el de gota que reciben
+(K mediana 9000 contra 195).
+
+Sin chatarra debajo no hay Ergun, y con el caudal donor-cell la cara que las
+separa del bano apenas intercambia momento con el. Balance medido en
+(12,17,5): presion +3289, peso −12142, neto **−8853 N/m³** contra una inercia
+de 1237 kg/m³, o sea **−7.2 m/s² — caida libre**. Desde el reposo llegan a los
+20 m/s en 2.8 s. Fisicamente, 4 mm de acero apoyados sobre un bano profundo no
+atraviesan el bano en caida libre.
+
+## Honestidad sobre el origen
+
+**Este modo lo introdujo F2.22.** Antes del blend, esa misma celda caia en la
+rama `ws_liq_cont` y recibia `alpha_l alpha_g rho_l / TAU_LG` = 1.0e5, que la
+sostenia. Al mover la decision de morfologia a `alpha_l` sola, la solte. El
+balance neto sigue siendo favorable (v33 colapsaba a 205 s; v34 llega a 293 s),
+pero la pieza no estaba completa.
+
+## Direccion del arreglo
+
+La morfologia del arrastre tiene que ser **coherente con la clasificacion de
+continuidad**: una celda que el modelo trata como liquido CONTINUO no puede
+recibir el cierre de gota. El candidato minimo es forzar `f_disp = 0` donde
+`ws_liq_cont` es cierto, conservando el blend para el liquido genuinamente
+disperso y la rama de lecho intacta. Pendiente de contrastar contra la
+literatura si ademas hace falta atar la pelicula al bano de abajo.
+
+## F2.25 — coherencia del arrastre: DESCARTADA (1-oct)
+
+Primer intento contra la pelicula: forzar `f_disp = 0` donde `ws_liq_cont` es
+cierto, para que una celda tratada como liquido continuo no reciba el cierre
+de gota. Conserva la regla de vecino y solo corrige la incoherencia.
+
+Bancos: los tres pasan, y `bath_fill` MEJORA (gas 181 -> 97 m/s, clip a un
+tercio). Pero el juez sobre 250-296 s lo descarta:
+
+| tramo | base F2.24 | F2.25 |
+|---|---|---|
+| 290-300 s, p_max | 81 kPa | **192 kPa** |
+| 290-300 s, u_gas | 133 | **300 (cota)** |
+| 290-300 s, % pasos con liquido en cota | 32.8 % | 2.5 % |
+
+El liquido mejora mucho (32.8 -> 2.5 % de los pasos) pero **la presion se
+duplica y el gas toca su cota**. La razon es directa: el cierre de interfase
+es un arrastre GAS-liquido, y en una celda de pelicula vale K = 1.7e4 contra
+una inercia de gas de 79, o sea 216 por paso. El gas queda soldado a la
+pelicula y el chorro del arco se aniquila en una celda — exactamente el
+mecanismo que producia los MPa en v33. La propia consulta de literatura lo
+habia advertido: ese cierre "ata al GAS de la propia celda, que es lo que te
+fallo con TAU_LG".
+
+Leccion: corregir la incoherencia por el lado del ARRASTRE la empuja al gas.
+Habia que corregirla por el lado de la CONTINUIDAD, que es lo que dice la
+literatura.
+
+## F2.26 — continuidad LOCAL con banda de histeresis
+
+La regla de superficie libre de F1 decidia continuidad por el VECINO de abajo.
+Ningun codigo Euler-Euler revisado hace eso: OpenFOAM (`blendingMethods::
+linear`, banda [0.3, 0.7] sobre la alpha local), AIAD (alpha_lim = 0.3),
+GENTOP (gradiente adimensionalizado por dx) y Porombka & Schlottke 2025
+(cociente espesor/celda, que para una pelicula de una celda ES alpha_l)
+deciden de forma LOCAL; y cuando detectan superficie libre, eso selecciona el
+CIERRE DE ARRASTRE, nunca el derecho a tener ecuacion de momento.
+
+Lo que la regla SI resolvia era el castaneteo al cruzar `ALPHA_LIQ_CONT`. El
+remedio de la literatura para eso es una BANDA, no un vecino. Asi que:
+
+    cont = liq_continuous(alpha_l, alpha_s)
+    donde YA era continua y alpha_l >= ALPHA_LIQ_HYST (0.2) -> sigue continua
+
+La memoria es el valor entrante de la mascara (el iterado externo anterior),
+por eso `cont` pasa a `intent(inout)`.
+
+Efecto: las peliculas de alpha_l < 0.2 dejan de tener ecuacion de momento y
+pasan a transporte por drift, que es algebraico y acotado — ya no pueden caer
+libremente por construccion. Y como dejan de ser continuas, tampoco reciben el
+cierre de interfase, asi que el gas no queda soldado a ellas.
+
+Bancos: los tres pasan y **bath_test queda IDENTICO a la base** (hidrostatica
+1.051e-2, reposo 0.175, gas 20.9). Es decir, la succion que motivo la regla en
+F1 no reaparece: la cubrieron F2.20/F2.21 (`ws_gas_reach` mete al gas en el
+Poisson donde aun no lo hay pero puede llegar, que es justo lo que deja a una
+celda de bano puro recibir gas al drenar). `bath_fill` baja el clip a 0.006 kg,
+el mejor valor de toda la serie.
+
+## F2.26 + F2.27: NO CIERRAN — y el porque reencuadra el problema
+
+Parche completo en `docs/dev-history/2026-10-01_f226_f227_pelicula_sin_cerrar.patch`
+(continuidad LOCAL con banda de histeresis + drift que se incorpora al bano).
+Los tres bancos pasan y `bath_test` queda identico a la base, pero el juez
+sobre 250-296 s no lo aprueba.
+
+### La comparacion de los tres candidatos
+
+| version | 1a cota liq | p_max | u_gas | % pasos en cota |
+|---|---|---|---|---|
+| F2.24 (commiteada) | 292.41 | 81 kPa | 218 | 3.0 % |
+| F2.25 (coherencia) | 295.81 | 192 kPa | 300 | 0.3 % |
+| F2.26+F2.27 | 281.31 | 134 kPa | 277 | 0.1 % |
+
+### El hallazgo que reencuadra todo
+
+Los tres variantes son **identicos hasta los 280 s** y los tres tienen el
+MISMO evento despues: un racimo de **cinco picos de presion de 30-60 ms**
+entre 280.95 y 281.85 s, en los mismos instantes:
+
+| pico | F2.24 | F2.25 | F2.27 |
+|---|---|---|---|
+| 1 | 280.980 · 68 kPa | 280.952 · 72 kPa | 281.070 · 82 kPa |
+| 2 | 281.360 · 53 kPa | 281.318 · 68 kPa | 281.338 · 134 kPa |
+| 3 | 281.500 · 68 kPa | 281.464 · 84 kPa | 281.458 · 107 kPa |
+| 4 | 281.660 · 62 kPa | 281.708 · 72 kPa | 281.676 · 126 kPa |
+| 5 | 281.760 · 67 kPa | 281.810 · 77 kPa | 281.748 · 92 kPa |
+
+Tiempo total por encima de 20 kPa en los 46 s de ventana: 0.21 / 0.25 / 0.19 s.
+Es decir, **episodios breves y acotados**, no un colapso.
+
+El evento coincide con una **rafaga de fusion**: m_liq pasa de 1763 a 1865 kg
+entre 280.4 y 281.6 s (83 kg/s). Es la familia de las rafagas bajo los arcos
+que ya trabajaron F2.14 y F2.15, y **ninguno de los tres candidatos la toca**:
+solo modulan la AMPLITUD de su respuesta.
+
+### Leccion de metodo
+
+Pase tres iteraciones de hora y media arreglando la respuesta del liquido a un
+evento cuya causa no habia identificado. La pelicula en caida libre es real y
+esta bien diagnosticada, pero es **secundaria**: el disparador es la rafaga de
+fusion de los 281 s. Antes de volver a tocar el cierre de morfologia hay que
+caracterizar esa rafaga — igual que se hizo con el colapso del lecho: sonda de
+balance en la celda que la origina, no suposiciones.
+
+### Estado
+
+El arbol vuelve al estado commiteado (F2.24, `30b466a`), `make test-quick` en
+verde. Los tres candidatos quedan archivados con sus medidas. La colada v34 se
+detuvo a los 294 s y sus snapshots y audit quedan en
+`campaigns/b1_v34_f224_5040s/` como linea base de la ventana.
