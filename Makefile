@@ -96,7 +96,7 @@ $(OBJDIR)/mod_boundary_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_energy_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o $(OBJDIR)/mod_audit.o
 $(OBJDIR)/mod_properties_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_momentum_3d.o: $(OBJDIR)/mod_probe.o $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o
-$(OBJDIR)/mod_pressure_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_workspace.o
+$(OBJDIR)/mod_pressure_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_workspace.o $(OBJDIR)/mod_probe.o
 $(OBJDIR)/mod_drag_ergun.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_continuity.o: $(OBJDIR)/mod_probe.o $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_audit.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o
 $(OBJDIR)/mod_melting_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_audit.o

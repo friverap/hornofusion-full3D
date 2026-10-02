@@ -422,3 +422,32 @@ t_bucket2_charge = 2100.0
 # ============================================================
 output_freq = 200;  monitor_freq = 20;  output_dir = output_prod
 ```
+
+## Sondas de diagnóstico (desactivadas por defecto)
+
+Instrumentos para seguir **una celda** paso a paso dentro de una ventana de
+pasos. Fuera de la ventana cuestan una comparación de enteros. Los índices son
+GLOBALES y 1-based (Fortran); un snapshot leído con numpy como `[k, j, i]`
+0-based se convierte sumando 1 a cada índice.
+
+| clave | default | significado |
+|---|---|---|
+| `probe_step_from`, `probe_step_to` | 0, 0 | ventana de pasos en la que las sondas escriben (`probe_step_to = 0` = apagadas). La sonda global (`[PROBE]`, extremos por subetapa) también usa esta ventana. |
+| `probe_cell_i`, `probe_cell_j`, `probe_cell_k` | 0, 0, 0 | celda a sondear (`probe_cell_k = 0` = apagada). Solo imprime el rank dueño. |
+
+Con la celda fijada, dentro de la ventana se escriben por **iteración externa**:
+
+- `[PROBE-MOM]` (`mod_momentum_3d`): la fila de la ecuación de `uz` del
+  líquido: transitorio, presión, gravedad+arco, `K·u_otra`, `aP`, `Σa_nb`,
+  `Ergun·V`, `K·V`. Es la que localizó la realimentación del caudal fantasma
+  (F2.24).
+- `[PROBE-P]` (`mod_pressure_3d`): la fila de la ecuación de presión:
+  `Su` por fase (líquido, gas, compresibilidad), los seis coeficientes de
+  cara, `aP`, `p` entrante, `pp` resuelto y el de las seis vecinas, y las
+  diagonales de momento del líquido de la celda y de sus vecinas. Es la que
+  diagnosticó el water packing de la ráfaga de los 281 s (F2.28).
+
+Uso típico: reinicio desde el snapshot anterior al evento (`restart_file`),
+`t_final` justo después, ventana de ~100 pasos alrededor del arranque. Se
+parsean con `scratchpad/cand/probe_p.py` y el parser de `[PROBE-MOM]` del
+historial (`docs/dev-history/`).

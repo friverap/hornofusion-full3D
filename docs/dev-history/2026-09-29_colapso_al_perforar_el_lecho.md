@@ -622,3 +622,242 @@ El arbol vuelve al estado commiteado (F2.24, `30b466a`), `make test-quick` en
 verde. Los tres candidatos quedan archivados con sus medidas. La colada v34 se
 detuvo a los 294 s y sus snapshots y audit quedan en
 `campaigns/b1_v34_f224_5040s/` como linea base de la ventana.
+
+---
+
+# LA RAFAGA DE LOS 281 s, caracterizada (1-oct)
+
+Reinicio desde el snapshot de 280 s con salida cada 50 ms (`rafaga281`) y sonda
+de la FILA DE PRESION de una celda (`[PROBE-P]`, nueva en `mod_pressure_3d`:
+Su por fase, los seis coeficientes de cara, aP, pp y las diagonales de momento
+de la celda y sus vecinas, por iteracion externa).
+
+## Donde y que
+
+Los cinco pulsos (280.95, 281.35, 281.50, 281.75, 281.85 s; 20-52 kPa; 80 ms
+cada uno) caen en **celdas de liquido PURO en reposo exacto** (alpha_l = 1.000,
+u = 0, T = 1825 K), en `i = 9, k = 3`, rotando por los tres sectores de
+electrodo (j = 59/0 -> 39/40 -> 19/20). Cada una descansa sobre lecho denso
+(alpha_s = 0.985 con gas de poro 0.015 ATRAPADO, movilidad 1e-5: pared para
+el Poisson) y tiene tres caras abiertas: dos laterales a liquido puro y la de
+arriba a la celda de superficie (alpha_l ~ 0.5).
+
+Lo que NO es: no hay fusion en la celda ni en sus vecinas (dm_s = 0 en toda la
+columna); el arco es estable (potencia y posicion sin salto); las celdas ya
+estaban llenas >= 100 ms antes de pulsar (no es el instante de sellado); y la
+bolsa no esta sellada geometricamente (dos celdas puras con cuatro salidas).
+
+## El orden causal (snapshots de 50 ms, columna i=9 j=59)
+
+| t | p(k=3) | alpha_l(k=4) | uz_l(k=4) | uz_g(k=5) |
+|---|---|---|---|---|
+| 280.80 | 1.6 kPa | 0.596 | -1.79 | -63.9 |
+| 280.90 | 3.4 kPa | 0.552 | -2.08 | -47.7 |
+| 280.95 | 10.9 kPa | 0.526 | -1.96 | +13.5 |
+| 281.00 | **35.3 kPa** | 0.492 | -0.38 | **+89.5** |
+| 281.05 | 7.7 kPa | 0.458 | -0.07 | +3.5 |
+
+El chorro del arco (gas a -64 m/s) empuja la celda de superficie hacia abajo a
+2 m/s, dentro de la celda llena. Esta no tiene a donde ponerlo: la presion
+salta, invierte el gas a +90 m/s hacia arriba y frena la entrada. Un golpe de
+ariete sobre una celda empacada.
+
+## La fila de presion de la celda del pico (sonda, cada 4 ms)
+
+| paso | t | aW (hacia el bano) | aT (superficie) | aP | p | aPuz propia |
+|---|---|---|---|---|---|---|
+| 140440 | 280.880 | 8.2e-6 | 1.0e-7 | 8.3e-6 | 2.7 kPa | 1.3e5 |
+| 140470 | 280.940 | 2.1e-6 | 1.2e-7 | 2.3e-6 | 7.8 kPa | 1.2e5 |
+| 140490 | 280.980 | 2.9e-7 | 1.3e-7 | 4.2e-7 | 34 kPa | 2.0e5 |
+| 140496 | 280.992 | 1.4e-7 | 1.4e-7 | 2.8e-7 | **58 kPa** | 2.5e5 |
+| 140530 | 281.060 | 4.2e-9 | 1.8e-7 | 1.8e-7 | 7.5 kPa | 8.1e4 |
+
+aE = aS = aB = 0 (paredes). Dos hechos:
+
+1. **La celda es hidraulicamente rigida.** Su diagonal de momento vale
+   1.3e5, 25 veces su inercia (alpha rho V/dt = 4.7e3). Es el **Ergun
+   EFECTIVO del lecho de abajo** (F2.15, `compute_ergun_drag(on_bed=.true.)`:
+   alpha_s_eff = 0.985, epsilon acotado a 0.01, A = 8.7e7, A·V = 1.1e5). Con
+   d = alpha V/aP minusculo, sus coeficientes en el Poisson son 1e-6..1e-7, y
+   la cara hacia la superficie — por donde entra el volumen — pesa 80 veces
+   menos que la cara hacia el bano.
+2. **Su unica conexion real se cierra durante la rampa**: aW cae de 8.2e-6 a
+   4e-9 (2000 veces) mientras p sube. Con sum(a_nb) ~ 1e-7, un desbalance de
+   volumen de 1e-4 m3/s — Su_liq +1.27e-2 y Su_gas -1.27e-2, que se cancelan
+   solo aproximadamente: el gas entra por la cara de ALCANCE de F2.21 y el
+   liquido sale soldado al chorro — exige miles de Pa por iteracion.
+
+## Cuan general es
+
+| t (s) | celdas de bano | sobre lecho | puras sobre lecho | p max en esas | p max resto |
+|---|---|---|---|---|---|
+| 200 | 64 | 64 | 0 | — | — |
+| 250 | 142 | 142 | 29 | 3.95 kPa | 0 |
+| 281 | 206 | **204** | 17 | **35.3 kPa** | 3.4 kPa |
+
+**Practicamente todo el bano descansa sobre lecho**, porque el bano se forma
+fundiendo hacia abajo: su capa inferior siempre esta sobre chatarra. La regla
+del Ergun efectivo no es una excepcion, rigidiza TODA la base del bano. Y el
+maximo de presion de la corrida vive exactamente en las celdas puras de esa
+capa.
+
+## Lectura
+
+F2.15 anadio el Ergun efectivo para un CHARCO PARCIAL (alpha_l ~ 0.3) sin
+chatarra propia que, sin ningun sumidero, caia libremente hasta U_LIQ_MAX. Una
+celda LLENA no puede caer a ninguna parte — su fila del Poisson se lo prohibe —
+y lo que necesita como sumidero es la presion, no un arrastre de 25 veces su
+inercia que la vuelve incapaz de ceder volumen. El candidato de arreglo es que
+el Ergun efectivo del lecho se desvanezca con el hueco de la celda (sin poro
+abierto no hay percolacion), de modo que la celda empacada recupere una
+diagonal normal y el Poisson pueda absorber el desbalance con 25 veces menos
+presion. Pendiente de la literatura y de la sonda ampliada (aP radial y
+azimutal) antes de implementar.
+
+## Sonda ampliada y literatura: cierre del diagnostico
+
+Las tres diagonales de momento de la celda del pico son iguales: aP_ur =
+aP_uth = aP_uz = 1.3e5 (inercia 4.7e3). Es el Ergun efectivo, isotropo.
+
+La literatura lo tiene nombre y manual: **water packing**. RELAP5 Vol. I
+§3.4.6: "a liquid full cell and large liquid influx momentum [...] Because the
+liquid is nearly incompressible, this large influx of liquid momentum will
+cause a large increase in pressure". TRACE §2: "the boundary of a mesh cell
+behaves like the dead end of a pipe in a water hammer event [...] a numerical
+dead end for the liquid [...] push the liquid on through the cell face with an
+abrupt increase in pressure", y TRACE iguala el coeficiente del vapor al del
+liquido en esa cara "to prevent excessively large vapor velocities" — nuestro
+gas a +90..+117 m/s. Lo que convierte a la celda en callejon aqui es el Ergun
+efectivo del lecho (d minusculo), no la incompresibilidad sola; por eso el
+remedio es de la familia "level tracking" (evitar el callejon) y no el parche
+reactivo de RELAP5: **F2.28**, el Ergun efectivo se desvanece con
+`1 - alpha_l`.
+
+## F2.28, juez del pulso (280.5-282.2 s) y re-juez del caso de F2.15
+
+| | base F2.24 | F2.28 |
+|---|---|---|
+| episodios p > 20 kPa | 5 | 3 |
+| tiempo por encima de 20 kPa | 0.222 s | **0.058 s** |
+| picos | 71-88 kPa | 59-69 kPa |
+| u_gas max | 237 | 218 |
+| u_liq max | 2.37 | 3.36 |
+
+La rafaga baja a la cuarta parte en tiempo pero NO desaparece: quedan tres
+pulsos de 16-26 ms a ~65 kPa. Restaurar el camino del liquido no quita el
+ingrediente que queda: la celda de superficie, soldada al chorro, sigue
+empujando liquido a 2 m/s dentro de una celda llena, y la presion tiene que
+frenarlo dentro del paso.
+
+Caso original de F2.15 (v31, 110 -> 113.8 s, el charco de alpha_l ~ 0.3 que
+caia libremente): corrida que motivo F2.15: p_max 145 kPa, gas 300, liquido en
+cota 2.7 % de los pasos; **con F2.28: 3.6 kPa, gas 58, ninguna cota, clip 0**.
+F2.28 no reabre el caso de F2.15.
+
+## F2.28, juez 250-296 s: NO cierra — mueve el fallo del liquido al gas
+
+| tramo | base F2.24 (p / gas / liq / % cota liq) | F2.28 |
+|---|---|---|
+| 280-290 | 68 kPa / 218 / 11.5 / 0 | 90 kPa / 251 / 11.6 / 0 |
+| 290-300 | 81 kPa / 133 / **20.0 / 32.8 %** | **125 kPa / 300** / 8.8 / 0 |
+
+El liquido deja de tocar su cota en toda la ventana (la base la tocaba el
+32.8 % de los pasos de 290-300), pero la presion sube y el gas toca U_GAS_MAX
+a los 292.77 s — el mismo instante en que la base capaba el liquido (292.41).
+Es la tercera vez que un arreglo del lado liquido descarga la correccion en el
+gas (F2.25, F2.27 y ahora F2.28), y es literalmente lo que TRACE describe para
+el water packing: la correccion de presion sale por la cara con mayor alpha_g
+y dispara al vapor, por lo que TRACE iguala ahi el coeficiente del vapor al
+del liquido. El evento de los 292 s no se ha caracterizado todavia (solo el
+de los 281); `rafaga292` reinicia desde el snapshot de 290 s de este juez.
+
+## El evento de los 292 s: un POR0 EMPACADO con la presion congelada (F2.29)
+
+El reinicio denso desde el snapshot de 290 s del juez F2.28 (`rafaga292`)
+reproduce el disparo — en el MINIMO de presion, que es lo que el audit reporta
+como `p_max` (valor absoluto). Dos hallazgos de metodo por el camino:
+
+- **El reinicio es fiel y la dinamica es caotica**: juez y reinicio son
+  identicos en el primer paso (primera diferencia a 1e-9 en 290.012 s) y
+  divergen desde el redondeo (1e-4 kg en m_liq a 290.5 s, 4e-4 a 291 s) hasta
+  que el mismo evento ocurre a 293.0 s en vez de a 292.8 s. La fuente del
+  redondeo es el deposito Monte Carlo del arco (MPI_SUM, no bit a bit). En una
+  rafaga de fusion con poros sellandose, 1e-13 se vuelve macroscopico en 2 s.
+- **`p_max` del audit es max |p|**: lo que parecia una meseta de +17.7 kPa era
+  una SUCCION congelada de -17.7 kPa.
+
+La celda: (5,40,2) numpy, un poro del lecho (alpha_s 0.769) completamente
+lleno de liquido (alpha_l 0.231, alpha_g 0.000), bajo una celda de bano puro.
+Su presion vale -17 693 Pa, identica a cinco cifras, durante 2.5 s. A los
+292.7 s la vecina (4,40,2) se empaca igual y queda congelada en **-122 kPa**:
+ese es el "125 kPa / gas a 300" del juez.
+
+Sonda `[PROBE-P]` sobre esa celda (290.00-290.08 s):
+act_l = T (liquido continuo en lecho: alpha_l >= 1e-2), act_g = F;
+**aW = aE = aS = aN = aB = aT = 0 exactos**, Su = 0, aP = 6e-13 (solo la
+compresibilidad acustica del liquido), **pp = 0 en todas las iteraciones**,
+mientras sus seis vecinas corrigen entre -83 y +400 Pa.
+
+Es Bug 16 en el caso que se le escapo. Bug 16 ("una celda sin fase continua
+no tiene presion de fluido") impone el Neumann de las vecinas a las celdas con
+`.not. act_l .and. .not. act_g`. Este poro ES act_l, pero el limitador de hueco
+(F2.8, `face_open`) cierra toda cara hacia el (room <= eps), no tiene gas y
+sus vecinas no le dan salida: fila activa con todas las caras cerradas. Su p
+no la toca nadie y queda rancia — y las vecinas la leen como gradiente, como
+describe la nota de F2.16 sobre Hilfer. Water packing DENTRO del lecho.
+
+Censo: los poros empacados activos crecen con el bano (16 a los 100 s, 53 a
+los 200, ~250 a los 290); en la serie densa 5-16 de ellos llevan la presion
+congelada a 1e-3 entre snapshots. Son benignos mientras se sellan a presion
+positiva pequena; el patologico es el que se sella en SUCCION.
+
+**F2.29**: la fila activa cuyos seis coeficientes suman cero se marca
+`sealed`, se vuelve trivial (aP = 1, Su = 0) y entra en el bloque de Neumann
+de Bug 16 (excluyendo vecinas tambien selladas del promedio). La pared se
+decide por el ESTADO hidraulico, no por la presencia de fase. Bancos: los tres
+pasan; `bath_test` y `bath_fill` identicos; `bath_freeze` sube a 105 kPa
+(cota 183) y gas 31 — la congelacion crea poros empacados y la pieza los toca.
+Juez 250-296 con F2.28 + F2.29 en curso.
+
+## F2.28 + F2.29, juez 250-296: tampoco cierra — y la conclusion de metodo
+
+| tramo | base F2.24 | F2.25 | F2.27 | F2.28 | F2.28+F2.29 |
+|---|---|---|---|---|---|
+| 280-290 \|p\|max / gas / liq | **68 kPa / 218 / 11.5** | 84 / 237 / 5.0 | 134 / 277 / 19.9 | 90 / 251 / 11.6 | 92 / 252 / 20.0 |
+| 290-300 \|p\|max / gas / liq | 81 / 133 / 20 (32.8 %) | 192 / 300 / 20 (0.3 %) | — | 125 / 300 / 8.8 (0 %) | — |
+| primera centinela | liq 292.41 | gas/liq 295.6 | liq 281.31 | gas 292.77 | liq 285.05 |
+
+Cinco candidatos, cinco instantes distintos de primera centinela, y en el
+tramo 280-290 **ninguno es mas suave que la base**. Dos hechos obligan a
+cambiar de metodo:
+
+1. **La dinamica es caotica pasados los ~280 s** (medido: juez y su propio
+   reinicio divergen desde 1e-9 hasta desplazar el mismo evento 0.2 s). Las
+   centinelas son umbrales duros sobre un campo caotico: cual salta primero y
+   cuando depende del redondeo. Juzgar por "tiempo hasta la primera centinela"
+   en UNA trayectoria es leer ruido como senal.
+2. Cada candidato corrigio un mecanismo REAL y medido (la pelicula en caida
+   libre, el callejon del Ergun efectivo, el poro empacado congelado) y cada
+   uno movio el fallo a otra variable y otro instante. El regimen 280-300 s de
+   esta trayectoria es MARGINAL: varios mecanismos al limite a la vez, y
+   aliviar uno carga a otro.
+
+Lo que si es solido y queda: (a) F2.24 (caudal donor-cell) alargo la corrida
+limpia de 205 a 225 s y el juez de 200-230 paso sin centinelas; (b) los tres
+mecanismos estan caracterizados con sonda y literatura, y sus parches
+archivados con sus medidas:
+`2026-10-01_f226_f227_pelicula_sin_cerrar.patch`,
+`2026-10-01_f228_ergun_efectivo_desvanece.patch`,
+`2026-10-01_f229_poro_sellado_neumann_CON_sonda.patch`;
+(c) las dos sondas de celda (`[PROBE-MOM]`, `[PROBE-P]`) se quedan en el
+codigo, apagadas por defecto, documentadas en CONFIGURATION.
+
+**Lo que haria falta para decidir entre candidatos**: un juez ESTADISTICO
+(varias trayectorias de la misma ventana perturbando el redondeo, o una
+ventana larga desde un estado limpio, 200 -> 300 s) con criterio de REGIMEN
+ACOTADO (fraccion de pasos con |p| > 20 kPa, tiempo con gas > 200, con
+liquido > 10) y no "tiempo hasta la primera centinela". Cuesta ~1.5 h por
+trayectoria y ventana a 14 ranks. Es una decision de computo del usuario.
+
+Arbol: codigo commiteado (30b466a) + sonda de presion + docs. test-quick en
+verde, golden v32 bit a bit (las sondas estan apagadas por defecto).

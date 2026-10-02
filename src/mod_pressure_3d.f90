@@ -28,6 +28,7 @@ module mod_pressure_3d
     use mod_solver_3d
     use mod_boundary_3d
     use mod_parallel_utils
+    use mod_probe, only: probe_active_now, probe_current_step
     use mod_mpi_topology, only: mpi_exchange_halos_3d
     implicit none
 
@@ -124,6 +125,10 @@ contains
         ! volumetrico total por caras. El residual del CG que se devolvia antes mide la solucion
         ! de pp, no si u* conserva masa (siempre <= SOR_TOL_PRESSURE).
         real(dp) :: flux_ref, sum_su, tmp
+        ! Sonda de la FILA DE PRESION de una celda (cfg%probe_cell_*)
+        integer  :: pi_, pj_, pk_
+        logical  :: probe_here, probe_own
+        real(dp) :: su_liq_p, su_gas_p, su_comp_p
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -205,12 +210,23 @@ contains
         ! con la radiación DO real el gas queda en ~3000-6000 K y su
         ! expansión es absorbible por el Poisson)
         !-----------------------------------------------------------------------
+        probe_here = .false.; pi_ = 0; pj_ = 0; pk_ = 0
+        su_liq_p = 0.0_dp; su_gas_p = 0.0_dp; su_comp_p = 0.0_dp
+        if (cfg%probe_cell_k > 0) then
+            if (probe_active_now(cfg)) then
+                call global_to_local(m, cfg%probe_cell_i, cfg%probe_cell_j, &
+                                     cfg%probe_cell_k, pi_, pj_, pk_, probe_own)
+                probe_here = probe_own
+            end if
+        end if
         flux_ref = 0.0_dp
         call add_phase_contribution(liq, liq%alpha, act_l, .true., sh%p, gpr, gpth, gpz, .false.)
+        if (probe_here) su_liq_p = Su(pi_,pj_,pk_)
         ! Gas en el Poisson SOLO con multifase: sin gas momentum resuelto,
         ! sus aP_u* valen 0 y d_f = V/SMALL revienta los coeficientes.
         if (cfg%gas_in_poisson .and. cfg%solve_multiphase) &
             call add_phase_contribution(gas, ag_eff, act_g, .false., p_g, gpr_g, gpth_g, gpz_g, .true.)
+        if (probe_here) su_gas_p = Su(pi_,pj_,pk_) - su_liq_p
 
         ! NOTA (cierre 2026): NO añadir aquí la fuente de masa de fusión
         ! del líquido (Su += mdot - rho*dalpha/dt). Se probó: realimenta
@@ -282,6 +298,18 @@ contains
             end do
         end do
 
+        if (probe_here) then
+            su_comp_p = Su(pi_,pj_,pk_) - su_liq_p - su_gas_p
+            write(*,'(A,I8,A,3I4,A,2L1,18(A,ES11.3))') &
+                '[PROBE-P] paso', probe_current_step(), ' celda', cfg%probe_cell_i, cfg%probe_cell_j, cfg%probe_cell_k, &
+                ' act_l/g=', act_l(pi_,pj_,pk_), act_g(pi_,pj_,pk_), &
+                ' | Su_liq=', su_liq_p, ' Su_gas=', su_gas_p, ' Su_comp=', su_comp_p, &
+                ' | aW=', aW(pi_,pj_,pk_), ' aE=', aE(pi_,pj_,pk_), ' aS=', aS(pi_,pj_,pk_), ' aN=', aN(pi_,pj_,pk_), &
+                ' aB=', aB(pi_,pj_,pk_), ' aT=', aT(pi_,pj_,pk_), ' aP=', aP(pi_,pj_,pk_), &
+                ' | p_in=', sh%p(pi_,pj_,pk_), ' al=', liq%alpha(pi_,pj_,pk_), ' ag=', gas%alpha(pi_,pj_,pk_), &
+                ' | aPuz=', liq%aP_uz(pi_,pj_,pk_), ' aPuz_T=', liq%aP_uz(pi_,pj_,pk_+1), ' aPur_W=', liq%aP_ur(pi_-1,pj_,pk_), &
+                ' aPur=', liq%aP_ur(pi_,pj_,pk_), ' aPuth=', liq%aP_uth(pi_,pj_,pk_)
+        end if
         ! Pressure BCs
         call apply_pressure_bc(aW, aE, aS, aN, aB, aT, aP, Su, m)
 
@@ -316,6 +344,9 @@ contains
         call cg_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, sh%pp, m, &
                        cfg%max_inner_pres, SOR_TOL_PRESSURE, &
                        cg_res, n_iter_cg)
+        if (probe_here) write(*,'(A,I8,A,ES11.3,A,6ES11.3)') '[PROBE-P] paso', probe_current_step(), &
+            ' pp=', sh%pp(pi_,pj_,pk_), ' pp_vec(W,E,S,N,B,T)=', sh%pp(pi_-1,pj_,pk_), sh%pp(pi_+1,pj_,pk_), &
+            sh%pp(pi_,pj_-1,pk_), sh%pp(pi_,pj_+1,pk_), sh%pp(pi_,pj_,pk_-1), sh%pp(pi_,pj_,pk_+1)
 
         ! (residual = desbalance de masa del iterado entrante, calculado
         ! antes del CG; cg_res queda como diagnostico del solver lineal)
