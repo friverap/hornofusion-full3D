@@ -46,7 +46,7 @@ contains
 
         integer :: i, j, k
         real(dp) :: alpha_s, A, B
-        real(dp) :: vmag, d_p
+        real(dp) :: vmag, d_p, fade
         logical  :: use_below
 
         use_below = .false.
@@ -60,17 +60,42 @@ contains
                     if (m%cell_type(i,j,k) == 0) cycle
 
                     alpha_s = sol%alpha_s(i,j,k)
+                    fade = 1.0_dp
                     if (use_below .and. alpha_s < 1.0e-2_dp) then
-                        if (m%cell_type(i,j,k-1) /= 0) &
+                        if (m%cell_type(i,j,k-1) /= 0) then
                             alpha_s = max(alpha_s, sol%alpha_s(i,j,k-1))
+                            ! F2.28 (1-oct-2026): el Ergun EFECTIVO del lecho de
+                            ! abajo (F2.15) solo frena al liquido que puede
+                            ! PERCOLAR hacia el: una celda EMPACADA (alpha_l -> 1)
+                            ! no tiene poro abierto, no puede drenar a ninguna
+                            ! parte — su fila del Poisson se lo prohibe — y lo
+                            ! que necesita como sumidero es la presion, no un
+                            ! arrastre de 25 veces su inercia. Con el Ergun del
+                            ! lecho (epsilon acotado a 0.01: A·V = 1.1e5 frente
+                            ! a alpha rho V/dt = 4.7e3) la celda queda con
+                            ! d = alpha V/aP minusculo, sus coeficientes en el
+                            ! Poisson caen a 1e-7 y se vuelve el "numerical dead
+                            ! end for the liquid" del water packing (TRACE
+                            ! Theory Manual §2; RELAP5 Vol. I §3.4.6): cualquier
+                            ! volumen que le empuja la celda de superficie
+                            ! exige decenas de kPa y se descarga por la unica
+                            ! cara blanda, la del gas (medido: 35-52 kPa y gas
+                            ! a +90..+117 m/s, cinco pulsos de 80 ms bajo cada
+                            ! electrodo, B1 v34 a 281 s; practicamente TODO el
+                            ! bano descansa sobre lecho, 204 de 206 celdas).
+                            ! El desvanecimiento es lineal con el liquido de la
+                            ! celda: el charco parcial de F2.15 (alpha_l ~ 0.3)
+                            ! conserva el 70 % del freno; la celda llena, nada.
+                            fade = max(0.0_dp, 1.0_dp - ph%alpha(i,j,k))
+                        end if
                     end if
-                    if (alpha_s < 1.0e-6_dp) cycle
+                    if (alpha_s < 1.0e-6_dp .or. fade <= 0.0_dp) cycle
 
                     ! Ergun (1952): coef = A + B |v| con la unica definicion de
                     ! los coeficientes (mod_constants::ergun_coefficients)
                     call ergun_coefficients(alpha_s, ph%rho(i,j,k), ph%mu(i,j,k), d_p, A, B)
                     vmag = sqrt(ph%ur(i,j,k)**2 + ph%uth(i,j,k)**2 + ph%uz(i,j,k)**2)
-                    drag_coef(i,j,k) = A + B * vmag
+                    drag_coef(i,j,k) = fade * (A + B * vmag)
                 end do
             end do
         end do

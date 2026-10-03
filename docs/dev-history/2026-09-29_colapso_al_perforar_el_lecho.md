@@ -861,3 +861,44 @@ trayectoria y ventana a 14 ranks. Es una decision de computo del usuario.
 
 Arbol: codigo commiteado (30b466a) + sonda de presion + docs. test-quick en
 verde, golden v32 bit a bit (las sondas estan apagadas por defecto).
+
+---
+
+# JUEZ ESTADISTICO (2-3 oct): F2.28 + F2.29 gana con claridad
+
+Tres variantes x tres descomposiciones (12/14/15 ranks, que perturban el
+redondeo del MPI_SUM del Monte Carlo del arco sin tocar la fisica), ventana
+250-296 s desde el snapshot de 250 s de v34, audit a cada paso. Criterio de
+REGIMEN ACOTADO (% de pasos), media +- desviacion entre descomposiciones:
+
+| variante | %|p|>20 kPa | % gas>200 | % liq>10 | % alguna centinela | clip (kg) |
+|---|---|---|---|---|---|
+| base (F2.24) | 0.62 +- 0.01 | 0.15 +- 0.00 | 11.66 +- 0.94 | 0.47 +- 0.03 | 0 / 0.005 / 0.016 |
+| F2.28 sola | 21.0 +- 9.9 | 8.3 +- 7.3 | 1.16 +- 0.94 | 1.99 +- 2.82 | 8.3 / 3.1 / 6.8 |
+| **F2.28 + F2.29** | **0.43 +- 0.18** | **0.04 +- 0.01** | **0.32 +- 0.22** | **0.11 +- 0.10** | 5.3 / 3.6 / 5.7 |
+
+Lecturas:
+
+1. **F2.28 sola es MALA**: ablandar la base del bano sin tratar el poro
+   empacado dispara la presion (21 % de los pasos sobre 20 kPa, con una
+   dispersion enorme entre trayectorias: 7.6 a 31 %). Las dos piezas van
+   juntas, igual que en F2.15.
+2. **F2.28 + F2.29 mejora las cuatro metricas** y con separacion clara de la
+   base: el liquido sobre 10 m/s cae 36 veces (11.7 % -> 0.32 %), el gas sobre
+   200 m/s 4 veces, la presion sobre 20 kPa un 30 %, y los pasos con alguna
+   centinela 4 veces. Los maximos instantaneos tambien bajan: |p| 190-670 kPa
+   en la base frente a 82-155 kPa.
+3. **La dispersion entre descomposiciones de la base es minuscula** (0.62 +-
+   0.01 en presion) y sin embargo la primera centinela cae en instantes
+   distintos (292.4, 293.2, ...): confirma que el "tiempo hasta la primera
+   centinela" era ruido y el criterio de regimen no lo es.
+4. **El coste, declarado**: el clip auditado sube de ~0 a 3.6-5.7 kg en la
+   ventana (f229_n14: desde 281.37 s, maximo 2.6 g por paso, 3.61 kg en 15 s,
+   el 0.17 % del bano). Coincide con la rafaga de fusion (derrame de 70-126 kg
+   por 5 s) y es la contabilidad honesta del volumen que en la base se iba en
+   velocidad espuria (el liquido a 20 m/s era la valvula de escape). Es
+   masa auditada, no silenciosa, y hay que vigilar que no crezca en la colada
+   larga.
+
+**Decision**: se adopta F2.28 + F2.29 (golden v33). La colada se relanza con
+el audit vigilando clip ademas de las centinelas.

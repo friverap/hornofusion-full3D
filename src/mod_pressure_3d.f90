@@ -110,6 +110,7 @@ contains
         ! Fases ACTIVAS en el acople P-V por celda (Bug 15): gas por el
         ! umbral hidrodinamico; liquido solo donde es fase continua
         logical, allocatable :: act_l(:,:,:), act_g(:,:,:)
+        logical, allocatable :: sealed(:,:,:)
         ! Flujo de Rhie-Chow F* y coeficiente a_nb del LIQUIDO en las caras +
         ! (este/norte/tope) de cada celda propia, para exportar el flujo
         ! conservativo F = F* + a_nb (pp_P - pp_nb) tras el CG (Bug 19, F1)
@@ -140,6 +141,7 @@ contains
         allocate(act_l(lbound(sh%pp,1):ubound(sh%pp,1), lbound(sh%pp,2):ubound(sh%pp,2), &
                        lbound(sh%pp,3):ubound(sh%pp,3)))
         allocate(act_g, mold=act_l)
+        allocate(sealed, mold=act_l); sealed = .false.
         allocate(ag_eff, mold=sh%pp)
         allocate(Fs_r, Fs_th, Fs_z, ac_r, ac_th, ac_z, mold=sh%pp)
         ! Completos a cero (halos incluidos): las caras de frontera fisica
@@ -267,7 +269,10 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
-                    if (.not. act_l(i,j,k) .and. .not. act_g(i,j,k)) then
+                    if ((act_l(i,j,k) .or. act_g(i,j,k)) .and. &
+                        aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) + &
+                        aB(i,j,k) + aT(i,j,k) <= 0.0_dp) sealed(i,j,k) = .true.
+                    if ((.not. act_l(i,j,k) .and. .not. act_g(i,j,k)) .or. sealed(i,j,k)) then
                         aW(i,j,k) = 0.0_dp; aE(i,j,k) = 0.0_dp
                         aS(i,j,k) = 0.0_dp; aN(i,j,k) = 0.0_dp
                         aB(i,j,k) = 0.0_dp; aT(i,j,k) = 0.0_dp
@@ -408,7 +413,7 @@ contains
                 do j = jstart, jend
                     do i = istart, iend
                         if (m%cell_type(i,j,k) == 0) cycle
-                        if (act_l(i,j,k) .or. act_g(i,j,k)) cycle
+                        if ((act_l(i,j,k) .or. act_g(i,j,k)) .and. .not. sealed(i,j,k)) cycle
                         psum = 0.0_dp; nnb = 0
                         call acc_nb(i-1, j, k, psum, nnb)
                         call acc_nb(i+1, j, k, psum, nnb)
@@ -427,7 +432,7 @@ contains
         end block
         call mpi_exchange_halos_3d(sh%p, m%topo)
 
-        deallocate(gpr, gpth, gpz, act_l, act_g, ag_eff)
+        deallocate(gpr, gpth, gpz, act_l, act_g, ag_eff, sealed)
         deallocate(Fs_r, Fs_th, Fs_z, ac_r, ac_th, ac_z)
         if (allocated(p_g)) deallocate(p_g, gpr_g, gpth_g, gpz_g)
 
@@ -485,6 +490,7 @@ contains
             integer,  intent(inout) :: nnb
             if (m%cell_type(ii,jj,kk) == 0) return
             if (.not. act_l(ii,jj,kk) .and. .not. act_g(ii,jj,kk)) return
+            if (sealed(ii,jj,kk)) return
             psum = psum + sh%p(ii,jj,kk); nnb = nnb + 1
         end subroutine acc_nb
 
