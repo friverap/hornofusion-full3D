@@ -109,6 +109,10 @@ def main():
             f.write("\n# --- overrides de la campana ---\n")
             f.write(f"output_dir = {rundir}\n")
             for k, v in run.get("overrides", {}).items():
+                # bool de JSON -> "true"/"false" (el parser Fortran no
+                # acepta el str() de Python como verdadero hasta oct-2026)
+                if isinstance(v, bool):
+                    v = "true" if v else "false"
                 f.write(f"{k} = {v}\n")
         print(f"[campaign] {run['name']}: config listo", flush=True)
         if args.dry_run:

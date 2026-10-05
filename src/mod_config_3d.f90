@@ -377,11 +377,31 @@ contains
         n = tmp
     end subroutine parse_int
 
-    pure function parse_bool(val) result(b)
+    ! Booleano SIN distinguir mayusculas (oct-2026): antes solo 'true' y
+    ! '.true.' eran verdaderos y CUALQUIER otro texto era falso en silencio;
+    ! los configs de campana escritos desde Python ('True') corrieron B1 con
+    ! adaptive_dt y solve_species APAGADOS. Un valor no reconocido es error.
+    function parse_bool(val) result(b)
         character(len=*), intent(in) :: val
         logical :: b
 
-        b = (trim(val) == 'true' .or. trim(val) == '.true.')
+        character(len=len(val)) :: v
+        integer :: i, c
+
+        v = adjustl(val)
+        do i = 1, len_trim(v)
+            c = iachar(v(i:i))
+            if (c >= iachar('A') .and. c <= iachar('Z')) v(i:i) = achar(c + 32)
+        end do
+        select case (trim(v))
+        case ('true', '.true.', 't', '.t.', 'yes', 'on', '1')
+            b = .true.
+        case ('false', '.false.', 'f', '.f.', 'no', 'off', '0')
+            b = .false.
+        case default
+            print '(3A)', ' [CONFIG] ERROR: invalid boolean value "', trim(val), '"'
+            stop 1
+        end select
     end function parse_bool
 
     !---------------------------------------------------------------------------

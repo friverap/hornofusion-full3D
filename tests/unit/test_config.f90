@@ -2,7 +2,7 @@
 ! test_config.f90 - Unit test del parser de configuración (mod_config_3d)
 !
 ! Escribe un config temporal con claves conocidas (int, real, bool en ambas
-! sintaxis, repetida: la última gana) y una desconocida (debe ignorarse con
+! sintaxis y sin distinguir mayúsculas, repetida: la última gana) y una desconocida (debe ignorarse con
 ! warning, sin abortar), lo lee y verifica los valores.
 !===============================================================================
 program test_config
@@ -40,6 +40,9 @@ program test_config
     write(iu, '(A)') 'iph_dt_safety = 0.25'
     write(iu, '(A)') 'probe_step_from = 1200'
     write(iu, '(A)') 'probe_step_to = 1300'
+    write(iu, '(A)') 'solve_species = True'      ! str() de Python (B1 oct-2026)
+    write(iu, '(A)') 'adaptive_dt = FALSE'
+    write(iu, '(A)') 'solve_turb = .TRUE.'
     close(iu)
 
     call config_set_defaults(cfg)
@@ -60,6 +63,9 @@ program test_config
     if (abs(cfg%iph_dt_safety - 0.25_dp) > 1e-12_dp) call fail('iph_dt_safety', ok)
     if (cfg%probe_step_from /= 1200) call fail('probe_step_from', ok)
     if (cfg%probe_step_to /= 1300)   call fail('probe_step_to', ok)
+    if (.not. cfg%solve_species)     call fail('solve_species=True (mayuscula)', ok)
+    if (cfg%adaptive_dt)             call fail('adaptive_dt=FALSE', ok)
+    if (.not. cfg%solve_turb)        call fail('solve_turb=.TRUE.', ok)
     if (abs(cfg%ecs_theta_width - 0.7854_dp) > 1e-12_dp) &
                                             call fail('ecs_theta_width', ok)
     if (trim(cfg%ecs_mode) /= 'coupled')    call fail('ecs_mode', ok)
