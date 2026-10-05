@@ -1,0 +1,70 @@
+        !-------------------------------------------------------------------
+        ! F2.32 (oct-2026): SALVAGUARDA NUMERICA de WATER PACKING / STRETCHING.
+        ! No es fisica: es el esquema estandar de los codigos de dos fluidos
+        ! para el pico espurio de presion de una celda casi llena de liquido
+        ! cuyas caras no pueden evacuar el volumen que recibe.
+        !   RELAP5/MOD3 Code Manual Vol. I (NUREG/CR-5535-V1, 1995) §3.4.6,
+        !     ecs. 3.4-72..74: deteccion por subida de presion con alpha_g
+        !     bajo; mitigacion: el coeficiente de presion de la celda se
+        !     multiplica por FACTOR (1e4-1e6) para que su p apenas cambie, y
+        !     se re-resuelve ("closely follows the method used in TRAC").
+        !   TRACE V5.0 Theory Manual (NRC ML120060218) cap. 2 "Water
+        !     Packing", ecs. 2-56/2-57: "a numerical dead end for the
+        !     liquid"; deteccion si alpha <= 0.1 y la nueva presion supera la
+        !     actual en >= 7 % y >= 50 kPa; solo con una vecina de mayor vacio
+        !     por donde salir; logica simetrica de "stretching" para caidas.
+        ! Aqui: fluido de la celda con vacio <= WP_VOID_MAX, cambio aplicado
+        ! alpha_p*|pp| >= max(7 % de la presion absoluta, 50 kPa), y al
+        ! menos una vecina con fluido mas vacio. Se aplica en ambos signos
+        ! (packing y stretching); el criterio de TRACE para stretching exige
+        ! ademas p < p_sat - 20 K, que no aplica a acero liquido. La
+        ! mitigacion es la de RELAP5: diagonal x WP_FACTOR (simetrica) y
+        ! re-solucion. Se reporta por paso en stdout ([WPACK]).
+        !-------------------------------------------------------------------
+        block
+            real(dp), parameter :: WP_VOID_MAX = 0.1_dp
+            real(dp), parameter :: WP_REL = 0.07_dp, WP_ABS = 5.0e4_dp
+            real(dp), parameter :: WP_FACTOR = 1.0e6_dp
+            real(dp) :: vf, vfn, nwp_l, nwp_g
+            logical  :: exit_ok
+            integer  :: q, ii2, jj2, kk2
+            integer  :: dq(3,6)
+            dq = reshape([1,0,0, -1,0,0, 0,1,0, 0,-1,0, 0,0,1, 0,0,-1], [3,6])
+            nwp_l = 0.0_dp
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        if (m%cell_type(i,j,k) == 0) cycle
+                        if (.not. act_l(i,j,k)) cycle
+                        vf = gas%alpha(i,j,k) / max(liq%alpha(i,j,k) + gas%alpha(i,j,k), SMALL)
+                        if (vf > WP_VOID_MAX) cycle
+                        if (cfg%alpha_p * abs(sh%pp(i,j,k)) < &
+                            max(WP_REL * (P0_THERMO + sh%p(i,j,k)), WP_ABS)) cycle
+                        exit_ok = .false.
+                        do q = 1, 6
+                            ii2 = i + dq(1,q); jj2 = j + dq(2,q); kk2 = k + dq(3,q)
+                            if (m%cell_type(ii2,jj2,kk2) == 0) cycle
+                            if (.not. (act_l(ii2,jj2,kk2) .or. act_g(ii2,jj2,kk2))) cycle
+                            vfn = gas%alpha(ii2,jj2,kk2) / &
+                                  max(liq%alpha(ii2,jj2,kk2) + gas%alpha(ii2,jj2,kk2), SMALL)
+                            if (vfn > vf) then
+                                exit_ok = .true.; exit
+                            end if
+                        end do
+                        if (.not. exit_ok) cycle
+                        aP(i,j,k) = aP(i,j,k) * WP_FACTOR
+                        nwp_l = nwp_l + 1.0_dp
+                    end do
+                end do
+            end do
+            nwp_g = nwp_l
+            if (m%is_parallel) call mpi_allreduce_sum(nwp_l, nwp_g, m%topo)
+            if (nwp_g > 0.5_dp) then
+                sh%pp = 0.0_dp
+                call cg_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, sh%pp, m, &
+                               cfg%max_inner_pres, SOR_TOL_PRESSURE, &
+                               cg_res, n_iter_cg)
+                if (should_print(m)) write(*,'(A,I8,A,I6,A)') ' [WPACK] paso', &
+                    probe_current_step(), ' :', nint(nwp_g), ' celdas'
+            end if
+        end block

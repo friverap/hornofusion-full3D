@@ -175,6 +175,70 @@ contains
                                 .and. m%cell_type /= 0)
         ag_eff = gas%alpha
 
+        ! F2.31 (oct-2026): el gas de una celda es fluido del acople solo si
+        ! su conductancia REAL en esta ecuacion de presion puede ventear su
+        ! propia demanda de compresibilidad con menos de P_VENT. Es el
+        ! criterio de Hilfer (Phys. Rev. E 58 (1998) 2090: la subfase
+        ! conectada es "the region inside of which an external applied
+        ! pressure gradient can propagate") medido con la conductancia del
+        ! Poisson, no con la movilidad por arrastre de F2.16: en el piso del
+        ! lecho la movilidad del gas de poro cae justo en la banda del umbral
+        ! (762 celdas entre 1e-3 y 1e-1 a 322 s de B1 v35) y la celda que se
+        ! queda con una conductancia total de 1e-8 seguia contando como
+        ! conectada. Su demanda de compresibilidad (gas calentandose, 1.9e-4
+        ! m3/s) dividida por esa conductancia exigia -600 Pa POR ITERACION,
+        ! sostenidos: -55 -> -139 kPa en 0.17 s y saturacion en -2 MPa (sonda
+        ! [PROBE-P]). Es la patologia de F2.13 reaparecida por la puerta de la
+        ! percolacion. Una celda que no puede ventear queda FUERA del acople
+        ! del gas; si su fila se queda sin caras, F2.29 la vuelve pared.
+        if (cfg%gas_in_poisson .and. cfg%gas_compressibility .and. cfg%solve_multiphase) then
+        block
+            real(dp), parameter :: P_VENT = 5.0e3_dp
+            real(dp) :: cg, src, dloc
+            logical, allocatable :: keep(:,:,:)
+            allocate(keep, mold=act_g); keep = act_g
+            do k = kstart, kend
+                do j = jstart, jend
+                    jm = j - 1; jp = j + 1
+                    do i = istart, iend
+                        if (m%cell_type(i,j,k) == 0) cycle
+                        if (.not. act_g(i,j,k)) cycle
+                        if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
+                        src = abs(gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
+                              (gas%rho(i,j,k) - cfg%rho_gas * cfg%T_ambient &
+                               / max(gas_T_old(i,j,k), T_MIN_GAS)) / max(gas%rho(i,j,k), SMALL))
+                        src = min(src, COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt)
+                        if (src <= 0.0_dp) cycle
+                        cg = 0.0_dp
+                        dloc = gas%alpha(i,j,k) * m%vol(i,j,k)
+                        if (link(act_g, i-1, j, k)) cg = cg + gcond(dloc/max(gas%aP_ur(i,j,k),SMALL), &
+                            gas%alpha(i-1,j,k)*m%vol(i-1,j,k)/max(gas%aP_ur(i-1,j,k),SMALL), &
+                            gas%alpha(i,j,k), gas%alpha(i-1,j,k), m%Ar(i-1,j,k), m%r(i)-m%r(i-1))
+                        if (link(act_g, i+1, j, k)) cg = cg + gcond(dloc/max(gas%aP_ur(i,j,k),SMALL), &
+                            gas%alpha(i+1,j,k)*m%vol(i+1,j,k)/max(gas%aP_ur(i+1,j,k),SMALL), &
+                            gas%alpha(i,j,k), gas%alpha(i+1,j,k), m%Ar(i,j,k), m%r(i+1)-m%r(i))
+                        if (link(act_g, i, jm, k)) cg = cg + gcond(dloc/max(gas%aP_uth(i,j,k),SMALL), &
+                            gas%alpha(i,jm,k)*m%vol(i,jm,k)/max(gas%aP_uth(i,jm,k),SMALL), &
+                            gas%alpha(i,j,k), gas%alpha(i,jm,k), m%Ath(i,j,k), m%r(i)*(m%theta(j)-m%theta(jm)))
+                        if (link(act_g, i, jp, k)) cg = cg + gcond(dloc/max(gas%aP_uth(i,j,k),SMALL), &
+                            gas%alpha(i,jp,k)*m%vol(i,jp,k)/max(gas%aP_uth(i,jp,k),SMALL), &
+                            gas%alpha(i,j,k), gas%alpha(i,jp,k), m%Ath(i,j,k), m%r(i)*(m%theta(jp)-m%theta(j)))
+                        if (link(act_g, i, j, k-1)) cg = cg + gcond(dloc/max(gas%aP_uz(i,j,k),SMALL), &
+                            gas%alpha(i,j,k-1)*m%vol(i,j,k-1)/max(gas%aP_uz(i,j,k-1),SMALL), &
+                            gas%alpha(i,j,k), gas%alpha(i,j,k-1), m%Az(i,j,k-1), m%z(k)-m%z(k-1))
+                        if (link(act_g, i, j, k+1)) cg = cg + gcond(dloc/max(gas%aP_uz(i,j,k),SMALL), &
+                            gas%alpha(i,j,k+1)*m%vol(i,j,k+1)/max(gas%aP_uz(i,j,k+1),SMALL), &
+                            gas%alpha(i,j,k), gas%alpha(i,j,k+1), m%Az(i,j,k), m%z(k+1)-m%z(k))
+                        if (cg * P_VENT < src) keep(i,j,k) = .false.
+                    end do
+                end do
+            end do
+            act_g = keep
+            deallocate(keep)
+            call exchange_logical_halos_p(act_g)
+        end block
+        end if
+
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
         gpr = 0.0_dp; gpth = 0.0_dp; gpz = 0.0_dp
@@ -709,6 +773,23 @@ contains
             real(dp) :: r
             r = ws_liq_room(ii,jj,kk)
         end function rm
+
+        ! Conductancia de una cara del gas en el Poisson: alpha_f d_f A/delta
+        pure function gcond(d1, d2, a1, a2, area, dl) result(c)
+            real(dp), intent(in) :: d1, d2, a1, a2, area, dl
+            real(dp) :: c
+            c = 0.5_dp * (a1 + a2) * 0.5_dp * (d1 + d2) * area / max(dl, SMALL)
+        end function gcond
+
+        subroutine exchange_logical_halos_p(msk)
+            logical, intent(inout) :: msk(-1:,-1:,-1:)
+            real(dp), allocatable :: tmp(:,:,:)
+            allocate(tmp(lbound(msk,1):ubound(msk,1), lbound(msk,2):ubound(msk,2), lbound(msk,3):ubound(msk,3)))
+            tmp = merge(1.0_dp, 0.0_dp, msk)
+            call mpi_exchange_halos_3d(tmp, m%topo)
+            msk = tmp > 0.5_dp
+            deallocate(tmp)
+        end subroutine exchange_logical_halos_p
 
         ! Cara con flujo de ESTA fase: vecino activo en el acople
         logical function link(act, ii, jj, kk)

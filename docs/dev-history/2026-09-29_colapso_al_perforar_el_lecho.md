@@ -902,3 +902,175 @@ Lecturas:
 
 **Decision**: se adopta F2.28 + F2.29 (golden v33). La colada se relanza con
 el audit vigilando clip ademas de las centinelas.
+
+---
+
+# COLADA v35 (F2.28 + F2.29): se detuvo a los 411 s — dos cosas distintas
+
+Lanzada 3-oct 16:47 (14 ranks, nice 5). Limpia hasta ~230 s; primera presion
+> 20 kPa a 280.77 s; gas en cota a 281.61; liquido > 10 m/s a 293.10;
+P_HYDRO_CAP (2 MPa) a 322.27; a partir de ahi 96 % de los pasos con |p| > 20
+kPa y 80 % con gas en cota. El usuario la mato a los 411 s (yo no puedo:
+el clasificador de permisos bloquea `pkill`).
+
+**El juez de 250-296 era demasiado corto.** En esa ventana v35 fue un sorteo
+peor que las tres corridas del juez (3.75 % de pasos > 20 kPa frente a
+0.55-1.82) pero del mismo orden; el deterioro real esta en 296-322 (17 %) y
+322+ (96 %), fuera de lo juzgado. La nota del audit: `u_liq_max` cuenta
+cualquier celda con alpha_l >= 1e-2, dispersa incluida, asi que los 49.94 m/s
+son drift de gotas (U_SETTLE_MAX), no celdas continuas saltandose la cota
+(snapshots: ninguna continua > 19.5).
+
+## Mecanismo 3 — el arco calienta el gas de poro a decenas de miles de K
+
+Snapshots a 250/300/350/400 s, gas de PORO (alpha_s >= 0.5, alpha_g <= 0.02):
+
+| t | n poro | T_g p90 | T_g max | n > 6000 K | S_arc en poros |
+|---|---|---|---|---|---|
+| 250 | 488 | 1905 | 4186 | 0 | 0.0 % |
+| 300 | 933 | 1796 | 4666 | 0 | 0.0 % |
+| 350 | 1475 | 1650 | 2842 | 0 | 0.0 % |
+| 400 | 1231 | **8114** | **54 211** | **359** | **6.1 %** |
+
+Coincide con el fin del bore-in: `elec_z_tip` 1.4 -> 0.9 -> 0.65 m
+(`bore_in_done` = 1 entre 350 y 400). Con la punta DENTRO del lecho, los
+rayos laterales del Monte Carlo entran en celdas de chatarra densa.
+
+La cadena, en el codigo:
+- `distribute_arc_radiation_mc`: el rayo deposita TODA su energia en la
+  primera celda con `alpha_s > 0.1` ("hits solid") o con `z < H_bowl + 0.5`,
+  como fuente volumetrica `S_arc` de la celda, sin mirar fases.
+- `solve_energy_3d`: `S_arc` se reparte SOLO entre liquido y gas con
+  `w = alpha_q/(alpha_l + alpha_g)`. El solido no recibe nada por esa via. En
+  una celda con alpha_s 0.985, alpha_g 0.015, alpha_l 0: el gas de poro
+  (atrapado, masa ~1e-3 kg) se lleva el 100 % del rayo que "choco con la
+  chatarra". De ahi 50 kK con el solido de la misma celda a 1500-1800 K.
+- Las vias que SI alimentan al solido tienen el patron correcto: el deposito
+  directo del arco (`mod_arc_cassie_mayr`, `sol%E_s += Q_rad` con cota
+  `DT_RAD_MAX = 2 K` por paso y el excedente a `S_arc`) y la radiacion DO
+  (`kappa_solido*alpha_s` = 10*alpha_s contra `kappa_gas*(1-alpha_s)` =
+  0.3*(1-alpha_s): en un poro, 99.95 % al solido).
+
+**Es PREEXISTENTE**: v33 a 400 s tiene 204 celdas > 6000 K (max 11 188 K,
+4.7 % del S_arc en poros) con la punta en 0.65 m. v34 se detuvo a 294, antes
+del bore-in. Ningun candidato de esta semana lo toca ni lo causa.
+
+Consecuencia hidraulica: ese gas atrapado a 8000-54000 K esta en celdas pared
+(F2.16) cuya p viene del Neumann de Bug 16: a 350 s la celda del maximo
+(77.8 kPa, k=1) COPIA la p de la celda de arriba y sus cuatro vecinas
+laterales y la de abajo estan a 0 exacto (sin vecina con fluido, nnb = 0):
+523 celdas del fondo del lecho a p = 0 y 553 con p identica a la de arriba.
+Un mosaico de 0 y copias en la base del lecho.
+
+## Mecanismo del pulso de 322 s (2 MPa): pendiente
+
+Precede al fin del bore-in (T_g de poro aun sana a 350). Reinicio denso
+300 -> 325 s en `scratchpad/cand/v35_322` en curso.
+
+## El colapso de los 322 s de v35: SUCCION en el piso del lecho (fila CASI sellada)
+
+Reinicio denso 300->325 (`v35_322`) lo reproduce: primera |p|>20 kPa a 302.9,
+liquido en cota a 303.2, gas en cota a 321.5, P_HYDRO_CAP a 325.0. El extremo
+es una SUCCION: 68 celdas a p < -100 kPa a 325 s, todas en k = 0-3 (piso del
+lecho), alpha_s mediana 0.89, alpha_l 0.01, alpha_g 0.016 (piso de poro), T_g
+~1000 K y subiendo. La presion PARPADEA entre snapshots (-131 kPa, luego +9 kPa,
+luego -176 kPa en celdas vecinas) hasta saturar en -2 MPa.
+
+Sonda [PROBE-P] sobre (2,52,1) Fortran (reinicio 322.5 -> 323.1, 4 ranks):
+
+| t | aS (unica cara real) | sum a_nb | aP | Su_gas | Su_comp | p |
+|---|---|---|---|---|---|---|
+| 322.76 | 1.4e-6 | 1.4e-6 | 1.4e-6 | +1.1e-4 | -1.8e-4 | 7.9 kPa |
+| 322.92 | 1.1e-6 | 1.1e-6 | 1.1e-6 | +1.3e-4 | -1.8e-4 | 2.3 kPa |
+| **322.93** | **0** | **8e-9** | 1.7e-8 | +1.4e-4 | -1.9e-4 | **-55 kPa** |
+| 323.10 | 0 | 4e-9 | 1.4e-8 | +1.8e-4 | -1.9e-4 | -139 kPa |
+
+Su_liq = 0. En un paso la unica conexion real (aS) cae a CERO exacto (el
+limitador de hueco cierra la cara al llenarse el poro de la vecina) y la fila
+queda con conductancia 100-200 veces menor pero NO nula. F2.29 solo atrapa
+filas con suma exactamente cero. El desbalance residual de volumen (gas que
+entra por flujo frente a la fuente de compresibilidad termica, se cancelan
+salvo ~7e-6) dividido por 1e-8 da pp ~ -500..-700 Pa POR ITERACION, sostenido:
+la presion de la celda deriva sin cota (-55 -> -139 kPa en 0.17 s). Es
+exactamente la patologia de F2.13 (gas de poro solo que integra presion por su
+compresibilidad), ahora con la percolacion de F2.16 declarandolo conectado
+porque su movilidad se mide con el ARRASTRE, no con la conductancia real que le
+queda en el Poisson.
+
+Literatura ya reunida que aplica: Hilfer (subfase desconectada: su presion no
+pertenece al campo conectado) y la deteccion de water packing de RELAP5/TRACE
+(subida de presion predicha por encima de un umbral en una celda casi cerrada).
+Lo que NO esta resuelto es el criterio: "casi cerrada" exige comparar la
+conductancia con una escala, y las escalas naturales (dt/rho del liquido) son
+ellas mismas de 1e-9, asi que un umbral absoluto o relativo a la celda no
+separa este caso del sano. Opciones: (a) umbral relativo a la conductancia
+PREVIA de la propia celda (colapso de 100x en un paso -> sellada); (b) criterio
+de prediccion tipo TRACE (|pp| predicho > P_SEAL con conexiones casi nulas);
+(c) que la percolacion de F2.16 use la conductancia del Poisson en lugar de la
+movilidad por arrastre. NO implementado: decision pendiente.
+
+## Juez LARGO limpio (v35 a 250 s -> 420 s, F2.28 + F2.29 + F2.30 + F2.31): NaN a 370.002 s
+
+| 250-370 s | %|p|>20k | %gas>200 | %liq>10 | %centinela | clip |
+|---|---|---|---|---|---|
+| v35 base (F2.28+F2.29) | 41.5 | 29.9 | 41.3 | 16.5 | 24 kg |
+| + F2.30 + F2.31 | 39.3 | 13.9 | 42.7 | 3.7 | (NaN al final) |
+
+Identico a la base hasta 280 s; el gas mejora a la mitad y las centinelas 4.5x
+menos, pero **la presion NO**: el colapso del piso desde ~320 s sigue (78-100 %
+de los pasos sobre 20 kPa en 320-370). Gas de poro sano en todos los snapshots
+(max 5164 K, ninguna celda > 6000 K hasta 350 s): F2.30 hace lo suyo.
+
+A 370.002 s, con la presion ya saturada, la corrida revienta por CREACION DE
+MASA: m_sol -312 kg, luego -32 t, luego todo; m_liq a 1.36e6 kg y NaN en 3
+pasos. El estado del solido a 350 s es sano (T_s max 1806 K, E_s/m_s max
+9.7e5 J/kg, igual que v35). No caracterizado: es un desenlace terminal de un
+regimen que ya estaba roto. F2.31 no cierra el mecanismo 4.
+
+## F2.32 — salvaguarda de water packing de RELAP5/TRACE (5-oct-2026, decision del usuario)
+
+Tras un mes de cierre pieza a pieza, el usuario elige la salvaguarda numerica
+de los codigos de sistemas en lugar de seguir caracterizando cada mecanismo
+(la opcion "correcta de libro", acople implicito α–p, queda diferida).
+
+Fuentes:
+- RELAP5/MOD3 Code Manual Vol. I (NUREG/CR-5535-V1, 1995) §3.4.6 "Water
+  Packing Mitigation Scheme", ecs. 3.4-72 a 3.4-74 (pp. 3-170 a 3-172).
+- TRACE V5.0 Theory Manual (NRC ML120060218) cap. 2 "Water Packing", ecs.
+  2-56/2-57 (pp. 96-98); el cap. 7 reconoce "limited success" del esquema.
+- Liles & Reed, J. Comput. Phys. 26 (1978) 390 (origen del termino);
+  Abe et al., J. Nucl. Sci. Technol. 30(12) (1993) 1214; Lim et al. (KAERI
+  2002) — solo resumen consultado.
+
+Implementacion (`mod_pressure_3d`, tras el CG): celda con liquido activo,
+vacio fluido α_g/(α_l+α_g) ≤ 0.1, |α_p·pp| ≥ max(7 % de la presion absoluta,
+50 kPa) y una vecina activa con MAS vacio (salida): diagonal × 1e6 y se
+re-resuelve el CG con los mismos coeficientes (la celda se "estira": su
+correccion de presion queda practicamente congelada y el desbalance sale por
+las vecinas). Imprime `[WPACK] paso N : M celdas`.
+Desviacion de las fuentes: TRACE solo estira si p < p_sat − 20 K (condensacion
+subita); para acero sin cambio de fase liquido-vapor la condicion no aplica y
+se estira en ambos signos de Δp. Umbrales fieles a los manuales; no se
+ajustaron para que la salvaguarda atrape el caso.
+
+Tests: gates fisicos intactos (arc_budget 1.0000, melt_forced 3.7e-5,
+xfails de siempre). Golden se mueve por F2.30/F2.31 (medias con signo de
+campos ~0). Una activacion en todo el banco: bath_freeze paso 2 (4 celdas,
+arranque del remanente de 180 t sobre chatarra fria).
+
+Juez: `scratchpad/cand/judge_largo_F232` (v35 a 250 s -> 420 s, 14 ranks,
+F2.28-F2.32). Resultado: pendiente.
+
+### Resultado del juez de F2.32 (detenido a 335 s por decision del usuario)
+
+[WPACK] actuo 3 veces (1 celda c/u) en 250-322 s. 290-320 s: p>20k 16.7 %
+(F2.31: 8.1, v35: 10.0), liq>10 20.5 %, centinelas 10.8 %. 320-322 s: p>20k
+31 % (F2.31: 81) pero el liquido en U_LIQ_MAX ~100 % desde ~318 s. Los
+criterios de RELAP5/TRACE (vacio <= 0.1) casi no atrapan la succion del piso:
+ese fallo NO es water packing clasico. F2.32 no se commitea en esta forma.
+
+F2.32 retirada del codigo (bloque archivado en
+`2026-10-05_f232_water_packing_relap5_trace_DESCARTADA.f90.txt`). Se commitean
+F2.30 + F2.31 con golden v34. Siguiente: (a) juez de paso de tiempo 1 ms y
+0.5 ms desde v35 a 300 s; (b) regla de regimen "liquido en el lecho = goteo"
+(fuera del Poisson) previa revision de literatura.

@@ -237,6 +237,16 @@ module mod_constants
     ! CATHARE. No es masa: la fraccion real no se toca.
     real(dp), parameter :: ALPHA_PHASE_MIN = 1.0e-5_dp
 
+    ! Coeficientes de absorcion por fase para REPARTIR un deposito radiativo
+    ! dentro de una celda (F2.30, oct-2026). Son los de la DO (mod_radiation_do
+    ! usa los mismos valores): el solido absorbe KAPPA_SOLID_ABS*alpha_s y el
+    ! fluido KAPPA_GAS_ABS*(1-alpha_s). Es la forma estandar (Fluent P-1/DO
+    ! ecs. 5.3-10/5.3-14; MFiX TFM ecs. 20-21; Cai & Modest 2014): cada fase
+    ! absorbe en proporcion a SU coeficiente, nunca a su fraccion de volumen.
+    ! En un poro de chatarra (alpha_s 0.985) el gas se lleva 5e-4 del deposito.
+    real(dp), parameter :: KAPPA_SOLID_ABS = 10.0_dp   ! 1/m
+    real(dp), parameter :: KAPPA_GAS_ABS   = 0.3_dp    ! 1/m
+
 
     ! Reparto del presupuesto radiativo del arco (C1.6): fracción de
     ! P_total*frac_rad que se distribuye vía Monte Carlo; el resto se

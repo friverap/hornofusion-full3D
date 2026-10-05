@@ -21,7 +21,8 @@ module mod_arc_radiation_mc
     use mod_constants
     use mod_types_3d
     use mod_parallel_utils
-    use mod_audit, only: audit_add, AUD_MC_DEPOSIT, AUD_MC_LOST
+    use mod_audit, only: audit_add, AUD_MC_DEPOSIT, AUD_MC_LOST, AUD_ARC_DIRECT
+    use mod_melting_3d, only: solid_T_from_enthalpy
     implicit none
 
 contains
@@ -46,9 +47,10 @@ contains
         deallocate(seed)
     end subroutine reseed_rng
 
-    subroutine distribute_arc_radiation_mc(elec, sh, m, cfg, alpha_g, n_elec, step)
+    subroutine distribute_arc_radiation_mc(elec, sh, sol, m, cfg, alpha_g, n_elec, step)
         type(electrode_t), intent(in)   :: elec(:)
         type(shared_t), intent(inout)   :: sh
+        type(solid_t), intent(inout)    :: sol
         type(mesh_t), intent(in)        :: m
         type(config_t), intent(in)      :: cfg
         real(dp), intent(in)            :: alpha_g(:,:,:)
@@ -56,6 +58,7 @@ contains
         integer, intent(in)             :: step
 
         integer  :: e, beam
+        real(dp) :: w_s, Q_s, Q_lim, Q_fl   ! F2.30: reparto solido/fluido del deposito
         real(dp) :: P_rad_per_beam
         real(dp) :: x0, y0, z0, dx, dy, dz
         real(dp) :: x, y, z_pos, r_pos, theta_pos
@@ -68,6 +71,7 @@ contains
         integer  :: idx, ierr
         real(dp), allocatable :: dep_g(:,:,:)
         integer, parameter :: MAX_TRACE_STEPS = 50000
+        real(dp), parameter :: DT_RAD_MAX_MC = 2.0_dp   ! K por paso al solido (= DT_RAD_MAX del deposito directo)
 
         if (cfg%n_beams <= 0) return   ! MC apagado (n_beams = 0 en config)
 
@@ -184,9 +188,46 @@ contains
                     if (dep_g(ig, jg, kg) <= 0.0_dp) cycle
                     call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
                     if (.not. owned) cycle
+                    ! F2.30 (oct-2026): el rayo que "choca con la chatarra"
+                    ! tiene que calentar a la CHATARRA. Antes todo el deposito
+                    ! iba a S_arc y solve_energy_3d lo reparte SOLO entre
+                    ! liquido y gas (w = alpha_q/(alpha_l+alpha_g)); en un poro
+                    ! de chatarra densa (alpha_s 0.985, alpha_g 0.015, sin
+                    ! liquido) el gas de poro atrapado se llevaba el 100 %:
+                    ! 359 celdas por encima de 6000 K y 54 211 K de maximo a
+                    ! los 400 s de B1 v35 (v33: 204 y 11 188 K), justo al
+                    ! acabar el bore-in, cuando la punta (0.65 m) queda dentro
+                    ! del lecho y los rayos laterales entran en celdas densas.
+                    ! Reparto por ABSORCION, el mismo de la DO
+                    ! (KAPPA_SOLID_ABS*alpha_s frente a KAPPA_GAS_ABS*(1-alpha_s)):
+                    ! Fluent P-1/DO, MFiX TFM, Cai & Modest 2014. Los CFD de
+                    ! EAF (Chen 2022 / Ugarte 2024, Logar 2012) no le dan
+                    ! radiacion del arco al gas en absoluto: en un lecho denso
+                    ! ambas formas coinciden (fraccion al gas ~5e-4). La parte
+                    ! del solido va a E_s con la MISMA cota DT_RAD_MAX por paso
+                    ! del deposito directo (mod_arc_cassie_mayr) y el
+                    ! excedente a S_arc: conservativo y auditado.
+                    w_s = 0.0_dp
+                    if (sol%m_s(il, jl, kl) > SMALL .and. alpha_g(ig, jg, kg) > 0.0_dp) &
+                        w_s = KAPPA_SOLID_ABS * alpha_g(ig, jg, kg) / &
+                              (KAPPA_SOLID_ABS * alpha_g(ig, jg, kg) + &
+                               KAPPA_GAS_ABS * max(1.0_dp - alpha_g(ig, jg, kg), 0.0_dp) + SMALL)
+                    Q_s  = w_s * dep_g(ig, jg, kg) * cfg%dt                 ! J al solido
+                    Q_fl = (1.0_dp - w_s) * dep_g(ig, jg, kg) * cfg%dt      ! J al fluido
+                    if (Q_s > 0.0_dp) then
+                        Q_lim = DT_RAD_MAX_MC * sol%m_s(il, jl, kl) * cfg%cp_s
+                        if (Q_s > Q_lim) then
+                            Q_fl = Q_fl + (Q_s - Q_lim)
+                            Q_s  = Q_lim
+                        end if
+                        sol%E_s(il, jl, kl) = sol%E_s(il, jl, kl) + Q_s
+                        sol%T_s(il, jl, kl) = solid_T_from_enthalpy( &
+                            sol%E_s(il, jl, kl) / sol%m_s(il, jl, kl), cfg)
+                        call audit_add(AUD_ARC_DIRECT, Q_s)
+                    end if
                     sh%S_arc(il, jl, kl) = sh%S_arc(il, jl, kl) + &
-                        dep_g(ig, jg, kg) / (m%vol_global(ig, jg, kg) + SMALL)
-                    call audit_add(AUD_MC_DEPOSIT, dep_g(ig, jg, kg) * cfg%dt)
+                        Q_fl / (m%vol_global(ig, jg, kg) * cfg%dt + SMALL)
+                    call audit_add(AUD_MC_DEPOSIT, Q_fl)
                 end do
             end do
         end do

@@ -285,7 +285,7 @@ program eaf_3d_simulator
                 allocate(alpha_sg(mesh%nr_g, mesh%nth_g, mesh%nz_g))
             call gather_global_field(sol%alpha_s, alpha_sg, mesh)
             call distribute_arc_heat(elec, sh, sol, mesh, cfg, alpha_sg, N_ELECTRODES)
-            call distribute_arc_radiation_mc(elec, sh, mesh, cfg, alpha_sg, &
+            call distribute_arc_radiation_mc(elec, sh, sol, mesh, cfg, alpha_sg, &
                                              N_ELECTRODES, step)
             ! (mod_arc_impingement retirado en C4.4: unidades N/m4 en vez
             ! de N/m3 y magnitud ~0.2 N/m3 despreciable; la depresión del
