@@ -43,6 +43,8 @@ program test_config
     write(iu, '(A)') 'solve_species = True'      ! str() de Python (B1 oct-2026)
     write(iu, '(A)') 'adaptive_dt = FALSE'
     write(iu, '(A)') 'solve_turb = .TRUE.'
+    write(iu, '(A)') 'solve_radiation = true   # comentario al final'
+    write(iu, '(A)') 'alpha_k = 0.45 ! otro comentario'
     close(iu)
 
     call config_set_defaults(cfg)
@@ -66,6 +68,7 @@ program test_config
     if (.not. cfg%solve_species)     call fail('solve_species=True (mayuscula)', ok)
     if (cfg%adaptive_dt)             call fail('adaptive_dt=FALSE', ok)
     if (.not. cfg%solve_turb)        call fail('solve_turb=.TRUE.', ok)
+    if (.not. cfg%solve_radiation)   call fail('bool con comentario al final', ok)
     if (abs(cfg%ecs_theta_width - 0.7854_dp) > 1e-12_dp) &
                                             call fail('ecs_theta_width', ok)
     if (trim(cfg%ecs_mode) /= 'coupled')    call fail('ecs_mode', ok)

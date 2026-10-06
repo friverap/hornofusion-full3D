@@ -185,7 +185,7 @@ contains
 
         integer :: iu, ios
         character(len=512) :: line, key, val
-        integer :: eq_pos
+        integer :: eq_pos, cpos
 
         open(newunit=iu, file=trim(filename), status='old', iostat=ios)
         if (ios /= 0) then
@@ -205,11 +205,30 @@ contains
             if (eq_pos < 2) cycle
             key = adjustl(line(1:eq_pos-1))
             val = adjustl(line(eq_pos+1:))
+            ! Comentario al final de linea ('valor  # nota'): precedido de
+            ! blanco o tabulador. Antes llegaba entero al parser y un booleano
+            ! 'true  # nota' se leia como FALSO en silencio.
+            cpos = scan_inline_comment(val)
+            if (cpos > 0) val = val(1:cpos-1)
 
             call config_set_value(cfg, trim(key), trim(val))
         end do
         close(iu)
     end subroutine config_read
+
+    ! Posicion del primer '#' o '!' precedido de blanco/tabulador (0 si no hay)
+    pure integer function scan_inline_comment(val) result(pos)
+        character(len=*), intent(in) :: val
+        integer :: i
+        pos = 0
+        do i = 2, len_trim(val)
+            if ((val(i:i) == '#' .or. val(i:i) == '!') .and. &
+                (val(i-1:i-1) == ' ' .or. val(i-1:i-1) == achar(9))) then
+                pos = i
+                return
+            end if
+        end do
+    end function scan_inline_comment
 
     subroutine config_set_value(cfg, key, val)
         type(config_t), intent(inout) :: cfg
