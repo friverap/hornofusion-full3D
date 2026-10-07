@@ -152,7 +152,7 @@ program eaf_3d_simulator
 
     ! Load charge recipe (input/charge_recipe.dat; con fallback al default
     ! si no existe — C4.4: antes el archivo JAMÁS se leía) y perfil V/I
-    call read_charge_recipe(cfg, 'input/charge_recipe.dat')
+    call read_charge_recipe(cfg, trim(cfg%charge_recipe_file))
     call read_electrode_profile(elec_prof, 'input/electrode_profile.dat')
     if (cfg%solve_ecs) then
         call read_rate_profile(ecs_prof, cfg%ecs_profile_file, cfg%ecs_rate)

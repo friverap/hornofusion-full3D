@@ -56,6 +56,7 @@ module mod_types_3d
         ! Diametro de gota del liquido DISPERSO (alpha_l < ALPHA_FLOW_CUTOFF):
         ! fija su velocidad terminal de sedimentacion (0 = sin sedimentacion)
         real(dp) :: d_droplet
+        character(len=256) :: charge_recipe_file   ! receta de carga (D0, oct-2026)
         real(dp) :: iph_dt_safety
         integer  :: probe_step_from, probe_step_to
         ! Sonda de BALANCE de momento de UNA celda (indices GLOBALES,

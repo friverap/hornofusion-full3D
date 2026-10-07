@@ -78,6 +78,7 @@ contains
         ! libre de 3 m). B1 v11: 3.6 t de niebla a alpha=0.01 suspendida
         ! porque bajo el umbral la velocidad era 0 y la gravedad no actuaba.
         cfg%d_droplet  = 2.0e-3_dp
+        cfg%charge_recipe_file = 'input/charge_recipe.dat'
         ! dt adaptativo <= safety * tau_interfase (0 = desactivado): evita
         ! operar en el régimen de clamp/equilibrio local (S5-dpart, B1)
         cfg%iph_dt_safety = 0.5_dp
@@ -279,6 +280,7 @@ contains
         case ('k_l');        call parse_real(val, key, cfg%k_l)
         case ('d_particle'); call parse_real(val, key, cfg%d_particle)
         case ('d_droplet');  call parse_real(val, key, cfg%d_droplet)
+        case ('charge_recipe_file'); cfg%charge_recipe_file = val
         case ('iph_dt_safety'); call parse_real(val, key, cfg%iph_dt_safety)
         case ('probe_step_from'); call parse_int(val, key, cfg%probe_step_from)
         case ('probe_step_to');   call parse_int(val, key, cfg%probe_step_to)
