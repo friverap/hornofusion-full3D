@@ -1074,3 +1074,97 @@ F2.32 retirada del codigo (bloque archivado en
 F2.30 + F2.31 con golden v34. Siguiente: (a) juez de paso de tiempo 1 ms y
 0.5 ms desde v35 a 300 s; (b) regla de regimen "liquido en el lecho = goteo"
 (fuera del Poisson) previa revision de literatura.
+
+## Juez de PASO DE TIEMPO (6-oct-2026): el dt NO es la causa
+
+Hallazgo previo: parse_bool leia 'True' como falso -> B1 corrio desde v5 con
+adaptive_dt y solve_species apagados (fc34d50). Al encenderlo, el dt cae al
+piso de 1 ms en todo el tramo (el CFL pide menos).
+
+v35@300 s -> 345 s, F2.28-F2.31, especies off, 6 ranks c/u (% de pasos):
+
+| ventana | corrida | p>20k | gas>200 | liq>10 | centinela |
+|---|---|---|---|---|---|
+| 310-320 | adapt (1 ms) | 10.8 | 0.1 | 53.3 | 15.8 |
+| | 1 ms | 11.0 | 0.1 | 46.4 | 9.2 |
+| | 0.5 ms | 15.2 | 0.1 | 28.7 | 7.2 |
+| | 2 ms (F231) | 17.1 | 0.1 | 45.7 | 22.7 |
+| 320-330 | adapt (1 ms) | 87.0 | 12.0 | 84.4 | 57.1 |
+| | 1 ms | 88.9 | 42.8 | 66.7 | 49.7 |
+| | 0.5 ms | 55.9 | 26.5 | 72.6 | 35.9 |
+| | 2 ms (F231) | 78.1 | 17.6 | 78.6 | 34.3 |
+| 330-345 | adapt (1 ms) | 77.5 | 30.2 | 93.2 | 46.4 |
+| | 1 ms | 89.3 | 38.0 | 94.6 | 65.8 |
+| | 0.5 ms | 88.6 | 13.3 | 78.2 | 37.0 |
+| | 2 ms (F231) | 78.6 | 14.3 | 90.4 | 54.4 |
+
+El colapso de los 320 s aparece en LAS CINCO trayectorias con dt de 0.5 a 2 ms:
+es un evento del estado (no del caos ni de la integracion temporal). Dividir
+el dt por 4 no lo evita. Siguiente: regimen del liquido por saturacion de poro
+(goteo fuera del Poisson con saturacion baja; Darcy continuo saturado).
+
+## F2.33 — regimen del liquido por SATURACION de poro (6-oct-2026)
+
+`liq_continuous`: continuo si alpha_l >= ALPHA_FLOW_CUTOFF y
+S = alpha_l/(1-alpha_s) >= ALPHA_LIQ_CONT (0.3). Fuera del lecho es la regla
+de siempre; en el lecho, antes bastaba alpha_l >= 0.01. Goteo (percolacion de
+Ergun, F2.14) por debajo; Darcy continuo en el Poisson con el poro saturado.
+Literatura: Gupta 1996 / Chew-Zulli-Yu 2001 (balance de fuerzas sin presion
+para bajo holdup), Yagi 1993 (lecho lleno -> Darcy), Ugarte 2024 (continuo
+en el lecho). test-full: solo se mueve el golden de melt_forced (unico caso
+con liquido en el lecho); banos, simetria y conservacion intactos.
+De paso: config_read no quitaba comentarios al final de linea (fb06a44).
+Juez: scratchpad/cand/sat_n{5,6,7} (v35@300 s -> 345 s, dt 2 ms, especies
+off). Resultado: pendiente.
+
+### Resultado del juez de F2.33 (detenido a 316-320 s): NO sirve
+
+310-320 s: p>20k 62-68 % (refs 11-17 %); presion mediana 33-63 kPa
+sostenida desde 312 s (refs 12-17 kPa); liquido en cota menos frecuente
+(19-37 % vs 46 %). El colapso llega ANTES (312 s).
+Por que: en el lecho, el liquido esta casi todo SATURADO. A 320 s, de 798
+celdas del lecho con alpha_l >= 0.01, 739 tienen S >= 0.3 (310 s: 533 de
+655). La regla de goteo solo reclasifica ~60-120 celdas marginales; la region
+del fallo es la CHATARRA SUMERGIDA del fondo (alpha_s 0.74-0.98, poro lleno de
+liquido, alpha_g en el piso de poro 0.012-0.015, vacio fluido ~0.05), que la
+literatura (Yagi, Ugarte) trata como continua. Ejemplo a 320.2 s: p = -13.6
+kPa en (i=1, j=1-3, k=1), S 0.91-0.95. F2.33 se descarta.
+
+## F2.34 — chatarra INUNDADA inmovil (6-oct-2026, aprobada por el usuario)
+
+Snapshot del colapso (juez 1 ms, 330 s): capa de chatarra SECA en el piso con
+bolsas de gas (p en la cota de 2 MPa) bajo una capa de chatarra INUNDADA
+(alpha_s 0.78-0.89, vacio del fluido < 0.1, p hasta -730 kPa). A 320 s hay
+~500 celdas inundadas, casi todas con alpha_s 0.7-0.9.
+Regla: `flooded_scrap` = alpha_s >= flood_as_min (0.7, clave de config, 0 =
+off) y alpha_g <= 0.1 (alpha_l + alpha_g) (umbral de water packing RELAP5/
+TRACE). La celda queda FUERA del acople P-V de ambas fases (no continua, el
+gas no percola por ella), su liquido es inmovil (drift 0) y sus seis caras
+tienen flujo de liquido nulo. Calienta, funde y conserva; al bajar alpha_s
+del umbral pasa a baño libre (reset_new_continuous).
+Justificacion: percolacion de Ergun a alpha_s 0.7-0.9 (d_p 0.1 m) = 8-0.7
+cm/s, un orden bajo la agitacion del baño; hipotesis del modelo, se declara.
+test-full verde sin mover goldens (ningun caso tiene chatarra inundada).
+Juez: scratchpad/cand/flood_n{5,6,7} (v35@300 -> 345 s, 2 ms).
+
+### Resultado del juez de F2.34: PEOR, descartada (7-oct-2026)
+
+| ventana | flood (n5/n6/n7) p>20k | centinela | refs (dt 0.5-2 ms) p>20k | centinela |
+|---|---|---|---|---|
+| 300-310 | 96 % | 2-3 % | 5-14 % | 0-1 % |
+| 310-320 | 63-75 % | 28-38 % | 11-17 % | 7-23 % |
+| 320-330 | 80-100 % | 64-100 % | 56-89 % | 34-57 % |
+| 330-345 | 100 % | 88-100 % | 78-89 % | 37-66 % |
+
+Volver pared ~500 celdas del fondo levanta la presion desde el primer
+segundo (96 % de pasos > 20 kPa) y el colapso de 320 s llega igual y peor.
+Masa conservada (clip 1e-14). Archivada como parche y revertida.
+
+## Cierre de la etapa (7-oct-2026)
+
+Documentado en el paper: §6.2 "The long heat: a regime the segregated
+coupling does not sustain" (label sec:b1limit) + Tabla 3 (regimen acotado por
+trayectoria, `scripts/b1_regime_table.py` -> `paper/tables/b1_regime.tex`),
+checkbox B1 anotado, trabajo futuro (i) = acople implicito alpha-p, citas
+RELAP5/TRACE/Liles-Reed/Hilfer/Yagi/Chew/Guelfi. Plan de implementacion:
+`docs/PLAN_D_acople_implicito_alpha_p.md` (D0-D6, ~3 semanas con maquina).

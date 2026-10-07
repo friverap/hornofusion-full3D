@@ -1,0 +1,68 @@
+diff --git a/src/mod_constants.f90 b/src/mod_constants.f90
+index 6edf6ec..5ebd206 100644
+--- a/src/mod_constants.f90
++++ b/src/mod_constants.f90
+@@ -263,16 +263,25 @@ contains
+ 
+     !---------------------------------------------------------------------------
+     ! El liquido de la celda es fase continua (momento propio + Poisson)?
+-    ! Fuera del lecho: alpha_l >= ALPHA_LIQ_CONT. En el lecho (hay chatarra):
+-    ! el umbral hidrodinamico ordinario (el arrastre de Ergun gobierna).
++    ! Regimen por SATURACION del volumen libre (F2.33, oct-2026):
++    !     S = alpha_l / (1 - alpha_s) >= ALPHA_LIQ_CONT   y   alpha_l >= ALPHA_FLOW_CUTOFF
++    ! Fuera del lecho (alpha_s = 0) es la regla de siempre (alpha_l >= 0.3).
++    ! Dentro del lecho, el liquido de bajo holdup es GOTEO: velocidad de
++    ! percolacion de Ergun, sin presion propia (modelo de balance de fuerzas
++    ! de la zona de goteo del alto horno: Gupta et al. ISIJ Int. 36 (1996) 32;
++    ! Chew, Zulli & Yu, ISIJ Int. 41 (2001) 1112 — "flows as discrete droplets
++    ! or rivulets, quickly achieving a steady average percolation velocity").
++    ! El poro SATURADO es fase continua tipo Darcy en el Poisson (Yagi, ISIJ
++    ! Int. 33 (1993) 619; Ugarte et al. 2024 resuelven el baño bajo la
++    ! chatarra como fase continua). Antes, en el lecho bastaba alpha_l >=
++    ! 0.01: un poro con 2 % de liquido entraba al acople P-V con
++    ! conductancias minimas y era la region de los cuatro mecanismos de
++    ! 280-370 s de B1 (dev-history 2026-09-29).
+     !---------------------------------------------------------------------------
+     pure elemental logical function liq_continuous(al, as)
+         real(dp), intent(in) :: al, as
+-        if (as >= 1.0e-2_dp) then
+-            liq_continuous = (al >= ALPHA_FLOW_CUTOFF)
+-        else
+-            liq_continuous = (al >= ALPHA_LIQ_CONT)
+-        end if
++        liq_continuous = (al >= ALPHA_FLOW_CUTOFF) .and. &
++                         (al >= ALPHA_LIQ_CONT * max(1.0_dp - as, 0.0_dp))
+     end function liq_continuous
+ 
+     ! Fraccion de liquido que cabe en la celda (F2.7): hueco menos el gas
+diff --git a/tests/unit/test_dispersed_liquid.f90 b/tests/unit/test_dispersed_liquid.f90
+index cfd007e..4d9bf7e 100644
+--- a/tests/unit/test_dispersed_liquid.f90
++++ b/tests/unit/test_dispersed_liquid.f90
+@@ -10,8 +10,11 @@
+ !
+ ! Casos (singleton MPI):
+ !   1. Predicado liq_continuous: 0.05 sin chatarra -> disperso; 0.5 sin
+-!      chatarra -> continuo; 0.05 con chatarra (alpha_s=0.3) -> continuo
+-!      (umbral ordinario); 0.005 con chatarra -> disperso.
++!      chatarra -> continuo. En el lecho rige la SATURACION del volumen
++!      libre S = alpha_l/(1-alpha_s) >= 0.3 (F2.33): con alpha_s = 0.3,
++!      0.05 (S = 0.07, goteo) -> disperso; 0.25 (S = 0.36) -> continuo;
++!      0.005 -> disperso. Poro denso alpha_s = 0.95: 0.02 (S = 0.4) ->
++!      continuo, 0.005 (bajo ALPHA_FLOW_CUTOFF) -> disperso.
+ !   2. Momento: gas uniforme uz=+3, ur=1; gota alpha_l=0.05 (sin chatarra)
+ !      con velocidad inicial 20 m/s -> tras solve_momentum_3d del liquido
+ !      su velocidad es la de drift RELAJADA desde liq_old con tau_p = u_t/g
+@@ -81,8 +84,11 @@ program test_dispersed_liquid
+     ! ---- caso 1: predicado ----
+     if (liq_continuous(0.05_dp, 0.0_dp))       call fail('0.05 sin chatarra deberia ser disperso')
+     if (.not. liq_continuous(0.5_dp, 0.0_dp))  call fail('0.5 sin chatarra deberia ser continuo')
+-    if (.not. liq_continuous(0.05_dp, 0.3_dp)) call fail('0.05 con chatarra deberia ser continuo')
++    if (liq_continuous(0.05_dp, 0.3_dp))       call fail('0.05 con chatarra (S=0.07) deberia ser goteo')
++    if (.not. liq_continuous(0.25_dp, 0.3_dp)) call fail('0.25 con chatarra (S=0.36) deberia ser continuo')
+     if (liq_continuous(0.005_dp, 0.3_dp))      call fail('0.005 con chatarra deberia ser disperso')
++    if (.not. liq_continuous(0.02_dp, 0.95_dp)) call fail('poro denso saturado deberia ser continuo')
++    if (liq_continuous(0.005_dp, 0.95_dp))     call fail('poro denso bajo el corte deberia ser disperso')
+ 
+     ! ---- caso 2: momento drift-flux ----
+     sol%alpha_s = 0.0_dp; sol%mdot = 0.0_dp; slag%alpha_sl = 0.0_dp

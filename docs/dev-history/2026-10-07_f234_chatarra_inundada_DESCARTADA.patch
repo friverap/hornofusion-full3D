@@ -1,0 +1,199 @@
+diff --git a/src/mod_config_3d.f90 b/src/mod_config_3d.f90
+index c33fc75..449b634 100644
+--- a/src/mod_config_3d.f90
++++ b/src/mod_config_3d.f90
+@@ -78,6 +78,7 @@ contains
+         ! libre de 3 m). B1 v11: 3.6 t de niebla a alpha=0.01 suspendida
+         ! porque bajo el umbral la velocidad era 0 y la gravedad no actuaba.
+         cfg%d_droplet  = 2.0e-3_dp
++        cfg%flood_as_min = 0.7_dp
+         ! dt adaptativo <= safety * tau_interfase (0 = desactivado): evita
+         ! operar en el régimen de clamp/equilibrio local (S5-dpart, B1)
+         cfg%iph_dt_safety = 0.5_dp
+@@ -279,6 +280,7 @@ contains
+         case ('k_l');        call parse_real(val, key, cfg%k_l)
+         case ('d_particle'); call parse_real(val, key, cfg%d_particle)
+         case ('d_droplet');  call parse_real(val, key, cfg%d_droplet)
++        case ('flood_as_min'); call parse_real(val, key, cfg%flood_as_min)
+         case ('iph_dt_safety'); call parse_real(val, key, cfg%iph_dt_safety)
+         case ('probe_step_from'); call parse_int(val, key, cfg%probe_step_from)
+         case ('probe_step_to');   call parse_int(val, key, cfg%probe_step_to)
+diff --git a/src/mod_constants.f90 b/src/mod_constants.f90
+index 6edf6ec..3db2ab1 100644
+--- a/src/mod_constants.f90
++++ b/src/mod_constants.f90
+@@ -128,6 +128,8 @@ module mod_constants
+     ! limite disperso->segregado habitual de los mapas de regimen
+     ! (OpenFOAM blended interfacial models).
+     real(dp), parameter :: ALPHA_LIQ_CONT = 0.3_dp
++    ! Vacio maximo del fluido de una celda de chatarra INUNDADA (F2.34)
++    real(dp), parameter :: VF_FLOOD_MAX = 0.1_dp
+     ! Cota de la velocidad de sedimentacion [m/s]: con dz~0.1 m y dt=2 ms
+     ! da CFL~1 => 1-2 sub-pasos; fisicamente u_t(2 mm) ~ 35 m/s
+     real(dp), parameter :: U_SETTLE_MAX = 50.0_dp
+@@ -275,6 +277,23 @@ contains
+         end if
+     end function liq_continuous
+ 
++    !---------------------------------------------------------------------------
++    ! CHATARRA INUNDADA (F2.34, oct-2026): celda del lecho denso (alpha_s >=
++    ! as_min) cuyo fluido es casi todo liquido (vacio alpha_g/(alpha_l +
++    ! alpha_g) <= VF_FLOOD_MAX, el umbral de "nearly liquid-full" del water
++    ! packing de RELAP5 §3.4.6 / TRACE cap. 2). Su liquido es INMOVIL y la
++    ! celda no participa del acople P-V de ninguna fase: es pared para el
++    ! flujo, pero calienta, funde y conserva masa y energia. Ver
++    ! mod_multiphase (ws_flood) y docs/PHYSICS.md.
++    !---------------------------------------------------------------------------
++    pure elemental logical function flooded_scrap(al, ag, as, as_min)
++        real(dp), intent(in) :: al, ag, as, as_min
++        flooded_scrap = .false.
++        if (as_min <= 0.0_dp .or. as < as_min) return
++        if (al < ALPHA_FLOW_CUTOFF) return
++        flooded_scrap = (ag <= VF_FLOOD_MAX * (al + ag))
++    end function flooded_scrap
++
+     ! Fraccion de liquido que cabe en la celda (F2.7): hueco menos el gas
+     ! residual de poro en el lecho
+     pure elemental function liq_cap(as, asl) result(c)
+diff --git a/src/mod_continuity.f90 b/src/mod_continuity.f90
+index c956c3c..c7393b6 100644
+--- a/src/mod_continuity.f90
++++ b/src/mod_continuity.f90
+@@ -32,7 +32,7 @@ module mod_continuity
+     use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
+                              ws_Mr, ws_Mth, ws_Mz, ws_lim, ws_flux_valid, &
+                              ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, &
+-                             ws_Fc_lk_z, ws_Fc_valid, ws_liq_cont, ws_liq_cont_valid, &
++                             ws_Fc_lk_z, ws_Fc_valid, ws_liq_cont, ws_liq_cont_valid, ws_flood, ws_flood_valid, &
+                              ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, ws_drift_valid
+     implicit none
+ 
+@@ -480,6 +480,15 @@ contains
+                         ws_ud_r(i,j,k) = 0.0_dp; ws_ud_th(i,j,k) = 0.0_dp; ws_ud_z(i,j,k) = 0.0_dp
+                         cycle
+                     end if
++                    ! F2.34: chatarra INUNDADA -> liquido inmovil (no percola:
++                    ! el poro de abajo tambien esta lleno o es el piso)
++                    if (ws_flood_valid) then
++                        if (ws_flood(i,j,k)) then
++                            ws_ud_r(i,j,k) = 0.0_dp; ws_ud_th(i,j,k) = 0.0_dp
++                            ws_ud_z(i,j,k) = 0.0_dp; ws_ut(i,j,k) = 0.0_dp
++                            cycle
++                        end if
++                    end if
+                     ! LECHO o EN CONTACTO con el lecho (F2.14, 2026-09-26): la
+                     ! celda tiene chatarra propia (aunque sea residual) o descansa
+                     ! sobre una celda del lecho. En los modelos de lecho empacado
+@@ -567,6 +576,9 @@ contains
+                 cont(:,:,k) = .true.
+             end where
+         end do
++        ! F2.34: el liquido de la chatarra INUNDADA no es fase continua
++        ! (tampoco por la regla de superficie libre): queda inmovil
++        if (ws_flood_valid) cont = cont .and. .not. ws_flood
+     end subroutine liquid_continuity_mask
+ 
+     !---------------------------------------------------------------------------
+@@ -636,6 +648,14 @@ contains
+                         Gz(i,j,k) = conservative_noalpha(ws_Fc_z(i,j,k), &
+                             liq%alpha(i,j,k), liq%rho(i,j,k), &
+                             liq%alpha(i,j,k+1), liq%rho(i,j,k+1), Ft)
++                    ! F2.34: la chatarra INUNDADA es pared para el liquido en
++                    ! sus seis caras (el Poisson ya no las enlaza; sin esto
++                    ! la regla del dador dejaba entrar a la vecina continua)
++                    if (ws_flood_valid) then
++                        if (ws_flood(i,j,k) .or. ws_flood(i+1,j,k)) Gr(i,j,k)  = 0.0_dp
++                        if (ws_flood(i,j,k) .or. ws_flood(i,j+1,k)) Gth(i,j,k) = 0.0_dp
++                        if (ws_flood(i,j,k) .or. ws_flood(i,j,k+1)) Gz(i,j,k)  = 0.0_dp
++                    end if
+                 end do
+             end do
+         end do
+diff --git a/src/mod_multiphase.f90 b/src/mod_multiphase.f90
+index 148bc3a..a975d26 100644
+--- a/src/mod_multiphase.f90
++++ b/src/mod_multiphase.f90
+@@ -24,7 +24,7 @@ module mod_multiphase
+     use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
+     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
+                              ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, &
+-                             ws_liq_cont_prev, ws_pv_active, ws_pv_valid
++                             ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_flood, ws_flood_valid
+     implicit none
+ 
+ contains
+@@ -80,6 +80,12 @@ contains
+ 
+         ! Mascara de liquido CONTINUO (Bug 15; halos de alpha ya intercambiados)
+         call ensure_workspace(m)
++        ! F2.34: chatarra INUNDADA (funcion local de campos con halos ya
++        ! intercambiados => coherente entre ranks). Antes de la mascara de
++        ! continuidad, que la excluye.
++        ws_flood = flooded_scrap(liq%alpha, gas%alpha, sol%alpha_s, cfg%flood_as_min) &
++                   .and. (m%cell_type /= 0)
++        ws_flood_valid = .true.
+         call liquid_continuity_mask(liq, sol, m, ws_liq_cont)
+         ws_liq_cont_valid = .true.
+         ! (la mascara de presion de fluido, ws_pv_active, se fija mas abajo:
+@@ -536,6 +542,10 @@ contains
+                 do i = istart, iend
+                     if (m%cell_type(i,j,k) == 0) cycle
+                     if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
++                    ! F2.34: el gas de un poro inundado no es conducto
++                    if (ws_flood_valid) then
++                        if (ws_flood(i,j,k)) cycle
++                    end if
+                     tr = gas%alpha(i,j,k) * gas%rho(i,j,k) / cfg%dt
+                     mob = tr / max(tr + max(drag_gas(i,j,k), 0.0_dp), SMALL)
+                     if (mob > GAS_MOB_MIN) mob_loc(i,j,k) = 1
+diff --git a/src/mod_types_3d.f90 b/src/mod_types_3d.f90
+index ddd7d2a..56475c0 100644
+--- a/src/mod_types_3d.f90
++++ b/src/mod_types_3d.f90
+@@ -56,6 +56,7 @@ module mod_types_3d
+         ! Diametro de gota del liquido DISPERSO (alpha_l < ALPHA_FLOW_CUTOFF):
+         ! fija su velocidad terminal de sedimentacion (0 = sin sedimentacion)
+         real(dp) :: d_droplet
++        real(dp) :: flood_as_min   ! F2.34: alpha_s minimo de la chatarra INUNDADA inmovil (0 = off)
+         real(dp) :: iph_dt_safety
+         integer  :: probe_step_from, probe_step_to
+         ! Sonda de BALANCE de momento de UNA celda (indices GLOBALES,
+diff --git a/src/mod_workspace.f90 b/src/mod_workspace.f90
+index df1d3d4..369f86f 100644
+--- a/src/mod_workspace.f90
++++ b/src/mod_workspace.f90
+@@ -45,6 +45,9 @@ module mod_workspace
+     ! continuo (la velocidad del liquido debe entrar desde la fase continua
+     ! vecina, no desde el drift: con la del gas 'horneada' exigia MPa)
+     logical, allocatable :: ws_liq_cont_prev(:,:,:)
++    ! F2.34: chatarra INUNDADA inmovil (fuera del acople P-V de ambas fases)
++    logical, allocatable :: ws_flood(:,:,:)
++    logical, save :: ws_flood_valid = .false.
+     ! Celdas CON alguna fase continua en el acople P-V (Bug 16): las demas
+     ! no tienen presion de fluido — su pp es 0 y el valor que guarden queda
+     ! congelado. Momento las trata como pared en dp/dx y la correccion de
+@@ -128,6 +131,7 @@ contains
+         ws_liq_cont = .true.
+         allocate(ws_liq_cont_prev, ws_pv_active, mold=ws_liq_cont)
+         ws_liq_cont_prev = .true.; ws_pv_active = .true.
++        allocate(ws_flood, mold=ws_liq_cont); ws_flood = .false.
+         allocate(ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, mold=ws_aW)
+         ws_ud_r = 0.0_dp; ws_ud_th = 0.0_dp; ws_ud_z = 0.0_dp; ws_ut = 0.0_dp
+         ws_Fr = 0.0_dp; ws_Fth = 0.0_dp; ws_Fz = 0.0_dp
+diff --git a/tests/unit/test_dispersed_liquid.f90 b/tests/unit/test_dispersed_liquid.f90
+index cfd007e..a5dd1fb 100644
+--- a/tests/unit/test_dispersed_liquid.f90
++++ b/tests/unit/test_dispersed_liquid.f90
+@@ -83,6 +83,12 @@ program test_dispersed_liquid
+     if (.not. liq_continuous(0.5_dp, 0.0_dp))  call fail('0.5 sin chatarra deberia ser continuo')
+     if (.not. liq_continuous(0.05_dp, 0.3_dp)) call fail('0.05 con chatarra deberia ser continuo')
+     if (liq_continuous(0.005_dp, 0.3_dp))      call fail('0.005 con chatarra deberia ser disperso')
++    ! F2.34: chatarra INUNDADA (alpha_s >= 0.7, vacio del fluido <= 0.1)
++    if (.not. flooded_scrap(0.20_dp, 0.015_dp, 0.785_dp, 0.7_dp)) call fail('poro inundado deberia ser flooded')
++    if (flooded_scrap(0.10_dp, 0.10_dp, 0.80_dp, 0.7_dp))  call fail('poro con gas (vacio 0.5) no es flooded')
++    if (flooded_scrap(0.30_dp, 0.01_dp, 0.69_dp, 0.7_dp))  call fail('alpha_s bajo el umbral no es flooded')
++    if (flooded_scrap(0.20_dp, 0.015_dp, 0.785_dp, 0.0_dp)) call fail('flood_as_min = 0 apaga la regla')
++    if (flooded_scrap(0.005_dp, 0.0_dp, 0.995_dp, 0.7_dp)) call fail('liquido bajo el corte no es flooded')
+ 
+     ! ---- caso 2: momento drift-flux ----
+     sol%alpha_s = 0.0_dp; sol%mdot = 0.0_dp; slag%alpha_sl = 0.0_dp
