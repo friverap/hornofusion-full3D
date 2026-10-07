@@ -21,8 +21,15 @@ contains
     !---------------------------------------------------------------------------
     ! Generate parallel mesh with halos
     !---------------------------------------------------------------------------
+    ! intent(INOUT), no (out): m%topo llega YA inicializada por
+    ! mpi_init_topology. Con intent(out) el dummy queda indefinido al entrar
+    ! (y gfortran desasigna/reinicia sus componentes): a -O0 la topologia
+    ! llegaba basura (rank, coords, iloc) y el allocate de la malla
+    ! reventaba; a -O2 sobrevivia por casualidad — fuente plausible de los
+    ! halos basura esporadicos (B1 v10, NaN a n=2, reinicio n8->n4 con 10 %
+    ! de diferencia en el gas; Plan D 7-oct-2026).
     subroutine mesh_generate_parallel(m, cfg)
-        type(mesh_t), intent(out)  :: m
+        type(mesh_t), intent(inout) :: m
         type(config_t), intent(in) :: cfg
 
         integer :: i, j, k, ig, jg, kg
