@@ -92,7 +92,14 @@ contains
         logical,  allocatable :: cont(:,:,:)
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
-        allocate(a_new, mold=liq%alpha)
+        ! a_new se asigna como COPIA de liq%alpha (no solo con mold): el
+        ! transporte escribe las celdas propias y luego liq%alpha = a_new;
+        ! con mold, los halos FISICOS (eje, pared, piso, techo: nadie los
+        ! escribe ni los intercambia) heredaban la basura del heap y
+        ! liq%alpha quedaba con halos basura desde el primer paso (medido con
+        ! malloc relleno de sNaN: 3584 halos; corridas no reproducibles,
+        ! dependientes de la presion de memoria de la maquina; Bug 22, oct-2026).
+        allocate(a_new, mold=liq%alpha); a_new = liq%alpha
         allocate(lim_new, mold=liq%alpha)
         lim_new = 1.0_dp
         allocate(ur_e, uth_e, uz_e, mold=liq%alpha)
