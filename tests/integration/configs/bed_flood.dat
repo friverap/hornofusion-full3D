@@ -1,0 +1,44 @@
+# Banco bed_flood (Plan D, D0, oct-2026): lecho denso del piso con los poros
+# llenos de liquido (heel) bajo chatarra suelta caliente que funde y drena
+# hacia el. Reproduce en minutos el regimen de lecho inundado de B1 (~320 s):
+# water packing del poro lleno. Criterio: bed_pv_bounded (check_bath.py).
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+charge_recipe_file = input/recipe_bed_flood.dat
+dt = 0.002
+t_final = 3.0
+adaptive_dt = false
+heel_mass = 60000.0
+heel_T = 1850.0
+T_initial = 1815.0
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = false
+solve_radiation = true
+solve_chemistry = false
+solve_arc = true
+solve_multiphase = true
+alpha_p = 0.3
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 200
+audit_freq = 1
+output_freq = 250
+monitor_freq = 100
+
+# --- Plan D (cerrado negativo 10-oct-2026): el banco conserva las piezas
+# D2.2b/D2.4/D2.5/D2.6 activadas (default false en produccion). Mejoran el
+# banco (p>100 kPa 8 -> 1 % de pasos) y NO se transfieren a B1 (juez D2.6:
+# 66 % de pasos fuera de regimen en 320-345 s). Ver dev-history
+# 2026-10-07_plan_d_acople_implicito.md, secciones D5 y D6.
+pc_limiter_faces = false
+pc_liq_sealed_wall = true
+pc_fs_liquid_gradient = true
+alpha_g_comp_min = 0.01
+pc_fs_liquid_face = true
+pc_consistent_corrector = true
+pc_liq_closed_dir = true

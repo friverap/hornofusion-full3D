@@ -28,11 +28,14 @@ module mod_continuity
     use mod_probe, only: probe_active_now, probe_current_step
     use mod_face_flux
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d
-    use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS, AUD_SPILL_MASS
+    use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS, AUD_SPILL_MASS, &
+                         AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
     use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
                              ws_Mr, ws_Mth, ws_Mz, ws_lim, ws_flux_valid, &
+                             ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
                              ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, &
                              ws_Fc_lk_z, ws_Fc_valid, ws_liq_cont, ws_liq_cont_valid, &
+                             ws_Fc_af_r, ws_Fc_af_th, ws_Fc_af_z, &
                              ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, ws_drift_valid
     implicit none
 
@@ -45,6 +48,9 @@ module mod_continuity
     real(dp), save :: clip_step_prev = 0.0_dp
     integer,  save :: clip_step_id = -huge(1)
     real(dp), save :: spill_step_prev = 0.0_dp
+    ! Plan D, D1: desfases alpha-p (ultima iteracion externa del paso)
+    real(dp), save :: vd_step_prev = 0.0_dp, vl_step_prev = 0.0_dp, vu_step_prev = 0.0_dp
+    integer,  save :: vd_step_id = -1, vl_step_id = -1, vu_step_id = -1
     integer,  save :: spill_step_id = -huge(1)
 
 contains
@@ -78,6 +84,8 @@ contains
         real(dp) :: inflow, outflow, room, dlim, dlim_glob, clip_call
         real(dp) :: dlim_exit, cap, exc, room_up, give, exc_glob, spill_call
         real(dp) :: exc0_glob
+        real(dp) :: vol_dalpha, vol_lim, vol_unl
+        real(dp), allocatable :: a_in(:,:,:), in_tot(:,:,:), in_ok(:,:,:)
         real(dp), allocatable :: a_new(:,:,:), lim_new(:,:,:)
         ! Velocidad EFECTIVA del liquido para el transporte de alpha: la del
         ! momento donde el liquido es fase CONTINUA (liq_continuous, Bug 15);
@@ -171,10 +179,17 @@ contains
             ! alcanza.
             call solve_alpha_bounded_implicit(liq, gas, sol, alpha_slag, &
                                               alpha_old, m, cfg, ur_e, uth_e, uz_e)
+            ws_lim_step_valid = .false.
             deallocate(a_new, lim_new, ur_e, uth_e, uz_e, Gr, Gth, Gz, cont)
             return
         end if
         dt_sub = cfg%dt / real(n_sub, dp)
+
+        ! D1: iterado ENTRANTE (el alpha con el que se armo el Poisson de
+        ! esta iteracion externa) para medir el desfase alpha-p
+        allocate(a_in, mold=liq%alpha); a_in = liq%alpha
+        allocate(in_tot, in_ok, mold=liq%alpha); in_tot = 0.0_dp; in_ok = 0.0_dp
+        vol_dalpha = 0.0_dp; vol_lim = 0.0_dp; vol_unl = 0.0_dp
 
         ! Partir SIEMPRE de alpha_old (ancla temporal, hallazgo 3.2)
         liq%alpha = alpha_old
@@ -204,6 +219,15 @@ contains
                         ws_Mr(i,j,k)  = donor_flux(Fe, liq%alpha(i,j,k), liq%alpha(i+1,j,k))
                         ws_Mth(i,j,k) = donor_flux(Fn, liq%alpha(i,j,k), liq%alpha(i,j+1,k))
                         ws_Mz(i,j,k)  = donor_flux(Ft, liq%alpha(i,j,k), liq%alpha(i,j,k+1))
+                        ! D1: volumen de liquido por caras que el Poisson NO enlazo
+                        if (ws_Fc_valid) then
+                            if (ws_Fc_lk_r(i,j,k) == 0 .and. m%cell_type(i+1,j,k) /= 0) &
+                                vol_unl = vol_unl + abs(ws_Mr(i,j,k)) * dt_sub / liq%rho(i,j,k)
+                            if (ws_Fc_lk_th(i,j,k) == 0 .and. m%cell_type(i,j+1,k) /= 0) &
+                                vol_unl = vol_unl + abs(ws_Mth(i,j,k)) * dt_sub / liq%rho(i,j,k)
+                            if (ws_Fc_lk_z(i,j,k) == 0 .and. m%cell_type(i,j,k+1) /= 0) &
+                                vol_unl = vol_unl + abs(ws_Mz(i,j,k)) * dt_sub / liq%rho(i,j,k)
+                        end if
                     end do
                 end do
             end do
@@ -255,6 +279,20 @@ contains
             end do
             n_it_max  = max(n_it_max, min(ilim, N_LIM_MAX))
             dlim_exit = max(dlim_exit, dlim_glob)
+            ! D1: entrada de liquido que el limitador BLOQUEA (el Poisson la
+            ! pidio); D2.2: agregado por celda de lo pedido y lo que cupo
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        if (m%cell_type(i,j,k) == 0) cycle
+                        call cell_in_out(i, j, k, inflow, outflow)
+                        if (inflow <= SMALL) cycle
+                        in_tot(i,j,k) = in_tot(i,j,k) + inflow * dt_sub
+                        in_ok(i,j,k)  = in_ok(i,j,k)  + ws_lim(i,j,k) * inflow * dt_sub
+                        vol_lim = vol_lim + (1.0_dp - ws_lim(i,j,k)) * inflow * dt_sub / liq%rho(i,j,k)
+                    end do
+                end do
+            end do
 
             ! (3) Actualización en forma de flujo con los flujos EFECTIVOS
             !     (mismo valor en las dos celdas de la cara) y acumulación
@@ -402,6 +440,31 @@ contains
                 ' dlim_exit=', dlim_exit, ' exc0=', exc0_glob, &
                 ' derramado=', spill_call, ' recortado=', clip_call
         end if
+
+        ! D1: desfase alpha-p de esta iteracion externa
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    vol_dalpha = vol_dalpha + abs(liq%alpha(i,j,k) - a_in(i,j,k)) * m%vol(i,j,k)
+                end do
+            end do
+        end do
+        call audit_step_delta(AUD_VOL_DALPHA,   vol_dalpha, vd_step_prev, vd_step_id)
+        call audit_step_delta(AUD_VOL_LIM,      vol_lim,    vl_step_prev, vl_step_id)
+        call audit_step_delta(AUD_VOL_UNLINKED, vol_unl,    vu_step_prev, vu_step_id)
+        ! D2.2: fraccion de la entrada que cupo, para el Poisson de la
+        ! iteracion externa siguiente (halos: la cara se evalua desde ambas celdas)
+        where (in_tot > SMALL)
+            ws_lim_step = in_ok / in_tot
+        elsewhere
+            ws_lim_step = 1.0_dp
+        end where
+        ws_lim_step = min(1.0_dp, max(0.0_dp, ws_lim_step))
+        call mpi_exchange_halos_3d(ws_lim_step, m%topo)
+        ws_lim_step_valid = .true.
+        ws_lim_step_id = probe_current_step()
+        deallocate(a_in, in_tot, in_ok)
 
         deallocate(a_new, lim_new, ur_e, uth_e, uz_e, Gr, Gth, Gz, cont)
 
@@ -633,16 +696,13 @@ contains
                     if (.not. ws_Fc_valid) cycle
                     if (ws_Fc_lk_r(i,j,k) == 1) &
                         Gr(i,j,k) = conservative_noalpha(ws_Fc_r(i,j,k), &
-                            liq%alpha(i,j,k), liq%rho(i,j,k), &
-                            liq%alpha(i+1,j,k), liq%rho(i+1,j,k), Fe)
+                            ws_Fc_af_r(i,j,k), liq%rho(i,j,k), liq%rho(i+1,j,k), Fe)
                     if (ws_Fc_lk_th(i,j,k) == 1) &
                         Gth(i,j,k) = conservative_noalpha(ws_Fc_th(i,j,k), &
-                            liq%alpha(i,j,k), liq%rho(i,j,k), &
-                            liq%alpha(i,j+1,k), liq%rho(i,j+1,k), Fn)
+                            ws_Fc_af_th(i,j,k), liq%rho(i,j,k), liq%rho(i,j+1,k), Fn)
                     if (ws_Fc_lk_z(i,j,k) == 1) &
                         Gz(i,j,k) = conservative_noalpha(ws_Fc_z(i,j,k), &
-                            liq%alpha(i,j,k), liq%rho(i,j,k), &
-                            liq%alpha(i,j,k+1), liq%rho(i,j,k+1), Ft)
+                            ws_Fc_af_z(i,j,k), liq%rho(i,j,k), liq%rho(i,j,k+1), Ft)
                 end do
             end do
         end do
@@ -670,10 +730,11 @@ contains
     ! rho_f Q/alpha_f: del flujo VOLUMETRICO Q = alpha_f u_f A del Poisson a
     ! rho u_f A; si la cara no tiene liquido (no deberia estar enlazada) se
     ! conserva la reconstruccion de centro
-    pure function conservative_noalpha(Q, a_lo, rho_lo, a_hi, rho_hi, F_center) result(G)
-        real(dp), intent(in) :: Q, a_lo, rho_lo, a_hi, rho_hi, F_center
-        real(dp) :: G, a_f
-        a_f = 0.5_dp * (a_lo + a_hi)
+    ! (D2.6: a_f es la fraccion de cara que uso el Poisson, ws_Fc_af_*; para
+    ! una cara continuo|continuo es la media de las dos celdas, como antes)
+    pure function conservative_noalpha(Q, a_f, rho_lo, rho_hi, F_center) result(G)
+        real(dp), intent(in) :: Q, a_f, rho_lo, rho_hi, F_center
+        real(dp) :: G
         if (a_f > SMALL) then
             G = Q * 0.5_dp * (rho_lo + rho_hi) / a_f
         else

@@ -74,6 +74,7 @@ contains
         use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
             ws_pcorr_g, ws_pcorr_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
+            ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su
@@ -300,10 +301,11 @@ contains
 
                     select case (comp)
                     case ('ur')
-                        dp_dr = pgrad(pf(i-1,j,k), pf(i,j,k), pf(i+1,j,k), &
+                        dp_dr = pgrad_fs(pf(i-1,j,k), pf(i,j,k), pf(i+1,j,k), &
                                       m%r(i-1), m%r(i), m%r(i+1), &
                                       i > 1    .and. pv_ok(i-1,j,k), &
-                                      i < iend .and. pv_ok(i+1,j,k))
+                                      i < iend .and. pv_ok(i+1,j,k), &
+                                      fs_nb(i-1,j,k), fs_nb(i+1,j,k), m%rf(i-1), m%rf(i))
                         ! Centrifugal: +rho*u_th^2/r  +  Lorentz r-stirring
                         src_extra = alpha_f * ph%rho(i,j,k) * ph%uth(i,j,k)**2 / m%r(i) &
                                   + sh%F_lorentz_r(i,j,k)
@@ -315,10 +317,12 @@ contains
                         ! correcta también en la costura (el parche
                         ! merge(jp<jm) anterior nunca se activaba: comparaba
                         ! ÍNDICES, y jp=j+1 > jm=j-1 siempre)
-                        dp_dth = pgrad(pf(i,jm,k), pf(i,j,k), pf(i,jp,k), &
+                        dp_dth = pgrad_fs(pf(i,jm,k), pf(i,j,k), pf(i,jp,k), &
                                        m%r(i) * m%theta(jm), m%r(i) * m%theta(j), &
                                        m%r(i) * m%theta(jp), &
-                                       pv_ok(i,jm,k), pv_ok(i,jp,k))
+                                       pv_ok(i,jm,k), pv_ok(i,jp,k), &
+                                       fs_nb(i,jm,k), fs_nb(i,jp,k), &
+                                       m%r(i) * m%thetaf(jm), m%r(i) * m%thetaf(j))
                         ! Coriolis -rho*ur*uth/r, LINEAL en uth: linearización
                         ! de Patankar — implícito (aP_extra) cuando el
                         ! coeficiente es positivo. Explícito cerraba el lazo de
@@ -354,8 +358,11 @@ contains
                             ! existen, como pgrad.
                             dp_dz = gas_pgrad_z(i, j, k, ok_bot, ok_top)
                         else
-                            dp_dz = pgrad(pf(i,j,k-1), pf(i,j,k), pf(i,j,k+1), &
-                                          m%z(k-1), m%z(k), m%z(k+1), ok_bot, ok_top)
+                            ! D2.5: superficie libre -> la presion del gas
+                            ! actua en la cara (ver pgrad_fs)
+                            dp_dz = pgrad_fs(pf(i,j,k-1), pf(i,j,k), pf(i,j,k+1), &
+                                          m%z(k-1), m%z(k), m%z(k+1), ok_bot, ok_top, &
+                                          fs_nb(i,j,k-1), fs_nb(i,j,k+1), m%zf(k-1), m%zf(k))
                         end if
                         ! Gravity + arc impingement; Boussinesq SOLO líquido
                         ! (rho constante): el gas ya tiene flotabilidad vía
@@ -463,6 +470,16 @@ contains
             af = 2.0_dp * a1 * a2 / max(a1 + a2, SMALL)
         end function aface
 
+        ! Vecina fluida SIN liquido continuo (superficie libre del liquido,
+        ! D2.5): su presion actua en la cara. Solo para el LIQUIDO.
+        pure logical function fs_nb(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            fs_nb = .false.
+            if (is_gas .or. .not. cfg%pc_fs_liquid_gradient) return
+            if (.not. ws_liq_cont_valid) return
+            fs_nb = pv_ok(ii, jj, kk) .and. .not. ws_liq_cont(ii,jj,kk)
+        end function fs_nb
+
         ! La celda tiene presion de fluido definida? (Bug 16)
         pure logical function pv_ok(ii, jj, kk)
             integer, intent(in) :: ii, jj, kk
@@ -471,6 +488,9 @@ contains
             else
                 pv_ok = (m%cell_type(ii,jj,kk) /= 0)
             end if
+            ! D2.2b: la celda sellada para el liquido es pared de SU gradiente
+            if (.not. is_gas .and. cfg%pc_liq_sealed_wall .and. ws_pv_liq_valid .and. &
+                ws_pv_liq_id == probe_current_step()) pv_ok = pv_ok .and. ws_pv_liq(ii,jj,kk)
         end function pv_ok
 
         ! Peso del liquido por unidad de volumen en la cara entre (k-1,k)

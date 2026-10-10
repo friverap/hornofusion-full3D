@@ -20,11 +20,12 @@ module mod_multiphase
     use mod_drag_ergun
     use mod_properties_3d
     use mod_fields_3d
-    use mod_probe, only: probe_report
+    use mod_probe, only: probe_report, probe_current_step
     use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
                              ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, &
-                             ws_liq_cont_prev, ws_pv_active, ws_pv_valid
+                             ws_liq_fr, ws_liq_fth, ws_liq_fz, &
+                             ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id
     implicit none
 
 contains
@@ -236,6 +237,20 @@ contains
         call relax_field(liq%uth, p_lth, cfg%alpha_u, m)
         call relax_field(liq%uz,  p_luz, cfg%alpha_u, m)
         call cap_liquid_velocity(liq, m)
+        ! D2.2b: el liquido de una celda sellada para el liquido (todas sus
+        ! caras de liquido cerradas en el ultimo Poisson del paso) no se mueve
+        if (cfg%pc_liq_sealed_wall .and. ws_pv_liq_valid .and. ws_pv_liq_id == probe_current_step()) then
+            where (ws_liq_cont .and. .not. ws_pv_liq)
+                liq%ur = 0.0_dp; liq%uth = 0.0_dp; liq%uz = 0.0_dp
+            end where
+        end if
+        ! D2.6 (regla cinematica por direccion): sin cara de liquido abierta
+        ! en una direccion, esa componente es nula (ver mod_pressure_3d)
+        if (cfg%pc_liq_closed_dir .and. ws_pv_liq_valid .and. ws_pv_liq_id == probe_current_step()) then
+            where (ws_liq_cont .and. .not. ws_liq_fr)  liq%ur  = 0.0_dp
+            where (ws_liq_cont .and. .not. ws_liq_fth) liq%uth = 0.0_dp
+            where (ws_liq_cont .and. .not. ws_liq_fz)  liq%uz  = 0.0_dp
+        end if
         call phase_exchange_halos(liq, m)
         call relax_field(gas%ur,  p_gur, cfg%alpha_u, m)
         call relax_field(gas%uth, p_gth, cfg%alpha_u, m)

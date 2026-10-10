@@ -87,7 +87,10 @@ contains
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
+            ws_Fc_af_r, ws_Fc_af_th, ws_Fc_af_z, ws_liq_fr, ws_liq_fth, ws_liq_fz, &
             ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, ws_pv_active, ws_pv_valid, &
+            ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
+            ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, &
             ws_gas_perc, ws_gas_perc_valid
         type(phase_t), intent(inout) :: liq, gas
@@ -111,6 +114,19 @@ contains
         ! umbral hidrodinamico; liquido solo donde es fase continua
         logical, allocatable :: act_l(:,:,:), act_g(:,:,:)
         logical, allocatable :: sealed(:,:,:)
+        real(dp), allocatable :: lcoef(:,:,:)   ! D2.2b: suma de coeficientes de cara del LIQUIDO por celda
+        ! D2.6: suma por DIRECCION (regla cinematica: sin cara abierta en una
+        ! direccion, la componente de velocidad del liquido es nula)
+        real(dp), allocatable :: lcoef_r(:,:,:), lcoef_th(:,:,:), lcoef_z(:,:,:)
+        ! D2.6: mascaras del gradiente que uso el PREDICTOR de este outer
+        ! (pared de Bug 16/D2.2b y superficie libre de D2.5), para que el
+        ! corrector use el MISMO operador
+        logical, allocatable :: pvl(:,:,:), fsl(:,:,:), pvg(:,:,:)
+        ! D2.6: celda LLENA de liquido (su superficie libre esta en la cara
+        ! superior): gas residual por debajo de este umbral
+        real(dp), parameter :: FS_FULL_EPS = 1.0e-3_dp
+        logical :: grad_is_gas = .false.
+        logical :: liq_mask_on               ! D2.2b: mascara del liquido del outer anterior (mismo paso)
         ! Flujo de Rhie-Chow F* y coeficiente a_nb del LIQUIDO en las caras +
         ! (este/norte/tope) de cada celda propia, para exportar el flujo
         ! conservativo F = F* + a_nb (pp_P - pp_nb) tras el CG (Bug 19, F1)
@@ -142,6 +158,11 @@ contains
                        lbound(sh%pp,3):ubound(sh%pp,3)))
         allocate(act_g, mold=act_l)
         allocate(sealed, mold=act_l); sealed = .false.
+        allocate(lcoef, mold=sh%pp); lcoef = 0.0_dp
+        allocate(lcoef_r, lcoef_th, lcoef_z, mold=sh%pp)
+        lcoef_r = 0.0_dp; lcoef_th = 0.0_dp; lcoef_z = 0.0_dp
+        allocate(pvl, fsl, pvg, mold=act_l)
+        liq_mask_on = cfg%pc_liq_sealed_wall .and. ws_pv_liq_valid .and. (ws_pv_liq_id == probe_current_step())
         allocate(ag_eff, mold=sh%pp)
         allocate(Fs_r, Fs_th, Fs_z, ac_r, ac_th, ac_z, mold=sh%pp)
         ! Completos a cero (halos incluidos): las caras de frontera fisica
@@ -150,6 +171,7 @@ contains
         ac_r = 0.0_dp; ac_th = 0.0_dp; ac_z = 0.0_dp
         ws_Fc_r = 0.0_dp; ws_Fc_th = 0.0_dp; ws_Fc_z = 0.0_dp
         ws_Fc_lk_r = 0; ws_Fc_lk_th = 0; ws_Fc_lk_z = 0
+        ws_Fc_af_r = 0.0_dp; ws_Fc_af_th = 0.0_dp; ws_Fc_af_z = 0.0_dp
         if (ws_liq_cont_valid) then
             act_l = ws_liq_cont
         else
@@ -249,12 +271,26 @@ contains
         ! one-sided SOLO en frontera física; mismas fórmulas que momentum).
         ! Liquido: p del Poisson. Gas: p + ws_pcorr_g (superficie libre).
         !-----------------------------------------------------------------------
+        grad_is_gas = .false.
         call cell_gradients(sh%p, .false., gpr, gpth, gpz)
         if (cfg%gas_in_poisson .and. cfg%solve_multiphase) then
             allocate(p_g, gpr_g, gpth_g, gpz_g, mold=sh%pp)
             p_g = sh%p   ! (F2.3: superficie libre via gas_gz / liq_weight_f)
+            grad_is_gas = .true.
             call cell_gradients(p_g, .true., gpr_g, gpth_g, gpz_g)
+            grad_is_gas = .false.
         end if
+        ! D2.6: mascaras del operador de gradiente de ESTE outer (halos
+        ! incluidos: act_l/act_g/ws_pv_liq/ws_liq_cont ya intercambiados)
+        do k = lbound(act_l,3), ubound(act_l,3)
+            do j = lbound(act_l,2), ubound(act_l,2)
+                do i = lbound(act_l,1), ubound(act_l,1)
+                    pvl(i,j,k) = pv_cell(i, j, k)
+                    fsl(i,j,k) = fs_cell(i, j, k)
+                    pvg(i,j,k) = (m%cell_type(i,j,k) /= 0) .and. (act_l(i,j,k) .or. act_g(i,j,k))
+                end do
+            end do
+        end do
 
         !-----------------------------------------------------------------------
         ! POISSON DE VOLUMEN (Bug 19, Plan C F2): la ecuacion de presion de un
@@ -287,6 +323,35 @@ contains
         end if
         flux_ref = 0.0_dp
         call add_phase_contribution(liq, liq%alpha, act_l, .true., sh%p, gpr, gpth, gpz, .false.)
+        ! D2.2b: celda ACTIVA para el liquido sin ninguna cara de liquido abierta
+        ! => sellada para el liquido: pared de su gradiente de presion (outers
+        ! siguientes de este paso) y liquido inmovil (mod_multiphase)
+        ! D2.6 (regla cinematica por direccion): la componente del liquido
+        ! continuo sin ninguna cara de liquido abierta en esa direccion es
+        ! nula (velocidad de celda = media de dos caras cerradas). Es lo que
+        ! mata la velocidad FANTASMA del charco de una celda sobre un poro
+        ! lleno con gas encima (B1 330 s: -5..-11 m/s con p hidrostatica
+        ! exacta; el Poisson no la ve por ninguna cara y nada la frena).
+        if (cfg%pc_liq_sealed_wall .or. cfg%pc_liq_closed_dir) then
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        ws_pv_liq(i,j,k) = (m%cell_type(i,j,k) /= 0) .and. &
+                                           (act_l(i,j,k) .or. act_g(i,j,k)) .and. &
+                                           .not. (act_l(i,j,k) .and. lcoef(i,j,k) <= 0.0_dp)
+                        ws_liq_fr(i,j,k)  = .not. (act_l(i,j,k) .and. lcoef_r(i,j,k)  <= 0.0_dp)
+                        ws_liq_fth(i,j,k) = .not. (act_l(i,j,k) .and. lcoef_th(i,j,k) <= 0.0_dp)
+                        ws_liq_fz(i,j,k)  = .not. (act_l(i,j,k) .and. lcoef_z(i,j,k)  <= 0.0_dp)
+                    end do
+                end do
+            end do
+            call exchange_logical_halos_p(ws_pv_liq)
+            call exchange_logical_halos_p(ws_liq_fr)
+            call exchange_logical_halos_p(ws_liq_fth)
+            call exchange_logical_halos_p(ws_liq_fz)
+            ws_pv_liq_valid = .true.
+            ws_pv_liq_id = probe_current_step()
+        end if
         if (probe_here) su_liq_p = Su(pi_,pj_,pk_)
         ! Gas en el Poisson SOLO con multifase: sin gas momentum resuelto,
         ! sus aP_u* valen 0 y d_f = V/SMALL revienta los coeficientes.
@@ -347,11 +412,30 @@ contains
                                      aN(i,j,k) + aB(i,j,k) + aT(i,j,k)) * &
                                     (1.0_dp + PP_COMPLIANCE)
                         ! Término acústico low-Mach (ver P0_THERMO arriba)
-                        if (cfg%gas_compressibility .and. cfg%solve_multiphase &
-                            .and. act_g(i,j,k)) then
+                        if (cfg%gas_compressibility .and. cfg%solve_multiphase) then
+                        block
+                            real(dp) :: ag_c
+                            ag_c = 0.0_dp
+                            if (act_g(i,j,k)) ag_c = gas%alpha(i,j,k)
+                            ! D2.4 (Plan D, oct-2026): COMPLIANCIA RESIDUAL en
+                            ! toda celda con liquido activo. Cuando una celda de
+                            ! bano expulsa su ultimo gas, su compliancia cae de
+                            ! alpha_g/P0 a ~0 en un paso y parar la columna que
+                            ! le llega cuesta Su/aP ~ 1e5-1e6 Pa (water packing;
+                            ! RELAP5 §3.4.6: "discontinuous change in
+                            ! compressibility between a two-phase mixture of
+                            ! small void fraction and a pure liquid"). Un piso
+                            ! alpha_g_comp_min en la DIAGONAL (no en el balance
+                            ! de volumen ni en la masa) acota ese salto: es gas/
+                            ! porosidad no resuelta de un bano sobre chatarra
+                            ! (compresibilidad artificial; Plan C B-2). El
+                            ! exceso de volumen que deja lo mueve el derrame,
+                            ! auditado. Default 0 = bit-identico.
+                            if (act_l(i,j,k)) ag_c = max(ag_c, cfg%alpha_g_comp_min)
                             ! (volumen: d alpha_g/dp' = alpha_g/P0)
-                            aP(i,j,k) = aP(i,j,k) + gas%alpha(i,j,k) / P0_THERMO * &
+                            if (ag_c > 0.0_dp) aP(i,j,k) = aP(i,j,k) + ag_c / P0_THERMO * &
                                 m%vol(i,j,k) / cfg%dt
+                        end block
                         end if
                         ! Compresibilidad acústica del LÍQUIDO (física,
                         ! c~4000 m/s): diagonal para celdas líquido-puras
@@ -449,11 +533,23 @@ contains
         call mpi_exchange_halos_3d_int(ws_Fc_lk_r,  m%topo)
         call mpi_exchange_halos_3d_int(ws_Fc_lk_th, m%topo)
         call mpi_exchange_halos_3d_int(ws_Fc_lk_z,  m%topo)
+        call mpi_exchange_halos_3d(ws_Fc_af_r,  m%topo)
+        call mpi_exchange_halos_3d(ws_Fc_af_th, m%topo)
+        call mpi_exchange_halos_3d(ws_Fc_af_z,  m%topo)
         ws_Fc_valid = .true.
 
-        call correct_velocities(liq, sh, m, act_l)
+        ! D2.6: el corrector usa el MISMO operador de gradiente que el
+        ! predictor de este outer (pvl/fsl: paredes y superficie libre del
+        ! liquido; pvg: paredes del gas) y la regla cinematica por direccion
+        if (cfg%pc_liq_closed_dir) then
+            call correct_velocities(liq, sh, m, act_l, pvl, fsl, cfg%pc_consistent_corrector, &
+                                    ws_liq_fr, ws_liq_fth, ws_liq_fz)
+        else
+            call correct_velocities(liq, sh, m, act_l, pvl, fsl, cfg%pc_consistent_corrector)
+        end if
         if (cfg%gas_in_poisson .and. cfg%solve_multiphase) &
-            call correct_velocities(gas, sh, m, act_g)
+            call correct_velocities(gas, sh, m, act_g, pvg, fsl, cfg%pc_consistent_corrector, &
+                                    use_fs=.false.)
 
         ! Correct pressure (con cota física, ver P_HYDRO_CAP)
         sh%p = sh%p + cfg%alpha_p * sh%pp
@@ -496,7 +592,8 @@ contains
         end block
         call mpi_exchange_halos_3d(sh%p, m%topo)
 
-        deallocate(gpr, gpth, gpz, act_l, act_g, ag_eff, sealed)
+        deallocate(gpr, gpth, gpz, act_l, act_g, ag_eff, sealed, lcoef)
+        deallocate(lcoef_r, lcoef_th, lcoef_z, pvl, fsl, pvg)
         deallocate(Fs_r, Fs_th, Fs_z, ac_r, ac_th, ac_z)
         if (allocated(p_g)) deallocate(p_g, gpr_g, gpth_g, gpz_g)
 
@@ -539,11 +636,23 @@ contains
             end if
         end function gas_gz
 
+        ! Vecina fluida SIN liquido continuo (superficie libre, D2.5): solo
+        ! para los gradientes del LIQUIDO (grad_is_gas = .false.)
+        pure logical function fs_cell(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            fs_cell = .false.
+            if (grad_is_gas .or. .not. cfg%pc_fs_liquid_gradient) return
+            if (.not. ws_liq_cont_valid) return
+            fs_cell = pv_cell(ii, jj, kk) .and. .not. ws_liq_cont(ii,jj,kk)
+        end function fs_cell
+
         ! La celda tiene presion de fluido definida? (Bug 16)
         pure logical function pv_cell(ii, jj, kk)
             integer, intent(in) :: ii, jj, kk
             pv_cell = (m%cell_type(ii,jj,kk) /= 0) .and. &
                       (act_l(ii,jj,kk) .or. act_g(ii,jj,kk))
+            ! D2.2b: para el gradiente del LIQUIDO la celda sellada es pared
+            if (liq_mask_on .and. .not. grad_is_gas) pv_cell = pv_cell .and. ws_pv_liq(ii,jj,kk)
         end function pv_cell
 
         ! Acumula la presion de una vecina CON fluido continuo (Neumann de
@@ -584,14 +693,33 @@ contains
             logical, intent(in)       :: export
 
             integer  :: ii, jj, kk, jjm, jjp
-            real(dp) :: d_f, af, u_f, delta
+            real(dp) :: d_f, af, u_f, delta, fl, a_fs, q_fs, af_fs
+            logical  :: fs_on, open_fs
+
+            ! D2.6 (oct-2026): la SUPERFICIE LIBRE del liquido es una cara de
+            ! liquido del Poisson, unilateral desde la celda de liquido (ver
+            ! fs_face). Hasta aqui una cara liquido|gas no existia para el
+            ! liquido: la superficie no podia subir por el Poisson (solo por
+            ! derrame), una celda de liquido suspendida sobre gas no podia
+            ! caer, y la velocidad vertical de un charco de una celda entre
+            ! un poro lleno y el gas era invisible para la presion.
+            fs_on = (.not. isg) .and. cfg%pc_fs_liquid_face .and. &
+                    cfg%pc_fs_liquid_gradient .and. ws_liq_cont_valid
 
             do kk = kstart, kend
                 do jj = jstart, jend
                     jjm = jj - 1; jjp = jj + 1
                     do ii = istart, iend
                         if (m%cell_type(ii,jj,kk) == 0) cycle
-                        if (.not. act(ii,jj,kk)) cycle
+                        if (.not. act(ii,jj,kk)) then
+                            ! D2.6: celda fluida SIN liquido continuo: recibe
+                            ! las caras de superficie libre de sus vecinas de
+                            ! liquido (lado simetrico de la matriz)
+                            if (fs_on) then
+                                if (fs_cell(ii,jj,kk)) call fs_gas_side(ii, jj, kk)
+                            end if
+                            cycle
+                        end if
 
                         ! --- Cara Oeste (i-1/2) ---
                         if (link(act, ii-1, jj, kk)) then
@@ -602,10 +730,27 @@ contains
                             u_f = 0.5_dp * (ph%ur(ii-1,jj,kk) + ph%ur(ii,jj,kk)) &
                                 + d_f * (0.5_dp*(gr(ii-1,jj,kk) + gr(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii-1,jj,kk)) / delta)
-                            if (face_open(isg, u_f, rm(ii-1,jj,kk), rm(ii,jj,kk))) then
+                            fl = face_lim(isg, u_f, ii-1,jj,kk, ii,jj,kk)
+                            if (fl > 0.0_dp) then
+                            af = af * fl
                             aW(ii,jj,kk) = aW(ii,jj,kk) + af * d_f * m%Ar(ii-1,jj,kk) / delta
+                            if (.not. isg) then
+                                lcoef(ii,jj,kk) = lcoef(ii,jj,kk) + af * d_f * m%Ar(ii-1,jj,kk) / delta
+                                lcoef_r(ii,jj,kk) = lcoef_r(ii,jj,kk) + af * d_f * m%Ar(ii-1,jj,kk) / delta
+                            end if
                             Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Ar(ii-1,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Ar(ii-1,jj,kk))
+                            end if
+                        else if (fs_on) then
+                            if (fs_cell(ii-1,jj,kk)) then
+                                call fs_face(ii, jj, kk, 1, -1, a_fs, q_fs, af_fs, open_fs)
+                                if (open_fs) then
+                                    aW(ii,jj,kk) = aW(ii,jj,kk) + a_fs
+                                    lcoef(ii,jj,kk) = lcoef(ii,jj,kk) + a_fs
+                                    lcoef_r(ii,jj,kk) = lcoef_r(ii,jj,kk) + a_fs
+                                    Su(ii,jj,kk) = Su(ii,jj,kk) + q_fs
+                                    flux_ref = flux_ref + abs(q_fs)
+                                end if
                             end if
                         end if
 
@@ -618,15 +763,37 @@ contains
                             u_f = 0.5_dp * (ph%ur(ii,jj,kk) + ph%ur(ii+1,jj,kk)) &
                                 + d_f * (0.5_dp*(gr(ii,jj,kk) + gr(ii+1,jj,kk)) &
                                          - (pf(ii+1,jj,kk) - pf(ii,jj,kk)) / delta)
-                            if (face_open(isg, u_f, rm(ii,jj,kk), rm(ii+1,jj,kk))) then
+                            fl = face_lim(isg, u_f, ii,jj,kk, ii+1,jj,kk)
+                            if (fl > 0.0_dp) then
+                            af = af * fl
                             aE(ii,jj,kk) = aE(ii,jj,kk) + af * d_f * m%Ar(ii,jj,kk) / delta
+                            if (.not. isg) then
+                                lcoef(ii,jj,kk) = lcoef(ii,jj,kk) + af * d_f * m%Ar(ii,jj,kk) / delta
+                                lcoef_r(ii,jj,kk) = lcoef_r(ii,jj,kk) + af * d_f * m%Ar(ii,jj,kk) / delta
+                            end if
                             Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Ar(ii,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Ar(ii,jj,kk))
                             if (export) then
                                 Fs_r(ii,jj,kk) = af * u_f * m%Ar(ii,jj,kk)
                                 ac_r(ii,jj,kk) = af * d_f * m%Ar(ii,jj,kk) / delta
                                 ws_Fc_lk_r(ii,jj,kk) = 1
+                                ws_Fc_af_r(ii,jj,kk) = af
                             end if
+                            end if
+                        else if (fs_on) then
+                            if (fs_cell(ii+1,jj,kk)) then
+                                call fs_face(ii, jj, kk, 1, +1, a_fs, q_fs, af_fs, open_fs)
+                                if (open_fs) then
+                                    aE(ii,jj,kk) = aE(ii,jj,kk) + a_fs
+                                    lcoef(ii,jj,kk) = lcoef(ii,jj,kk) + a_fs
+                                    lcoef_r(ii,jj,kk) = lcoef_r(ii,jj,kk) + a_fs
+                                    Su(ii,jj,kk) = Su(ii,jj,kk) - q_fs
+                                    flux_ref = flux_ref + abs(q_fs)
+                                    if (export) then
+                                        Fs_r(ii,jj,kk) = q_fs; ac_r(ii,jj,kk) = a_fs
+                                        ws_Fc_lk_r(ii,jj,kk) = 1; ws_Fc_af_r(ii,jj,kk) = af_fs
+                                    end if
+                                end if
                             end if
                         end if
 
@@ -639,10 +806,27 @@ contains
                             u_f = 0.5_dp * (ph%uth(ii,jjm,kk) + ph%uth(ii,jj,kk)) &
                                 + d_f * (0.5_dp*(gth(ii,jjm,kk) + gth(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii,jjm,kk)) / delta)
-                            if (face_open(isg, u_f, rm(ii,jjm,kk), rm(ii,jj,kk))) then
+                            fl = face_lim(isg, u_f, ii,jjm,kk, ii,jj,kk)
+                            if (fl > 0.0_dp) then
+                            af = af * fl
                             aS(ii,jj,kk) = aS(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
+                            if (.not. isg) then
+                                lcoef(ii,jj,kk) = lcoef(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
+                                lcoef_th(ii,jj,kk) = lcoef_th(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
+                            end if
                             Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Ath(ii,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Ath(ii,jj,kk))
+                            end if
+                        else if (fs_on) then
+                            if (fs_cell(ii,jjm,kk)) then
+                                call fs_face(ii, jj, kk, 2, -1, a_fs, q_fs, af_fs, open_fs)
+                                if (open_fs) then
+                                    aS(ii,jj,kk) = aS(ii,jj,kk) + a_fs
+                                    lcoef(ii,jj,kk) = lcoef(ii,jj,kk) + a_fs
+                                    lcoef_th(ii,jj,kk) = lcoef_th(ii,jj,kk) + a_fs
+                                    Su(ii,jj,kk) = Su(ii,jj,kk) + q_fs
+                                    flux_ref = flux_ref + abs(q_fs)
+                                end if
                             end if
                         end if
 
@@ -655,15 +839,37 @@ contains
                             u_f = 0.5_dp * (ph%uth(ii,jj,kk) + ph%uth(ii,jjp,kk)) &
                                 + d_f * (0.5_dp*(gth(ii,jj,kk) + gth(ii,jjp,kk)) &
                                          - (pf(ii,jjp,kk) - pf(ii,jj,kk)) / delta)
-                            if (face_open(isg, u_f, rm(ii,jj,kk), rm(ii,jjp,kk))) then
+                            fl = face_lim(isg, u_f, ii,jj,kk, ii,jjp,kk)
+                            if (fl > 0.0_dp) then
+                            af = af * fl
                             aN(ii,jj,kk) = aN(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
+                            if (.not. isg) then
+                                lcoef(ii,jj,kk) = lcoef(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
+                                lcoef_th(ii,jj,kk) = lcoef_th(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
+                            end if
                             Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Ath(ii,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Ath(ii,jj,kk))
                             if (export) then
                                 Fs_th(ii,jj,kk) = af * u_f * m%Ath(ii,jj,kk)
                                 ac_th(ii,jj,kk) = af * d_f * m%Ath(ii,jj,kk) / delta
                                 ws_Fc_lk_th(ii,jj,kk) = 1
+                                ws_Fc_af_th(ii,jj,kk) = af
                             end if
+                            end if
+                        else if (fs_on) then
+                            if (fs_cell(ii,jjp,kk)) then
+                                call fs_face(ii, jj, kk, 2, +1, a_fs, q_fs, af_fs, open_fs)
+                                if (open_fs) then
+                                    aN(ii,jj,kk) = aN(ii,jj,kk) + a_fs
+                                    lcoef(ii,jj,kk) = lcoef(ii,jj,kk) + a_fs
+                                    lcoef_th(ii,jj,kk) = lcoef_th(ii,jj,kk) + a_fs
+                                    Su(ii,jj,kk) = Su(ii,jj,kk) - q_fs
+                                    flux_ref = flux_ref + abs(q_fs)
+                                    if (export) then
+                                        Fs_th(ii,jj,kk) = q_fs; ac_th(ii,jj,kk) = a_fs
+                                        ws_Fc_lk_th(ii,jj,kk) = 1; ws_Fc_af_th(ii,jj,kk) = af_fs
+                                    end if
+                                end if
                             end if
                         end if
 
@@ -677,10 +883,27 @@ contains
                                 + d_f * (0.5_dp*(gz(ii,jj,kk-1) + gz(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii,jj,kk-1)) / delta &
                                          - merge(liq_weight_f(ii,jj,kk-1,kk), 0.0_dp, isg))
-                            if (face_open(isg, u_f, rm(ii,jj,kk-1), rm(ii,jj,kk))) then
+                            fl = face_lim(isg, u_f, ii,jj,kk-1, ii,jj,kk)
+                            if (fl > 0.0_dp) then
+                            af = af * fl
                             aB(ii,jj,kk) = aB(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk-1) / delta
+                            if (.not. isg) then
+                                lcoef(ii,jj,kk) = lcoef(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk-1) / delta
+                                lcoef_z(ii,jj,kk) = lcoef_z(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk-1) / delta
+                            end if
                             Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Az(ii,jj,kk-1)
                             flux_ref = flux_ref + abs(af * u_f * m%Az(ii,jj,kk-1))
+                            end if
+                        else if (fs_on) then
+                            if (fs_cell(ii,jj,kk-1)) then
+                                call fs_face(ii, jj, kk, 3, -1, a_fs, q_fs, af_fs, open_fs)
+                                if (open_fs) then
+                                    aB(ii,jj,kk) = aB(ii,jj,kk) + a_fs
+                                    lcoef(ii,jj,kk) = lcoef(ii,jj,kk) + a_fs
+                                    lcoef_z(ii,jj,kk) = lcoef_z(ii,jj,kk) + a_fs
+                                    Su(ii,jj,kk) = Su(ii,jj,kk) + q_fs
+                                    flux_ref = flux_ref + abs(q_fs)
+                                end if
                             end if
                         end if
 
@@ -694,21 +917,201 @@ contains
                                 + d_f * (0.5_dp*(gz(ii,jj,kk) + gz(ii,jj,kk+1)) &
                                          - (pf(ii,jj,kk+1) - pf(ii,jj,kk)) / delta &
                                          - merge(liq_weight_f(ii,jj,kk,kk+1), 0.0_dp, isg))
-                            if (face_open(isg, u_f, rm(ii,jj,kk), rm(ii,jj,kk+1))) then
+                            fl = face_lim(isg, u_f, ii,jj,kk, ii,jj,kk+1)
+                            if (fl > 0.0_dp) then
+                            af = af * fl
                             aT(ii,jj,kk) = aT(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk) / delta
+                            if (.not. isg) then
+                                lcoef(ii,jj,kk) = lcoef(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk) / delta
+                                lcoef_z(ii,jj,kk) = lcoef_z(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk) / delta
+                            end if
                             Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Az(ii,jj,kk)
                             flux_ref = flux_ref + abs(af * u_f * m%Az(ii,jj,kk))
                             if (export) then
                                 Fs_z(ii,jj,kk) = af * u_f * m%Az(ii,jj,kk)
                                 ac_z(ii,jj,kk) = af * d_f * m%Az(ii,jj,kk) / delta
                                 ws_Fc_lk_z(ii,jj,kk) = 1
+                                ws_Fc_af_z(ii,jj,kk) = af
                             end if
+                            end if
+                        else if (fs_on) then
+                            if (fs_cell(ii,jj,kk+1)) then
+                                call fs_face(ii, jj, kk, 3, +1, a_fs, q_fs, af_fs, open_fs)
+                                if (open_fs) then
+                                    aT(ii,jj,kk) = aT(ii,jj,kk) + a_fs
+                                    lcoef(ii,jj,kk) = lcoef(ii,jj,kk) + a_fs
+                                    lcoef_z(ii,jj,kk) = lcoef_z(ii,jj,kk) + a_fs
+                                    Su(ii,jj,kk) = Su(ii,jj,kk) - q_fs
+                                    flux_ref = flux_ref + abs(q_fs)
+                                    if (export) then
+                                        Fs_z(ii,jj,kk) = q_fs; ac_z(ii,jj,kk) = a_fs
+                                        ws_Fc_lk_z(ii,jj,kk) = 1; ws_Fc_af_z(ii,jj,kk) = af_fs
+                                    end if
+                                end if
                             end if
                         end if
                     end do
                 end do
             end do
         end subroutine add_phase_contribution
+
+        !-----------------------------------------------------------------------
+        ! D2.6: cara de SUPERFICIE LIBRE del liquido entre la celda de liquido
+        ! continuo L y su vecina fluida sin liquido continuo N (gas, gas con
+        ! niebla), en la direccion dir (1 r, 2 theta, 3 z) y el lado sgn
+        ! (+1: N es la vecina +, -1: la vecina -). Rhie-Chow UNILATERAL desde
+        ! L con el MISMO gradiente de superficie libre que el predictor
+        ! (D2.5: presion de N en la cara, distancia centro-cara):
+        !     u_f = u_L + d_L [ g_L - (p_N - p_L)/(sgn delta) ],   d_L = alpha_L V_L/aP_L
+        ! (con el gradiente unilateral de L el corchete es cero: u_f = u_L,
+        ! la velocidad de la celda es la velocidad de su superficie).
+        ! Coeficiente a = alpha_L d_L A/delta; flujo Q = alpha_L u_f A
+        ! (orientado hacia +). La cara es DONANTE: solo cede liquido de L a N
+        ! (sgn u_f >= 0); nada entra desde N, que no tiene liquido continuo.
+        ! La cara SUPERIOR solo se abre con L LLENA (fs_full): el liquido se
+        ! estratifica dentro de la celda y su superficie no toca la cara
+        ! superior hasta que no queda gas. Hueco de la receptora (F2.8) y
+        ! limitador (D2.2) como en cualquier cara (face_lim).
+        ! Lo que no se puede hacer: la media simetrica 1/2(u_L + u_N): u_N es
+        ! el drift del liquido disperso de la celda de gas (-49.7 m/s de
+        ! sedimentacion), el caudal fantasma de F2.24.
+        !-----------------------------------------------------------------------
+        subroutine fs_face(iL, jL, kL, dir, sgn, a, q, afd, open)
+            integer,  intent(in)  :: iL, jL, kL, dir, sgn
+            real(dp), intent(out) :: a, q, afd
+            logical,  intent(out) :: open
+            integer  :: iN, jN, kN
+            real(dp) :: dL, delta, area, u_f, fl
+            a = 0.0_dp; q = 0.0_dp; afd = 0.0_dp; open = .false.
+            iN = iL; jN = jL; kN = kL
+            select case (dir)
+            case (1)
+                iN = iL + sgn
+                dL = liq%alpha(iL,jL,kL) * m%vol(iL,jL,kL) / max(liq%aP_ur(iL,jL,kL), SMALL)
+                if (sgn > 0) then
+                    delta = m%rf(iL) - m%r(iL);  area = m%Ar(iL,jL,kL)
+                else
+                    delta = m%r(iL) - m%rf(iL-1); area = m%Ar(iL-1,jL,kL)
+                end if
+                u_f = liq%ur(iL,jL,kL) + dL * (gpr(iL,jL,kL) &
+                      - (sh%p(iN,jN,kN) - sh%p(iL,jL,kL)) / (real(sgn,dp) * delta))
+            case (2)
+                jN = jL + sgn
+                dL = liq%alpha(iL,jL,kL) * m%vol(iL,jL,kL) / max(liq%aP_uth(iL,jL,kL), SMALL)
+                if (sgn > 0) then
+                    delta = m%r(iL) * (m%thetaf(jL) - m%theta(jL))
+                else
+                    delta = m%r(iL) * (m%theta(jL) - m%thetaf(jL-1))
+                end if
+                area = m%Ath(iL,jL,kL)
+                u_f = liq%uth(iL,jL,kL) + dL * (gpth(iL,jL,kL) &
+                      - (sh%p(iN,jN,kN) - sh%p(iL,jL,kL)) / (real(sgn,dp) * delta))
+            case default
+                kN = kL + sgn
+                dL = liq%alpha(iL,jL,kL) * m%vol(iL,jL,kL) / max(liq%aP_uz(iL,jL,kL), SMALL)
+                if (sgn > 0) then
+                    delta = m%zf(kL) - m%z(kL);  area = m%Az(iL,jL,kL)
+                else
+                    delta = m%z(kL) - m%zf(kL-1); area = m%Az(iL,jL,kL-1)
+                end if
+                u_f = liq%uz(iL,jL,kL) + dL * (gpz(iL,jL,kL) &
+                      - (sh%p(iN,jN,kN) - sh%p(iL,jL,kL)) / (real(sgn,dp) * delta))
+            end select
+            if (delta <= 0.0_dp) return
+            ! Donante: solo de L hacia N
+            open = (real(sgn,dp) * u_f >= 0.0_dp)
+            if (.not. open) return
+            ! Cara superior: solo con L llena
+            if (dir == 3 .and. sgn > 0) open = fs_full(iL, jL, kL)
+            if (.not. open) return
+            ! Hueco de la receptora (F2.8) y limitador (D2.2): (lo, hi) por orientacion
+            if (sgn > 0) then
+                fl = face_lim(.false., u_f, iL,jL,kL, iN,jN,kN)
+            else
+                fl = face_lim(.false., u_f, iN,jN,kN, iL,jL,kL)
+            end if
+            open = (fl > 0.0_dp)
+            if (.not. open) return
+            afd = liq%alpha(iL,jL,kL) * fl
+            a = afd * dL * area / delta
+            q = afd * u_f * area
+        end subroutine fs_face
+
+        ! Celda de liquido LLENA (D2.6): sin gas por encima del residual. En
+        ! el lecho, hueco de poro agotado (ws_liq_room); fuera, gas < eps.
+        pure logical function fs_full(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            fs_full = (gas%alpha(ii,jj,kk) <= FS_FULL_EPS)
+            if (ws_liq_room_valid) fs_full = fs_full .or. (ws_liq_room(ii,jj,kk) <= 1.0e-4_dp)
+        end function fs_full
+
+        ! Lado del GAS de las caras de superficie libre (D2.6): la celda G
+        ! (fluida, sin liquido continuo) recibe el coeficiente simetrico y el
+        ! flujo de cada vecina de liquido continuo L. Las caras + de G
+        ! (vecina al Este/Norte/Tope) las exporta G, como cualquier cara +.
+        subroutine fs_gas_side(iG, jG, kG)
+            integer, intent(in) :: iG, jG, kG
+            real(dp) :: a, q, afd
+            logical  :: op
+            ! r
+            if (link(act_l, iG-1, jG, kG)) then
+                call fs_face(iG-1, jG, kG, 1, +1, a, q, afd, op)
+                if (op) then
+                    aW(iG,jG,kG) = aW(iG,jG,kG) + a
+                    Su(iG,jG,kG) = Su(iG,jG,kG) + q
+                    flux_ref = flux_ref + abs(q)
+                end if
+            end if
+            if (link(act_l, iG+1, jG, kG)) then
+                call fs_face(iG+1, jG, kG, 1, -1, a, q, afd, op)
+                if (op) then
+                    aE(iG,jG,kG) = aE(iG,jG,kG) + a
+                    Su(iG,jG,kG) = Su(iG,jG,kG) - q
+                    flux_ref = flux_ref + abs(q)
+                    Fs_r(iG,jG,kG) = q; ac_r(iG,jG,kG) = a
+                    ws_Fc_lk_r(iG,jG,kG) = 1; ws_Fc_af_r(iG,jG,kG) = afd
+                end if
+            end if
+            ! theta
+            if (link(act_l, iG, jG-1, kG)) then
+                call fs_face(iG, jG-1, kG, 2, +1, a, q, afd, op)
+                if (op) then
+                    aS(iG,jG,kG) = aS(iG,jG,kG) + a
+                    Su(iG,jG,kG) = Su(iG,jG,kG) + q
+                    flux_ref = flux_ref + abs(q)
+                end if
+            end if
+            if (link(act_l, iG, jG+1, kG)) then
+                call fs_face(iG, jG+1, kG, 2, -1, a, q, afd, op)
+                if (op) then
+                    aN(iG,jG,kG) = aN(iG,jG,kG) + a
+                    Su(iG,jG,kG) = Su(iG,jG,kG) - q
+                    flux_ref = flux_ref + abs(q)
+                    Fs_th(iG,jG,kG) = q; ac_th(iG,jG,kG) = a
+                    ws_Fc_lk_th(iG,jG,kG) = 1; ws_Fc_af_th(iG,jG,kG) = afd
+                end if
+            end if
+            ! z
+            if (link(act_l, iG, jG, kG-1)) then
+                call fs_face(iG, jG, kG-1, 3, +1, a, q, afd, op)
+                if (op) then
+                    aB(iG,jG,kG) = aB(iG,jG,kG) + a
+                    Su(iG,jG,kG) = Su(iG,jG,kG) + q
+                    flux_ref = flux_ref + abs(q)
+                end if
+            end if
+            if (link(act_l, iG, jG, kG+1)) then
+                call fs_face(iG, jG, kG+1, 3, -1, a, q, afd, op)
+                if (op) then
+                    aT(iG,jG,kG) = aT(iG,jG,kG) + a
+                    Su(iG,jG,kG) = Su(iG,jG,kG) - q
+                    flux_ref = flux_ref + abs(q)
+                    Fs_z(iG,jG,kG) = q; ac_z(iG,jG,kG) = a
+                    ws_Fc_lk_z(iG,jG,kG) = 1; ws_Fc_af_z(iG,jG,kG) = afd
+                end if
+            end if
+        end subroutine fs_gas_side
+
 
 
         ! Gradientes de celda de un campo de presion (ver arriba)
@@ -727,20 +1130,26 @@ contains
                     ! Gradientes con las celdas SIN fluido tratadas como
                     ! pared (Bug 16): su presion no es de fluido y entraba
                     ! al termino de Rhie-Chow del propio Poisson.
-                    gr(i,j,k) = pgrad(pfld(i-1,j,k), pfld(i,j,k), pfld(i+1,j,k), &
+                    ! D2.5: para el LIQUIDO, la vecina fluida sin liquido
+                    ! continuo (superficie libre) aporta su presion en la cara
+                    gr(i,j,k) = pgrad_fs(pfld(i-1,j,k), pfld(i,j,k), pfld(i+1,j,k), &
                                        m%r(i-1), m%r(i), m%r(i+1), &
                                        i > istart .and. pv_cell(i-1,j,k), &
-                                       i < iend   .and. pv_cell(i+1,j,k))
+                                       i < iend   .and. pv_cell(i+1,j,k), &
+                                       fs_cell(i-1,j,k), fs_cell(i+1,j,k), m%rf(i-1), m%rf(i))
 
-                    gth(i,j,k) = pgrad(pfld(i,jm,k), pfld(i,j,k), pfld(i,jp,k), &
+                    gth(i,j,k) = pgrad_fs(pfld(i,jm,k), pfld(i,j,k), pfld(i,jp,k), &
                                         m%r(i) * m%theta(jm), m%r(i) * m%theta(j), &
                                         m%r(i) * m%theta(jp), &
-                                        pv_cell(i,jm,k), pv_cell(i,jp,k))
+                                        pv_cell(i,jm,k), pv_cell(i,jp,k), &
+                                        fs_cell(i,jm,k), fs_cell(i,jp,k), &
+                                        m%r(i) * m%thetaf(jm), m%r(i) * m%thetaf(j))
 
-                    gz(i,j,k) = pgrad(pfld(i,j,k-1), pfld(i,j,k), pfld(i,j,k+1), &
+                    gz(i,j,k) = pgrad_fs(pfld(i,j,k-1), pfld(i,j,k), pfld(i,j,k+1), &
                                        m%z(k-1), m%z(k), m%z(k+1), &
                                        (k > kstart .or. .not. at_zmin) .and. pv_cell(i,j,k-1), &
-                                       (k < kend   .or. .not. at_zmax) .and. pv_cell(i,j,k+1))
+                                       (k < kend   .or. .not. at_zmax) .and. pv_cell(i,j,k+1), &
+                                       fs_cell(i,j,k-1), fs_cell(i,j,k+1), m%zf(k-1), m%zf(k))
                     if (isg) gz(i,j,k) = gas_gz(pfld, i, j, k, &
                                        (k > kstart .or. .not. at_zmin) .and. pv_cell(i,j,k-1), &
                                        (k < kend   .or. .not. at_zmax) .and. pv_cell(i,j,k+1))
@@ -767,6 +1176,41 @@ contains
             if (u_f > 0.0_dp .and. room_pos <= ROOM_EPS) face_open = .false.
             if (u_f < 0.0_dp .and. room_neg <= ROOM_EPS) face_open = .false.
         end function face_open
+
+        ! Factor de la cara del liquido en el Poisson (Plan D D2.2): la
+        ! fraccion de la entrada que CUPO en la celda receptora (segun el
+        ! signo de u_f) en el ultimo transporte de alpha de ESTE paso.
+        ! Escala coeficiente y Q* a la vez (la ecuacion de presion pide por
+        ! esa cara exactamente lo que el limitador dejara pasar: el poro
+        ! lleno deja de ser un "numerical dead end" que solo la presion
+        ! puede cerrar). 0 = cara cerrada (F2.8). 1 = sin limitador.
+        function face_lim(isg, u_f, in_, jn_, kn_, ip_, jp_, kp_) result(fl)
+            logical,  intent(in) :: isg
+            real(dp), intent(in) :: u_f
+            integer,  intent(in) :: in_, jn_, kn_, ip_, jp_, kp_
+            real(dp) :: fl
+            fl = 1.0_dp
+            if (isg) return
+            if (.not. face_open(isg, u_f, rm(in_,jn_,kn_), rm(ip_,jp_,kp_))) then
+                fl = 0.0_dp
+                return
+            end if
+            if (.not. cfg%pc_limiter_faces) return
+            if (.not. ws_lim_step_valid) return
+            if (ws_lim_step_id /= probe_current_step()) return
+            ! Cierre BINARIO (D2.2c): la cara hacia una celda cuya entrada
+            ! pedida NO cupo en mas de (1 - pc_lim_dead) se cierra del todo
+            ! (a = 0, Q* = 0). El escalado continuo (D2.2) dejaba la celda
+            ! con caras residuales: no quedaba sellada, el momento de la
+            ! donante seguia diferenciando a traves de ella y cayendo.
+            ! Con el cierre binario la celda muerta se sella, D2.2b la vuelve
+            ! pared y la columna de arriba se queda hidrostatica.
+            if (u_f > 0.0_dp) then
+                if (ws_lim_step(ip_,jp_,kp_) < cfg%pc_lim_dead) fl = 0.0_dp
+            else if (u_f < 0.0_dp) then
+                if (ws_lim_step(in_,jn_,kn_) < cfg%pc_lim_dead) fl = 0.0_dp
+            end if
+        end function face_lim
 
         pure function rm(ii, jj, kk) result(r)
             integer, intent(in) :: ii, jj, kk
@@ -804,23 +1248,36 @@ contains
     ! Correct velocities using pressure correction gradient (esténcil central
     ! de celda; el suavizado de cara lo aporta Rhie-Chow en la divergencia)
     !---------------------------------------------------------------------------
-    subroutine correct_velocities(ph, sh, m, act)
+    subroutine correct_velocities(ph, sh, m, act, pv, fs, consistent, op_r, op_th, op_z, use_fs)
         type(phase_t), intent(inout) :: ph
         type(shared_t), intent(in)   :: sh
         type(mesh_t), intent(in)     :: m
         logical, intent(in)  :: act(-1:,-1:,-1:)
+        ! D2.6: celda con presion de fluido para ESTA fase (pared si no, Bug
+        ! 16/D2.2b) y vecina de superficie libre (D2.5, solo liquido): las
+        ! MISMAS mascaras que uso el predictor de momento de este outer
+        logical, intent(in)  :: pv(-1:,-1:,-1:), fs(-1:,-1:,-1:)
+        ! .false. = estencil central crudo (anterior a D2.6)
+        logical, intent(in)  :: consistent
+        ! D2.6 regla cinematica (solo liquido): caras abiertas por direccion;
+        ! sin cara abierta la componente queda en cero
+        logical, intent(in), optional :: op_r(-1:,-1:,-1:), op_th(-1:,-1:,-1:), op_z(-1:,-1:,-1:)
+        logical, intent(in), optional :: use_fs
 
         integer :: i, j, k, jm, jp
         integer :: istart, iend, jstart, jend, kstart, kend
         ! d = alpha V/aP (F2.1): mismo operador que el predictor (-alpha grad p V)
-        real(dp) :: d_coeff
+        real(dp) :: d_coeff, g, gb, gt
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
-        logical  :: skip_r, skip_z
+        logical  :: skip_r, skip_z, okm, okp, fsm, fsp, wfs, kin
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         ! Correcciones omitidas SOLO en fronteras físicas; en interfaces de
         ! rank se usan los halos de pp (hallazgo 3.6)
         call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
+        wfs = .true.
+        if (present(use_fs)) wfs = use_fs
+        kin = present(op_r) .and. present(op_th) .and. present(op_z)
 
         do k = kstart, kend
             do j = jstart, jend
@@ -832,35 +1289,123 @@ contains
                     ! Sin corrección bajo el umbral hidrodinámico (C2.2)
                     if (.not. act(i,j,k)) cycle
 
-                    ! u_r correction
-                    skip_r = (i == istart .and. at_rmin) .or. &
-                             (i == iend   .and. at_rmax)
-                    if (.not. skip_r .and. abs(ph%aP_ur(i,j,k)) > SMALL) then
-                        d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_ur(i,j,k)
-                        ph%ur(i,j,k) = ph%ur(i,j,k) - d_coeff * &
-                            (sh%pp(i+1,j,k) - sh%pp(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
-                    end if
+                    if (.not. consistent) then
+                        ! u_r correction
+                        skip_r = (i == istart .and. at_rmin) .or. &
+                                 (i == iend   .and. at_rmax)
+                        if (.not. skip_r .and. abs(ph%aP_ur(i,j,k)) > SMALL) then
+                            d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_ur(i,j,k)
+                            ph%ur(i,j,k) = ph%ur(i,j,k) - d_coeff * &
+                                (sh%pp(i+1,j,k) - sh%pp(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
+                        end if
 
-                    ! u_theta correction
-                    if (abs(ph%aP_uth(i,j,k)) > SMALL) then
-                        d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_uth(i,j,k)
-                        ph%uth(i,j,k) = ph%uth(i,j,k) - d_coeff * &
-                            (sh%pp(i,jp,k) - sh%pp(i,jm,k)) / &
-                            (m%r(i) * (m%theta(jp) - m%theta(jm)))
-                    end if
+                        ! u_theta correction
+                        if (abs(ph%aP_uth(i,j,k)) > SMALL) then
+                            d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_uth(i,j,k)
+                            ph%uth(i,j,k) = ph%uth(i,j,k) - d_coeff * &
+                                (sh%pp(i,jp,k) - sh%pp(i,jm,k)) / &
+                                (m%r(i) * (m%theta(jp) - m%theta(jm)))
+                        end if
 
-                    ! u_z correction
-                    skip_z = (k == kstart .and. at_zmin) .or. &
-                             (k == kend   .and. at_zmax)
-                    if (.not. skip_z .and. abs(ph%aP_uz(i,j,k)) > SMALL) then
-                        d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_uz(i,j,k)
-                        ph%uz(i,j,k) = ph%uz(i,j,k) - d_coeff * &
-                            (sh%pp(i,j,k+1) - sh%pp(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
+                        ! u_z correction
+                        skip_z = (k == kstart .and. at_zmin) .or. &
+                                 (k == kend   .and. at_zmax)
+                        if (.not. skip_z .and. abs(ph%aP_uz(i,j,k)) > SMALL) then
+                            d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_uz(i,j,k)
+                            ph%uz(i,j,k) = ph%uz(i,j,k) - d_coeff * &
+                                (sh%pp(i,j,k+1) - sh%pp(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
+                        end if
+                    else
+                        ! D2.6: el MISMO operador que el predictor (pgrad_fs con
+                        ! paredes unilaterales y distancia a la cara en la
+                        ! superficie libre; el gas, media de las caras que
+                        ! existen en z como gas_pgrad_z). Con el estencil
+                        ! central crudo, la celda de superficie no sentia su
+                        ! propio pp (pp_N - pp_B no la contiene) y las paredes
+                        ! entraban con pp = 0.
+                        ! (en las fronteras fisicas la componente normal no se
+                        ! resuelve — aP de relleno 1.0 — y tampoco se corrige,
+                        ! como antes; en la celda del eje d = alpha V/1 daba
+                        ! 1e3 m/s con pp de kPa)
+                        skip_r = (i == istart .and. at_rmin) .or. &
+                                 (i == iend   .and. at_rmax)
+                        skip_z = (k == kstart .and. at_zmin) .or. &
+                                 (k == kend   .and. at_zmax)
+                        ! u_r
+                        if (.not. skip_r .and. abs(ph%aP_ur(i,j,k)) > SMALL) then
+                            if (kin) then
+                                if (.not. op_r(i,j,k)) then
+                                    ph%ur(i,j,k) = 0.0_dp
+                                    goto 10
+                                end if
+                            end if
+                            okm = (i > 1) .and. pv(i-1,j,k)
+                            okp = (i < iend) .and. pv(i+1,j,k)
+                            fsm = wfs .and. fs(i-1,j,k); fsp = wfs .and. fs(i+1,j,k)
+                            g = pgrad_fs(sh%pp(i-1,j,k), sh%pp(i,j,k), sh%pp(i+1,j,k), &
+                                         m%r(i-1), m%r(i), m%r(i+1), okm, okp, fsm, fsp, &
+                                         m%rf(i-1), m%rf(i))
+                            d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_ur(i,j,k)
+                            ph%ur(i,j,k) = ph%ur(i,j,k) - d_coeff * g
+                        end if
+10                      continue
+                        ! u_theta
+                        if (abs(ph%aP_uth(i,j,k)) > SMALL) then
+                            if (kin) then
+                                if (.not. op_th(i,j,k)) then
+                                    ph%uth(i,j,k) = 0.0_dp
+                                    goto 20
+                                end if
+                            end if
+                            okm = pv(i,jm,k); okp = pv(i,jp,k)
+                            fsm = wfs .and. fs(i,jm,k); fsp = wfs .and. fs(i,jp,k)
+                            g = pgrad_fs(sh%pp(i,jm,k), sh%pp(i,j,k), sh%pp(i,jp,k), &
+                                         m%r(i) * m%theta(jm), m%r(i) * m%theta(j), &
+                                         m%r(i) * m%theta(jp), okm, okp, fsm, fsp, &
+                                         m%r(i) * m%thetaf(jm), m%r(i) * m%thetaf(j))
+                            d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_uth(i,j,k)
+                            ph%uth(i,j,k) = ph%uth(i,j,k) - d_coeff * g
+                        end if
+20                      continue
+                        ! u_z
+                        if (.not. skip_z .and. abs(ph%aP_uz(i,j,k)) > SMALL) then
+                            if (kin) then
+                                if (.not. op_z(i,j,k)) then
+                                    ph%uz(i,j,k) = 0.0_dp
+                                    goto 30
+                                end if
+                            end if
+                            okm = (k > kstart .or. .not. at_zmin) .and. pv(i,j,k-1)
+                            okp = (k < kend   .or. .not. at_zmax) .and. pv(i,j,k+1)
+                            if (wfs) then
+                                g = pgrad_fs(sh%pp(i,j,k-1), sh%pp(i,j,k), sh%pp(i,j,k+1), &
+                                             m%z(k-1), m%z(k), m%z(k+1), okm, okp, &
+                                             fs(i,j,k-1), fs(i,j,k+1), m%zf(k-1), m%zf(k))
+                            else
+                                ! gas: media de las caras existentes (gas_pgrad_z sin pesos)
+                                gb = 0.0_dp; gt = 0.0_dp
+                                if (okm) gb = (sh%pp(i,j,k) - sh%pp(i,j,k-1)) / (m%z(k) - m%z(k-1))
+                                if (okp) gt = (sh%pp(i,j,k+1) - sh%pp(i,j,k)) / (m%z(k+1) - m%z(k))
+                                if (okm .and. okp) then
+                                    g = 0.5_dp * (gb + gt)
+                                else if (okp) then
+                                    g = gt
+                                else if (okm) then
+                                    g = gb
+                                else
+                                    g = 0.0_dp
+                                end if
+                            end if
+                            d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_uz(i,j,k)
+                            ph%uz(i,j,k) = ph%uz(i,j,k) - d_coeff * g
+                        end if
+30                      continue
                     end if
                 end do
             end do
         end do
 
     end subroutine correct_velocities
+
 
 end module mod_pressure_3d

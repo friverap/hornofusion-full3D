@@ -102,6 +102,13 @@ DEFS = {
                              "[kg]; subset of m\\_melted"),
     "E_resid_closed": ("C", "Enthalpy handed with that residual [J]; subset "
                              "of E\\_melt\\_from\\_solid"),
+    "vol_dalpha_outer": ("D", "Liquid volume moved between the incoming outer "
+                               "iterate and the transported fraction, last outer "
+                               "iteration [m$^3$] (lag of $\\alpha$ in the pressure equation)"),
+    "vol_lim": ("D", "Liquid inflow blocked by the pore-capacity limiter, last "
+                     "outer iteration [m$^3$]"),
+    "vol_unlinked": ("D", "Liquid volume crossing faces not linked in the pressure "
+                          "equation (dispersed/drift), last outer iteration [m$^3$]"),
     "m_spill": ("C", "Liquid displaced upward by the conservative spill of "
                      "volume-constraint excess [kg] (informative; no mass "
                      "error)"),

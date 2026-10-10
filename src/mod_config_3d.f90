@@ -79,6 +79,14 @@ contains
         ! porque bajo el umbral la velocidad era 0 y la gravedad no actuaba.
         cfg%d_droplet  = 2.0e-3_dp
         cfg%charge_recipe_file = 'input/charge_recipe.dat'
+        cfg%pc_limiter_faces = .false.   ! D2.2/D2.2c: perjudicial en el banco (ver dev-history Plan D)
+        cfg%pc_liq_sealed_wall = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
+        cfg%pc_lim_dead = 0.5_dp
+        cfg%alpha_g_comp_min = 0.0_dp
+        cfg%pc_fs_liquid_gradient = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
+        cfg%pc_fs_liquid_face = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
+        cfg%pc_consistent_corrector = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
+        cfg%pc_liq_closed_dir = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
         ! dt adaptativo <= safety * tau_interfase (0 = desactivado): evita
         ! operar en el régimen de clamp/equilibrio local (S5-dpart, B1)
         cfg%iph_dt_safety = 0.5_dp
@@ -281,6 +289,14 @@ contains
         case ('d_particle'); call parse_real(val, key, cfg%d_particle)
         case ('d_droplet');  call parse_real(val, key, cfg%d_droplet)
         case ('charge_recipe_file'); cfg%charge_recipe_file = val
+        case ('pc_limiter_faces'); cfg%pc_limiter_faces = parse_bool(val)
+        case ('pc_liq_sealed_wall'); cfg%pc_liq_sealed_wall = parse_bool(val)
+        case ('pc_lim_dead'); call parse_real(val, key, cfg%pc_lim_dead)
+        case ('alpha_g_comp_min'); call parse_real(val, key, cfg%alpha_g_comp_min)
+        case ('pc_fs_liquid_gradient'); cfg%pc_fs_liquid_gradient = parse_bool(val)
+        case ('pc_fs_liquid_face'); cfg%pc_fs_liquid_face = parse_bool(val)
+        case ('pc_consistent_corrector'); cfg%pc_consistent_corrector = parse_bool(val)
+        case ('pc_liq_closed_dir'); cfg%pc_liq_closed_dir = parse_bool(val)
         case ('iph_dt_safety'); call parse_real(val, key, cfg%iph_dt_safety)
         case ('probe_step_from'); call parse_int(val, key, cfg%probe_step_from)
         case ('probe_step_to');   call parse_int(val, key, cfg%probe_step_to)

@@ -57,6 +57,14 @@ module mod_types_3d
         ! fija su velocidad terminal de sedimentacion (0 = sin sedimentacion)
         real(dp) :: d_droplet
         character(len=256) :: charge_recipe_file   ! receta de carga (D0, oct-2026)
+        logical :: pc_limiter_faces   ! Plan D D2.2: el Poisson escala sus caras de liquido con el limitador de hueco
+        logical :: pc_fs_liquid_gradient ! Plan D D2.5: gradiente del liquido con la presion del gas en la cara (superficie libre)
+        real(dp) :: alpha_g_comp_min ! Plan D D2.4: piso de compliancia acustica en celdas con liquido activo (0 = off)
+        real(dp) :: pc_lim_dead       ! Plan D D2.2c: umbral del limitador bajo el cual la celda es callejon sin salida
+        logical :: pc_liq_sealed_wall ! Plan D D2.2b: celda sellada para el liquido = pared de su gradiente de presion
+        logical :: pc_fs_liquid_face  ! Plan D D2.6: la superficie libre es cara de liquido (unilateral) del Poisson
+        logical :: pc_consistent_corrector ! Plan D D2.6: corrector de velocidad con el operador de gradiente del predictor
+        logical :: pc_liq_closed_dir  ! Plan D D2.6: componente del liquido nula sin cara abierta en esa direccion
         real(dp) :: iph_dt_safety
         integer  :: probe_step_from, probe_step_to
         ! Sonda de BALANCE de momento de UNA celda (indices GLOBALES,

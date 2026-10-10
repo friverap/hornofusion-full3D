@@ -1,0 +1,6 @@
+# Receta del banco bed_flood (Plan D, D0): lecho DENSO en el piso (4 niveles a
+# alpha_s 0.85, luego inundado por el heel) y chatarra SUELTA encima (4 niveles
+# a 0.5) que funde y drena hacia el lecho inundado. Malla 12x24x16.
+# bucket  mass[kg]  solid_fraction
+1   200000.0   0.85
+1   190000.0   0.50

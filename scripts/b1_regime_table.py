@@ -33,6 +33,10 @@ RUNS = [
     (r"immobile flooded scrap (a)", os.path.join(CAND, "flood_n5", "audit.csv")),
     (r"immobile flooded scrap (b)", os.path.join(CAND, "flood_n6", "audit.csv")),
     (r"immobile flooded scrap (c)", os.path.join(CAND, "flood_n7", "audit.csv")),
+    (r"sealed-wall + free-surface grad. + compliance (a)", os.path.join(CAND, "judge_d2_n12", "audit.csv")),
+    (r"sealed-wall + free-surface grad. + compliance (b)", os.path.join(CAND, "judge_d2_n14", "audit.csv")),
+    (r"sealed-wall + free-surface grad. + compliance (c)", os.path.join(CAND, "judge_d2_n15", "audit.csv")),
+    (r"+ free-surface face, consistent corrector, kinematic rule (a)", os.path.join(CAND, "judge_d26_n12", "audit.csv")),
 ]
 
 

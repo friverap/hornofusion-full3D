@@ -186,3 +186,21 @@ otra escala de trabajo.
 - RELAP5/MOD3 Vol. I §3.4.6; TRACE V5.0 Theory Manual cap. 2 (water packing).
 - Manninen M., Taivassalo V., Kallio S. 1996, VTT Publ. 288 (drift-flux).
 - OpenFOAM `multiphaseEulerFoam`: `pU/pEqn.H`, `alphaEqns`, PIMPLE.
+
+## 7. Resultado (cerrado NEGATIVO, 10-oct-2026)
+
+D0 reprodujo el régimen en minutos (`bed_flood`, en la matriz de `test-full`
+con xfail `bath_pv_bounded`). D1 midió los desfases. De D2 se implementaron
+D2.2b (celda sellada = pared), D2.4 (compliancia residual `alpha_g_comp_min`),
+D2.5 (gradiente del líquido a la superficie libre) y D2.6 (cara de superficie
+libre unilateral en el Poisson + corrector consistente + regla cinemática);
+D2.2/D2.2c (caras del limitador) fueron perjudiciales. Todas bajan los picos
+del banco (>100 kPa: 8 → 1 % de los pasos) y ninguna el nivel del poro
+inundado (42 % de pasos > 20 kPa). El juez D5 (v35@300 → 345 s) NO cruza el
+criterio ni con D2.2b+D2.4+D2.5 (tres trayectorias, 63–82 % de pasos > 20 kPa
+en 320–345 s) ni con D2.6 (una trayectoria, 65.7 %, peor en picos y gas).
+Decisión del usuario: consolidar con todas las claves en `false` (el banco
+`bed_flood` las lleva en `true` y documenta el efecto), golden v35. D3, D4,
+D6 no se ejecutaron. La siguiente opción sigue siendo la del §4: acople
+α–p implícito (Newton sobre Σα = 1, Liles & Reed; NEPTUNE_CFD), otra escala
+de trabajo. Detalle en `dev-history/2026-10-07_plan_d_acople_implicito.md`.

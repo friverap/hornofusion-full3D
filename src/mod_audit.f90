@@ -39,6 +39,7 @@ module mod_audit
     public :: AUD_RAD_FOAM
     public :: AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
     public :: AUD_RESID_MASS, AUD_RESID_E, AUD_SPILL_MASS
+    public :: AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -68,7 +69,12 @@ module mod_audit
     integer, parameter :: AUD_RESID_MASS      = 25 ! kg de solido residual cerrados al liquido (subconjunto de m_melted)
     integer, parameter :: AUD_RESID_E         = 26 ! J entregados con ese residuo (subconjunto de E_melt_from_solid)
     integer, parameter :: AUD_SPILL_MASS      = 27 ! kg de liquido derramados hacia arriba (conservativo; informativo)
-    integer, parameter :: N_AUD = 27
+    ! Plan D, D1 (oct-2026): desfases del acople alpha-p, por paso (ultima
+    ! iteracion externa), en m3 de liquido
+    integer, parameter :: AUD_VOL_DALPHA      = 28 ! m3: sum |alpha_l(tras transporte) - alpha_l(iterado entrante)| V
+    integer, parameter :: AUD_VOL_LIM         = 29 ! m3: entrada de liquido BLOQUEADA por el limitador de hueco
+    integer, parameter :: AUD_VOL_UNLINKED    = 30 ! m3: flujo de liquido por caras NO enlazadas en el Poisson (disperso/drift)
+    integer, parameter :: N_AUD = 30
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -147,6 +153,7 @@ contains
                 'm_fe_yield,m_fe_return,E_slag_ox,E_slag_red,E_rad_foam,' // &
                 'E_iph_sol,E_iph_gas,E_iph_liq,' // &
                 'm_resid_closed,E_resid_closed,m_spill,' // &
+                'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max'
             close(iu)
         end if
@@ -273,7 +280,7 @@ contains
                  action='write', position='append')
             ! ES17.9E3: sin E3 un valor < 1e-99 imprime '6.678-178' (sin la
             ! E) y rompe el CSV (B1 v9, m_alpha_clip subnormal)
-            write(iu, '(I0,A,ES17.9E3,A,ES17.9E3,50(A,ES17.9E3))') &
+            write(iu, '(I0,A,ES17.9E3,A,ES17.9E3,60(A,ES17.9E3))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &
@@ -295,6 +302,7 @@ contains
                 ',', a(AUD_RAD_FOAM), &
                 ',', a(AUD_IPH_SOL), ',', a(AUD_IPH_GAS), ',', a(AUD_IPH_LIQ), &
                 ',', a(AUD_RESID_MASS), ',', a(AUD_RESID_E), ',', a(AUD_SPILL_MASS), &
+                ',', a(AUD_VOL_DALPHA), ',', a(AUD_VOL_LIM), ',', a(AUD_VOL_UNLINKED), &
                 ',', mx_glob(1), ',', mx_glob(2), ',', mx_glob(3)
             close(iu)
         end if

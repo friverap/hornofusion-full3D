@@ -331,6 +331,27 @@ contains
     end function pgrad
 
     !---------------------------------------------------------------------------
+    ! Gradiente de presion del LIQUIDO con SUPERFICIE LIBRE (Plan D D2.5,
+    ! oct-2026): si la vecina es fluido pero no tiene liquido continuo (gas,
+    ! gas con niebla), su presion es la del gas EN LA CARA (continuidad de
+    ! presion en la interfase, sin tension superficial): la distancia del
+    ! gradiente llega hasta la cara xf, no hasta el centro de la vecina. Con
+    ! el centro, la celda superficial de una columna hidrostatica exacta
+    ! sentia (0 - 3/2 rho g dz)/(2 dz) = 3/4 rho g y caia a g/4 (bath_rest:
+    ! corriente fantasma; bed_flood: la superficie drenaba a -1.5 m/s hacia
+    ! la celda de abajo hasta llenarla y reventarla, water packing). Con la
+    ! cara: (0 - 3/2 rho g dz)/(3/2 dz) = rho g, exacto.
+    !---------------------------------------------------------------------------
+    pure function pgrad_fs(pm, p0, pp_, xm, x0, xp, okm, okp, fsm, fsp, xfm, xfp) result(g)
+        real(dp), intent(in) :: pm, p0, pp_, xm, x0, xp, xfm, xfp
+        logical,  intent(in) :: okm, okp, fsm, fsp
+        real(dp) :: g, xm_e, xp_e
+        xm_e = merge(xfm, xm, fsm)
+        xp_e = merge(xfp, xp, fsp)
+        g = pgrad(pm, p0, pp_, xm_e, x0, xp_e, okm, okp)
+    end function pgrad_fs
+
+    !---------------------------------------------------------------------------
     ! Velocidad de PERCOLACION del liquido disperso por el lecho de chatarra:
     ! el punto estacionario de SU PROPIA ecuacion de momento, es decir donde
     ! el arrastre de Ergun iguala el peso boyante:

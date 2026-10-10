@@ -35,6 +35,26 @@ module mod_workspace
     real(dp), allocatable :: ws_Fr(:,:,:), ws_Fth(:,:,:), ws_Fz(:,:,:)
     real(dp), allocatable :: ws_Mr(:,:,:), ws_Mth(:,:,:), ws_Mz(:,:,:)
     real(dp), allocatable :: ws_lim(:,:,:)
+    ! Plan D D2.2: fraccion de la entrada de liquido pedida por el Poisson que
+    ! CUPO en la celda en el ultimo transporte de alpha del paso (agregado de
+    ! los sub-pasos; 1 donde no hubo entrada). El Poisson de la iteracion
+    ! externa siguiente escala con ella sus caras de liquido hacia la celda.
+    ! Solo vale dentro del paso en que se calculo (ws_lim_step_id): sin
+    ! estado entre pasos => nada que persistir en el reinicio.
+    real(dp), allocatable :: ws_lim_step(:,:,:)
+    ! Plan D D2.2b: celdas con presion de fluido PARA EL LIQUIDO. Falsa en la
+    ! celda cuyo liquido quedo sin ninguna cara abierta en el ultimo Poisson
+    ! del paso (hidraulicamente sellada para el liquido, tenga o no gas): es
+    ! PARED para el gradiente de presion del liquido (diferencia unilateral)
+    ! y su liquido no se mueve. Sin ella, la celda de bano sobre un poro
+    ! lleno diferenciaba a traves de la presion rancia del poro y caia a g/2
+    ! contra una cara cerrada (bed_flood: sonda [PROBE-MOM], presion/grav 0.7).
+    ! Solo vale dentro del paso (ws_pv_liq_id): sin estado en el reinicio.
+    logical, allocatable :: ws_pv_liq(:,:,:)
+    logical, save :: ws_pv_liq_valid = .false.
+    integer, save :: ws_pv_liq_id = -huge(1)
+    logical, save :: ws_lim_step_valid = .false.
+    integer, save :: ws_lim_step_id = -huge(1)
     logical, save :: ws_flux_valid = .false.
     ! Mascara de LIQUIDO CONTINUO (Bug 15): la calcula multiphase_iteration
     ! (necesita alpha_s) antes de los solves; momentum y presion la leen.
@@ -75,6 +95,15 @@ module mod_workspace
     ! flujo reconstruido de la velocidad efectiva (disperso / drift).
     real(dp), allocatable :: ws_Fc_r(:,:,:), ws_Fc_th(:,:,:), ws_Fc_z(:,:,:)
     integer,  allocatable :: ws_Fc_lk_r(:,:,:), ws_Fc_lk_th(:,:,:), ws_Fc_lk_z(:,:,:)  ! 1 = enlazada
+    ! ws_Fc_af_*: alpha_f que uso el Poisson en esa cara (D2.6): el transporte
+    ! de alpha convierte Q -> rho u_f A dividiendo por EXACTAMENTE esta
+    ! fraccion (en la cara de superficie libre es la de la donante, no la
+    ! media con la celda de gas, que valdria la mitad y doblaria el caudal)
+    real(dp), allocatable :: ws_Fc_af_r(:,:,:), ws_Fc_af_th(:,:,:), ws_Fc_af_z(:,:,:)
+    ! D2.6 regla cinematica: el liquido continuo de la celda tiene alguna
+    ! cara de liquido abierta en esa direccion en el ultimo Poisson del paso
+    ! (vigencia: ws_pv_liq_id). Sin cara abierta la componente es nula.
+    logical, allocatable :: ws_liq_fr(:,:,:), ws_liq_fth(:,:,:), ws_liq_fz(:,:,:)
     logical, save :: ws_Fc_valid = .false.
     ! Correccion de la presion que ve el GAS en una celda de bano (Plan C
     ! F1): p_gas = p + rho_l g_eff dz (1/2 - alpha_l). El Poisson de mezcla
@@ -124,9 +153,11 @@ contains
         allocate(ws_aW(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         allocate(ws_aE, ws_aS, ws_aN, ws_aB, ws_aT, ws_aP, ws_Su, mold=ws_aW)
         allocate(ws_Fr, ws_Fth, ws_Fz, ws_Mr, ws_Mth, ws_Mz, ws_lim, mold=ws_aW)
+        allocate(ws_lim_step, mold=ws_aW); ws_lim_step = 1.0_dp
         allocate(ws_liq_cont(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         ws_liq_cont = .true.
         allocate(ws_liq_cont_prev, ws_pv_active, mold=ws_liq_cont)
+        allocate(ws_pv_liq, mold=ws_liq_cont); ws_pv_liq = .true.
         ws_liq_cont_prev = .true.; ws_pv_active = .true.
         allocate(ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, mold=ws_aW)
         ws_ud_r = 0.0_dp; ws_ud_th = 0.0_dp; ws_ud_z = 0.0_dp; ws_ut = 0.0_dp
@@ -137,6 +168,10 @@ contains
         allocate(ws_Fc_lk_r(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         allocate(ws_Fc_lk_th, ws_Fc_lk_z, mold=ws_Fc_lk_r)
         ws_Fc_lk_r = 0; ws_Fc_lk_th = 0; ws_Fc_lk_z = 0
+        allocate(ws_Fc_af_r, ws_Fc_af_th, ws_Fc_af_z, mold=ws_aW)
+        ws_Fc_af_r = 0.0_dp; ws_Fc_af_th = 0.0_dp; ws_Fc_af_z = 0.0_dp
+        allocate(ws_liq_fr, ws_liq_fth, ws_liq_fz, mold=ws_liq_cont)
+        ws_liq_fr = .true.; ws_liq_fth = .true.; ws_liq_fz = .true.
         allocate(ws_gas_perc, ws_gas_reach, mold=ws_liq_cont)
         ws_gas_perc = .true.; ws_gas_reach = .true.
         allocate(ws_pcorr_g, mold=ws_aW); ws_pcorr_g = 0.0_dp

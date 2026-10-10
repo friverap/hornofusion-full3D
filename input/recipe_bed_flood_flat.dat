@@ -1,0 +1,5 @@
+# bed_flood con piso plano (H_bowl = 0): lecho DENSO en los 3 primeros niveles
+# (alpha_s 0.85, inundado por el heel) y 4 niveles de chatarra suelta (0.5).
+# bucket  mass[kg]  solid_fraction
+1   244000.0   0.85
+1   191000.0   0.50

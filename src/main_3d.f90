@@ -152,6 +152,20 @@ program eaf_3d_simulator
 
     ! Load charge recipe (input/charge_recipe.dat; con fallback al default
     ! si no existe — C4.4: antes el archivo JAMÁS se leía) y perfil V/I
+    ! Una receta NOMBRADA en el config que no existe es un error (con el
+    ! fallback silencioso al default, un banco lanzado desde otro directorio
+    ! corrio la carga por defecto sin avisar, Plan D 7-oct-2026). La ruta por
+    ! defecto conserva el fallback (configs antiguos; test_recipe).
+    block
+        logical :: recipe_ok
+        inquire(file=trim(cfg%charge_recipe_file), exist=recipe_ok)
+        if (.not. recipe_ok .and. trim(cfg%charge_recipe_file) /= 'input/charge_recipe.dat') then
+            if (should_print(mesh)) print '(3A)', ' [INPUT] ERROR: charge_recipe_file "', &
+                trim(cfg%charge_recipe_file), '" no existe (ruta relativa al directorio de trabajo)'
+            call mpi_finalize_topology(mesh%topo)
+            stop 1
+        end if
+    end block
     call read_charge_recipe(cfg, trim(cfg%charge_recipe_file))
     call read_electrode_profile(elec_prof, 'input/electrode_profile.dat')
     if (cfg%solve_ecs) then

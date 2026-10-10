@@ -43,3 +43,11 @@ bath:bath_rest
 #   y baja a 7.0). Se retira cuando se cierre bath_rest: las dos son la
 #   misma corriente.
 bath:bath_hydrostatic
+# --- Banco del lecho inundado (Plan D, D0 2026-10-05) ---
+# Poros del lecho llenos de liquido bajo chatarra que funde: el poro lleno es
+# un "numerical dead end" (water packing, RELAP5 §3.4.6 / TRACE cap. 2) y la
+# presion del lecho sube a 20-60 kPa (>3x la ferrostatica del heel) con
+# rafagas de gas. D2.2b/D2.4/D2.5/D2.6 bajan los picos >100 kPa de 8 a 1 %
+# de los pasos pero no el nivel del poro. Se retira cuando el acople
+# alpha-p lo acote (ver docs/PLAN_D_acople_implicito_alpha_p.md).
+bed_flood:bath_pv_bounded
