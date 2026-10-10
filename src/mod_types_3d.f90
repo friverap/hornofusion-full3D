@@ -65,6 +65,11 @@ module mod_types_3d
         logical :: pc_fs_liquid_face  ! Plan D D2.6: la superficie libre es cara de liquido (unilateral) del Poisson
         logical :: pc_consistent_corrector ! Plan D D2.6: corrector de velocidad con el operador de gradiente del predictor
         logical :: pc_liq_closed_dir  ! Plan D D2.6: componente del liquido nula sin cara abierta en esa direccion
+        integer  :: n_pc_max          ! Plan E E2: pasadas maximas del corrector interno alpha<->p (1 = segregado)
+        real(dp) :: tol_alpha_pc      ! Plan E E2: tolerancia de salida del corrector (max |dalpha| entre pasadas)
+        logical :: pc_spill_source    ! Plan E E2: incluir el derrame en ws_pc_unl (realimenta al reves; off)
+        logical :: pc_drift_source    ! Plan E E2: goteo disperso/derrame como fuente conocida del Poisson (ws_pc_unl)
+        logical :: pc_sat_open        ! Plan E E1: poro saturado = celda incompresible con caras liquido|liquido ABIERTAS (sin cierre F2.8)
         real(dp) :: iph_dt_safety
         integer  :: probe_step_from, probe_step_to
         ! Sonda de BALANCE de momento de UNA celda (indices GLOBALES,
@@ -327,6 +332,8 @@ module mod_types_3d
         real(dp) :: res_cont, res_ur, res_uth, res_uz
         real(dp) :: res_energy, res_tke, res_eps
         integer  :: n_outer
+        integer  :: n_pc        ! Plan E E2: pasadas del corrector alpha<->p en la ultima iteracion externa
+        real(dp) :: dalpha_pc   ! Plan E E2: max |alpha^(ic+1) - alpha^(ic)| al salir
         logical  :: converged
     end type convergence_t
 

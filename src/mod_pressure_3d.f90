@@ -90,6 +90,7 @@ contains
             ws_Fc_af_r, ws_Fc_af_th, ws_Fc_af_z, ws_liq_fr, ws_liq_fth, ws_liq_fz, &
             ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, ws_pv_active, ws_pv_valid, &
             ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
+            ws_pc_unl, ws_pc_unl_valid, ws_pc_unl_id, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, &
             ws_gas_perc, ws_gas_perc_valid
@@ -391,6 +392,28 @@ contains
                 end do
             end do
         end block
+        end if
+
+        ! Plan E E2 (oct-2026): el volumen de liquido que entra por caras que
+        ! esta ecuacion NO enlaza (goteo disperso por la regla del dador,
+        ! derrame), medido en el ultimo transporte de alpha de ESTE paso, es
+        ! una FUENTE conocida: entra como "inflow" y la presion lo evacua por
+        ! las caras enlazadas en la misma iteracion (gas de la celda, o
+        ! liquido si esta saturada). Es el termino de drift-flux de la
+        ! continuidad de mezcla (Manninen 1996). Sin el, el goteo llenaba
+        ! celdas que la presion nunca vio y la diferencia se cobraba como
+        ! presion un paso despues (D1: vol_unlinked, Spearman 0.93 con p_max).
+        if (cfg%pc_drift_source .and. ws_pc_unl_valid .and. &
+            ws_pc_unl_id == probe_current_step()) then
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        if (m%cell_type(i,j,k) == 0) cycle
+                        if (.not. (act_l(i,j,k) .or. act_g(i,j,k))) cycle
+                        Su(i,j,k) = Su(i,j,k) + ws_pc_unl(i,j,k)
+                    end do
+                end do
+            end do
         end if
 
         ! Celdas activas sin contribución de ninguna fase: triviales
@@ -1172,6 +1195,16 @@ contains
             real(dp), intent(in) :: u_f, room_neg, room_pos
             real(dp), parameter :: ROOM_EPS = 1.0e-4_dp
             face_open = .true.
+            ! Plan E E1 (oct-2026): una celda del lecho con el poro LLENO es
+            ! un medio poroso incompresible, no una pared. Sus caras de
+            ! liquido quedan abiertas y su fila, sin almacenamiento, impone
+            ! div(alpha_l u_l) = 0: la presion se propaga por el lecho
+            ! saturado (continuacion hidrostatica) y el liquido lo atraviesa
+            ! a la velocidad de Darcy. Con el cierre F2.8 el lecho inundado
+            ! era pared (F2.29: Neumann), la columna de encima leia 1/2 g y
+            ! caia contra un piso incompresible: golpe de ariete de MPa
+            ! (Plan D D2.2, sonda PROBE-MOM; PLAN_E seccion 2).
+            if (cfg%pc_sat_open) return
             if (isg .or. .not. ws_liq_room_valid) return
             if (u_f > 0.0_dp .and. room_pos <= ROOM_EPS) face_open = .false.
             if (u_f < 0.0_dp .and. room_neg <= ROOM_EPS) face_open = .false.

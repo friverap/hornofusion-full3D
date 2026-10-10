@@ -369,6 +369,7 @@ program eaf_3d_simulator
         conv%res_uth = 0.0_dp
         conv%res_uz = 0.0_dp
         conv%res_cont = 0.0_dp
+        conv%n_pc = 1; conv%dalpha_pc = 0.0_dp
         conv%res_energy = 0.0_dp
         conv%res_tke = 0.0_dp
         conv%res_eps = 0.0_dp

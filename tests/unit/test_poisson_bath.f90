@@ -15,6 +15,10 @@
 !   1. |pp|max <= 1e-9 * rho g H
 !   2. |u_l|max <= 1e-9 * g dt   (aceleracion residual nula)
 !   3. p tras la correccion sigue siendo hidrostatica a 1e-9 relativo
+!   4. flujos conservativos exportados ~0 y todas las caras del bano enlazadas
+!   5. (Plan E E1) bano sobre LECHO SATURADO: la hidrostatica continua a
+!      traves del lecho inundado y nada se mueve (lecho = medio poroso
+!      incompresible, no pared)
 !===============================================================================
 program test_poisson_bath
     use mod_constants
@@ -28,7 +32,7 @@ program test_poisson_bath
     use mod_drag_ergun, only: compute_ergun_drag
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
                              ws_pv_active, ws_pv_valid, ws_Fc_r, ws_Fc_th, ws_Fc_z, &
-                             ws_Fc_lk_z, ws_Fc_valid
+                             ws_Fc_lk_z, ws_Fc_valid, ws_liq_room, ws_liq_room_valid
     implicit none
 
     type(config_t) :: cfg
@@ -137,6 +141,51 @@ program test_poisson_bath
     end if
     if (nlk /= count(mesh%cell_type(1:nr,1:nth,1:nz-1) /= 0 .and. mesh%cell_type(1:nr,1:nth,2:nz) /= 0)) then
         print '(A,I0)', '   FAIL caso 4: caras verticales del bano sin enlazar; enlazadas = ', nlk
+        ok = .false.
+    end if
+
+    ! Caso 5 (Plan E E1, oct-2026): bano en reposo sobre un LECHO SATURADO
+    ! (k <= 3: alpha_s 0.865, poro lleno de liquido, sin gas). Un lecho
+    ! inundado es un medio poroso incompresible: p sigue la hidrostatica A
+    ! TRAVES de el (-alpha grad p + alpha rho g = 0 vale con cualquier alpha)
+    ! y una iteracion momento+presion deja pp ~ 0, u ~ 0 y p intacta. (En
+    ! reposo el cierre F2.8 no actua — solo cierra caras con flujo hacia el
+    ! poro lleno —, asi que este caso guarda la continuacion hidrostatica a
+    ! traves del lecho con cualquier valor de pc_sat_open; lo que E1 cambia
+    ! se juzga en el banco bed_flood.)
+    do k = 1, 3
+        sol%alpha_s(:,:,k) = 0.865_dp
+        liq%alpha(:,:,k)   = 0.135_dp
+        gas%alpha(:,:,k)   = 0.0_dp
+    end do
+    liq%ur = 0.0_dp; liq%uth = 0.0_dp; liq%uz = 0.0_dp
+    liq_old%alpha = liq%alpha; gas_old%alpha = gas%alpha
+    liq_old%ur = 0.0_dp; liq_old%uth = 0.0_dp; liq_old%uz = 0.0_dp
+    sh%p = p_hyd; sh%pp = 0.0_dp
+    ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s); ws_liq_cont_valid = .true.
+    ws_pv_active = (ws_liq_cont .or. gas%alpha >= ALPHA_FLOW_CUTOFF) .and. (mesh%cell_type /= 0)
+    ws_pv_valid = .true.
+    ws_liq_room = liq_cap(sol%alpha_s, slag%alpha_sl) - liq%alpha
+    ws_liq_room_valid = .true.
+    cfg%pc_sat_open = .true.
+    call compute_ergun_drag(liq, sol, mesh, cfg, drag)
+    call solve_momentum_3d(liq, liq_old, gas, Kz, sh, mesh, cfg, liq%alpha, drag, .false., r1, r2, r3)
+    call solve_pressure_correction(liq, gas, gas_old%T, sh, mesh, cfg, res)
+    ppmax = 0.0_dp; umax = 0.0_dp; perr = 0.0_dp
+    do k = 1, nz
+        do j = 1, nth
+            do i = 1, nr
+                if (mesh%cell_type(i,j,k) == 0) cycle
+                ppmax = max(ppmax, abs(sh%pp(i,j,k)))
+                umax  = max(umax, sqrt(liq%ur(i,j,k)**2 + liq%uth(i,j,k)**2 + liq%uz(i,j,k)**2))
+                perr  = max(perr, abs(sh%p(i,j,k) - p_hyd(i,j,k)))
+            end do
+        end do
+    end do
+    if (ppmax > 1.0e-9_dp * scale_p .or. umax > 1.0e-9_dp * GRAVITY * cfg%dt .or. &
+        perr > 1.0e-9_dp * scale_p) then
+        print '(A,ES10.3,A,ES10.3,A,ES10.3)', '   FAIL caso 5 (lecho saturado): |pp|max = ', ppmax, &
+            '  |u_l|max = ', umax, '  |p - p_hyd|max = ', perr
         ok = .false.
     end if
 

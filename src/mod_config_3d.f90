@@ -87,6 +87,11 @@ contains
         cfg%pc_fs_liquid_face = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
         cfg%pc_consistent_corrector = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
         cfg%pc_liq_closed_dir = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
+        cfg%pc_sat_open = .true.          ! Plan E E1 (10-oct-2026)
+        cfg%pc_drift_source = .false.     ! Plan E E2 (10-oct-2026): sin efecto medible en el banco con E1 (e12ns); off
+        cfg%pc_spill_source = .false.
+        cfg%n_pc_max = 1
+        cfg%tol_alpha_pc = 1.0e-6_dp
         ! dt adaptativo <= safety * tau_interfase (0 = desactivado): evita
         ! operar en el régimen de clamp/equilibrio local (S5-dpart, B1)
         cfg%iph_dt_safety = 0.5_dp
@@ -297,6 +302,11 @@ contains
         case ('pc_fs_liquid_face'); cfg%pc_fs_liquid_face = parse_bool(val)
         case ('pc_consistent_corrector'); cfg%pc_consistent_corrector = parse_bool(val)
         case ('pc_liq_closed_dir'); cfg%pc_liq_closed_dir = parse_bool(val)
+        case ('pc_sat_open'); cfg%pc_sat_open = parse_bool(val)
+        case ('pc_drift_source'); cfg%pc_drift_source = parse_bool(val)
+        case ('pc_spill_source'); cfg%pc_spill_source = parse_bool(val)
+        case ('n_pc_max'); call parse_int(val, key, cfg%n_pc_max)
+        case ('tol_alpha_pc'); call parse_real(val, key, cfg%tol_alpha_pc)
         case ('iph_dt_safety'); call parse_real(val, key, cfg%iph_dt_safety)
         case ('probe_step_from'); call parse_int(val, key, cfg%probe_step_from)
         case ('probe_step_to');   call parse_int(val, key, cfg%probe_step_to)
@@ -462,6 +472,8 @@ contains
                      'T_solidus must be < T_liquidus', ok)
         call require(cfg%alpha_u > 0.0_dp .and. cfg%alpha_u <= 1.0_dp, &
                      'alpha_u must be in (0, 1]', ok)
+        call require(cfg%n_pc_max >= 1 .and. cfg%tol_alpha_pc > 0.0_dp, &
+                     'n_pc_max must be >= 1 and tol_alpha_pc > 0', ok)
         call require(cfg%alpha_p > 0.0_dp .and. cfg%alpha_p <= 1.0_dp, &
                      'alpha_p must be in (0, 1]', ok)
         call require(cfg%alpha_T > 0.0_dp .and. cfg%alpha_T <= 1.0_dp, &

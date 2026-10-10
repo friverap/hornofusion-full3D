@@ -22,6 +22,7 @@ module mod_multiphase
     use mod_fields_3d
     use mod_probe, only: probe_report, probe_current_step
     use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
+    use mod_mpi_topology, only: mpi_allreduce_max
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
                              ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, &
                              ws_liq_fr, ws_liq_fth, ws_liq_fz, &
@@ -44,6 +45,11 @@ contains
         real(dp) :: res_ur_l, res_uth_l, res_uz_l
         real(dp) :: res_ur_g, res_uth_g, res_uz_g
         real(dp) :: res_cont, res_energy_l, res_energy_g
+        ! Plan E E2: corrector interno alpha<->p (n_pc_max pasadas)
+        integer  :: ic, n_pc_used
+        integer  :: istart, iend, jstart, jend, kstart, kend
+        real(dp) :: res_ic, dalpha_loc, dalpha_pc
+        real(dp), allocatable :: a_prev(:,:,:)
         real(dp) :: al_c, ag_c, as_e, xb, f_bed, f_disp, K_int, K_disp, rho_mix  ! F2.22
         ! Velocidades del liquido USADAS por el solve del gas (PEA, F2.2)
         real(dp), allocatable :: ul_used_r(:,:,:), ul_used_th(:,:,:), ul_used_z(:,:,:)
@@ -260,9 +266,24 @@ contains
         ! Exchange halos after momentum
         call phase_exchange_halos(gas, m)
 
+        ! Plan E E2 (oct-2026): CORRECTOR INTERNO alpha <-> p. Cada pasada es
+        ! una correccion de presion completa (p += alpha_p pp, u -= d grad pp,
+        ! flujos conservativos exportados) seguida del transporte de alpha
+        ! desde alpha_old con esos flujos; el transporte deja en ws_pc_unl la
+        ! fuente de goteo/derrame y en ws_lim_step lo que cupo, y la pasada
+        ! siguiente los ve. Sale cuando alpha deja de cambiar entre pasadas
+        ! (tol_alpha_pc) o en n_pc_max. Es el lazo alpha-presion de
+        ! NEPTUNE_CFD (Guelfi 2007) con el momento rezagado; n_pc_max = 1
+        ! es el algoritmo segregado de siempre, bit a bit.
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        if (cfg%n_pc_max > 1) allocate(a_prev, mold=liq%alpha)
+        dalpha_pc = 0.0_dp
+        do ic = 1, max(1, cfg%n_pc_max)
         ! Pressure correction de MEZCLA: ambas fases contribuyen y ambas
         ! se corrigen (C2.4)
-        call solve_pressure_correction(liq, gas, gas_old%T, sh, m, cfg, res_cont)
+        call solve_pressure_correction(liq, gas, gas_old%T, sh, m, cfg, res_ic)
+        ! el residual del lazo externo es el del iterado ENTRANTE (Bug 20)
+        if (ic == 1) res_cont = res_ic
 
         ! Cota fisica TAMBIEN tras la correccion de presion: la correccion
         ! u' = u - V*grad(p')/aP con aP diminuto (celda-gota apenas sobre
@@ -281,12 +302,29 @@ contains
 
         ! Volume fraction update
         if (cfg%solve_multiphase) then
+            if (cfg%n_pc_max > 1) a_prev = liq%alpha
             call solve_volume_fraction(liq, gas, sol, slag%alpha_sl, &
                                        liq_old%alpha, m, cfg)
             ! Exchange after volume fraction update
             call phase_exchange_halos(liq, m)
             call phase_exchange_halos(gas, m)
+            if (cfg%n_pc_max > 1) then
+                dalpha_loc = maxval(abs(liq%alpha(istart:iend,jstart:jend,kstart:kend) &
+                                      - a_prev(istart:iend,jstart:jend,kstart:kend)))
+                if (m%is_parallel) then
+                    call mpi_allreduce_max(dalpha_loc, dalpha_pc, m%topo)
+                else
+                    dalpha_pc = dalpha_loc
+                end if
+                if (dalpha_pc < cfg%tol_alpha_pc) exit
+            end if
+        else
+            exit
         end if
+        end do
+        n_pc_used = min(ic, max(1, cfg%n_pc_max))
+        conv%n_pc = n_pc_used; conv%dalpha_pc = dalpha_pc
+        if (cfg%n_pc_max > 1) deallocate(a_prev)
 
         call probe_report('post-alpha    ', liq, gas, sol, sh, m, cfg)
 

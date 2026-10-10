@@ -42,6 +42,15 @@ module mod_workspace
     ! Solo vale dentro del paso en que se calculo (ws_lim_step_id): sin
     ! estado entre pasos => nada que persistir en el reinicio.
     real(dp), allocatable :: ws_lim_step(:,:,:)
+    ! Plan E E2 (oct-2026): volumen de liquido por unidad de tiempo [m3/s]
+    ! que entro a cada celda por caras que el Poisson NO enlazo (goteo
+    ! disperso, regla del dador, derrame) en el ultimo transporte de alpha
+    ! del paso: fuente CONOCIDA de la ecuacion de presion de la iteracion
+    ! siguiente (termino de drift-flux de la continuidad de mezcla). Solo
+    ! vale dentro del paso (ws_pc_unl_id): sin estado en el reinicio.
+    real(dp), allocatable :: ws_pc_unl(:,:,:)
+    logical, save :: ws_pc_unl_valid = .false.
+    integer, save :: ws_pc_unl_id = -huge(1)
     ! Plan D D2.2b: celdas con presion de fluido PARA EL LIQUIDO. Falsa en la
     ! celda cuyo liquido quedo sin ninguna cara abierta en el ultimo Poisson
     ! del paso (hidraulicamente sellada para el liquido, tenga o no gas): es
@@ -154,6 +163,7 @@ contains
         allocate(ws_aE, ws_aS, ws_aN, ws_aB, ws_aT, ws_aP, ws_Su, mold=ws_aW)
         allocate(ws_Fr, ws_Fth, ws_Fz, ws_Mr, ws_Mth, ws_Mz, ws_lim, mold=ws_aW)
         allocate(ws_lim_step, mold=ws_aW); ws_lim_step = 1.0_dp
+        allocate(ws_pc_unl, mold=ws_aW); ws_pc_unl = 0.0_dp
         allocate(ws_liq_cont(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         ws_liq_cont = .true.
         allocate(ws_liq_cont_prev, ws_pv_active, mold=ws_liq_cont)

@@ -33,6 +33,7 @@ module mod_continuity
     use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
                              ws_Mr, ws_Mth, ws_Mz, ws_lim, ws_flux_valid, &
                              ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
+                             ws_pc_unl, ws_pc_unl_valid, ws_pc_unl_id, &
                              ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, &
                              ws_Fc_lk_z, ws_Fc_valid, ws_liq_cont, ws_liq_cont_valid, &
                              ws_Fc_af_r, ws_Fc_af_th, ws_Fc_af_z, &
@@ -87,6 +88,9 @@ contains
         real(dp) :: vol_dalpha, vol_lim, vol_unl
         real(dp), allocatable :: a_in(:,:,:), in_tot(:,:,:), in_ok(:,:,:)
         real(dp), allocatable :: a_new(:,:,:), lim_new(:,:,:)
+        ! Plan E E2: volumen [m3] entrado por caras NO enlazadas (y derrame)
+        real(dp), allocatable :: unl_vol(:,:,:)
+        real(dp) :: unl
         ! Velocidad EFECTIVA del liquido para el transporte de alpha: la del
         ! momento donde el liquido es fase CONTINUA (liq_continuous, Bug 15);
         ! donde es disperso (sin ecuacion de momento propia) la del gas mas la
@@ -189,6 +193,7 @@ contains
         ! esta iteracion externa) para medir el desfase alpha-p
         allocate(a_in, mold=liq%alpha); a_in = liq%alpha
         allocate(in_tot, in_ok, mold=liq%alpha); in_tot = 0.0_dp; in_ok = 0.0_dp
+        allocate(unl_vol, mold=liq%alpha); unl_vol = 0.0_dp
         vol_dalpha = 0.0_dp; vol_lim = 0.0_dp; vol_unl = 0.0_dp
 
         ! Partir SIEMPRE de alpha_old (ancla temporal, hallazgo 3.2)
@@ -314,6 +319,18 @@ contains
                         a_new(i,j,k) = liq%alpha(i,j,k) + dt_sub * &
                             (flux_net + sol%mdot(i,j,k)) / &
                             (liq%rho(i,j,k) * m%vol(i,j,k))
+                        ! Plan E E2: entrada neta EFECTIVA por caras que el
+                        ! Poisson no enlazo (fuente conocida de la presion)
+                        if (ws_Fc_valid) then
+                            unl = 0.0_dp
+                            if (ws_Fc_lk_r(i-1,j,k) == 0)  unl = unl + Fw
+                            if (ws_Fc_lk_r(i,j,k) == 0)    unl = unl - Fe
+                            if (ws_Fc_lk_th(i,j-1,k) == 0) unl = unl + Fs
+                            if (ws_Fc_lk_th(i,j,k) == 0)   unl = unl - Fn
+                            if (ws_Fc_lk_z(i,j,k-1) == 0)  unl = unl + Fb
+                            if (ws_Fc_lk_z(i,j,k) == 0)    unl = unl - Ft
+                            unl_vol(i,j,k) = unl_vol(i,j,k) + unl * dt_sub / liq%rho(i,j,k)
+                        end if
                         ws_Fr(i,j,k)  = ws_Fr(i,j,k)  + Fe * dt_sub / cfg%dt
                         ws_Fth(i,j,k) = ws_Fth(i,j,k) + Fn * dt_sub / cfg%dt
                         ws_Fz(i,j,k)  = ws_Fz(i,j,k)  + Ft * dt_sub / cfg%dt
@@ -384,9 +401,19 @@ contains
                         if (m%cell_type(i,j,k) == 0) cycle
                         give = ws_lim(i,j,k)
                         liq%alpha(i,j,k) = liq%alpha(i,j,k) - give
-                        if (m%cell_type(i,j,k-1) /= 0) &
+                        ! (pc_spill_source: el derrame como fuente REALIMENTA al
+                        ! reves — al dador lleno le dice que perdio volumen y el
+                        ! Poisson le mete mas; banco e12: P_HYDRO_CAP, vol_lim
+                        ! 0.66 m3. Default false: el derrame es la correccion del
+                        ! limitador, no un flujo fisico que la presion deba
+                        ! compensar.)
+                        if (cfg%pc_spill_source) unl_vol(i,j,k) = unl_vol(i,j,k) - give * m%vol(i,j,k)
+                        if (m%cell_type(i,j,k-1) /= 0) then
                             liq%alpha(i,j,k) = liq%alpha(i,j,k) + ws_lim(i,j,k-1) &
                                 * m%vol(i,j,k-1) / m%vol(i,j,k)
+                            if (cfg%pc_spill_source) &
+                                unl_vol(i,j,k) = unl_vol(i,j,k) + ws_lim(i,j,k-1) * m%vol(i,j,k-1)
+                        end if
                         if (give > 0.0_dp) then
                             ws_Fz(i,j,k) = ws_Fz(i,j,k) + give * liq%rho(i,j,k) &
                                            * m%vol(i,j,k) / cfg%dt
@@ -464,7 +491,16 @@ contains
         call mpi_exchange_halos_3d(ws_lim_step, m%topo)
         ws_lim_step_valid = .true.
         ws_lim_step_id = probe_current_step()
-        deallocate(a_in, in_tot, in_ok)
+        ! Plan E E2: fuente conocida [m3/s] para el Poisson siguiente del paso
+        if (ws_Fc_valid) then
+            ws_pc_unl = unl_vol / cfg%dt
+            call mpi_exchange_halos_3d(ws_pc_unl, m%topo)
+            ws_pc_unl_valid = .true.
+            ws_pc_unl_id = probe_current_step()
+        else
+            ws_pc_unl_valid = .false.
+        end if
+        deallocate(a_in, in_tot, in_ok, unl_vol)
 
         deallocate(a_new, lim_new, ur_e, uth_e, uz_e, Gr, Gth, Gz, cont)
 
