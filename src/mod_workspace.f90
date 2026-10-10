@@ -137,6 +137,11 @@ module mod_workspace
     ! liquido que el limitador rechazaba (water packing).
     real(dp), allocatable :: ws_liq_room(:,:,:)
     logical, save :: ws_liq_room_valid = .false.
+    ! Plan E E1b: mascara del gas residual de poro saturado FUERA del acople,
+    ! fijada UNA vez por paso (primera iteracion externa) para que la fila no
+    ! alterne blanda/rigida entre outers (banco e1b: pp de signo alternante)
+    logical, allocatable :: ws_sat_goff(:,:,:)
+    integer, save :: ws_sat_goff_id = -huge(1)
     ! Gas PERCOLANTE (F2.16, Hilfer 1998): el gas de la celda esta conectado
     ! al freeboard por un camino de celdas cuyo gas puede moverse. El gas NO
     ! percolante es una subfase DESCONECTADA (atrapada): inmovil, su presion
@@ -186,6 +191,7 @@ contains
         ws_gas_perc = .true.; ws_gas_reach = .true.
         allocate(ws_pcorr_g, mold=ws_aW); ws_pcorr_g = 0.0_dp
         allocate(ws_liq_room, mold=ws_aW); ws_liq_room = 1.0_dp
+        allocate(ws_sat_goff, mold=ws_liq_cont); ws_sat_goff = .false.
     end subroutine ensure_workspace
 
 end module mod_workspace

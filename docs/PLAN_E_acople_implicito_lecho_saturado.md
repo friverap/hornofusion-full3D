@@ -134,3 +134,26 @@ en `true` para el desarrollo; el juez decide los defaults.
   arriba se queda — ya es así por `ws_lim` en caras dispersas).
 - `S_store` depende de qué gas está acoplado (F2.13/F2.16/F2.31): hay que
   tomarlo de la MISMA máscara `act_g` del Poisson de la pasada (exportarla).
+
+## 6. Resultado (10-oct)
+
+- E1 en el banco: la pieza con más efecto de Plan D+E (picos > 100 kPa 8 →
+  1.4 %, líquido > 10 m/s 9 → 0 %, centinela 4.7 → 0.8 %, `vol_unlinked` 40×
+  menor, consistente n2/n4/n8). E2 (fuente de goteo no enlazado) y el lazo
+  interno (`n_pc_max`) sin efecto medible en el banco una vez puesta E1.
+- **Juez B1 (E4): NEGATIVO.** `judge_e1_n12` detenida a 322.2 s: en 320–325 s
+  p > 100 kPa en el 27.6 % de los pasos (base 4.2), gas > 200 m/s 6.3 (1.8);
+  en 300–320 s no se distingue de la base. (El "100 % > 20 kPa" y el "66 %
+  de centinela" del primer corte eran hidrostática y gotas dispersas:
+  métrica corregida en `regime2.py`/`b1_regime_table.py`.) Detalle
+  y mecanismo en dev-history `2026-10-10_plan_e_lecho_saturado.md`.
+- Consolidación: `pc_sat_open` default `false` (banco `bed_flood.dat` lo
+  activa), E2/lazo quedan en claves `false`, golden v37. Segunda lección de
+  método, idéntica a la de Plan D: el banco de 4 celdas NO predice B1 — y
+  esta vez tampoco la coincidencia en tres descomposiciones del banco.
+- Lo que el fallo enseña (§5, riesgo "bolsa", confirmado): abrir la cara del
+  poro saturado traslada el water packing de la celda dadora (F2.8: el baño
+  cae) a la receptora (E1: el baño se estrella). Ninguna regla sobre QUÉ
+  caras abre el Poisson resuelve que la presión no sabe lo que el limitador
+  rechazará; el término que falta es el de E2 (`S_store`/`S_unl`) CONVERGIDO
+  con la presión — pero medido en B1, no en el banco.

@@ -70,6 +70,7 @@ module mod_types_3d
         logical :: pc_spill_source    ! Plan E E2: incluir el derrame en ws_pc_unl (realimenta al reves; off)
         logical :: pc_drift_source    ! Plan E E2: goteo disperso/derrame como fuente conocida del Poisson (ws_pc_unl)
         logical :: pc_sat_open        ! Plan E E1: poro saturado = celda incompresible con caras liquido|liquido ABIERTAS (sin cierre F2.8)
+        logical :: pc_sat_gas_off     ! Plan E E1b: el gas RESIDUAL (piso ALPHA_PORE_GAS) de un poro SATURADO no es fluido del acople (sin valvula ficticia)
         real(dp) :: iph_dt_safety
         integer  :: probe_step_from, probe_step_to
         ! Sonda de BALANCE de momento de UNA celda (indices GLOBALES,

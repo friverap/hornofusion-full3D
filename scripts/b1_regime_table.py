@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Tabla de REGIMEN ACOTADO de la ventana 300-345 s de B1 (paper, Sec.
 Benchmarks): por trayectoria, % de pasos con |p| > 20 kPa, |u_g| > 200 m/s,
-|u_l| > 10 m/s y con alguna centinela activa (P_HYDRO_CAP, U_GAS_MAX,
-U_LIQ_MAX), en dos ventanas: 310-320 s (inicio del colapso) y 320-345 s.
+|u_l| > 10 m/s (incluye liquido disperso) y con alguna centinela de presion o
+gas activa (P_HYDRO_CAP, U_GAS_MAX), en dos ventanas: 310-320 s (inicio del colapso) y 320-345 s.
 Genera paper/tables/b1_regime.tex. Uso: python3 scripts/b1_regime_table.py
 """
 import csv
@@ -37,6 +37,7 @@ RUNS = [
     (r"sealed-wall + free-surface grad. + compliance (b)", os.path.join(CAND, "judge_d2_n14", "audit.csv")),
     (r"sealed-wall + free-surface grad. + compliance (c)", os.path.join(CAND, "judge_d2_n15", "audit.csv")),
     (r"+ free-surface face, consistent corrector, kinematic rule (a)", os.path.join(CAND, "judge_d26_n12", "audit.csv")),
+    (r"transmissive saturated pore (Plan E E1) (a)", os.path.join(CAND, "judge_e1_n12", "audit.csv")),
 ]
 
 
@@ -50,9 +51,13 @@ def window_stats(rows, t0, t1):
     def pct(k, v):
         return 100.0 * sum(float(r[k]) > v for r in s) / n
 
+    # Centinelas de PRESION y GAS. La columna u_liq_max del audit incluye el
+    # liquido DISPERSO (alpha_l >= 1e-2), que lleva la velocidad terminal de
+    # gota (hasta U_SETTLE_MAX ~ 50 m/s en gas caliente) y al que la cota
+    # U_LIQ_MAX no se aplica (solo capa liquido continuo): u_liq_max >= 20 NO
+    # es una centinela activa (corregido 10-oct-2026).
     sent = 100.0 * sum(float(r["p_max"]) >= P_CAP or
-                       float(r["u_gas_max"]) >= UG_CAP or
-                       float(r["u_liq_max"]) >= UL_CAP for r in s) / n
+                       float(r["u_gas_max"]) >= UG_CAP for r in s) / n
     return (pct("p_max", 2.0e4), pct("u_gas_max", 200.0),
             pct("u_liq_max", 10.0), sent)
 

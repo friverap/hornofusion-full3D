@@ -89,6 +89,7 @@ contains
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
             ws_Fc_af_r, ws_Fc_af_th, ws_Fc_af_z, ws_liq_fr, ws_liq_fth, ws_liq_fz, &
             ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, ws_pv_active, ws_pv_valid, &
+            ws_sat_goff, ws_sat_goff_id, &
             ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
             ws_pc_unl, ws_pc_unl_valid, ws_pc_unl_id, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
@@ -260,6 +261,41 @@ contains
             deallocate(keep)
             call exchange_logical_halos_p(act_g)
         end block
+        end if
+
+        ! Plan E E1b (oct-2026): el gas RESIDUAL de un poro SATURADO no es
+        ! fluido del acople. ALPHA_PORE_GAS se puso por ENCIMA de
+        ! ALPHA_FLOW_CUTOFF (F2.7) para que la celda "nunca quede sellada
+        ! hidraulicamente"; medido en B1 a 320 s (sonda [PROBE-P], celda
+        ! (8,60,3): alpha_s 0.835, alpha_l 0.150 = cap, alpha_g 0.015 = piso)
+        ! eso es una VALVULA FICTICIA: la fila pide 7.5e-4 m3/s de liquido
+        ! que compensa con 7.2e-4 m3/s de gas saliendo a 2.4 m/s por el bano
+        ! de encima, y ni alpha_l ni alpha_g cambian en 120 pasos porque el
+        ! limitador rechaza el liquido (vol_lim) y alpha_g = 1 - suma repone
+        ! el gas. El bano de encima baja a 0.33 m/s "dentro" del poro cada
+        ! paso y el derrame mueve lo rechazado. Sin la valvula la fila del
+        ! poro saturado es incompresible (con E1, transmisiva): la presion
+        ! para el bano antes de que la velocidad exista.
+        ! La mascara se FIJA en la primera iteracion externa del paso y se
+        ! mantiene en las siguientes: medido en el banco (sonda (1,16,4), celda
+        ! de bano con 1.3 % de chatarra) que si se reevalua por outer la celda
+        ! cruza su capacidad y vuelve en outers consecutivos, el gas entra y
+        ! sale del acople, la fila alterna blanda/rigida y pp cambia de signo
+        ! en cada outer (+1.3e4, +0.9e4, +4.3e4, +0.05e4, +3.8e4 en un paso).
+        if (cfg%pc_sat_gas_off .and. ws_liq_room_valid) then
+            if (ws_sat_goff_id /= probe_current_step()) then
+                ws_sat_goff = (ws_liq_room <= 1.0e-4_dp)
+                ws_sat_goff_id = probe_current_step()
+            end if
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        if (m%cell_type(i,j,k) == 0) cycle
+                        if (ws_sat_goff(i,j,k)) act_g(i,j,k) = .false.
+                    end do
+                end do
+            end do
+            call exchange_logical_halos_p(act_g)
         end if
 
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp

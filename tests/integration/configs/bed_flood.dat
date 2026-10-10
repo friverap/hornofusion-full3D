@@ -42,3 +42,8 @@ alpha_g_comp_min = 0.01
 pc_fs_liquid_face = true
 pc_consistent_corrector = true
 pc_liq_closed_dir = true
+# --- Plan E E1 (cerrado negativo 10-oct-2026): poro saturado transmisivo.
+# En el banco baja picos y centinelas 6x; en B1 (juez n12) NO: 320-325 s
+# p > 100 kPa en el 28 % de los pasos (base 4 %). Ver dev-history
+# 2026-10-10_plan_e_lecho_saturado.md.
+pc_sat_open = true
