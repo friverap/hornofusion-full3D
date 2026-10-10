@@ -157,3 +157,12 @@ en `true` para el desarrollo; el juez decide los defaults.
   caras abre el Poisson resuelve que la presión no sabe lo que el limitador
   rechazará; el término que falta es el de E2 (`S_store`/`S_unl`) CONVERGIDO
   con la presión — pero medido en B1, no en el banco.
+- **E1b (`pc_sat_gas_off`, 10-oct tarde)**: el gas residual del poro saturado
+  sale del acople (máscara fijada por paso). Banco: el lecho saturado carga
+  su peso (∇p = ρ_l g; la base está ~70 kPa por debajo), `vol_lim` 14× menor,
+  pero aparece el water packing de la celda de baño que se llena (540 kPa) —
+  antes lo absorbía la válvula ficticia. Con D2.4 (`alpha_g_comp_min = 0.01`)
+  el banco queda acotado (p>100k 4 %, gas 5 %, centinela 1 %, p_max 158 kPa).
+  E2 y el lazo interno no ayudan (el lazo con momento rezagado es mucho
+  peor). Screening B1 (`judge_e1b_n12`, 300→325 s) en curso desde 17:55.
+  Commit `95e6048`.
