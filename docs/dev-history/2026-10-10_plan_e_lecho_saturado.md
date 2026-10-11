@@ -283,3 +283,46 @@ diagonal al cruzar el umbral y el golpe se reparte en varios pasos. Banco
 `e1bfc_n4` = E1+E1b(fija)+`alpha_g_comp_min = 0.01` en curso.
 Relajación y outers no son la causa: `alpha_p` 0.7 (el de B1) no cambia
 nada (11.6/19.1/8.3); 10 outers mejora poco (10.0/13.9/6.0; 0–6 s limpio).
+
+## Screening B1 de E1+E1b(fija)+D2.4 (10-oct, 17:55–20:21): NEGATIVO, peor que base y E1
+
+`judge_e1b_n12` (= `judge_e1_n12` + `pc_sat_gas_off = true` +
+`alpha_g_comp_min = 0.01`, 12 ranks, reinicio a 300 s, hasta 325 s; 2.4 h
+de pared). Ventanas de 5 s con `regime2.py` (% de pasos):
+
+| ventana | corrida | p>100k | gas>200 | cent p/g | p_max |
+|---|---|---|---|---|---|
+| 315–320 | base | 0.4 | 0.2 | 0.0 | 209 kPa |
+| | E1 | 0.2 | 0.4 | 0.1 | 198 kPa |
+| | E1+E1b+D2.4 | **13.2** | **28.0** | 0.4 | 549 kPa |
+| 320–325 | base | 4.2 | 1.8 | 0.7 | 331 kPa |
+| | E1 | 27.6 | 6.3 | 0.8 | 317 kPa |
+| | E1+E1b+D2.4 | **63.4** | **100.0** | **10.6** | **2.00 MPa** (`P_HYDRO_CAP`) |
+
+Arranque por segundos: 316–317 s p > 100 kPa en el 17 % de los pasos
+(335 kPa), 318–319 s gas > 200 en el 33 %, desde 319 s gas > 200 el 100 % de
+los pasos, 320–324 s p > 100 kPa en el 67–83 % con 1.2–2.0 MPa; primer paso
+en `P_HYDRO_CAP` a 323.2 s. En 300–315 s es indistinguible de E1 (0–0.4 % en
+presión; gas > 200 el 8 % en 310–315 como E1, 7 %).
+
+Los snapshots a 320 y 325 s están TRANQUILOS (ninguna celda con |p| > 100
+kPa; exceso hidrostático del lecho +71/−87 kPa a 320 s y +46/−41 a 325 s;
+gas máximo 280 m/s en una celda de freeboard junto al eje (k=3, j=57, i=3,
+α_g 0.94)): los picos son ráfagas de pocos pasos entre snapshots, la misma
+firma de golpe de ariete del banco (`e1bf_dense`: ráfagas de 3–5 pasos),
+pero aquí con la compliancia residual puesta y sobre un lecho con cientos
+de celdas saturadas en vez de las cuatro del banco. Conclusión: cerrar la
+válvula ficticia convierte TODO el piso del baño en pared rígida (204 de 206
+celdas de baño descansan sobre lecho, F2.28), y el water packing de las
+celdas que se llenan, que D2.4 amortigua en el banco, en B1 se dispara a
+escala de horno. Tercera confirmación de la lección de método: el banco
+acotado (p>100k 4 %, gas 5 %) no predice B1 (63 % / 100 %).
+
+Decisión Plan E §4: no procede el juez de tres trayectorias. Las dos vías
+que quedan son (a) la mitigación de water packing de RELAP5 §3.4.6 / TRACE
+reescrita sobre la celda que pierde su último gas (F2.32 archivada; ahora el
+fenómeno existe de verdad y es localizable: α_g cruza `ALPHA_FLOW_CUTOFF`
+hacia abajo sobre fila rígida), o (b) cerrar Plan E negativo y dejar la
+válvula ficticia documentada como lo que sostiene a la base hasta ~320 s.
+Ninguna se toma sin el usuario. `pc_sat_gas_off` queda con default `false`
+y ningún config la activa.

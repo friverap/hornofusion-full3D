@@ -164,5 +164,16 @@ en `true` para el desarrollo; el juez decide los defaults.
   antes lo absorbía la válvula ficticia. Con D2.4 (`alpha_g_comp_min = 0.01`)
   el banco queda acotado (p>100k 4 %, gas 5 %, centinela 1 %, p_max 158 kPa).
   E2 y el lazo interno no ayudan (el lazo con momento rezagado es mucho
-  peor). Screening B1 (`judge_e1b_n12`, 300→325 s) en curso desde 17:55.
-  Commit `95e6048`.
+  peor). Commit `95e6048`.
+- **Screening B1 de E1+E1b+D2.4 (`judge_e1b_n12`, 300→325 s): NEGATIVO y
+  peor que base y E1.** 320–325 s: p > 100 kPa en el 63.4 % de los pasos
+  (base 4.2, E1 27.6), gas > 200 m/s el 100 % (1.8 / 6.3), centinela p/gas
+  10.6 % (0.7 / 0.8), `P_HYDRO_CAP` alcanzado a 323.2 s; ya en 315–320 s
+  13.2 / 28.0 % (base 0.4 / 0.2). En 300–315 s indistinguible de E1. Los
+  snapshots a 320/325 s están tranquilos: son ráfagas de pocos pasos (golpe
+  de ariete de la celda que se llena, a escala de horno: todo el piso del
+  baño se vuelve rígido al cerrar la válvula). Tercera confirmación: el
+  banco acotado (4 % / 5 %) no predice B1. No procede el juez de tres
+  trayectorias. Quedan (a) F2.32 reescrita sobre la celda que pierde su
+  último gas, o (b) cerrar Plan E negativo — decisión del usuario.
+  `pc_sat_gas_off` default `false`, ningún config la activa.

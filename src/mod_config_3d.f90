@@ -88,7 +88,7 @@ contains
         cfg%pc_consistent_corrector = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
         cfg%pc_liq_closed_dir = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
         cfg%pc_sat_open = .false.         ! Plan E E1 (10-oct-2026): juez B1 negativo, solo banco
-        cfg%pc_sat_gas_off = .false.      ! Plan E E1b (10-oct-2026): en evaluacion (juez B1)
+        cfg%pc_sat_gas_off = .false.      ! Plan E E1b (10-oct-2026): juez B1 negativo, nadie la activa
         cfg%pc_drift_source = .false.     ! Plan E E2 (10-oct-2026): sin efecto medible en el banco con E1 (e12ns); off
         cfg%pc_spill_source = .false.
         cfg%n_pc_max = 1
