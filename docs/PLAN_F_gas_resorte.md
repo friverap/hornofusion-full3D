@@ -149,3 +149,33 @@ y `pc_keep_pore_floor` quedan con default `false` y ningún config las activa.
 La referencia nueva con el binario actual (`judge_base_n12`) se termina de
 correr solo para dejar documentado el nivel real de la base (los jueces de
 Plan D/E se compararon contra bases contaminadas por Bug 22).
+
+## 6. Referencia limpia `judge_base_n12` (binario actual, sin claves, 300 → 325 s)
+
+| ventana | p > 100 kPa | gas > 200 | centinela p/gas | l ≥ 20 | p_max | g_max |
+|---|---|---|---|---|---|---|
+| 300–305 | 0.0 | 0.0 | 0.0 | 0.0 | 34 kPa | 145 |
+| 305–310 | 0.0 | 0.0 | 0.0 | 0.7 | 50 kPa | 162 |
+| 310–315 | 0.0 | 0.0 | 0.0 | 17.6 | 99 kPa | 191 |
+| 315–320 | 2.4 | 0.1 | 0.0 | 0.0 | 165 kPa | 210 |
+| 320–325 | 92.4 | 92.3 | 91.1 | 90.0 | 2.00 MPa | 300 |
+
+Por segundo: 318–319 s una ráfaga (12 % de pasos > 100 kPa, 165 kPa), 319–320
+limpio, y a **320.49 s** `P_HYDRO_CAP` (2 MPa) por primera vez; desde 321 s
+en la cota el 99–100 % de los pasos. Snapshot 325 s: (5,10,3) −2 MPa con
+α_l 0.22, α_g 0, α_s 0.78, Σα = 1.015, líquido puro encima a −20 m/s
+(`U_LIQ_MAX`) y poro con 9 % de gas debajo a +240 kPa: la celda del lecho
+que se satura sin gas es la misma anatomía que la ráfaga final de F.
+Exceso hidrostático: +1.3 / +6.9 kPa a 310 / 320 s; ±1–2 MPa a 325 s.
+Sin NaN ni avisos. `make test-quick` OK tras la cadena.
+
+**Lectura.** Con el binario actual la base es LIMPIA hasta 318 s (la vieja
+tenía 0.4 % en 315–320 y 4.2 % en 320–325) y colapsa de golpe a 320.5 s,
+MÁS fuerte que la vieja (92 % en la cota frente a 4.2 % sobre 100 kPa). La
+contaminación por Bug 22 cambiaba el ruido de 300–320 s, no el muro de
+~320 s: el colapso del lecho inundado es un fallo del modelo con el binario
+limpio. Plan F frente a la referencia limpia: 100 / 100 % en 305–320 s
+contra 0 / 0 %; en 320–325 s ambos en centinela. El veredicto NEGATIVO de
+§5 se mantiene y se refuerza. Los jueces de Plan D/E no se repiten: contra
+una base con el 92 % de pasos en la cota en 320–325 s ningún candidato de
+D/E (63–100 % sobre 100 kPa) cambiaría de veredicto.

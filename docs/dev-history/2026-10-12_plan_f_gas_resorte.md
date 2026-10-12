@@ -129,3 +129,11 @@ T_g 1213 → 1240 K, α_g 0.015 fijo, u_g = 0, S_arc = 0; la de arriba (k = 3)
 α_g 0.015 → 0.010 → 0.000, α_s → 1.000. Mecanismo, conclusión y veredicto en
 `docs/PLAN_F_gas_resorte.md` §5. Plan F cerrado NEGATIVO; el proyecto se
 cierra por decisión del usuario.
+
+## 5. Referencia limpia `judge_base_n12` (13:53–16:2x)
+
+300–320 s limpia (0 / 0 / 0 / 2.4 % de pasos > 100 kPa por ventana de 5 s),
+ráfaga aislada en 318–319 s (165 kPa), `P_HYDRO_CAP` a 320.49 s y en la cota
+el 99–100 % de los pasos desde 321 s (320–325: 92.4 / 92.3 / 91.1). Tabla y
+lectura en `docs/PLAN_F_gas_resorte.md` §6. Cierre: el muro de ~320 s es del
+modelo, no del binario contaminado.
