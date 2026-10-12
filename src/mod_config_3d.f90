@@ -89,6 +89,8 @@ contains
         cfg%pc_liq_closed_dir = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
         cfg%pc_sat_open = .false.         ! Plan E E1 (10-oct-2026): juez B1 negativo, solo banco
         cfg%pc_sat_gas_off = .false.      ! Plan E E1b (10-oct-2026): juez B1 negativo, nadie la activa
+        cfg%pc_gas_spring = .false.       ! Plan F (12-oct-2026): en evaluacion (juez B1)
+        cfg%pc_keep_pore_floor = .false.  ! Plan F (diagnostico del banco)
         cfg%pc_drift_source = .false.     ! Plan E E2 (10-oct-2026): sin efecto medible en el banco con E1 (e12ns); off
         cfg%pc_spill_source = .false.
         cfg%n_pc_max = 1
@@ -229,6 +231,9 @@ contains
             call config_set_value(cfg, trim(key), trim(val))
         end do
         close(iu)
+        ! Plan F: la capacidad del liquido (liq_cap, mod_constants) es el hueco
+        ! FISICO cuando el gas es siempre fluido del acople (sin piso F2.7)
+        pore_floor_on = .not. cfg%pc_gas_spring .or. cfg%pc_keep_pore_floor
     end subroutine config_read
 
     ! Posicion del primer '#' o '!' precedido de blanco/tabulador (0 si no hay)
@@ -305,6 +310,8 @@ contains
         case ('pc_liq_closed_dir'); cfg%pc_liq_closed_dir = parse_bool(val)
         case ('pc_sat_open'); cfg%pc_sat_open = parse_bool(val)
         case ('pc_sat_gas_off'); cfg%pc_sat_gas_off = parse_bool(val)
+        case ('pc_gas_spring'); cfg%pc_gas_spring = parse_bool(val)
+        case ('pc_keep_pore_floor'); cfg%pc_keep_pore_floor = parse_bool(val)
         case ('pc_drift_source'); cfg%pc_drift_source = parse_bool(val)
         case ('pc_spill_source'); cfg%pc_spill_source = parse_bool(val)
         case ('n_pc_max'); call parse_int(val, key, cfg%n_pc_max)

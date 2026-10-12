@@ -70,6 +70,8 @@ module mod_types_3d
         logical :: pc_spill_source    ! Plan E E2: incluir el derrame en ws_pc_unl (realimenta al reves; off)
         logical :: pc_drift_source    ! Plan E E2: goteo disperso/derrame como fuente conocida del Poisson (ws_pc_unl)
         logical :: pc_sat_open        ! Plan E E1: poro saturado = celda incompresible con caras liquido|liquido ABIERTAS (sin cierre F2.8)
+        logical :: pc_gas_spring      ! Plan F (oct-2026): el gas es SIEMPRE fluido del acople P-V (bolsa atrapada = resorte, no pared): sin percolacion F2.16, sin venteo F2.31, sin E1b; caras de liquido abiertas (E1) y sin piso de gas de poro en liq_cap
+        logical :: pc_keep_pore_floor ! Plan F (diagnostico): con pc_gas_spring, conservar el piso ALPHA_PORE_GAS en liq_cap
         logical :: pc_sat_gas_off     ! Plan E E1b: el gas RESIDUAL (piso ALPHA_PORE_GAS) de un poro SATURADO no es fluido del acople (sin valvula ficticia)
         real(dp) :: iph_dt_safety
         integer  :: probe_step_from, probe_step_to

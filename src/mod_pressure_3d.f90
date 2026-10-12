@@ -197,6 +197,15 @@ contains
         if (ws_gas_perc_valid) &
             act_g = act_g .or. (ws_gas_reach .and. gas%alpha < ALPHA_FLOW_CUTOFF &
                                 .and. m%cell_type /= 0)
+        ! Plan F (oct-2026): gas SIEMPRE activo donde hay gas o donde puede
+        ! llegar (toda celda con liquido continuo: generaliza el canal
+        ! residual F2.21 a todo el dominio). Sin umbral hidrodinamico en la
+        ! actividad: los coeficientes de cara ya escalan con alpha_f d_f y la
+        ! compresibilidad con alpha_g, asi que la fase evanescente pesa lo que
+        ! pesa (continuo), en vez de entrar y salir del acople al cruzar 1e-2
+        ! (cada cruce es un "primer contacto" y cuesta rho u dx/dt de presion).
+        if (cfg%pc_gas_spring) &
+            act_g = (m%cell_type /= 0) .and. (gas%alpha > 0.0_dp .or. act_l)
         ag_eff = gas%alpha
 
         ! F2.31 (oct-2026): el gas de una celda es fluido del acople solo si
@@ -215,7 +224,8 @@ contains
         ! [PROBE-P]). Es la patologia de F2.13 reaparecida por la puerta de la
         ! percolacion. Una celda que no puede ventear queda FUERA del acople
         ! del gas; si su fila se queda sin caras, F2.29 la vuelve pared.
-        if (cfg%gas_in_poisson .and. cfg%gas_compressibility .and. cfg%solve_multiphase) then
+        if (cfg%gas_in_poisson .and. cfg%gas_compressibility .and. cfg%solve_multiphase &
+            .and. .not. cfg%pc_gas_spring) then
         block
             real(dp), parameter :: P_VENT = 5.0e3_dp
             real(dp) :: cg, src, dloc
@@ -282,7 +292,7 @@ contains
         ! cruza su capacidad y vuelve en outers consecutivos, el gas entra y
         ! sale del acople, la fila alterna blanda/rigida y pp cambia de signo
         ! en cada outer (+1.3e4, +0.9e4, +4.3e4, +0.05e4, +3.8e4 en un paso).
-        if (cfg%pc_sat_gas_off .and. ws_liq_room_valid) then
+        if (cfg%pc_sat_gas_off .and. ws_liq_room_valid .and. .not. cfg%pc_gas_spring) then
             if (ws_sat_goff_id /= probe_current_step()) then
                 ws_sat_goff = (ws_liq_room <= 1.0e-4_dp)
                 ws_sat_goff_id = probe_current_step()
@@ -1240,7 +1250,7 @@ contains
             ! era pared (F2.29: Neumann), la columna de encima leia 1/2 g y
             ! caia contra un piso incompresible: golpe de ariete de MPa
             ! (Plan D D2.2, sonda PROBE-MOM; PLAN_E seccion 2).
-            if (cfg%pc_sat_open) return
+            if (cfg%pc_sat_open .or. cfg%pc_gas_spring) return
             if (isg .or. .not. ws_liq_room_valid) return
             if (u_f > 0.0_dp .and. room_pos <= ROOM_EPS) face_open = .false.
             if (u_f < 0.0_dp .and. room_neg <= ROOM_EPS) face_open = .false.

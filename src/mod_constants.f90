@@ -78,6 +78,10 @@ module mod_constants
     ! residual de gas tipo residualAlpha en el Poisson dejaba pasar liquido
     ! a celdas selladas: 1.6 t recortadas en bath_freeze, descartado).
     real(dp), parameter :: ALPHA_PORE_GAS = 1.5e-2_dp
+    ! Plan F (oct-2026, `pc_gas_spring`): sin piso de gas de poro en la
+    ! capacidad del liquido (liq_cap = hueco fisico). Lo fija config_read;
+    ! .true. = comportamiento F2.7 (goldens, tests unitarios).
+    logical, save :: pore_floor_on = .true.
     ! Fraccion RESIDUAL del solido (cierre de fase evanescente, sep-2026).
     ! Una celda con 0 < alpha_s <= este umbral ya no es un lecho: su masa y
     ! entalpia se entregan al liquido co-localizado (mismo camino que la
@@ -281,7 +285,7 @@ contains
         real(dp), intent(in) :: as, asl
         real(dp) :: c
         c = 1.0_dp - as - asl
-        if (as >= 1.0e-2_dp) c = c - ALPHA_PORE_GAS
+        if (as >= 1.0e-2_dp .and. pore_floor_on) c = c - ALPHA_PORE_GAS
         c = max(c, 0.0_dp)
     end function liq_cap
 

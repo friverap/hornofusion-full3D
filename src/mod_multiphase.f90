@@ -124,11 +124,29 @@ contains
 
         ! Percolacion del gas (F2.16) y, con ella, las celdas que tienen
         ! presion de fluido (Bug 16). El gas atrapado no la tiene.
-        call gas_percolation_mask(gas, sol, m, cfg, drag_gas, ws_gas_perc, ws_gas_reach)
-        ws_gas_perc_valid = .true.
-        ws_pv_active = (ws_liq_cont .or. &
-                        (gas%alpha >= ALPHA_FLOW_CUTOFF .and. ws_gas_perc)) &
-                       .and. (m%cell_type /= 0)
+        if (cfg%pc_gas_spring) then
+            ! Plan F (oct-2026): el gas es SIEMPRE fluido del acople. Una bolsa
+            ! atrapada bajo el lecho inundado (B1 325 s: alpha_g 0.36 en el
+            ! piso, sin camino al freeboard) no es una pared de presion
+            ! (Neumann) sino un RESORTE: su fila lleva la compresibilidad
+            ! alpha_g V/(P0 dt) y su presion sube al comprimirla y baja al
+            ! drenarla. Medido en la serie densa base_dense325: 412 de 428
+            ! celdas-snapshot con |p| > 100 kPa estan en k = 1-2 (bolsas y
+            ! lecho denso del piso), con +550 kPa al llenarse y -535 kPa al
+            ! vaciarse: es el volumen que la pared no absorbe cobrandose en
+            ! la compresibilidad acustica del liquido. Hilfer (1998) dice que
+            ! la subfase desconectada no propaga GRADIENTES, no que carezca
+            ! de presion.
+            ws_gas_perc = .true.; ws_gas_reach = .true.
+            ws_gas_perc_valid = .true.
+            ws_pv_active = (ws_liq_cont .or. gas%alpha > 0.0_dp) .and. (m%cell_type /= 0)
+        else
+            call gas_percolation_mask(gas, sol, m, cfg, drag_gas, ws_gas_perc, ws_gas_reach)
+            ws_gas_perc_valid = .true.
+            ws_pv_active = (ws_liq_cont .or. &
+                            (gas%alpha >= ALPHA_FLOW_CUTOFF .and. ws_gas_perc)) &
+                           .and. (m%cell_type /= 0)
+        end if
         ws_pv_valid = .true.
 
         ! Coeficiente de intercambio gas-líquido (ver F2.15 abajo)

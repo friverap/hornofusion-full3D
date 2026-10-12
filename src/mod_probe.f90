@@ -69,7 +69,7 @@ contains
         integer :: step
 
         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
-        integer  :: iu, ju, ku, it, jt, kt
+        integer  :: iu, ju, ku, it, jt, kt, ip, jp, kp
         real(dp) :: umag, umax_loc, umax_glob
         real(dp) :: tmax_loc, tmax_glob, rmin_loc, rmin_glob
         real(dp) :: amax_loc, amax_glob, pmax_loc, pmax_glob
@@ -86,7 +86,7 @@ contains
         umax_loc = 0.0_dp; tmax_loc = 0.0_dp; amax_loc = 0.0_dp
         pmax_loc = 0.0_dp; tsmax_loc = 0.0_dp
         rmin_loc = 1.0e30_dp
-        iu = 0; ju = 0; ku = 0; it = 0; jt = 0; kt = 0
+        iu = 0; ju = 0; ku = 0; it = 0; jt = 0; kt = 0; ip = 0; jp = 0; kp = 0
 
         do k = kstart, kend
             do j = jstart, jend
@@ -104,7 +104,9 @@ contains
                         rmin_loc = min(rmin_loc, liq%rho(i,j,k))
                     end if
                     amax_loc  = max(amax_loc,  liq%alpha(i,j,k))
-                    pmax_loc  = max(pmax_loc,  abs(sh%p(i,j,k)))
+                    if (abs(sh%p(i,j,k)) > pmax_loc) then
+                        pmax_loc = abs(sh%p(i,j,k)); ip = i; jp = j; kp = k
+                    end if
                     tsmax_loc = max(tsmax_loc, sol%T_s(i,j,k))
                 end do
             end do
@@ -138,6 +140,21 @@ contains
                 ju + m%topo%jglobal_start - 1, ',', &
                 ku + m%topo%kglobal_start - 1, ')  u=', umax_glob, &
                 '  a_l=', liq%alpha(iu,ju,ku), '  rho=', liq%rho(iu,ju,ku)
+        end if
+        ! Localizacion del |p| maximo con el estado de la celda y de sus
+        ! vecinas verticales (diagnostico de rafagas, oct-2026)
+        if (pmax_glob > 5.0e4_dp .and. abs(pmax_loc - pmax_glob) < 1.0e-12_dp .and. ip > 0) then
+            print '(A,I0,A,I0,A,I0,A,I0,A,ES11.4,A,3ES11.3,A,3F8.4,A,3ES10.2,A,2F8.4,A,3ES10.2,A,2F8.4)', &
+                '   [PROBE-pmax] rank ', rank, ' |p|max en (', &
+                ip + m%topo%iglobal_start - 1, ',', &
+                jp + m%topo%jglobal_start - 1, ',', &
+                kp + m%topo%kglobal_start - 1, ')  p=', sh%p(ip,jp,kp), &
+                '  p(B,T,E)=', sh%p(ip,jp,kp-1), sh%p(ip,jp,kp+1), sh%p(ip+1,jp,kp), &
+                '  al/ag/as=', liq%alpha(ip,jp,kp), gas%alpha(ip,jp,kp), sol%alpha_s(ip,jp,kp), &
+                '  ul(r,th,z)=', liq%ur(ip,jp,kp), liq%uth(ip,jp,kp), liq%uz(ip,jp,kp), &
+                '  al/ag_B=', liq%alpha(ip,jp,kp-1), gas%alpha(ip,jp,kp-1), &
+                '  ug(r,th,z)=', gas%ur(ip,jp,kp), gas%uth(ip,jp,kp), gas%uz(ip,jp,kp), &
+                '  al/ag_T=', liq%alpha(ip,jp,kp+1), gas%alpha(ip,jp,kp+1)
         end if
         if (tmax_glob > 2500.0_dp .and. abs(tmax_loc - tmax_glob) < 1.0e-9_dp) then
             print '(A,I0,A,I0,A,I0,A,I0,A,F10.1,A,F8.4)', &
