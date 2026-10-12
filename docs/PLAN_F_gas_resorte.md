@@ -95,3 +95,57 @@ Bit a bit con la clave apagada (goldens v37 intactos).
 - La bolsa que se calienta (F2.13) ahora empuja líquido hacia arriba por las
   caras abiertas (Darcy): volumen pequeño, presión acotada. Si no, se verá
   como p lineal en el tiempo en el piso.
+
+## 5. Veredicto G2: NEGATIVO (12-oct-2026, `judge_f_n12`, 300 → 325 s, 12 ranks)
+
+| corrida (320–325 s) | p > 100 kPa | gas > 200 | centinela p/gas | p_max |
+|---|---|---|---|---|
+| base vieja `judge_largo_F231` (binario 4-oct) | 4.2 | 1.8 | 0.7 | 331 kPa |
+| E1 `judge_e1_n12` | 27.6 | 6.3 | 0.8 | 317 kPa |
+| **F `judge_f_n12`** (resorte + `alpha_g_comp_min` 0.01) | **100.0** | **100.0** | **46.5** | **1.85 MPa** |
+
+Evolución de F por ventanas de 5 s (p > 100 kPa / gas > 200): 300–305
+21.9 / 50.8; desde 305 s **100 / 100** en todas. Mediana de `p_max` del
+audit: 54 kPa (300 s) → 105 (304) → 200 (316) → 240 kPa (325), lineal.
+Exceso sobre la hidrostática saturada (`pexcess.py`): +96 kPa (310 s),
++187 kPa (320 s), +936 kPa (325 s), siempre en el lecho. Sin NaN ni avisos.
+
+**Mecanismo medido en los snapshots (`scripts/diag/burst_scan.py` +
+clasificación por tipo de celda):**
+
+1. **Rampa lineal en celdas de poro SECO.** El 89–100 % de las celdas con
+   |p| > 100 kPa de cada snapshot (1/1, 5/5, 34/35, 44/47, 89/113) tienen
+   α_g = 0.015 exacto (`ALPHA_PORE_GAS`), α_s = 0.985, sin líquido, u_g = 0,
+   k = 2–3, bajo los tres electrodos (j ≈ 1–3, 19, 36, 55–57). Su presión sube
+   5–7 kPa/s desde 302 s: (8,56,2) 0 → 65 → 79 → 185 → 203 → 238 kPa entre 300
+   y 325 s con T_g 1213 → 1240 K (no es calentamiento isocórico: 27 K darían
+   2 kPa). La vecina de arriba pierde su gas (α_g 0.015 → 0.010 → 0.000,
+   α_s → 1.000). Son EXACTAMENTE las celdas que F2.13 saca del acople
+   (`pore_gas_only`, B1 v30: "111 kPa lineales en el fondo bajo los arcos")
+   y que `pc_gas_spring` mete (`act_g = α_g > 0`): sin conductancia hacia
+   ninguna vecina (todas sin gas) su fila solo tiene la diagonal acústica y
+   cualquier defecto de volumen se integra en presión.
+2. **Gas > 200 m/s el 100 % de los pasos desde 303 s, en el BAÑO.** Las celdas
+   rápidas son de baño (α_l ≈ 0.9, α_g 0.08–0.10) sobre el lecho y con
+   freeboard encima (2/2, 9/11, 13/13, 15/20; 0 en el lecho): el gas dentro
+   del baño es ahora fluido del acople y sale a 206–243 m/s por la
+   superficie. Es el "resorte solo oscila" del banco; la compliancia 0.01 lo
+   amortiguó en 4 celdas y no en B1.
+3. **Ráfaga final 324–325 s (1.85 MPa).** Snapshot 325 s: (5,60,3) 959 kPa con
+   α_l 0.17, α_g 0, α_s 0.83, Σα = 1.015, líquido puro encima y sólido 1.0
+   debajo: celda del lecho que se satura sin gas ni margen, el golpe de
+   ariete de E1b.
+
+**Conclusión.** La bolsa como resorte es correcta para las bolsas con gas
+real, pero "todo el gas es fluido del acople" revive de golpe los tres fallos
+que motivaron F2.13 (poro seco), F2.16/F2.31 (gas sin camino) y el venteo
+del gas del baño. Cada una de esas capas existe por un fallo medido y
+quitarlas juntas los vuelve a exponer todos. No se probó una variante
+reducida (resorte solo en bolsas con α_g ≥ `ALPHA_FLOW_CUTOFF` y F2.13
+vigente para el poro seco); queda anotada, no ejecutada. Por decisión del
+usuario (último esfuerzo), el Plan F se cierra NEGATIVO. `pc_gas_spring`
+y `pc_keep_pore_floor` quedan con default `false` y ningún config las activa.
+
+La referencia nueva con el binario actual (`judge_base_n12`) se termina de
+correr solo para dejar documentado el nivel real de la base (los jueces de
+Plan D/E se compararon contra bases contaminadas por Bug 22).

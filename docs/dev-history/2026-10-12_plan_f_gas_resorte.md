@@ -94,8 +94,38 @@ poro (f_a/f_c) no sustituye a la compliancia: conserva la válvula ficticia.
 "p > 20 kPa 99 %" en f_b es la hidrostática del lecho saturado que ahora
 carga su peso (como E1b).
 
-## 4. Screening B1 (en curso)
+## 4. Screening B1: NEGATIVO
 
 `judge_f_n12` = `judge_e1_n12` sin E1 + `pc_gas_spring` + `alpha_g_comp_min
-0.01`, 300 → 325 s, 12 ranks; después `judge_base_n12`. Criterio: `regime2.py`
-en 320–325 s (p > 100 kPa, gas > 200, centinela p/gas) frente a la base NUEVA.
+0.01`, 300 → 325 s, 12 ranks, 11:47–13:53. `regime2.py` (% de pasos):
+
+| ventana | p>100k | g>200 | cent_pg | l≥20 | pmax | gmax |
+|---|---|---|---|---|---|---|
+| 300–305 | 21.9 | 50.8 | 0.4 | 0.0 | 1.93e5 | 300 |
+| 305–310 | 100.0 | 100.0 | 1.6 | 0.0 | 1.12e5 | 300 |
+| 310–315 | 100.0 | 100.0 | 0.5 | 13.0 | 3.99e5 | 300 |
+| 315–320 | 100.0 | 100.0 | 13.5 | 4.2 | 2.50e5 | 300 |
+| 320–325 | 100.0 | 100.0 | 46.5 | 89.4 | 1.85e6 | 300 |
+
+Base vieja 320–325: 4.2 / 1.8 / 0.7; E1: 27.6 / 6.3 / 0.8. Mediana de
+`p_max` por segundo: 54 kPa (300) → 105 (304) → 200 (316) → 240 (325),
+rampa lineal; gas > 200 pasa de 2 % (300–301) a 51.6 % (302–303) y 100 %
+desde 303 s. `pexcess.py`: +96 / +187 / +936 kPa (310 / 320 / 325 s), lecho.
+
+Clasificación de celdas por snapshot (|p| > 100 kPa: total / poro seco con
+α_g = 0.015 exacto, α_s > 0.98, sin líquido; gas > 200: total / en baño
+α_l > 0.3 / en lecho / freeboard):
+
+| t | |p|>100k | poro seco | gas>200 | baño | lecho | freeboard |
+|---|---|---|---|---|---|---|
+| 305 | 1 | 1 | 2 | 2 | 0 | 0 |
+| 310 | 5 | 5 | 11 | 9 | 0 | 2 |
+| 315 | 35 | 34 | 13 | 13 | 0 | 0 |
+| 320 | 47 | 44 | 20 | 15 | 0 | 4 |
+| 325 | 113 | 89 | 50 | 11 | 0 | 37 |
+
+Celda rampa (8,56,2): p 0 → 65 → 79 → 185 → 203 → 238 kPa (300 → 325 s),
+T_g 1213 → 1240 K, α_g 0.015 fijo, u_g = 0, S_arc = 0; la de arriba (k = 3)
+α_g 0.015 → 0.010 → 0.000, α_s → 1.000. Mecanismo, conclusión y veredicto en
+`docs/PLAN_F_gas_resorte.md` §5. Plan F cerrado NEGATIVO; el proyecto se
+cierra por decisión del usuario.
