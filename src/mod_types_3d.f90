@@ -302,6 +302,7 @@ module mod_types_3d
         ! Lorentz / electromagnetic stirring (liquid only, [N/m^3])
         real(dp), allocatable :: F_lorentz_r(:,:,:)   ! Radial Lorentz force density
         real(dp), allocatable :: F_lorentz_th(:,:,:)  ! Azimuthal Lorentz force density
+        real(dp), allocatable :: F_lorentz_z(:,:,:)   ! Vertical Lorentz force density (M11)
 
         ! Radiation
         real(dp), allocatable :: S_rad(:,:,:)

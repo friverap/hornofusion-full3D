@@ -1,43 +1,40 @@
 !===============================================================================
-! mod_lorentz_3d.f90 - Lorentz / electromagnetic stirring forces for EAF bath
+! mod_lorentz_3d.f90 - Fuerza de Lorentz en el baño (auditoria 12-oct-2026, M11)
 !
-! Simplified analytical model (no Poisson solve):
+! Modelo de FUENTE PUNTUAL de corriente en un conductor semi-infinito
+! (Shercliff, J. Fluid Mech. 40 (1970) 241; Sozou, J. Fluid Mech. 46 (1971)
+! 25; Szekely et al., Met. Trans. B 14 (1983) 189): la corriente I de cada
+! electrodo entra al baño en el pie del arco P y se reparte radialmente en
+! el hemisferio inferior,
+!     J = I/(2 pi rho^2) rho_hat,     B_phi = mu0 I (1 - cos th)/(2 pi r_loc)
+! (rho = distancia a P, th = angulo con la vertical descendente, r_loc =
+! distancia horizontal al eje del electrodo). La fuerza
+!     F = J x B = -J B th_hat,  th_hat = cos th e_h + sin th z_hat
+! apunta HACIA el eje y HACIA ABAJO, y su rotacional no es nulo: es lo que
+! impulsa el chorro descendente bajo el electrodo y la recirculacion del baño.
+! El punto fuente P es el MAS BAJO entre el pie del arco (punta - l_a) y el
+! tope del baño bajo el electrodo (radio 2 R_elec, reduccion GLOBAL como en
+! update_electrodes): con chatarra entre el arco y el baño la corriente entra
+! al baño por su superficie. Sin baño bajo el electrodo no hay fuerza.
+! Regularizacion en el pie del arco: rho_eff^2 = rho^2 + R_elec^2 (mancha del
+! arco del orden del radio del electrodo). Con AC la fuerza va con I^2 (no
+! cambia de signo); I es el valor eficaz.
 !
-!   Current I flows downward (-z) from each electrode through the liquid bath.
-!   Distribution: J_z(r_loc) = -I * exp(-r_loc^2/σ_J^2) / (π σ_J^2)
-!   where r_loc = horizontal distance from electrode axis, σ_J = 3*R_elec.
-!
-!   Magnetic field from Ampere's law (around electrode axis):
-!   B_mag(r_loc) = μ₀ * I_enc(r_loc) / (2π r_loc)
-!   I_enc(r_loc) = I * (1 - exp(-r_loc^2/σ_J^2))
-!
-!   Lorentz force:  F = J × B   (J = J_z ẑ, B horizontal around electrode axis)
-!   F = -(J_z * B_mag / r_loc) * (ξ x̂ + η ŷ)      [N/m³, Cartesian]
-!   With J_z < 0: F points OUTWARD from electrode → creates bath stirring.
-!
-!   Converted to cylindrical furnace coordinates (r̂, θ̂) and applied only
-!   where liquid phase is present (alpha_l > threshold).
-!
-! Reference: Trindade & Vilela (2020), ISIJ Int. 60(7) — simplified MHD for EAF.
+! Antes (modelo de Trindade-Vilela simplificado): J vertical uniforme en z con
+! B de una corriente ASCENDENTE -> fuerza hacia AFUERA (signo invertido),
+! puramente radial alrededor del electrodo e independiente de z (un gradiente:
+! la absorbia la presion y no agitaba), sumada tambien a la ecuacion del gas y
+! aplicada a la niebla del freeboard. Ahora: solo liquido CONTINUO (baño,
+! alpha_l >= ALPHA_LIQ_CONT) bajo el pie del arco, y solo en el liquido.
 !===============================================================================
 module mod_lorentz_3d
     use mod_constants
     use mod_types_3d
+    use mod_mpi_topology, only: mpi_allreduce_max
     implicit none
 
 contains
 
-    !---------------------------------------------------------------------------
-    ! Compute Lorentz force density and store in sh%F_lorentz_r/th
-    !
-    !   elec        : electrode array (position, current)
-    !   alpha_l     : liquid volume fraction (-1:,-1:,-1:)
-    !   sh          : shared fields (F_lorentz_r/th are updated here)
-    !   m           : mesh
-    !   cfg         : configuration (R_elec, R_pcd)
-    !   I_electrode : electrode current [A] (from profile interpolation)
-    !   n_elec      : number of electrodes
-    !---------------------------------------------------------------------------
     subroutine compute_lorentz_force(elec, alpha_l, sh, m, cfg, I_electrode, n_elec)
         type(electrode_t), intent(in)   :: elec(:)
         real(dp), intent(in)            :: alpha_l(-1:,-1:,-1:)
@@ -48,76 +45,68 @@ contains
         integer, intent(in)             :: n_elec
 
         integer  :: e, i, j, k
-        real(dp) :: x_elec, y_elec, x_cell, y_cell
-        real(dp) :: xi, eta, r_loc, r2_loc
-        real(dp) :: sigma_J, sigma_J2
-        real(dp) :: exp_fac, J_z_local, I_enc, B_mag
-        real(dp) :: F_cart_x, F_cart_y
-        real(dp) :: F_r_local, F_th_local
-        real(dp) :: alpha_liq
-
-        ! σ_J: current spreads to 3× electrode radius
-        sigma_J  = cfg%R_elec * 3.0_dp
-        sigma_J2 = sigma_J**2
+        real(dp) :: x_elec, y_elec, z_att, xi, eta, r_loc, dz, rho2, rho
+        real(dp) :: cth, sth, J_rho, B_phi, Fmag, Fh, Fx, Fy, z_bath, z_glob
 
         sh%F_lorentz_r  = 0.0_dp
         sh%F_lorentz_th = 0.0_dp
-
-        ! No current → no Lorentz force
+        sh%F_lorentz_z  = 0.0_dp
         if (abs(I_electrode) < 1.0_dp) return
 
         do e = 1, n_elec
             x_elec = cfg%R_pcd * cos(elec(e)%theta_pos)
             y_elec = cfg%R_pcd * sin(elec(e)%theta_pos)
-
+            ! tope del baño bajo el electrodo (global: z esta descompuesta)
+            z_bath = -1.0_dp
             do k = 1, m%nz
                 do j = 1, m%ntheta
                     do i = 1, m%nr
                         if (m%cell_type(i,j,k) == 0) cycle
+                        if (alpha_l(i,j,k) < ALPHA_LIQ_CONT) cycle
+                        if ((m%r(i) * cos(m%theta(j)) - x_elec)**2 + &
+                            (m%r(i) * sin(m%theta(j)) - y_elec)**2 > (2.0_dp * cfg%R_elec)**2) cycle
+                        z_bath = max(z_bath, m%zf(k))
+                    end do
+                end do
+            end do
+            if (m%is_parallel) then
+                call mpi_allreduce_max(z_bath, z_glob, m%topo); z_bath = z_glob
+            end if
+            if (z_bath < 0.0_dp) cycle        ! sin baño bajo el electrodo
+            ! pie del arco: punta menos la longitud de arco (m, C2), o la
+            ! superficie del baño si esta mas abajo
+            z_att = min(elec(e)%z_tip - max(elec(e)%arc_length, 0.0_dp), z_bath)
 
-                        ! Apply only where liquid is present
-                        alpha_liq = alpha_l(i,j,k)
-                        if (alpha_liq < 1.0e-4_dp) cycle
+            do k = 1, m%nz
+                dz = z_att - m%z(k)            ! profundidad bajo el pie (> 0)
+                if (dz <= 0.0_dp) cycle
+                do j = 1, m%ntheta
+                    do i = 1, m%nr
+                        if (m%cell_type(i,j,k) == 0) cycle
+                        if (alpha_l(i,j,k) < ALPHA_LIQ_CONT) cycle   ! solo baño
 
-                        ! Horizontal displacement from electrode axis
-                        x_cell = m%r(i) * cos(m%theta(j))
-                        y_cell = m%r(i) * sin(m%theta(j))
-                        xi  = x_cell - x_elec
-                        eta = y_cell - y_elec
+                        xi  = m%r(i) * cos(m%theta(j)) - x_elec
+                        eta = m%r(i) * sin(m%theta(j)) - y_elec
                         r_loc = sqrt(xi**2 + eta**2)
+                        if (r_loc < 1.0e-6_dp) cycle    ! sobre el eje: F = 0
 
-                        ! Avoid singularity at electrode center
-                        if (r_loc < 1.0e-3_dp) cycle
+                        rho2 = r_loc**2 + dz**2 + cfg%R_elec**2
+                        rho  = sqrt(rho2)
+                        cth = dz / rho
+                        sth = r_loc / rho
+                        J_rho = abs(I_electrode) / (TWO_PI * rho2)
+                        B_phi = MU_0 * abs(I_electrode) * (1.0_dp - cth) / (TWO_PI * r_loc)
+                        Fmag = J_rho * B_phi * alpha_l(i,j,k)
 
-                        r2_loc  = (xi**2 + eta**2) / sigma_J2
-                        exp_fac = exp(-r2_loc)
-
-                        ! Current density: J_z < 0 (current flows DOWN: electrode → bath)
-                        J_z_local = -I_electrode * exp_fac / (PI * sigma_J2)
-
-                        ! Enclosed current fraction within r_loc
-                        I_enc = I_electrode * (1.0_dp - exp_fac)
-
-                        ! Azimuthal B field around electrode axis (Ampere's law)
-                        B_mag = MU_0 * I_enc / (TWO_PI * r_loc)
-
-                        ! Lorentz force in Cartesian:
-                        !   F = J×B = J_z ẑ × (B_x x̂ + B_y ŷ)
-                        !   F_x = -J_z * B_y = -J_z * B_mag * (ξ/r_loc)
-                        !   F_y = +J_z * B_x = -J_z * B_mag * (η/r_loc)   [B_x = -B_mag*(η/r_loc)]
-                        ! Combined: F = -(J_z * B_mag / r_loc) * (ξ, η)
-                        ! With J_z < 0: F points OUTWARD → bath stirring
-                        F_cart_x = -(J_z_local * B_mag / r_loc) * xi
-                        F_cart_y = -(J_z_local * B_mag / r_loc) * eta
-
-                        ! Convert to cylindrical furnace coordinates
-                        F_r_local  =  F_cart_x * cos(m%theta(j)) + F_cart_y * sin(m%theta(j))
-                        F_th_local = -F_cart_x * sin(m%theta(j)) + F_cart_y * cos(m%theta(j))
-
-                        ! Accumulate (weight by liquid fraction: force acts on liquid volume)
-                        sh%F_lorentz_r(i,j,k)  = sh%F_lorentz_r(i,j,k)  + alpha_liq * F_r_local
-                        sh%F_lorentz_th(i,j,k) = sh%F_lorentz_th(i,j,k) + alpha_liq * F_th_local
-
+                        ! -th_hat: horizontal hacia el eje, vertical hacia abajo
+                        Fh = -Fmag * cth
+                        Fx = Fh * xi / r_loc
+                        Fy = Fh * eta / r_loc
+                        sh%F_lorentz_r(i,j,k)  = sh%F_lorentz_r(i,j,k) &
+                            + Fx * cos(m%theta(j)) + Fy * sin(m%theta(j))
+                        sh%F_lorentz_th(i,j,k) = sh%F_lorentz_th(i,j,k) &
+                            - Fx * sin(m%theta(j)) + Fy * cos(m%theta(j))
+                        sh%F_lorentz_z(i,j,k)  = sh%F_lorentz_z(i,j,k) - Fmag * sth
                     end do
                 end do
             end do

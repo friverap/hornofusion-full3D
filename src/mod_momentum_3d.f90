@@ -309,8 +309,10 @@ contains
                                       i < iend .and. pv_ok(i+1,j,k), &
                                       fs_nb(i-1,j,k), fs_nb(i+1,j,k), m%rf(i-1), m%rf(i))
                         ! Centrifugal: +rho*u_th^2/r  +  Lorentz r-stirring
-                        src_extra = alpha_f * ph%rho(i,j,k) * ph%uth(i,j,k)**2 / m%r(i) &
-                                  + sh%F_lorentz_r(i,j,k)
+                        src_extra = alpha_f * ph%rho(i,j,k) * ph%uth(i,j,k)**2 / m%r(i)
+                        ! Lorentz SOLO en el liquido (auditoria M11: se sumaba
+                        ! tambien al gas -> fuerza contada dos veces)
+                        if (.not. is_gas) src_extra = src_extra + sh%F_lorentz_r(i,j,k)
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
                                    + (-alpha_f * dp_dr + src_extra) * vol
 
@@ -334,8 +336,8 @@ contains
                         aP_extra = alpha_f * ph%rho(i,j,k) * &
                                    max(ph%ur(i,j,k), 0.0_dp) / m%r(i) * vol
                         src_extra = -alpha_f * ph%rho(i,j,k) * &
-                                    min(ph%ur(i,j,k), 0.0_dp) * ph%uth(i,j,k) / m%r(i) &
-                                  + sh%F_lorentz_th(i,j,k)
+                                    min(ph%ur(i,j,k), 0.0_dp) * ph%uth(i,j,k) / m%r(i)
+                        if (.not. is_gas) src_extra = src_extra + sh%F_lorentz_th(i,j,k)
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
                                    + (-alpha_f * dp_dth + src_extra) * vol
 
@@ -374,7 +376,8 @@ contains
                         if (.not. is_gas) then
                             src_extra = src_extra &
                                   + alpha_f * ph%rho(i,j,k) * cfg%beta_expansion &
-                                    * GRAVITY * (ph%T(i,j,k) - cfg%T_ref_boussinesq)
+                                    * GRAVITY * (ph%T(i,j,k) - cfg%T_ref_boussinesq) &
+                                  + sh%F_lorentz_z(i,j,k)
                         end if
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
                                    + (-alpha_f * dp_dz + src_extra) * vol

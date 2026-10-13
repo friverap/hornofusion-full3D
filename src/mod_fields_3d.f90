@@ -272,13 +272,14 @@ contains
                  sh%Y_O2(i1:i2, j1:j2, k1:k2), sh%S_O2_src(i1:i2, j1:j2, k1:k2), &
                  sh%S_chem(i1:i2, j1:j2, k1:k2), sh%Y_CO(i1:i2, j1:j2, k1:k2), &
                  sh%Y_CO2(i1:i2, j1:j2, k1:k2), sh%S_CO_src(i1:i2, j1:j2, k1:k2), &
-                 sh%S_CO2_src(i1:i2, j1:j2, k1:k2), sh%Tg_end(i1:i2, j1:j2, k1:k2), stat=ierr)
+                 sh%S_CO2_src(i1:i2, j1:j2, k1:k2), sh%Tg_end(i1:i2, j1:j2, k1:k2), &
+                 sh%F_lorentz_z(i1:i2, j1:j2, k1:k2), stat=ierr)
         call check_alloc(ierr, 'shared fields')
         sh%Tg_end = -1.0_dp
 
         sh%p = 0.0_dp; sh%pp = 0.0_dp; sh%tke = 0.0_dp; sh%eps = 0.0_dp
         sh%mu_t = 0.0_dp; sh%S_arc = 0.0_dp; sh%S_arc_mom = 0.0_dp
-        sh%F_lorentz_r = 0.0_dp; sh%F_lorentz_th = 0.0_dp
+        sh%F_lorentz_r = 0.0_dp; sh%F_lorentz_th = 0.0_dp; sh%F_lorentz_z = 0.0_dp
         sh%S_rad = 0.0_dp; sh%S_chem = 0.0_dp
         sh%G_rad = 0.0_dp; sh%kappa_f = 0.0_dp
         sh%Y_O2 = 0.232_dp   ! aire; se agota (sin ingreso modelado)
@@ -330,6 +331,7 @@ contains
         if (allocated(sh%S_arc_mom))     deallocate(sh%S_arc_mom)
         if (allocated(sh%F_lorentz_r))   deallocate(sh%F_lorentz_r)
         if (allocated(sh%F_lorentz_th))  deallocate(sh%F_lorentz_th)
+        if (allocated(sh%F_lorentz_z))   deallocate(sh%F_lorentz_z)
         if (allocated(sh%S_rad))         deallocate(sh%S_rad)
         if (allocated(sh%G_rad))         deallocate(sh%G_rad)
         if (allocated(sh%Y_O2))          deallocate(sh%Y_O2)

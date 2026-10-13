@@ -684,7 +684,7 @@ contains
                         ! el Boussinesq rompia el equilibrio discreto de la
                         ! superficie (bath_test: 18.6 % del peso del bano sin
                         ! contrapartida en la cara -> modo par-impar del gas)
-                        src = e * Gz(i,j,k) + sh%S_arc_mom(i,j,k)
+                        src = e * Gz(i,j,k) + sh%S_arc_mom(i,j,k) + sh%F_lorentz_z(i,j,k)
                         Su(i,j,k) = mt * vz_o(i,j,k) + src * vol
                     end select
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) + aB(i,j,k) + aT(i,j,k) &
