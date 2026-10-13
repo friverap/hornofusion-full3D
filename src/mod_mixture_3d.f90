@@ -1001,14 +1001,18 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (.not. fl(i,j,k)) cycle
-                    if (.not. ((i == istart .and. at_rmin) .or. (i == iend .and. at_rmax))) &
+                    ! Auditoria M35: solo el EJE queda fuera (u_r lo fija su CC
+                    ! de simetria). Junto a coraza, piso y techo la cara de pared
+                    ! aporta velocidad normal 0 (fvel) y la reconstruccion vale
+                    ! igual; antes esas celdas conservaban la velocidad del
+                    ! predictor, nunca corregida
+                    if (.not. (i == istart .and. at_rmin)) &
                         vr(i,j,k) = 0.5_dp * (fvel(ws_mQ_r(i-1,j,k), i-1, j, k, 1) &
                                             + fvel(ws_mQ_r(i,j,k),   i,   j, k, 1))
                     vth(i,j,k) = 0.5_dp * (fvel(ws_mQ_th(i,j-1,k), i, j-1, k, 2) &
                                          + fvel(ws_mQ_th(i,j,k),   i, j,   k, 2))
-                    if (.not. ((k == kstart .and. at_zmin) .or. (k == kend .and. at_zmax))) &
-                        vz(i,j,k) = 0.5_dp * (fvel(ws_mQ_z(i,j,k-1), i, j, k-1, 3) &
-                                            + fvel(ws_mQ_z(i,j,k),   i, j, k,   3))
+                    vz(i,j,k) = 0.5_dp * (fvel(ws_mQ_z(i,j,k-1), i, j, k-1, 3) &
+                                        + fvel(ws_mQ_z(i,j,k),   i, j, k,   3))
                 end do
             end do
         end do

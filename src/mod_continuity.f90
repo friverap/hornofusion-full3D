@@ -635,9 +635,63 @@ contains
             eL = fluid_eps(iL,jL,kL); eH = fluid_eps(iH,jH,kH)
             if (eL <= EPS_MIX .or. eH <= EPS_MIX) return
             ef = 2.0_dp * eL * eH / (eL + eH)
-            F = F - (1.0_dp - fH) * liq%rho(iH,jH,kH) * ef * sat(iH,jH,kH) * (1.0_dp - sat(iL,jL,kL)) &
-                    * ws_mW(iH,jH,kH) * area
+            if (sol%alpha_s(iH,jH,kH) >= 1.0e-2_dp .and. ws_mKl(iH,jH,kH) > 0.0_dp &
+                .and. ws_mKg(iH,jH,kH) > 0.0_dp) then
+                ! LECHO arriba (auditoria M37): flujo de GODUNOV de Buckley-
+                ! Leverett con la funcion de flujo de Darcy bifasico de la
+                ! celda de arriba, f(s) = min(ub ef s(1-s), drho g ll lg/(ll+lg)).
+                ! Con W de centro de la celda de arriba un estrato SATURADO
+                ! (lambda_g = 0 -> W = 0) no drenaba hacia uno seco; Godunov
+                ! toma el maximo de f entre las dos saturaciones.
+                F = F - (1.0_dp - fH) * liq%rho(iH,jH,kH) * area * &
+                        god_bl(sat(iH,jH,kH), sat(iL,jL,kL), ef, ws_mKl(iH,jH,kH), &
+                               ws_mKg(iH,jH,kH), max(liq%rho(iH,jH,kH) - gas%rho(iH,jH,kH), 0.0_dp), &
+                               liq%rho(iH,jH,kH))
+            else
+                F = F - (1.0_dp - fH) * liq%rho(iH,jH,kH) * ef * sat(iH,jH,kH) * (1.0_dp - sat(iL,jL,kL)) &
+                        * ws_mW(iH,jH,kH) * area
+            end if
         end function mixflux
+
+        ! Flujo de Godunov (superficial, m/s, hacia abajo) entre el dador de
+        ! arriba (sU) y el receptor de abajo (sD) para la funcion de flujo de
+        ! deslizamiento del lecho. sU >= sD: max de f en [sD, sU]; si no, min
+        ! en [sU, sD] (Godunov para flujo en el sentido U -> D).
+        function god_bl(sU, sD, e, Kl, Kg, drho, rl) result(fg)
+            real(dp), intent(in) :: sU, sD, e, Kl, Kg, drho, rl
+            real(dp) :: fg, a, b, sv, fv, ub
+            integer  :: n
+            integer, parameter :: NS = 40
+            ub = 1.53_dp * (1.8_dp * GRAVITY * drho / rl**2)**0.25_dp
+            a = min(sU, sD); b = max(sU, sD)
+            if (sU >= sD) then
+                fg = 0.0_dp
+            else
+                fg = huge(1.0_dp)
+            end if
+            do n = 0, NS
+                sv = a + (b - a) * real(n, dp) / real(NS, dp)
+                fv = fbl(sv, e, Kl, Kg, drho, ub)
+                if (sU >= sD) then
+                    fg = max(fg, fv)
+                else
+                    fg = min(fg, fv)
+                end if
+            end do
+            if (fg == huge(1.0_dp)) fg = 0.0_dp
+        end function god_bl
+
+        ! Funcion de flujo de deslizamiento del lecho (Darcy bifasico acotado
+        ! por la burbuja de Harmathy), superficial [m/s]
+        pure real(dp) function fbl(sx, e, Kl, Kg, drho, ub)
+            real(dp), intent(in) :: sx, e, Kl, Kg, drho, ub
+            real(dp) :: ll, lg
+            ll = (e * sx)**2 / Kl
+            lg = (e * (1.0_dp - sx))**2 / Kg
+            fbl = 0.0_dp
+            if (ll + lg > 0.0_dp) fbl = min(ub * e * sx * (1.0_dp - sx), &
+                                            drho * GRAVITY * ll * lg / (ll + lg))
+        end function fbl
 
         ! celda con liquido DISPERSO fuera del lecho (mismo criterio que
         ! mod_mixture_3d: sin liquido continuo y sin chatarra propia)

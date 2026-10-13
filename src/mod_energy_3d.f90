@@ -23,7 +23,7 @@ contains
                                alpha_old, mdot, T_src, is_gas, residual)
         use mod_face_flux, only: face_mass_fluxes_noalpha
         use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
-            ws_flux_valid, aW => ws_aW, &
+            ws_flux_valid, ws_mQ_r, ws_mQ_th, ws_mQ_z, ws_mix_valid, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su
         type(phase_t), intent(inout) :: ph
@@ -162,7 +162,23 @@ contains
                         ! es mdot*cp*T. El código original sumaba F [kg/s]
                         ! directamente a D [W/K] — la convección térmica
                         ! quedaba subponderada ~cp (x700-1000).
-                        if (is_gas) then
+                        if (is_gas .and. cfg%mixture_model .and. ws_mix_valid &
+                            .and. ws_flux_valid) then
+                            ! MEZCLA (auditoria M36): el gas mueve el
+                            ! COMPLEMENTO del flujo volumetrico de mezcla,
+                            ! Q_g = Q - Q_l (Q_l = flujo de masa del transporte
+                            ! de alpha / rho_steel, densidad constante del
+                            ! liquido), con la rho_g del dador. Antes: flujos
+                            ! reconstruidos de las velocidades de fase, que no
+                            ! suman Q -> la energia del gas no movia el volumen
+                            ! que dejo la continuidad.
+                            Fw = gflux(ws_mQ_r(i-1,j,k) - ws_Fr(i-1,j,k) / cfg%rho_steel, i-1, j, k, i, j, k)
+                            Fe = gflux(ws_mQ_r(i,j,k)   - ws_Fr(i,j,k)   / cfg%rho_steel, i, j, k, i+1, j, k)
+                            Fs = gflux(ws_mQ_th(i,jm,k) - ws_Fth(i,jm,k) / cfg%rho_steel, i, jm, k, i, j, k)
+                            Fn = gflux(ws_mQ_th(i,j,k)  - ws_Fth(i,j,k)  / cfg%rho_steel, i, j, k, i, jp, k)
+                            Fb = gflux(ws_mQ_z(i,j,k-1) - ws_Fz(i,j,k-1) / cfg%rho_steel, i, j, k-1, i, j, k)
+                            Ft = gflux(ws_mQ_z(i,j,k)   - ws_Fz(i,j,k)   / cfg%rho_steel, i, j, k, i, j, k+1)
+                        else if (is_gas) then
                             call face_mass_fluxes(alpha_q, ph%rho, ph%ur, &
                                 ph%uth, ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
                         else
@@ -337,6 +353,21 @@ contains
         ! anterior — ver multiphase_iteration/relax_field)
 
     contains
+
+        ! Flujo de masa del gas en una cara de lo -> hi con caudal volumetrico
+        ! Qg: rho_g del dador (M36); 0 si alguna celda es pared
+        function gflux(Qg, il, jl, kl, ih, jh, kh) result(F)
+            real(dp), intent(in) :: Qg
+            integer, intent(in)  :: il, jl, kl, ih, jh, kh
+            real(dp) :: F
+            F = 0.0_dp
+            if (m%cell_type(il,jl,kl) == 0 .or. m%cell_type(ih,jh,kh) == 0) return
+            if (Qg >= 0.0_dp) then
+                F = ph%rho(il,jl,kl) * Qg
+            else
+                F = ph%rho(ih,jh,kh) * Qg
+            end if
+        end function gflux
 
         ! Conductividad efectiva del centro de celda: k + cp*mu_t/Pr_t para
         ! el líquido (transporte turbulento); molecular para el gas
