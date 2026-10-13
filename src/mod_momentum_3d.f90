@@ -103,6 +103,8 @@ contains
         ! Presion que ve ESTA fase: la del Poisson, y para el gas ademas la
         ! correccion de superficie libre (ws_pcorr_g, mod_workspace)
         real(dp), allocatable :: pf(:,:,:)
+        ! aP fisico del anillo del eje (A15)
+        real(dp) :: aP_axis(lbound(vel,2):ubound(vel,2), lbound(vel,3):ubound(vel,3))
         ! Sonda de balance de momento de una celda (cfg%probe_cell_*)
         integer  :: pi_, pj_, pk_
         logical  :: probe_here, probe_own
@@ -416,6 +418,11 @@ contains
             end do
         end do
 
+        ! aP FISICO del anillo del eje antes de la fila de relleno de la BC
+        ! (u_r = 0 => aP = 1): el Poisson y F2.31 leen aP_ur(1) como
+        ! coeficiente real y con el 1 la conductancia de la cara 1-2 era
+        ! dimensionalmente arbitraria en todo el eje (auditoria 12-oct-2026, A15)
+        if (comp == 'ur' .and. at_rmin) aP_axis = aP(istart,:,:)
         ! Boundary conditions
         call apply_momentum_bc(aW, aE, aS, aN, aB, aT, aP, Su, m, comp)
 
@@ -437,7 +444,9 @@ contains
 
         ! Store aP for Rhie-Chow
         select case (comp)
-        case ('ur');  ph%aP_ur = aP
+        case ('ur')
+            ph%aP_ur = aP
+            if (at_rmin) ph%aP_ur(istart,:,:) = max(aP_axis, SMALL)
         case ('uth'); ph%aP_uth = aP
         case ('uz');  ph%aP_uz = aP
         end select
