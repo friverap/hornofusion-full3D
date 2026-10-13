@@ -12,6 +12,7 @@ module mod_solid_phase
     use mod_scrap_collapse
     use mod_interphase_ht
     use mod_workspace, only: ensure_workspace, ws_Tsrc
+    use mod_audit, only: audit_add, AUD_GAS_VOLFIX
     implicit none
 
 contains
@@ -65,17 +66,24 @@ contains
         type(mesh_t), intent(in)     :: m
 
         integer :: i, j, k
+        real(dp) :: a_new, dmg
 
+        dmg = 0.0_dp
         do k = 1, m%nz
             do j = 1, m%ntheta
                 do i = 1, m%nr
                     if (m%cell_type(i,j,k) == 0) cycle
-                    gas%alpha(i,j,k) = max(0.0_dp, 1.0_dp &
+                    a_new = max(0.0_dp, 1.0_dp &
                         - sol%alpha_s(i,j,k) - liq%alpha(i,j,k) &
                         - slag%alpha_sl(i,j,k))
+                    ! masa de gas creada/destruida (auditoria, bajos: antes
+                    ! sin columna; la masa del gas la fija la EOS)
+                    dmg = dmg + (a_new - gas%alpha(i,j,k)) * gas%rho(i,j,k) * m%vol(i,j,k)
+                    gas%alpha(i,j,k) = a_new
                 end do
             end do
         end do
+        call audit_add(AUD_GAS_VOLFIX, dmg)
     end subroutine enforce_volume_constraint
 
 end module mod_solid_phase

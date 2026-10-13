@@ -929,7 +929,7 @@ contains
                         aP(i,j,k) = aP(i,j,k) + ag / P0_THERMO * m%vol(i,j,k) / cfg%dt
                         ag = max(gas%alpha(i,j,k), 0.0_dp)
                         src = ag * m%vol(i,j,k) / cfg%dt * &
-                              (gas%rho(i,j,k) - cfg%rho_gas * cfg%T_ambient &
+                              (gas%rho(i,j,k) - cfg%rho_gas * T_RHO_GAS_REF &
                                / max(Tg_ref(i,j,k), T_MIN_GAS)) / max(gas%rho(i,j,k), SMALL)
                         cap = COMP_SRC_CAP * ag * m%vol(i,j,k) / cfg%dt
                         ! demanda total con un solo tope y acarreo (M26; ver

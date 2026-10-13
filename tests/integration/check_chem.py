@@ -21,12 +21,11 @@ from eafutil import cell_volumes, load_snapshot, read_config, snapshots
 
 
 RHO_REF = 1.2      # cfg%rho_gas por defecto
-T_REF = 300.0      # cfg%T_ambient (se sobreescribe con el config)
+T_REF = 300.0      # T_RHO_GAS_REF del codigo (fija; no T_ambient)
 
 
 def rho_gas(T):
-    # la MISMA EOS que mod_properties_3d: rho_gas*T_ambient/T (antes 1.2*300/T
-    # fijo: con T_ambient = 900 K los inventarios salian 3x menores)
+    # la MISMA EOS que mod_properties_3d: rho_gas*T_RHO_GAS_REF/max(T, 100)
     return RHO_REF * T_REF / np.maximum(T, 100.0)
 
 
@@ -47,10 +46,9 @@ def main():
     ap.add_argument("--rtol", type=float, default=0.05)
     args = ap.parse_args()
 
-    global RHO_REF, T_REF
+    global RHO_REF
     cfg = read_config(args.config)
     RHO_REF = float(cfg.get("rho_gas", 1.2))
-    T_REF = float(cfg.get("T_ambient", 300.0))
     files = snapshots(args.rundir)
     O0, C0, f0 = elements(files[0])
     O1, C1, f1 = elements(files[-1])

@@ -160,6 +160,10 @@ module mod_constants
 
     ! Minimum gas temperature for the ideal-gas density update [K]
     real(dp), parameter :: T_MIN_GAS = 100.0_dp
+    ! Temperatura a la que vale cfg%rho_gas (auditoria, bajos): la EOS
+    ! rho = rho_gas T_REF/T se referia a cfg%T_ambient, asi que un caso con
+    ! T_ambient = 900 K tenia aire de 1.2 kg/m3 a 900 K (3x)
+    real(dp), parameter :: T_RHO_GAS_REF = 300.0_dp
 
     ! Minimum radius of the cylindrical mesh axis hole [m]
     real(dp), parameter :: R_AXIS_MIN = 0.02_dp

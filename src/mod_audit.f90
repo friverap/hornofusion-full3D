@@ -40,7 +40,7 @@ module mod_audit
     public :: AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
     public :: AUD_RESID_MASS, AUD_RESID_E, AUD_SPILL_MASS
     public :: AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
-    public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2
+    public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2, AUD_GAS_VOLFIX
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -86,7 +86,10 @@ module mod_audit
     integer, parameter :: AUD_DIL_O2          = 34
     integer, parameter :: AUD_DIL_CO          = 35
     integer, parameter :: AUD_DIL_CO2         = 36
-    integer, parameter :: N_AUD = 36
+    ! kg de gas que la restriccion de volumen (enforce_volume_constraint) crea
+    ! (+) o destruye (-) al recalcular alpha_g = 1 - sum tras fusion/colapso
+    integer, parameter :: AUD_GAS_VOLFIX      = 37
+    integer, parameter :: N_AUD = 37
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -181,7 +184,7 @@ contains
                 'm_resid_closed,E_resid_closed,m_spill,' // &
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
-                'm_dil_O2,m_dil_CO,m_dil_CO2'
+                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix'
             close(iu)
         end if
         acc = 0.0_dp
@@ -264,9 +267,9 @@ contains
                     ! cp*ln(T/T_amb). El inventario rho(T)*cp*T era CONSTANTE
                     ! en T (el 'agujero' de ~70% del balance).
                     s(6) = s(6) + gas%alpha(i,j,k) * cfg%rho_gas * &
-                                  cfg%T_ambient * gas%cp(i,j,k) * vol * &
+                                  T_RHO_GAS_REF * gas%cp(i,j,k) * vol * &
                                   log(max(gas%T(i,j,k), T_MIN_GAS) / &
-                                      cfg%T_ambient)
+                                      T_RHO_GAS_REF)
                     s(7) = s(7) + sol%E_s(i,j,k)
                     s(8) = s(8) + slag%E_sl(i,j,k)
 
@@ -332,7 +335,8 @@ contains
                 ',', a(AUD_VOL_DALPHA), ',', a(AUD_VOL_LIM), ',', a(AUD_VOL_UNLINKED), &
                 ',', mx_glob(1), ',', mx_glob(2), ',', mx_glob(3), &
                 ',', a(AUD_CHARGE_MASS), ',', a(AUD_CHARGE_E), ',', a(AUD_C_OXID), &
-                ',', a(AUD_DIL_O2), ',', a(AUD_DIL_CO), ',', a(AUD_DIL_CO2)
+                ',', a(AUD_DIL_O2), ',', a(AUD_DIL_CO), ',', a(AUD_DIL_CO2), &
+                ',', a(AUD_GAS_VOLFIX)
             close(iu)
         end if
     end subroutine audit_write_step

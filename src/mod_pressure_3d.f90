@@ -247,7 +247,7 @@ contains
                         if (.not. act_g(i,j,k)) cycle
                         if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
                         src = abs(gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
-                              (gas%rho(i,j,k) - cfg%rho_gas * cfg%T_ambient &
+                              (gas%rho(i,j,k) - cfg%rho_gas * T_RHO_GAS_REF &
                                / max(gas_T_old(i,j,k), T_MIN_GAS)) / max(gas%rho(i,j,k), SMALL))
                         src = min(src, COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt)
                         if (src <= 0.0_dp) cycle
@@ -439,7 +439,7 @@ contains
                         if (.not. act_g(i,j,k)) cycle
                         ! Forma de VOLUMEN: (alpha_g/rho_g) (rho(T) - rho(T_old))/dt V
                         src = gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
-                              (gas%rho(i,j,k) - cfg%rho_gas * cfg%T_ambient &
+                              (gas%rho(i,j,k) - cfg%rho_gas * T_RHO_GAS_REF &
                                / max(gas_T_old(i,j,k), T_MIN_GAS)) / max(gas%rho(i,j,k), SMALL)
                         cap = COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt
                         ! Demanda de volumen del gas [m3/s]: expansion termica

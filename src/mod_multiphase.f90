@@ -195,7 +195,10 @@ contains
                     ! integra presion: 4.5 -> 63 kPa lineales en 0.8 s.
                     al_c = liq%alpha(i,j,k)
                     ag_c = gas%alpha(i,j,k)
-                    as_e = max(sol%alpha_s(i,j,k), sol%alpha_s(i,j,k-1))
+                    ! celda de abajo solo si existe (auditoria, bajos: en
+                    ! k = 1 y sobre el tazon se leia el halo fisico)
+                    as_e = sol%alpha_s(i,j,k)
+                    if (m%cell_type(i,j,k-1) /= 0) as_e = max(as_e, sol%alpha_s(i,j,k-1))
                     xb = A_AIAD * (ALPHA_AIAD_LIM - as_e)
                     f_bed = 1.0_dp / (1.0_dp + exp(min(max(xb, -60.0_dp), 60.0_dp)))
                     xb = A_AIAD * (al_c - ALPHA_AIAD_LIM)
@@ -390,15 +393,37 @@ contains
             du = sqrt((gas%ur(ii,jj,kk)  - liq%ur(ii,jj,kk))**2 + &
                       (gas%uth(ii,jj,kk) - liq%uth(ii,jj,kk))**2 + &
                       (gas%uz(ii,jj,kk)  - liq%uz(ii,jj,kk))**2)
-            gr_  = 0.5_dp * (liq%alpha(ii+1,jj,kk) - liq%alpha(ii-1,jj,kk)) / &
-                   max(m%r(ii+1) - m%r(ii-1), SMALL) * 2.0_dp
-            gth_ = 0.5_dp * (liq%alpha(ii,jj+1,kk) - liq%alpha(ii,jj-1,kk)) / &
-                   max(m%r(ii) * (m%theta(jj+1) - m%theta(jj-1)), SMALL) * 2.0_dp
-            gz_  = 0.5_dp * (liq%alpha(ii,jj,kk+1) - liq%alpha(ii,jj,kk-1)) / &
-                   max(m%z(kk+1) - m%z(kk-1), SMALL) * 2.0_dp
+            ! gradiente de alpha_l con diferencias UNILATERALES junto a celdas
+            ! inactivas (pared: sin interfase). Auditoria (bajos): antes se
+            ! leian los halos fisicos y las celdas del tazon como si fueran
+            ! fluido
+            gr_  = g1(liq%alpha(ii-1,jj,kk), liq%alpha(ii,jj,kk), liq%alpha(ii+1,jj,kk), &
+                      m%cell_type(ii-1,jj,kk) /= 0, m%cell_type(ii+1,jj,kk) /= 0, &
+                      m%r(ii) - m%r(ii-1), m%r(ii+1) - m%r(ii))
+            gth_ = g1(liq%alpha(ii,jj-1,kk), liq%alpha(ii,jj,kk), liq%alpha(ii,jj+1,kk), &
+                      m%cell_type(ii,jj-1,kk) /= 0, m%cell_type(ii,jj+1,kk) /= 0, &
+                      m%r(ii) * (m%theta(jj) - m%theta(jj-1)), m%r(ii) * (m%theta(jj+1) - m%theta(jj)))
+            gz_  = g1(liq%alpha(ii,jj,kk-1), liq%alpha(ii,jj,kk), liq%alpha(ii,jj,kk+1), &
+                      m%cell_type(ii,jj,kk-1) /= 0, m%cell_type(ii,jj,kk+1) /= 0, &
+                      m%z(kk) - m%z(kk-1), m%z(kk+1) - m%z(kk))
             ga = sqrt(gr_*gr_ + gth_*gth_ + gz_*gz_)
             K = C_FS_SHEAR * gas%rho(ii,jj,kk) * du * ga
         end function fs_shear
+
+        pure function g1(am, ac, ap, okm, okp, dm, dpl) result(g)
+            real(dp), intent(in) :: am, ac, ap, dm, dpl
+            logical, intent(in)  :: okm, okp
+            real(dp) :: g
+            if (okm .and. okp) then
+                g = (ap - am) / max(dm + dpl, SMALL)
+            else if (okp) then
+                g = (ap - ac) / max(dpl, SMALL)
+            else if (okm) then
+                g = (ac - am) / max(dm, SMALL)
+            else
+                g = 0.0_dp
+            end if
+        end function g1
 
     end subroutine multiphase_iteration
 

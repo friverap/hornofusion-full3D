@@ -404,7 +404,11 @@ contains
                     liq%mu(i,j,k)     = cfg%mu_l
                     liq%mu_eff(i,j,k) = cfg%mu_l
 
-                    gas%rho(i,j,k)    = cfg%rho_gas
+                    ! la MISMA EOS que update_properties (antes rho_gas sin
+                    ! importar T: un caso sin flujo ni energia nunca la
+                    ! recalculaba)
+                    gas%rho(i,j,k)    = cfg%rho_gas * T_RHO_GAS_REF / &
+                                        max(gas%T(i,j,k), T_MIN_GAS)
                     gas%cp(i,j,k)     = cfg%cp_gas
                     gas%kth(i,j,k)    = cfg%k_gas
                     gas%mu(i,j,k)     = cfg%mu_gas
