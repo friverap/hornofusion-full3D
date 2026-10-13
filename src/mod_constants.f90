@@ -367,7 +367,9 @@ contains
     ! el arrastre de Ergun iguala el peso boyante:
     !     (mu/K + C_F rho |u| / sqrt(K)) u = alpha_l (rho_l - rho_g) g
     ! (raiz positiva, forma numericamente estable). Con d_p = 0.1 m,
-    ! eps = 0.5 y alpha_l = 0.01 da ~2 mm/s. La estimacion anterior por
+    ! eps = 0.5 y alpha_l = 0.01 da ~0.11 m/s con la convencion de velocidad
+    ! intersticial de ergun_coefficients (auditoria A6; 37 mm/s con la anterior,
+    ! y el "~2 mm/s" de este comentario era del Ergun previo a Bug 21). La estimacion anterior por
     ! caida libre, sqrt(2 g d_p) ~ 1.4 m/s, era 700x mayor: drenaba el
     ! primer fundido de la zona caliente antes de que se acumulara y lo
     ! congelaba en la chatarra fria de abajo (B1 v14: 8 kg de bano a 30 s
@@ -376,8 +378,9 @@ contains
     !---------------------------------------------------------------------------
     ! Coeficientes de Ergun (1952) del lecho de particulas d_p con fraccion
     ! solida alpha_s (porosidad eps = 1 - alpha_s), para el fluido (rho, mu):
-    !   grad p = A u + B u |u|,   A = 150 mu (1-eps)^2 / (d_p^2 eps^3)  [kg/(m3 s)]
-    !                             B = 1.75 rho (1-eps) / (d_p eps^3)    [kg/m4]
+    !   -grad p = A_E U + B_E U|U| (U superficial),
+    !   A_E = 150 mu (1-eps)^2 / (d_p^2 eps^3),  B_E = 1.75 rho (1-eps) / (d_p eps^3)
+    ! (ver la convencion de velocidad abajo: la rutina devuelve eps^2 A_E, eps^3 B_E)
     ! Es la UNICA definicion (momento, percolacion, tests). Hasta el 25-sep-2026
     ! el Forchheimer se escribia C_F rho |u| / sqrt(K) con C_F = 1.75/(d_p eps^3)
     ! [1/m] en vez del adimensional 1.75/sqrt(150 eps^3): el termino quedaba
@@ -387,13 +390,25 @@ contains
     ! "bolsas hidraulicamente bloqueadas" que respondian con kPa-MPa
     ! (B1 v16-v27, Bug 18/19).
     !---------------------------------------------------------------------------
+    !
+    ! CONVENCION DE VELOCIDAD (auditoria 12-oct-2026, A6): Ergun da la caida de
+    ! presion por la velocidad SUPERFICIAL U = eps u. El codigo usa la
+    ! velocidad INTERSTICIAL de la fase u y el gradiente de presion pesado por
+    ! la fraccion (momento: alpha(-grad p) = coef u, por volumen total). Para el
+    ! lecho saturado eso es eps(-dp/dx) = eps^2 A_E u + eps^3 B_E u|u|: los
+    ! coeficientes que devuelve esta rutina son los de Gidaspow,
+    !   A = eps^2 A_E = 150 mu (1-eps)^2/(d_p^2 eps)     [kg/(m3 s)]
+    !   B = eps^3 B_E = 1.75 rho (1-eps)/d_p             [kg/m4]
+    ! Antes devolvia A_E y B_E tal cual: arrastre 1/eps^2 (viscoso) y 1/eps^3
+    ! (inercial) veces mayor — 4x/8x con eps = 0.5 y 400x/8000x con eps = 0.05,
+    ! justo el lecho compactado del piso de B1.
     pure subroutine ergun_coefficients(alpha_s, rho, mu, d_p, A, B)
         real(dp), intent(in)  :: alpha_s, rho, mu, d_p
         real(dp), intent(out) :: A, B
         real(dp) :: eps
         eps = max(1.0_dp - alpha_s, 0.01_dp)
-        A = 150.0_dp * mu * (1.0_dp - eps)**2 / (d_p**2 * eps**3 + SMALL)
-        B = 1.75_dp * rho * (1.0_dp - eps) / (d_p * eps**3 + SMALL)
+        A = 150.0_dp * mu * (1.0_dp - eps)**2 / (d_p**2 * eps + SMALL)
+        B = 1.75_dp * rho * (1.0_dp - eps) / (d_p + SMALL)
     end subroutine ergun_coefficients
 
     pure function percolation_velocity(alpha_l, alpha_s, rho_l, rho_g, mu_l, d_p) result(u)

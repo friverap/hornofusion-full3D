@@ -9,6 +9,9 @@
 !   dp/L = 150 mu (1-eps)^2 u/(d_p^2 eps^3) + 1.75 rho (1-eps) u^2/(d_p eps^3)
 ! Hasta 2026-09-25 el código y este test usaban C_F = 1.75/(d_p eps^3)
 ! con /sqrt(K): 1/m en vez de adimensional, ~500x de más en Forchheimer.
+! Desde el 12-oct-2026 (auditoria A6) el coeficiente es para velocidad
+! INTERSTICIAL con presion pesada por la fraccion (forma de Gidaspow):
+!   coef = eps^2 A_E + eps^3 B_E |u|,  A_E, B_E los de Ergun (U superficial).
 ! Los arrays llevan halos (-1:n+2) como en producción (regla GFortran de
 ! cotas inferiores).
 !===============================================================================
@@ -44,12 +47,13 @@ program test_ergun
 
     ! Cálculo independiente (Ergun 1952, forma original)
     eps  = 0.5_dp; d = cfg%d_particle
-    A    = 150.0_dp * 6.0e-3_dp * (1.0_dp - eps)**2 / (d**2 * eps**3)
-    B    = 1.75_dp * 7500.0_dp * (1.0_dp - eps) / (d * eps**3)
+    A    = eps**2 * 150.0_dp * 6.0e-3_dp * (1.0_dp - eps)**2 / (d**2 * eps**3)
+    B    = eps**3 * 1.75_dp * 7500.0_dp * (1.0_dp - eps) / (d * eps**3)
     vmag = sqrt(0.1_dp**2 + 0.05_dp**2 + 0.2_dp**2)
     want = A + B * vmag
-    ! Valores a mano (d = 0.10 m, eps = 0.5): A = 180 kg/(m3 s), B = 5.25e5 kg/m4
-    if (abs(A - 180.0_dp) > 1.0e-9_dp .or. abs(B - 5.25e5_dp) > 1.0e-6_dp) then
+    ! Valores a mano (d = 0.10 m, eps = 0.5): A_E = 180, B_E = 5.25e5 ->
+    ! A = 0.25*180 = 45 kg/(m3 s), B = 0.125*5.25e5 = 65625 kg/m4
+    if (abs(A - 45.0_dp) > 1.0e-9_dp .or. abs(B - 65625.0_dp) > 1.0e-6_dp) then
         print '(A,2ES12.4)', '   FAIL Ergun a mano: A, B = ', A, B
         stop 1
     end if
