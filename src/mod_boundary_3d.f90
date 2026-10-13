@@ -139,10 +139,11 @@ contains
                         end if
                     end if
 
-                    ! Outer wall: no-slip v=0
+                    ! Outer wall: el enlace a la pared se anula aqui; el
+                    ! esfuerzo de no deslizamiento (u = 0 en la pared) lo pone
+                    ! wall_shear en la diagonal (mod_momentum_3d, M23)
                     if (i == nr .and. at_rmax) then
                         aE(i,j,k) = 0.0_dp
-                        ! Large aP to enforce zero at wall-adjacent
                     end if
 
                     ! Bottom wall

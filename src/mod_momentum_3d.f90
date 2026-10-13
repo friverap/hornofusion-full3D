@@ -393,7 +393,7 @@ contains
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
                                + aB(i,j,k) + aT(i,j,k) + rho_vol_dt &
                                + drag_coef(i,j,k) * vol + aP_extra &
-                               + Kexch(i,j,k) * vol
+                               + Kexch(i,j,k) * vol + wall_shear()
 
                     if (probe_here) then
                         if (i == pi_ .and. j == pj_ .and. k == pk_) then
@@ -459,6 +459,37 @@ contains
         deallocate(pf)
 
     contains
+
+        ! Esfuerzo de PARED (auditoria M23): no deslizamiento u = 0 en la
+        ! pared, conductancia de media celda alpha mu A/(delta/2) en la
+        ! diagonal de las componentes TANGENCIALES a cada cara de pared (celda
+        ! vecina inactiva: tazon, coraza, piso, techo). Antes la conductancia
+        ! hacia la pared se ponia a cero: deslizamiento libre en todas partes
+        ! aunque la CC decia no-slip. El eje (r = rmin) es simetria: sin pared.
+        function wall_shear() result(ap_w)
+            real(dp) :: ap_w, am
+            ap_w = 0.0_dp
+            am = max(alpha_q(i,j,k), 0.0_dp) * ph%mu_eff(i,j,k)
+            if (am <= 0.0_dp) return
+            if (comp /= 'ur') then
+                if (m%cell_type(i-1,j,k) == 0 .and. .not. (i == istart .and. at_rmin)) &
+                    ap_w = ap_w + am * m%Ar(i-1,j,k) / (0.5_dp * m%dr(i))
+                if (m%cell_type(i+1,j,k) == 0) &
+                    ap_w = ap_w + am * m%Ar(i,j,k) / (0.5_dp * m%dr(i))
+            end if
+            if (comp /= 'uth') then
+                if (m%cell_type(i,j-1,k) == 0) &
+                    ap_w = ap_w + am * m%Ath(i,j,k) / (0.5_dp * m%r(i) * m%dtheta(j))
+                if (m%cell_type(i,j+1,k) == 0) &
+                    ap_w = ap_w + am * m%Ath(i,j,k) / (0.5_dp * m%r(i) * m%dtheta(j))
+            end if
+            if (comp /= 'uz') then
+                if (m%cell_type(i,j,k-1) == 0) &
+                    ap_w = ap_w + am * m%Az(i,j,k-1) / (0.5_dp * m%dz(k))
+                if (m%cell_type(i,j,k+1) == 0) &
+                    ap_w = ap_w + am * m%Az(i,j,k) / (0.5_dp * m%dz(k))
+            end if
+        end function wall_shear
 
         ! Flujo de masa donor-cell en una cara orientada de 'lo' (lado -)
         ! a 'hi' (lado +): F>0 va de lo a hi y lleva alpha_lo; F<0 lleva
