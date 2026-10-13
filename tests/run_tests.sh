@@ -280,8 +280,6 @@ full | rebaseline)
             cold_10step_*)   x=audit_cold ;;
             arc_noscrap_*)   x=audit_arcnoscrap ;;
             noflow_energy_*) x=audit_noflow ;;
-            bath_fill_mix_*) x=audit_fillmix ;;
-            bed_drain_*)     x=audit_beddrain ;;
             *)               x="" ;;
         esac
         check_audit_if_present "$d" "$x" "$more"

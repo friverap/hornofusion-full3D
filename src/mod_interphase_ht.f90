@@ -193,6 +193,85 @@ contains
     end subroutine compute_interphase_heat
 
     !---------------------------------------------------------------------------
+    ! Intercambio de calor GAS-LIQUIDO del modelo de dos fluidos (auditoria 2,
+    ! N-A1). No existia: el gas a 300 K sobre acero a 1850 K quedaba a 300 K,
+    ! y la columna del arco y el gas caliente sobre el baño no podian cederle
+    ! calor. Area interfacial:
+    !   - liquido CONTINUO: superficie libre resuelta, a = |grad alpha_l| (la
+    !     densidad de area del AIAD, Hoehne-Vallee 2010);
+    !   - liquido DISPERSO (gotas, fuera del lecho): a = 6 alpha_l / d_gota.
+    ! h del lado del gas con k molecular (el liquido conduce ~100x mas):
+    !   gotas Nu = 2 + 0.6 Re^1/2 Pr^1/3 (Ranz-Marshall, longitud d_gota);
+    !   superficie Nu = 2 + 0.664 Re^1/2 Pr^1/3 (placa plana, longitud dz),
+    ! con la velocidad RELATIVA gas-liquido. Paso IMPLICITO exacto de dos nodos
+    ! (sin rebase con ningun dt): q = C_g C_l/(C_g + C_l) (T_g - T_l)
+    ! (1 - exp(-G dt (1/C_g + 1/C_l))). Conservativo: lo que pierde el gas lo
+    ! gana el liquido (E_iph_gas = -E_iph_liq; la identidad de la interfase
+    ! sigue cerrando). La radiacion entre la superficie y el gas la lleva la DO.
+    !---------------------------------------------------------------------------
+    subroutine compute_gas_liquid_heat(liq, gas, sol, m, cfg)
+        type(phase_t), intent(inout) :: liq, gas
+        type(solid_t), intent(in)    :: sol
+        type(mesh_t), intent(in)     :: m
+        type(config_t), intent(in)   :: cfg
+        integer  :: i, j, k, jm, jp
+        real(dp) :: al, ag, cg, cl, G, f, q, d, k_mol, urel, Re, h, a_i
+        real(dp) :: gr, gth, gz, L
+        d = cfg%d_droplet
+        if (d <= 0.0_dp) d = 2.0e-3_dp
+        do k = 1, m%nz
+            do j = 1, m%ntheta
+                jm = j - 1; jp = j + 1
+                do i = 1, m%nr
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    al = liq%alpha(i,j,k); ag = gas%alpha(i,j,k)
+                    if (al <= 1.0e-6_dp .or. ag <= 1.0e-6_dp) cycle
+                    cg = ag * gas%rho(i,j,k) * gas%cp(i,j,k) * m%vol(i,j,k)
+                    cl = al * liq%rho(i,j,k) * liq%cp(i,j,k) * m%vol(i,j,k)
+                    k_mol = gas%mu(i,j,k) * gas%cp(i,j,k) / PR_GAS_MOL
+                    urel = sqrt((gas%ur(i,j,k) - liq%ur(i,j,k))**2 + &
+                                (gas%uth(i,j,k) - liq%uth(i,j,k))**2 + &
+                                (gas%uz(i,j,k) - liq%uz(i,j,k))**2)
+                    if (liq_continuous(al, sol%alpha_s(i,j,k))) then
+                        ! |grad alpha_l| central; vecina inactiva = sin salto
+                        gr  = (anb(i+1,j,k, al) - anb(i-1,j,k, al)) / (m%r(i+1) - m%r(i-1) + SMALL)
+                        gth = (anb(i,jp,k, al) - anb(i,jm,k, al)) / &
+                              (m%r(i) * (m%theta(jp) - m%theta(jm)) + SMALL)
+                        gz  = (anb(i,j,k+1, al) - anb(i,j,k-1, al)) / (m%z(k+1) - m%z(k-1) + SMALL)
+                        a_i = sqrt(gr**2 + gth**2 + gz**2)
+                        L = m%dz(k)
+                        Re = gas%rho(i,j,k) * urel * L / (gas%mu(i,j,k) + SMALL)
+                        h = k_mol / L * (2.0_dp + 0.664_dp * sqrt(Re) * PR_GAS_MOL**(1.0_dp/3.0_dp))
+                    else
+                        a_i = 6.0_dp * al / d
+                        Re = gas%rho(i,j,k) * urel * d / (gas%mu(i,j,k) + SMALL)
+                        h = k_mol / d * (2.0_dp + 0.6_dp * sqrt(Re) * PR_GAS_MOL**(1.0_dp/3.0_dp))
+                    end if
+                    G = h * a_i * m%vol(i,j,k)
+                    if (G <= 0.0_dp) cycle
+                    f = 1.0_dp - exp(-cfg%dt * G * (1.0_dp / cg + 1.0_dp / cl))
+                    q = cg * cl / (cg + cl) * (gas%T(i,j,k) - liq%T(i,j,k)) * f
+                    gas%T(i,j,k) = gas%T(i,j,k) - q / cg
+                    liq%T(i,j,k) = liq%T(i,j,k) + q / cl
+                    call audit_add(AUD_IPH_GAS,  q)
+                    call audit_add(AUD_IPH_LIQ, -q)
+                end do
+            end do
+        end do
+    contains
+        ! alpha_l de la vecina; inactiva (pared, halo fisico) = la propia
+        pure real(dp) function anb(ii, jj, kk, aown)
+            integer, intent(in)  :: ii, jj, kk
+            real(dp), intent(in) :: aown
+            if (m%cell_type(ii,jj,kk) == 0) then
+                anb = aown
+            else
+                anb = liq%alpha(ii,jj,kk)
+            end if
+        end function anb
+    end subroutine compute_gas_liquid_heat
+
+    !---------------------------------------------------------------------------
     ! Tau mínimo GLOBAL del acople interfase del último paso [s]
     !---------------------------------------------------------------------------
     function interphase_tau_global(m) result(tau)

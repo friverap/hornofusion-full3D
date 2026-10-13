@@ -60,21 +60,12 @@ audit_noflow:arc_budget
 # convergido en el encendido queda a la vista; los demas balances mejoran
 # (cold_10step 1.51 -> 1.39 %, melt_forced 3.0e-6 -> 1.6e-6).
 # RETIRADO 13-oct-2026 (M25): con la compresion fisica cierra a 0.16 %.
-# bath_fill_mix (modelo de MEZCLA, opt-in; auditoria 2, N-C3/N-M17): con la
-# identidad estricta (13-oct-2026) la energia no cierra: gap +1.6e7 J en 50
-# pasos frente a 1.0e7 permitidos. El recorte de alpha del paso 1 ya cierra
-# (E_alpha_clip 2.64e8 J); el resto crece con el defecto convectivo que mide
-# el hook (E_conv_defect ~ -1e6 J/paso, mayor que el arco): el gap por paso es
-# ~0.5-0.7 de ese defecto, asi que el hook no mide el mismo enunciado que
-# resuelve la energia de la mezcla (flujos Q_l y Q - Q_l, M36). La mezcla no
-# se usa en B1 (Plan G cerrado negativo).
-audit_fillmix:energy_balance
-# bed_drain (auditoria 2, N-A7, 13-oct-2026): energia del GAS en el lecho que
-# funde. Por fases: solido cierra a +-60 J/paso y liquido a +-200 J/paso; el gap
-# es el libro del gas (E_gas_abs frente a -E_iph_gas) y el defecto convectivo
-# del hook (+2.9e7 J con max_outer 5, +4.6e7 con 10) que no llega a los
-# inventarios: residuo del lazo externo de la energia del gas con la interfase
-# gas-solido fuerte aplicada DESPUES del solve. Con el lazo convergido (60
-# outers, tol 1e-10) baja ~20x pero no a cero (-1.6e4 J/paso, crece). Mas el
-# paso 1: la palanca funde 1.8e11 J y 5 outers dejan -3.4e7 J (convergido: -31 J).
-audit_beddrain:energy_balance
+# bath_fill_mix (mezcla, N-M17): RETIRADO el mismo dia; era la misma identidad
+# que sumaba el defecto convectivo del liquido (ver bed_drain arriba).
+# bed_drain (auditoria 2, N-A7): RETIRADO el mismo dia. No era una fuga: la
+# identidad sumaba el 'defecto' convectivo del LIQUIDO, que con el transitorio
+# alpha^n y los flujos exactos del transporte de alpha es transporte de masa ya
+# contado en su inventario (el liquido cierra sin el a +-400 J/paso). Ahora la
+# identidad usa solo el del gas (E_conv_gas). El banco corre con max_outer 10
+# (produccion): con 5, la fusion instantanea del paso 1 (1.8e11 J) quedaba sin
+# converger (-3.4e7 J).

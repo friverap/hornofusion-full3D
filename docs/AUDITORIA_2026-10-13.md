@@ -30,7 +30,7 @@ fuerza balanceada; volúmenes de `eafutil` con eje real.
 | id | V | Hallazgo | Dónde |
 |---|---|---|---|
 | N-C4 | ✔ | **Sin transporte de α de dos fluidos (ramas de una sola fase y solo energía) el ṁ de fusión/congelación no se aplicaba al líquido**: el sólido ganaba la masa congelada sin que el líquido la perdiera (bath_freeze sin flujo: +18 t de acero y +1.4e10 J por paso). Usan `solve_flow = false` chem_test, slag_chem_test, ecs_test, noflow_energy y dos configs de input | `main_3d.f90`, `mod_solid_phase.f90` |
-| N-A7 | ✔ | **Energía del gas en el lecho que funde (bed_drain):** sólido y líquido cierran por separado, el descuadre es el libro del gas (E_gas_abs frente a −E_iph_gas) más un defecto convectivo del hook que no llega a los inventarios (+4.6e7 J con max_outer 10): residuo del lazo externo de la energía del gas con la interfase gas–sólido fuerte aplicada después del solve; convergido baja ~20× pero deriva. xfail `audit_beddrain` | `mod_energy_3d` hook, `mod_interphase_ht`, orden del lazo |
+| N-A7 | ✔ | RESUELTO: no era fuga. Desglose por fases con columnas nuevas (`E_conv_liq`, `E_conv_gas`, `E_abs_gas_hook`): sólido y líquido cierran a ±400 J/paso; la identidad sumaba el «defecto» convectivo del LÍQUIDO, que con el transitorio αⁿ y los flujos exactos del transporte de α es transporte de masa ya contado en el inventario. Ahora solo el del gas. Más: el libro del gas usa la α_g con la que absorbió el calor (antes de la flotación de la escoria, 14 % de error en el encendido de slag_chem_flow), y bed_drain con max_outer 10 | `check_audit.py`, `mod_audit` |
 | N-C5 | ✔ | **El residual de energía se normaliza con la temperatura ABSOLUTA** (Σ\|aP T\|): un desfase de 0.7 K sobre 1550 K pasa `tol_energy = 1e-3` y el lazo externo se corta con 2.8 % de las fuentes del paso sin aplicar (bath_freeze sin flujo: −7e7 J por paso, igual con max_outer = 60) | `mod_solver_3d.f90:388-401`, `mod_config_3d.f90:51` |
 
 ## Altos
@@ -63,7 +63,7 @@ fuerza balanceada; volúmenes de `eafutil` con eje real.
 | N-M13 | R | A17 incompleta en el corrector del gas (máscara de acople final ≠ `ws_pv_active` del predictor); el gas atrapado/fuera del acople no se comprime (contradice la doc de M25); posible alternancia F2.31 con la fuente (p^k − pⁿ) | `mod_pressure_3d.f90:363, 690` |
 | N-M14 | R | La hidrostática inicial no es el punto fijo de W_f con dz no uniforme (producción usa stretch 1.5; toda la matriz usa 1.0); la init cuenta el líquido disperso y W_f no | `mod_fields_3d.f90:748-777` |
 | N-M15 | R | La rama de flujo de una sola fase con energía pierde arco/química/radiación del gas (pasa `gas%alpha` como `alpha_other`); latente | `main_3d.f90:495-498` |
-| N-M17 | ✔ | Modelo de mezcla (opt-in): la energía no cierra con la identidad estricta (`bath_fill_mix`: gap ≈ 0.5–0.7 del defecto convectivo del hook por paso, 1.6e7 J en 50 pasos); xfail `audit_fillmix` con causa | `mod_mixture_3d` (energía con Q_l y Q − Q_l) |
+| N-M17 | ✔ | RESUELTO con N-A7 (misma identidad). Modelo de mezcla (opt-in): la energía no cerraba con la identidad estricta (`bath_fill_mix`: gap ≈ 0.5–0.7 del defecto convectivo del hook por paso, 1.6e7 J en 50 pasos); xfail `audit_fillmix` con causa | `mod_mixture_3d` (energía con Q_l y Q − Q_l) |
 | N-M16 | R | Documentación desactualizada: ARCHITECTURE §6 (orden del paso, Cassie–Mayr), CONFIGURATION (44 claves sin documentar, incluida `liq_balanced_force`; §9-10 al revés), OUTPUT (/restart, /fields) | docs |
 
 ## Bajos

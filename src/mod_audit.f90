@@ -101,7 +101,13 @@ module mod_audit
     integer, parameter :: AUD_RESOLID_E       = 40
     ! J que se llevan los kg recortados por el clip de alpha (N-B1)
     integer, parameter :: AUD_ALPHA_CLIP_E    = 41
-    integer, parameter :: N_AUD = 41
+    ! DIAGNOSTICO (no entran a la identidad: su suma es E_conv_defect): el
+    ! defecto convectivo del hook por fase y el calor que absorbe la ecuacion
+    ! del gas segun su propio hook (auditoria 2, N-A7)
+    integer, parameter :: AUD_CONV_LIQ        = 42
+    integer, parameter :: AUD_CONV_GAS        = 43
+    integer, parameter :: AUD_ABS_GAS_HOOK    = 44
+    integer, parameter :: N_AUD = 44
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -196,7 +202,7 @@ contains
                 'm_resid_closed,E_resid_closed,m_spill,' // &
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
-                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip'
+                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook'
             close(iu)
         end if
         acc = 0.0_dp
@@ -353,7 +359,8 @@ contains
                 ',', a(AUD_CHARGE_MASS), ',', a(AUD_CHARGE_E), ',', a(AUD_C_OXID), &
                 ',', a(AUD_DIL_O2), ',', a(AUD_DIL_CO), ',', a(AUD_DIL_CO2), &
                 ',', a(AUD_GAS_VOLFIX), ',', a(AUD_SLAG_TCLIP), ',', a(AUD_MIX_INIT), &
-                ',', a(AUD_RESOLID_E), ',', a(AUD_ALPHA_CLIP_E)
+                ',', a(AUD_RESOLID_E), ',', a(AUD_ALPHA_CLIP_E), &
+                ',', a(AUD_CONV_LIQ), ',', a(AUD_CONV_GAS), ',', a(AUD_ABS_GAS_HOOK)
             close(iu)
         end if
     end subroutine audit_write_step
@@ -365,8 +372,12 @@ contains
     ! después de resolver la física y ANTES de adapt_timestep (usa cfg%dt
     ! del paso corrido). Local al rank; se reduce al escribir.
     !---------------------------------------------------------------------------
-    subroutine audit_accumulate(liq, gas, gas_T_old, sh, m, cfg)
+    subroutine audit_accumulate(liq, gas, gas_T_old, sh, m, cfg, ag_heat)
         type(phase_t), intent(in)  :: liq, gas
+        ! alpha_g con la que el gas ABSORBIO el calor del paso (antes de que la
+        ! flotacion de la escoria la cambie; auditoria 2, N-A1/N-B2): con dT
+        ! grande en el encendido la alpha final desfasaba el libro un 14 %
+        real(dp), intent(in), optional :: ag_heat(-1:,-1:,-1:)
         ! T del gas al INICIO del paso: medida integral del calor absorbido
         ! por la ecuación del gas (forma T con rho(T)): E_gas_abs +=
         ! alpha*rho(T)*cp*(T - T_old)*V. Con EOS rho~1/T el inventario de
@@ -414,9 +425,15 @@ contains
                         ! cae al residuo iterativo (3e-6, gate deep). La
                         ! medida exacta exige acumular en cada update de T
                         ! con el rho local (pendiente del audit).
-                        srcacc(18) = srcacc(18) + gas%alpha(i,j,k) * &
-                            gas%rho(i,j,k) * gas%cp(i,j,k) * &
-                            (gas%T(i,j,k) - gas_T_old(i,j,k)) * vol
+                        if (present(ag_heat)) then
+                            srcacc(18) = srcacc(18) + ag_heat(i,j,k) * &
+                                gas%rho(i,j,k) * gas%cp(i,j,k) * &
+                                (gas%T(i,j,k) - gas_T_old(i,j,k)) * vol
+                        else
+                            srcacc(18) = srcacc(18) + gas%alpha(i,j,k) * &
+                                gas%rho(i,j,k) * gas%cp(i,j,k) * &
+                                (gas%T(i,j,k) - gas_T_old(i,j,k)) * vol
+                        end if
                     end if
 
                     ! Entalpía del gas venteado por las salidas del techo.
@@ -476,6 +493,9 @@ contains
         ! para el balance es la integral post-paso de abajo, que incluye la
         ! remoción explícita de la interfase)
         srcacc(19) = srcacc(19) + eeq(1,7)   ! liq mass terms (fusión)
+        acc(AUD_CONV_LIQ) = acc(AUD_CONV_LIQ) + eeq(1,5)
+        acc(AUD_CONV_GAS) = acc(AUD_CONV_GAS) + eeq(2,5)
+        acc(AUD_ABS_GAS_HOOK) = acc(AUD_ABS_GAS_HOOK) + eeq(2,1)
         eeq = 0.0_dp
     end subroutine audit_accumulate
 

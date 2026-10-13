@@ -2,15 +2,17 @@
 """Balances globales desde audit.csv (generado por mod_audit.f90, C0.2).
 
 Chequeos (ids para xfail, prefijo 'audit:'):
-  energy_balance : |dE_total - E_iny| <= etol * S_ext + htol * S_int
+  energy_balance : |dE_total - E_iny| <= etol (S_ext + S_gas) + htol S_int
                    dE_total = (E_liq+E_sol+E_slag) final - inicial + E_gas_abs
                    E_iny    = fuentes externas (arco, radiacion, quimica,
                               paredes, ECS, adiciones, escoria, ...) menos lo
                               que se lleva el recorte de alpha
                    S_ext    = sum |fuentes externas por paso|
-                   S_int    = sum |transferencias internas|: fusion
-                              (E_melt_from_solid), congelacion (E_resolid),
-                              interfase (E_iph_*), cierre residual
+                   S_int    = sum |traspasos entre fases condensadas|:
+                              fusion, congelacion, interfase solido/liquido,
+                              cierre residual (tolerancia htol)
+                   S_gas    = sum |E_iph_gas| + |E_gas_abs| (tolerancia etol:
+                              el libro del gas tiene cuadratura O(dT^2))
                    (auditoria 2, N-C3: antes la escala era
                    max(|dE|, |E_in|, sum|E_melt|) y en casos con fusion el
                    traspaso, 1e10-1e11 J, dejaba pasar errores de 1e8-1e9 J,
@@ -85,21 +87,41 @@ def main():
                "E_charge_in", "E_slag_ox", "E_rad_foam", "E_slag_tclip",
                "E_mix_init")
     EXT_NEG = ("E_wall_conv", "E_slag_red", "E_alpha_clip")
-    INTERNAL = ("E_melt_from_solid", "E_resolid", "E_iph_sol", "E_iph_gas",
+    # traspasos entre fases CONDENSADAS (inventarios de estado exactos): htol
+    INTERNAL = ("E_melt_from_solid", "E_resolid", "E_iph_sol",
                 "E_iph_liq", "E_resid_closed")
+    # terminos del GAS: su libro (E_gas_abs, forma T con rho(p,T)) tiene error
+    # de cuadratura O(dT^2) conocido (~1 % en encendidos) -> etol, como las
+    # fuentes externas (auditoria 2, N-A1: el intercambio gas-liquido nuevo)
+    GAS = ("E_iph_gas", "E_gas_abs")
+
+    # Defecto convectivo: solo el del GAS si hay columnas por fase (auditoria
+    # 2, N-A7). La energia del LIQUIDO usa los flujos exactos del transporte
+    # de alpha con el transitorio alpha^n (continuidad restada): su inventario
+    # cierra SIN defecto (+-400 J/paso en bed_drain) y el 'defecto' del hook
+    # es el transporte de masa ya contado en el inventario; sumarlo creaba un
+    # gap de 1e7-1e8 J en los bancos de lecho. El gas (alpha^{n+1}) si lo lleva.
+    per_phase = "E_conv_gas" in last
 
     def ext(r):
-        return (sum(r.get(k, 0.0) for k in EXT_POS)
-                - sum(r.get(k, 0.0) for k in EXT_NEG))
+        v = (sum(r.get(k, 0.0) for k in EXT_POS)
+             - sum(r.get(k, 0.0) for k in EXT_NEG))
+        if per_phase:
+            v += r.get("E_conv_gas", 0.0) - r.get("E_conv_defect", 0.0)
+        return v
 
     E_in = sum(ext(r) for r in steps)
     # (E_out_conv es DIAGNÓSTICO: la energía convectada a las celdas
     # outlet queda en su T — el déficit convectivo del hook ya incluye
     # esas caras; restarla doble-contaba: gap medido == E_out_conv.)
-    S_ext = sum(abs(r.get(k, 0.0)) for r in steps for k in EXT_POS + EXT_NEG)
+    S_ext = sum(abs(r.get(k, 0.0)) for r in steps for k in EXT_POS + EXT_NEG
+                if not (per_phase and k == "E_conv_defect"))
+    if per_phase:
+        S_ext += sum(abs(r.get("E_conv_gas", 0.0)) for r in steps)
     S_int = sum(abs(r.get(k, 0.0)) for r in steps for k in INTERNAL)
+    S_gas = sum(abs(r.get(k, 0.0)) for r in steps for k in GAS)
     gap = dE - E_in
-    allowed = args.etol * S_ext + args.htol * S_int
+    allowed = args.etol * (S_ext + S_gas) + args.htol * S_int
     energy_on = True
     if args.config:
         v = read_config(args.config).get("solve_energy", True)
@@ -110,8 +132,9 @@ def main():
         ratio = abs(gap) / max(allowed, 1.0)
         chk.report("energy_balance", abs(gap) <= max(allowed, 1.0),
                    f"dE={dE:.4e} J, E_iny={E_in:.4e} J, gap={gap:.3e} J, "
-                   f"permitido={allowed:.3e} J (etol {args.etol} x S_ext "
-                   f"{S_ext:.3e} + htol {args.htol} x S_int {S_int:.3e}), "
+                   f"permitido={allowed:.3e} J (etol {args.etol} x (S_ext "
+                   f"{S_ext:.3e} + S_gas {S_gas:.3e}) + htol {args.htol} x S_int "
+                   f"{S_int:.3e}), "
                    f"gap/permitido={ratio:.3e}")
 
     # -- arc_budget ----------------------------------------------------------

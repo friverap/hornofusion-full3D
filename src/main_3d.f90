@@ -68,6 +68,7 @@ program eaf_3d_simulator
     type(elec_profile_t)  :: elec_prof
     type(rate_profile_t)  :: ecs_prof, cal_prof, cinj_prof
     real(dp) :: mdot_ecs
+    real(dp), allocatable :: ag_heat(:,:,:)
 
     ! Time loop
     real(dp) :: time, V_elec, I_elec
@@ -552,8 +553,20 @@ program eaf_3d_simulator
         if (cfg%solve_melting) then
             call update_solid_postenergy(sol, liq, gas, mesh, cfg)
         end if
+        ! Intercambio gas-liquido de dos fluidos (auditoria 2, N-A1; la mezcla
+        ! lleva el suyo, y sin energia del gas su T no evoluciona)
+        if (cfg%solve_flow .and. cfg%solve_multiphase .and. cfg%solve_energy &
+            .and. .not. cfg%mixture_model) then
+            call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg)
+            call phase_exchange_halos(liq, mesh)
+            call phase_exchange_halos(gas, mesh)
+        end if
         call timer_stop(T_SOLID)
 
+        ! alpha_g con la que el gas absorbio el calor del paso (el libro del
+        ! gas del audit; la flotacion de la escoria la cambia despues)
+        if (.not. allocated(ag_heat)) allocate(ag_heat, mold=gas%alpha)
+        ag_heat = gas%alpha
         ! Slag layer update (adiciones + buoyancy + energy exchange)
         call timer_start(T_SLAG)
         if (cfg%solve_slag) then
@@ -572,7 +585,7 @@ program eaf_3d_simulator
         ! escribe cada audit_freq pasos y cubre todo el intervalo.
         call timer_start(T_IO)
         if (cfg%audit_freq > 0) then
-            call audit_accumulate(liq, gas, gas_old%T, sh, mesh, cfg)
+            call audit_accumulate(liq, gas, gas_old%T, sh, mesh, cfg, ag_heat)
             if (mod(step, cfg%audit_freq) == 0) then
                 call audit_write_step(liq, gas, sol, slag, sh, elec, mesh, &
                                       cfg, step, time)

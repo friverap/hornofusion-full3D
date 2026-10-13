@@ -439,6 +439,13 @@ energía inyectada auditada (`E_slag_tclip`).
 
 ## 15. Transferencia de calor interfase
 
+**Gas–líquido en dos fluidos (auditoría 2, N-A1)**: `compute_gas_liquid_heat`,
+implícito exacto de dos nodos tras el SIMPLE. Área: superficie libre resuelta
+|∇α_l| en el líquido continuo (AIAD), 6 α_l/d_gota en el disperso. h del lado
+del gas con k molecular: Nu = 2 + 0.664 Re^½ Pr^⅓ (superficie, longitud dz) y
+Nu = 2 + 0.6 Re^½ Pr^⅓ (gotas), con la velocidad relativa. Antes no existía: el
+gas a 300 K sobre el baño a 1850 K quedaba a 300 K.
+
 ```
 gas–sólido:      h_gs = (k_mol/d)(2 + 1.1 Pr^⅓ Re^0.6) [Wakao], k_mol = μ c_p / 0.7;
                  sobre 1373 K, max(Wakao, correlación radiativa de alta T) (A12, M39)
