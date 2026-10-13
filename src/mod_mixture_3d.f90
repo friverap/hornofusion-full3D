@@ -233,13 +233,16 @@ contains
             call solve_energy_3d(liq, liq_old%T, sh, m, cfg, liq%alpha, &
                                  gas%alpha, liq_old%alpha, sol%mdot, ws_Tsrc, &
                                  .false., res_el)
-            call relax_field(liq%T, p_lT, cfg%alpha_T, m)
-            call phase_exchange_halos(liq, m)
             call solve_energy_3d(gas, gas_old%T, sh, m, cfg, gas%alpha, &
                                  liq%alpha, gas%alpha, sol%mdot, ws_Tsrc, &
                                  .true., res_eg)
-            call relax_field(gas%T, p_gT, cfg%alpha_T, m)
+            ! Intercambio gas-liquido sobre las soluciones SIN relajar y luego
+            ! la relajacion (auditoria 12-oct-2026, A18): aplicado despues de
+            ! relajar, el punto fijo era X = E(alpha S + (1-alpha) X) y la
+            ! transferencia q/alpha_T dependia del factor de relajacion
             call exchange_gas_liquid(liq, gas, m, cfg)
+            call relax_field(liq%T, p_lT, cfg%alpha_T, m)
+            call relax_field(gas%T, p_gT, cfg%alpha_T, m)
             call phase_exchange_halos(liq, m)
             call phase_exchange_halos(gas, m)
         else
