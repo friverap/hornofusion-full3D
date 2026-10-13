@@ -161,6 +161,7 @@ full | rebaseline)
     run_case ecs_test 1
     run_case ecs_test 8
     run_case slag_chem_test 8
+    run_case slag_chem_flow 4
     # Bug 19 (Plan C, F0): bancos del bano de liquido puro — reposo (n1/n4)
     # y llenado por fusion (n4). Sus checks propios (bath:*) llevan xfail
     # con causa hasta F1/F2; los invariantes duros (nan/bounds) NO.
@@ -216,6 +217,8 @@ full | rebaseline)
         $PY $INT/compare_decomposition.py "$OUT/ecs_test_n1" "$OUT/ecs_test_n8"
     run_script "slag_chem" \
         $PY $INT/check_slag_chem.py "$OUT/slag_chem_test_n8" --config "$CFG/slag_chem_test.dat"
+    run_script "slag_chem_flow" \
+        $PY $INT/check_slag_chem.py "$OUT/slag_chem_flow_n4" --config "$CFG/slag_chem_flow.dat"
     for d in "$OUT"/bath_test_n*; do
         check_invariants "$d" bath_test
         run_script "bath_test" \

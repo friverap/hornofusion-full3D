@@ -330,10 +330,10 @@ program eaf_3d_simulator
             ! Química de escoria (E2.3/E2.4): tras el carbono (usa su O2
             ! remanente) y antes del transporte de especies
             if (cfg%solve_slag) then
-                call compute_slag_chemistry(slag, liq, gas, sh, mesh, cfg)
+                call compute_slag_chemistry(slag, liq, liq_old, gas, sh, mesh, cfg)
                 call slag_exchange_halos(slag, mesh)
-                if (mesh%is_parallel) &
-                    call mpi_exchange_halos_3d(liq%alpha, mesh%topo)
+                call phase_exchange_halos(liq, mesh)
+                call phase_exchange_halos(liq_old, mesh)
             end if
         end if
 

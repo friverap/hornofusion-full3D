@@ -30,6 +30,7 @@ module mod_slag_chemistry
                          AUD_SLAG_OX_E, AUD_SLAG_RED_E
     use mod_melting_3d, only: liquid_datum_offset
     use mod_foam, only: xi_pretorius
+    use mod_mpi_topology, only: mpi_exchange_halos_3d
     implicit none
 
     real(dp), parameter :: SMALL_SL = 1.0e-6_dp   ! (como mod_slag_3d)
@@ -51,9 +52,15 @@ module mod_slag_chemistry
 
 contains
 
-    subroutine compute_slag_chemistry(slag, liq, gas, sh, m, cfg)
+    subroutine compute_slag_chemistry(slag, liq, liq_old, gas, sh, m, cfg)
         type(slag_t),  intent(inout) :: slag
         type(phase_t), intent(inout) :: liq, gas
+        ! Ancla temporal del liquido (auditoria 12-oct-2026, A1): el transporte
+        ! de alpha REHACE el paso desde liq_old%alpha en cada iteracion externa,
+        ! asi que la transferencia de Fe escoria<->bano se aplica tambien aqui
+        ! (con liq_old%T consistente); antes se descartaba (Fe creado en la
+        ! oxidacion, destruido en la reduccion, el audit decia otra cosa)
+        type(phase_t), intent(inout) :: liq_old
         type(shared_t), intent(inout) :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
@@ -64,6 +71,13 @@ contains
         real(dp) :: vol, vol_b, q_rx, q_lim, e_fe, c0
         real(dp) :: r_red, dm_red, dm_c, dm_co
         real(dp) :: b2, x_feo, j_co, h_foam, rho_co, dm_co_cell
+        ! Fe hacia/desde la celda de bano de ABAJO de cada celda de escoria
+        ! [kg]: sale (oxidacion, a la T del bano) y entra (reduccion, a T_sl).
+        ! Pasada 2 sobre las celdas de bano PROPIAS, leyendo la celda de arriba
+        ! con halos intercambiados: invariante a la descomposicion en z (antes
+        ! la escritura en un halo de k-1 se perdia; auditoria A14)
+        real(dp), allocatable :: fe_out(:,:,:), fe_in(:,:,:), t_in(:,:,:)
+        logical  :: below
 
         if (m%is_parallel) then
             istart = m%topo%istart; iend = m%topo%iend
@@ -76,6 +90,11 @@ contains
         end if
 
         c0 = liquid_datum_offset(cfg)
+        allocate(fe_out(lbound(liq%alpha,1):ubound(liq%alpha,1), &
+                        lbound(liq%alpha,2):ubound(liq%alpha,2), &
+                        lbound(liq%alpha,3):ubound(liq%alpha,3)))
+        allocate(fe_in, t_in, mold=fe_out)
+        fe_out = 0.0_dp; fe_in = 0.0_dp; t_in = 0.0_dp
 
         do k = kstart, kend
             do j = jstart, jend
@@ -88,9 +107,8 @@ contains
                     !--------------------------------------------------------
                     ! E2.3: oxidación Fe + 1/2 O2 -> FeO (baño abajo)
                     !--------------------------------------------------------
-                    if (k > kstart - 1 .and. k > 1) then
-                    if (m%cell_type(i,j,k-1) /= 0 .and. &
-                        liq%alpha(i,j,k-1) > SMALL_SL) then
+                    if (m%cell_type(i,j,k-1) /= 0) then
+                    if (liq%alpha(i,j,k-1) > SMALL_SL) then
                         vol_b = m%vol(i,j,k-1)
                         ! O2 remanente del paso en la celda de escoria
                         o2_rem = max(0.0_dp, gas%alpha(i,j,k) * &
@@ -118,9 +136,7 @@ contains
                             ! Fe sale del baño (pérdida de rendimiento)
                             e_fe = dm_fe * (liq%cp(i,j,k-1) * &
                                    liq%T(i,j,k-1) + c0)
-                            liq%alpha(i,j,k-1) = max(0.0_dp, &
-                                liq%alpha(i,j,k-1) - dm_fe / &
-                                (liq%rho(i,j,k-1) * vol_b))
+                            fe_out(i,j,k) = fe_out(i,j,k) + dm_fe   ! pasada 2
                             ! FeO a la escoria; entalpía del Fe VIAJA + exo
                             slag%m_X(i,j,k,SL_FEO) = &
                                 slag%m_X(i,j,k,SL_FEO) + dm_feo
@@ -167,12 +183,14 @@ contains
                             ! Fe vuelve al baño de abajo (si existe; si no,
                             ! a la propia celda si tiene líquido)
                             e_fe = dm_fe * (cfg%cp_l * slag%T_sl(i,j,k) + c0)
-                            if (k > 1) then
-                                if (m%cell_type(i,j,k-1) /= 0) then
-                                    liq%alpha(i,j,k-1) = liq%alpha(i,j,k-1) &
-                                        + dm_fe / (liq%rho(i,j,k-1) * &
-                                          m%vol(i,j,k-1))
-                                end if
+                            ! Fe al bano de ABAJO (pasada 2) o, sobre pared, a
+                            ! la propia celda (antes se perdia)
+                            below = (m%cell_type(i,j,k-1) /= 0)
+                            if (below) then
+                                fe_in(i,j,k) = fe_in(i,j,k) + dm_fe
+                                t_in(i,j,k) = slag%T_sl(i,j,k)
+                            else
+                                call add_fe(i, j, k, dm_fe, slag%T_sl(i,j,k))
                             end if
                             slag%E_sl(i,j,k) = slag%E_sl(i,j,k) - e_fe - q_rx
                             ! CO al gas (fuente de especies) y a la espuma
@@ -214,6 +232,51 @@ contains
                 end do
             end do
         end do
+
+        ! ── Pasada 2: celdas de bano PROPIAS reciben el Fe de la escoria de
+        ! arriba (halos de las celdas de escoria intercambiados)
+        call mpi_exchange_halos_3d(fe_out, m%topo)
+        call mpi_exchange_halos_3d(fe_in,  m%topo)
+        call mpi_exchange_halos_3d(t_in,   m%topo)
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (fe_out(i,j,k+1) > 0.0_dp) call remove_fe(i, j, k, fe_out(i,j,k+1))
+                    if (fe_in(i,j,k+1) > 0.0_dp) call add_fe(i, j, k, fe_in(i,j,k+1), t_in(i,j,k+1))
+                end do
+            end do
+        end do
+        deallocate(fe_out, fe_in, t_in)
+
+    contains
+
+        ! Fe que sale del bano a la T del bano: alpha baja en el iterado y en el
+        ! ancla temporal, T no cambia (entalpia especifica intacta)
+        subroutine remove_fe(ii, jj, kk, dm)
+            integer, intent(in)  :: ii, jj, kk
+            real(dp), intent(in) :: dm
+            real(dp) :: da
+            da = dm / (liq%rho(ii,jj,kk) * m%vol(ii,jj,kk))
+            liq%alpha(ii,jj,kk)     = max(0.0_dp, liq%alpha(ii,jj,kk) - da)
+            liq_old%alpha(ii,jj,kk) = max(0.0_dp, liq_old%alpha(ii,jj,kk) - da)
+        end subroutine remove_fe
+
+        ! Fe que entra al bano a T_fe: mezcla de entalpias e_l = cp T + C0
+        ! (lineal en T: conserva la energia exactamente) en el iterado y en el
+        ! ancla temporal; una celda sin liquido toma T_fe (nunca la T rancia)
+        subroutine add_fe(ii, jj, kk, dm, T_fe)
+            integer, intent(in)  :: ii, jj, kk
+            real(dp), intent(in) :: dm, T_fe
+            real(dp) :: da, a0
+            da = dm / (liq%rho(ii,jj,kk) * m%vol(ii,jj,kk))
+            a0 = max(liq_old%alpha(ii,jj,kk), 0.0_dp)
+            liq_old%T(ii,jj,kk) = (a0 * liq_old%T(ii,jj,kk) + da * T_fe) / (a0 + da)
+            liq_old%alpha(ii,jj,kk) = a0 + da
+            a0 = max(liq%alpha(ii,jj,kk), 0.0_dp)
+            liq%T(ii,jj,kk) = (a0 * liq%T(ii,jj,kk) + da * T_fe) / (a0 + da)
+            liq%alpha(ii,jj,kk) = a0 + da
+        end subroutine add_fe
 
     end subroutine compute_slag_chemistry
 
