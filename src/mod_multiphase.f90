@@ -519,7 +519,7 @@ contains
         real(dp), intent(in) :: ul_r(-1:,-1:,-1:), ul_th(-1:,-1:,-1:), ul_z(-1:,-1:,-1:)
         type(mesh_t), intent(in) :: m
         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: KV
+        real(dp) :: KV, al, ag
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         do k = kstart, kend
             do j = jstart, jend
@@ -529,6 +529,7 @@ contains
                     if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
                     KV = Kexch(i,j,k) * m%vol(i,j,k)
                     if (KV <= SMALL) cycle
+                    al = liq%alpha(i,j,k); ag = gas%alpha(i,j,k)
                     call pea2(liq%ur(i,j,k),  gas%ur(i,j,k),  liq%aP_ur(i,j,k),  gas%aP_ur(i,j,k),  KV, ug_r(i,j,k),  ul_r(i,j,k))
                     call pea2(liq%uth(i,j,k), gas%uth(i,j,k), liq%aP_uth(i,j,k), gas%aP_uth(i,j,k), KV, ug_th(i,j,k), ul_th(i,j,k))
                     call pea2(liq%uz(i,j,k),  gas%uz(i,j,k),  liq%aP_uz(i,j,k),  gas%aP_uz(i,j,k),  KV, ug_z(i,j,k),  ul_z(i,j,k))
@@ -538,10 +539,20 @@ contains
         call phase_exchange_halos(liq, m)
         call phase_exchange_halos(gas, m)
     contains
-        pure subroutine pea2(ul, ug, apl, apg, KV, ug_used, ul_used)
-            real(dp), intent(inout) :: ul, ug
-            real(dp), intent(in)    :: apl, apg, KV, ug_used, ul_used
-            real(dp) :: Hl, Hg, det
+        ! PEA de dos fases + coeficientes de presion CONSISTENTES (auditoria
+        ! M30; Karema & Lo, Powder Technol. 1999): del sistema acoplado
+        !   a_l u_l - KV u_g = -alpha_l V grad p + ...
+        !   a_g u_g - KV u_l = -alpha_g V grad p + ...
+        ! la respuesta de cada fase a la presion es
+        !   d_l = V (alpha_l a_g + KV alpha_g)/det, d_g = V (alpha_g a_l + KV alpha_l)/det
+        ! y el Poisson y el corrector (d = alpha V/aP) reciben el aP
+        ! equivalente alpha V/d. Antes usaban el aP de cada fase por separado:
+        ! con K grande las fases se mueven juntas (d -> d de la mezcla) pero el
+        ! Poisson veia cada una frenada por K.
+        subroutine pea2(ul, ug, apl, apg, KV, ug_used, ul_used)
+            real(dp), intent(inout) :: ul, ug, apl, apg
+            real(dp), intent(in)    :: KV, ug_used, ul_used
+            real(dp) :: Hl, Hg, det, nl, ng
             if (apl <= SMALL .or. apg <= SMALL) return
             det = apl * apg - KV * KV
             if (det <= SMALL) return
@@ -549,6 +560,13 @@ contains
             Hg = apg * ug - KV * ul_used
             ul = (apg * Hl + KV * Hg) / det
             ug = (apl * Hg + KV * Hl) / det
+            nl = al * apg + KV * ag
+            ng = ag * apl + KV * al
+            if (nl > SMALL .and. ng > SMALL) then
+                Hl = al * det / nl
+                Hg = ag * det / ng
+                apl = Hl; apg = Hg
+            end if
         end subroutine pea2
     end subroutine partial_elimination
 
