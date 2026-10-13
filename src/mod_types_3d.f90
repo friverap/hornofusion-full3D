@@ -72,6 +72,9 @@ module mod_types_3d
         logical :: pc_sat_open        ! Plan E E1: poro saturado = celda incompresible con caras liquido|liquido ABIERTAS (sin cierre F2.8)
         logical :: pc_gas_spring      ! Plan F (oct-2026): el gas es SIEMPRE fluido del acople P-V (bolsa atrapada = resorte, no pared): sin percolacion F2.16, sin venteo F2.31, sin E1b; caras de liquido abiertas (E1) y sin piso de gas de poro en liq_cap
         logical :: pc_keep_pore_floor ! Plan F (diagnostico): con pc_gas_spring, conservar el piso ALPHA_PORE_GAS en liq_cap
+        logical :: mixture_model      ! Plan G (oct-2026): modelo de MEZCLA con deslizamiento algebraico (drift-flux) en vez de dos fluidos: una velocidad volumetrica de mezcla, una presion, alpha_l con flujo de deslizamiento acotado (mod_mixture_3d)
+        real(dp) :: tol_alpha_mix     ! Plan G: convergencia del lazo externo en alpha (max |dalpha| entre iteraciones externas): acople alpha-p implicito
+        real(dp) :: mix_eps_perm_min  ! Plan G (diagnostico): piso de porosidad en la PERMEABILIDAD del lecho (movilidades de Darcy); 0 = sin piso
         logical :: pc_sat_gas_off     ! Plan E E1b: el gas RESIDUAL (piso ALPHA_PORE_GAS) de un poro SATURADO no es fluido del acople (sin valvula ficticia)
         real(dp) :: iph_dt_safety
         integer  :: probe_step_from, probe_step_to
@@ -285,6 +288,11 @@ module mod_types_3d
         real(dp), allocatable :: tke(:,:,:)
         real(dp), allocatable :: eps(:,:,:)
         real(dp), allocatable :: mu_t(:,:,:)
+        ! Plan G (modelo de mezcla): T del gas al FINAL del lazo SIMPLE del
+        ! paso (antes de los operadores partidos de despues: interfase con el
+        ! solido). Referencia de la fuente de compresibilidad del paso
+        ! siguiente; persiste en el reinicio. -1 = sin valor (se usa T_old).
+        real(dp), allocatable :: Tg_end(:,:,:)
 
         ! Arc sources
         real(dp), allocatable :: S_arc(:,:,:)      ! Arc heat source [W/m^3]

@@ -144,6 +144,12 @@ contains
             else if (rank == 0) then
                 print '(A)', ' [RESTART] AVISO: snapshot sin rho_gas/mu_eff_liquid; recalculadas de T'
             end if
+            call h5lexists_f(rid, 'Tg_end', ex, error)
+            if (ex) then
+                call read_3d_field(rid, 'Tg_end', sh%Tg_end, m, plist_xfer)
+            else
+                sh%Tg_end = -1.0_dp
+            end if
 
             adims(1) = 1
             call read_attr_real(rid, 'dt', cfg%dt, adims)

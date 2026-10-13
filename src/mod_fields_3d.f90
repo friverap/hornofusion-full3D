@@ -271,8 +271,9 @@ contains
                  sh%Y_O2(i1:i2, j1:j2, k1:k2), sh%S_O2_src(i1:i2, j1:j2, k1:k2), &
                  sh%S_chem(i1:i2, j1:j2, k1:k2), sh%Y_CO(i1:i2, j1:j2, k1:k2), &
                  sh%Y_CO2(i1:i2, j1:j2, k1:k2), sh%S_CO_src(i1:i2, j1:j2, k1:k2), &
-                 sh%S_CO2_src(i1:i2, j1:j2, k1:k2), stat=ierr)
+                 sh%S_CO2_src(i1:i2, j1:j2, k1:k2), sh%Tg_end(i1:i2, j1:j2, k1:k2), stat=ierr)
         call check_alloc(ierr, 'shared fields')
+        sh%Tg_end = -1.0_dp
 
         sh%p = 0.0_dp; sh%pp = 0.0_dp; sh%tke = 0.0_dp; sh%eps = 0.0_dp
         sh%mu_t = 0.0_dp; sh%S_arc = 0.0_dp; sh%S_arc_mom = 0.0_dp
@@ -323,6 +324,7 @@ contains
         if (allocated(sh%tke))      deallocate(sh%tke)
         if (allocated(sh%eps))      deallocate(sh%eps)
         if (allocated(sh%mu_t))     deallocate(sh%mu_t)
+        if (allocated(sh%Tg_end))   deallocate(sh%Tg_end)
         if (allocated(sh%S_arc))         deallocate(sh%S_arc)
         if (allocated(sh%S_arc_mom))     deallocate(sh%S_arc_mom)
         if (allocated(sh%F_lorentz_r))   deallocate(sh%F_lorentz_r)

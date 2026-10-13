@@ -81,6 +81,9 @@ module mod_constants
     ! Plan F (oct-2026, `pc_gas_spring`): sin piso de gas de poro en la
     ! capacidad del liquido (liq_cap = hueco fisico). Lo fija config_read;
     ! .true. = comportamiento F2.7 (goldens, tests unitarios).
+    ! Plan G (modelo de mezcla): porosidad fluida minima para que una celda
+    ! sea fluido del acople (por debajo: chatarra maciza, pared)
+    real(dp), parameter :: EPS_MIX = 1.0e-4_dp
     logical, save :: pore_floor_on = .true.
     ! Fraccion RESIDUAL del solido (cierre de fase evanescente, sep-2026).
     ! Una celda con 0 < alpha_s <= este umbral ya no es un lecho: su masa y

@@ -42,6 +42,7 @@ SRCS = \
 	$(SRCDIR)/mod_arc_radiation_mc.f90 \
 	$(SRCDIR)/mod_lorentz_3d.f90 \
        $(SRCDIR)/mod_multiphase.f90 \
+       $(SRCDIR)/mod_mixture_3d.f90 \
 	$(SRCDIR)/mod_turbulence_3d.f90 \
 	$(SRCDIR)/mod_radiation_do.f90 \
 	$(SRCDIR)/mod_foam.f90 \
@@ -110,6 +111,7 @@ $(OBJDIR)/mod_arc_radiation_mc.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_
 $(OBJDIR)/mod_lorentz_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_probe.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_mpi_topology.o
 $(OBJDIR)/mod_multiphase.o: $(OBJDIR)/mod_probe.o $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_momentum_3d.o $(OBJDIR)/mod_pressure_3d.o $(OBJDIR)/mod_energy_3d.o $(OBJDIR)/mod_continuity.o $(OBJDIR)/mod_drag_ergun.o $(OBJDIR)/mod_properties_3d.o $(OBJDIR)/mod_fields_3d.o
+$(OBJDIR)/mod_mixture_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_energy_3d.o $(OBJDIR)/mod_continuity.o $(OBJDIR)/mod_properties_3d.o $(OBJDIR)/mod_fields_3d.o $(OBJDIR)/mod_pressure_3d.o $(OBJDIR)/mod_multiphase.o $(OBJDIR)/mod_probe.o $(OBJDIR)/mod_workspace.o
 $(OBJDIR)/mod_turbulence_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o
 $(OBJDIR)/mod_radiation_do.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_melting_3d.o $(OBJDIR)/mod_audit.o $(OBJDIR)/mod_workspace.o
 $(OBJDIR)/mod_chemistry_carbon.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_melting_3d.o $(OBJDIR)/mod_audit.o
@@ -127,7 +129,7 @@ $(OBJDIR)/main_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR
                       $(OBJDIR)/mod_output_hdf5.o $(OBJDIR)/mod_restart.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o \
                       $(OBJDIR)/mod_energy_3d.o $(OBJDIR)/mod_properties_3d.o $(OBJDIR)/mod_momentum_3d.o \
                       $(OBJDIR)/mod_pressure_3d.o $(OBJDIR)/mod_drag_ergun.o $(OBJDIR)/mod_continuity.o \
-                      $(OBJDIR)/mod_multiphase.o $(OBJDIR)/mod_solid_phase.o $(OBJDIR)/mod_melting_3d.o \
+                      $(OBJDIR)/mod_multiphase.o $(OBJDIR)/mod_mixture_3d.o $(OBJDIR)/mod_solid_phase.o $(OBJDIR)/mod_melting_3d.o \
                       $(OBJDIR)/mod_scrap_collapse.o $(OBJDIR)/mod_interphase_ht.o \
                       $(OBJDIR)/mod_arc_cassie_mayr.o $(OBJDIR)/mod_slag_3d.o \
                       $(OBJDIR)/mod_electrode_3d.o \

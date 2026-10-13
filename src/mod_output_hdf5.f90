@@ -286,6 +286,8 @@ contains
         ! en p dentro del lecho.
         call write_3d_field(group_id, 'rho_gas',       gas%rho,    m, plist_xfer)
         call write_3d_field(group_id, 'mu_eff_liquid', liq%mu_eff, m, plist_xfer)
+        ! Plan G: referencia de la fuente de compresibilidad (mod_mixture_3d)
+        call write_3d_field(group_id, 'Tg_end', sh%Tg_end, m, plist_xfer)
 
         ! Atributos escalares y por electrodo (metadatos: todos los ranks)
         adims(1) = 1

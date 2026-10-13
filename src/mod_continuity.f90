@@ -37,7 +37,8 @@ module mod_continuity
                              ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, &
                              ws_Fc_lk_z, ws_Fc_valid, ws_liq_cont, ws_liq_cont_valid, &
                              ws_Fc_af_r, ws_Fc_af_th, ws_Fc_af_z, &
-                             ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, ws_drift_valid
+                             ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, ws_drift_valid, &
+                             ws_mQ_r, ws_mQ_th, ws_mQ_z, ws_mW, ws_mKl, ws_mKg, ws_mFd, ws_mix_valid, ws_mix_id
     implicit none
 
     logical, save :: fallback_warned = .false.
@@ -102,8 +103,13 @@ contains
         ! fijo durante los sub-pasos (las velocidades no cambian; solo alpha)
         real(dp), allocatable :: Gr(:,:,:), Gth(:,:,:), Gz(:,:,:)
         logical,  allocatable :: cont(:,:,:)
+        ! Plan G: transporte del modelo de MEZCLA (flujos volumetricos de la
+        ! mezcla + deslizamiento acotado; ver mixflux)
+        logical :: mixture
+        logical, save :: mix_sub_warned = .false.
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        mixture = cfg%mixture_model .and. ws_mix_valid .and. (ws_mix_id == probe_current_step())
         ! a_new se asigna como COPIA de liq%alpha (no solo con mold): el
         ! transporte escribe las celdas propias y luego liq%alpha = a_new;
         ! con mold, los halos FISICOS (eje, pared, piso, techo: nadie los
@@ -115,15 +121,20 @@ contains
         allocate(lim_new, mold=liq%alpha)
         lim_new = 1.0_dp
         allocate(ur_e, uth_e, uz_e, mold=liq%alpha)
-        call effective_liquid_velocity(liq, gas, sol, m, cfg, ur_e, uth_e, uz_e)
         allocate(Gr, Gth, Gz, mold=liq%alpha)
         allocate(cont, mold=ws_liq_cont)
+        if (.not. mixture) then
+        call effective_liquid_velocity(liq, gas, sol, m, cfg, ur_e, uth_e, uz_e)
         if (ws_liq_cont_valid) then
             cont = ws_liq_cont
         else
             call liquid_continuity_mask(liq, sol, m, cont)
         end if
         call face_fluxes_noalpha_all(liq, m, ur_e, uth_e, uz_e, cont, Gr, Gth, Gz)
+        else
+            ur_e = 0.0_dp; uth_e = 0.0_dp; uz_e = 0.0_dp
+            Gr = 0.0_dp; Gth = 0.0_dp; Gz = 0.0_dp; cont = .true.
+        end if
 
         ! n_sub UNIFORME GLOBAL desde el CFL donor-cell máximo
         ! (suma de flujos de salida * dt / (rho*V))
@@ -133,6 +144,24 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
+                    if (mixture) then
+                        ! acotamiento del donor en SATURACION: la celda no
+                        ! puede ceder mas que su liquido, s_P (sum Q_out + slip)
+                        ! dt <= alpha_P V  <=>  dt (sum Q_out + slip) <= eps V
+                        cfl_loc = (max(-ws_mQ_r(i-1,j,k),0.0_dp) + max(ws_mQ_r(i,j,k),0.0_dp) + &
+                                   max(-ws_mQ_th(i,j-1,k),0.0_dp) + max(ws_mQ_th(i,j,k),0.0_dp) + &
+                                   max(-ws_mQ_z(i,j,k-1),0.0_dp) + max(ws_mQ_z(i,j,k),0.0_dp) + &
+                                   ws_mW(i,j,k) * m%Az(i,j,k-1) * fluid_eps(i,j,k)) * cfg%dt / &
+                                  (max(fluid_eps(i,j,k), EPS_MIX) * m%vol(i,j,k))
+                        if (ws_mFd(i,j,k) > 0.0_dp) cfl_loc = max(cfl_loc, cfg%dt / m%vol(i,j,k) * &
+                            (abs(ws_ud_r(i,j,k)) * (m%Ar(i-1,j,k) + m%Ar(i,j,k)) &
+                             + abs(ws_ud_th(i,j,k)) * 2.0_dp * m%Ath(i,j,k) &
+                             + abs(ws_ud_z(i,j,k)) * (m%Az(i,j,k-1) + m%Az(i,j,k))))
+                        if (cfl_loc > cfl_max) then
+                            cfl_max = cfl_loc; icfl = i; jcfl = j; kcfl = k
+                        end if
+                        cycle
+                    end if
                     Fw = Gr(i-1,j,k); Fe = Gr(i,j,k); Fs = Gth(i,j-1,k)
                     Fn = Gth(i,j,k);  Fb = Gz(i,j,k-1); Ft = Gz(i,j,k)
                     cfl_loc = (max(-Fw,0.0_dp) + max(Fe,0.0_dp) + &
@@ -168,6 +197,18 @@ contains
         end if
 
         n_sub = max(1, ceiling(cfl_glob / 0.9_dp))
+        if (mixture .and. n_sub > N_SUB_MAX) then
+            ! Modelo de mezcla: sin fallback implicito (sus velocidades son
+            ! las del liquido de dos fluidos). Se acota el numero de
+            ! sub-pasos; el limitador de hueco y el clip auditado cubren el
+            ! exceso. Aviso una vez.
+            if (.not. mix_sub_warned .and. should_print(m)) then
+                print '(A,F9.1,A)', ' [ALPHA] AVISO (mezcla): CFL del transporte ', cfl_glob, &
+                    ' > sub-pasable; n_sub acotado (regimen fuera de validez)'
+                mix_sub_warned = .true.
+            end if
+            n_sub = N_SUB_MAX
+        end if
         if (n_sub > N_SUB_MAX) then
             if (.not. fallback_warned .and. .not. m%is_parallel .or. &
                 (.not. fallback_warned .and. m%topo%rank == 0)) then
@@ -220,6 +261,12 @@ contains
                         ws_Mr(i,j,k) = 0.0_dp; ws_Mth(i,j,k) = 0.0_dp
                         ws_Mz(i,j,k) = 0.0_dp
                         if (m%cell_type(i,j,k) == 0) cycle
+                        if (mixture) then
+                            ws_Mr(i,j,k)  = mixflux(ws_mQ_r(i,j,k),  i, j, k, i+1, j, k, 1)
+                            ws_Mth(i,j,k) = mixflux(ws_mQ_th(i,j,k), i, j, k, i, j+1, k, 2)
+                            ws_Mz(i,j,k)  = mixflux(ws_mQ_z(i,j,k),  i, j, k, i, j, k+1, 3)
+                            cycle
+                        end if
                         Fe = Gr(i,j,k); Fn = Gth(i,j,k); Ft = Gz(i,j,k)
                         ws_Mr(i,j,k)  = donor_flux(Fe, liq%alpha(i,j,k), liq%alpha(i+1,j,k))
                         ws_Mth(i,j,k) = donor_flux(Fn, liq%alpha(i,j,k), liq%alpha(i,j+1,k))
@@ -505,6 +552,99 @@ contains
         deallocate(a_new, lim_new, ur_e, uth_e, uz_e, Gr, Gth, Gz, cont)
 
     contains
+
+        ! Porosidad FLUIDA de la celda (hueco que comparten liquido y gas)
+        pure function fluid_eps(ii, jj, kk) result(e)
+            integer, intent(in) :: ii, jj, kk
+            real(dp) :: e
+            e = 0.0_dp
+            if (m%cell_type(ii,jj,kk) == 0) return
+            e = max(0.0_dp, 1.0_dp - sol%alpha_s(ii,jj,kk) - alpha_slag(ii,jj,kk))
+        end function fluid_eps
+
+        ! Saturacion de liquido s = alpha_l/eps en [0, 1]
+        pure function sat(ii, jj, kk) result(sv)
+            integer, intent(in) :: ii, jj, kk
+            real(dp) :: sv, e
+            e = fluid_eps(ii, jj, kk)
+            sv = 0.0_dp
+            if (e <= EPS_MIX) return
+            sv = min(1.0_dp, max(0.0_dp, liq%alpha(ii,jj,kk) / e))
+        end function sat
+
+        ! Fraccion convectiva del liquido con la alpha ACTUAL del sub-paso:
+        ! saturacion fuera del lecho; flujo fraccional de Buckley-Leverett
+        ! lambda_l/lambda_T en el lecho (lambda_q = alpha_q^2/K_q)
+        pure function ffrac(ii, jj, kk) result(f)
+            integer, intent(in) :: ii, jj, kk
+            real(dp) :: f, e, al, ll, lg
+            f = sat(ii, jj, kk)
+            if (ws_mKl(ii,jj,kk) <= 0.0_dp .or. ws_mKg(ii,jj,kk) <= 0.0_dp) return
+            e = fluid_eps(ii, jj, kk)
+            al = min(max(liq%alpha(ii,jj,kk), 0.0_dp), e)
+            ll = al * al / ws_mKl(ii,jj,kk)
+            lg = (e - al)**2 / ws_mKg(ii,jj,kk)
+            if (ll + lg > 0.0_dp) f = ll / (ll + lg)
+        end function ffrac
+
+        !-----------------------------------------------------------------------
+        ! Plan G: flujo de MASA de liquido [kg/s] por la cara entre L (lado -)
+        ! y H (lado +) en el modelo de mezcla (drift-flux, Ishii/Zuber-Findlay
+        ! en forma volumetrica):
+        !     j_l = s j + eps s (1 - s) u_r
+        ! - conveccion con el flujo VOLUMETRICO conservativo de la mezcla Q
+        !   (el que el Poisson hizo solenoidal) y la saturacion del DADOR;
+        ! - deslizamiento (solo caras verticales, liquido hacia abajo) con la
+        !   discretizacion ACOTADA de los modelos de sedimentacion (Godunov
+        !   para f = s (1 - s); Burger et al.): saturacion del dador de
+        !   ARRIBA por el hueco de gas de la receptora de ABAJO, con la rapidez
+        !   de deslizamiento del regimen de la celda de arriba (ws_mW). Se
+        !   anula sola si arriba no hay liquido o abajo no queda gas: el
+        !   deslizamiento nunca llena una celda saturada, y la presion no lo
+        !   ve (es un intercambio de volumen liquido-gas a flujo neto nulo).
+        !-----------------------------------------------------------------------
+        function mixflux(Q, iL, jL, kL, iH, jH, kH, dir) result(F)
+            real(dp), intent(in) :: Q
+            integer,  intent(in) :: iL, jL, kL, iH, jH, kH, dir
+            real(dp) :: F, eL, eH, ef, area, udL, udH, fL, fH
+            F = 0.0_dp
+            if (m%cell_type(iH,jH,kH) == 0) return
+            select case (dir)
+            case (1)
+                area = m%Ar(iL,jL,kL); udL = ws_ud_r(iL,jL,kL); udH = ws_ud_r(iH,jH,kH)
+            case (2)
+                area = m%Ath(iL,jL,kL); udL = ws_ud_th(iL,jL,kL); udH = ws_ud_th(iH,jH,kH)
+            case default
+                area = m%Az(iL,jL,kL); udL = ws_ud_z(iL,jL,kL); udH = ws_ud_z(iH,jH,kH)
+            end select
+            ! lado L (sentido +) y lado H (sentido -): mezcla pesada por
+            ! (1 - fd) y deriva de las gotas pesada por fd (logistica AIAD)
+            fL = ws_mFd(iL,jL,kL); fH = ws_mFd(iH,jH,kH)
+            if (Q >= 0.0_dp) then
+                F = F + (1.0_dp - fL) * liq%rho(iL,jL,kL) * ffrac(iL,jL,kL) * Q
+            else
+                F = F + (1.0_dp - fH) * liq%rho(iH,jH,kH) * ffrac(iH,jH,kH) * Q
+            end if
+            F = F + fL * liq%rho(iL,jL,kL) * max(liq%alpha(iL,jL,kL), 0.0_dp) * max(udL, 0.0_dp) * area &
+                  + fH * liq%rho(iH,jH,kH) * max(liq%alpha(iH,jH,kH), 0.0_dp) * min(udH, 0.0_dp) * area
+            ! deslizamiento acotado (caras verticales, H continuo o lecho)
+            if (dir /= 3) return
+            eL = fluid_eps(iL,jL,kL); eH = fluid_eps(iH,jH,kH)
+            if (eL <= EPS_MIX .or. eH <= EPS_MIX) return
+            ef = 2.0_dp * eL * eH / (eL + eH)
+            F = F - (1.0_dp - fH) * liq%rho(iH,jH,kH) * ef * sat(iH,jH,kH) * (1.0_dp - sat(iL,jL,kL)) &
+                    * ws_mW(iH,jH,kH) * area
+        end function mixflux
+
+        ! celda con liquido DISPERSO fuera del lecho (mismo criterio que
+        ! mod_mixture_3d: sin liquido continuo y sin chatarra propia)
+        pure logical function dispc(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            dispc = .false.
+            if (m%cell_type(ii,jj,kk) == 0) return
+            if (fluid_eps(ii,jj,kk) <= EPS_MIX) return
+            dispc = (.not. ws_liq_cont(ii,jj,kk)) .and. sol%alpha_s(ii,jj,kk) < 1.0e-2_dp
+        end function dispc
 
         ! Entradas y salidas CRUDAS de la celda [kg/s] (con el limitador
         ! actual de las receptoras aplicado a las salidas)

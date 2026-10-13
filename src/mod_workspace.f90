@@ -114,6 +114,22 @@ module mod_workspace
     ! (vigencia: ws_pv_liq_id). Sin cara abierta la componente es nula.
     logical, allocatable :: ws_liq_fr(:,:,:), ws_liq_fth(:,:,:), ws_liq_fz(:,:,:)
     logical, save :: ws_Fc_valid = .false.
+    ! Plan G (modelo de mezcla, mod_mixture_3d): flujo VOLUMETRICO
+    ! conservativo de la mezcla [m3/s] por las caras + de cada celda
+    ! (Q = Q* + a (pp_P - pp_N), el que el Poisson acaba de hacer
+    ! solenoidal) y velocidad de deslizamiento de la celda [m/s] (rapidez
+    ! relativa liquido-gas, vertical, liquido hacia abajo). Valen solo dentro
+    ! del paso (ws_mix_id): sin estado entre pasos.
+    real(dp), allocatable :: ws_mQ_r(:,:,:), ws_mQ_th(:,:,:), ws_mQ_z(:,:,:)
+    real(dp), allocatable :: ws_mW(:,:,:)
+    ! coeficientes de Ergun de cada fase en las celdas del LECHO (0 fuera):
+    ! el transporte evalua con ellos el flujo fraccional de Buckley-Leverett
+    ! lambda_l/lambda_T, lambda_q = alpha_q^2/K_q, con la alpha del sub-paso
+    real(dp), allocatable :: ws_mKl(:,:,:), ws_mKg(:,:,:)
+    ! peso disperso de las gotas libres (logistica AIAD), 0 fuera
+    real(dp), allocatable :: ws_mFd(:,:,:)
+    logical, save :: ws_mix_valid = .false.
+    integer, save :: ws_mix_id = -huge(1)
     ! Correccion de la presion que ve el GAS en una celda de bano (Plan C
     ! F1): p_gas = p + rho_l g_eff dz (1/2 - alpha_l). El Poisson de mezcla
     ! tiene una sola p por celda y el momento del liquido la pone sobre SU
@@ -192,6 +208,10 @@ contains
         allocate(ws_pcorr_g, mold=ws_aW); ws_pcorr_g = 0.0_dp
         allocate(ws_liq_room, mold=ws_aW); ws_liq_room = 1.0_dp
         allocate(ws_sat_goff, mold=ws_liq_cont); ws_sat_goff = .false.
+        allocate(ws_mQ_r, ws_mQ_th, ws_mQ_z, ws_mW, ws_mKl, ws_mKg, ws_mFd, mold=ws_aW)
+        ws_mFd = 0.0_dp
+        ws_mQ_r = 0.0_dp; ws_mQ_th = 0.0_dp; ws_mQ_z = 0.0_dp; ws_mW = 0.0_dp
+        ws_mKl = 0.0_dp; ws_mKg = 0.0_dp
     end subroutine ensure_workspace
 
 end module mod_workspace

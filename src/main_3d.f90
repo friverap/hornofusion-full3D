@@ -31,6 +31,7 @@ program eaf_3d_simulator
     use mod_drag_ergun
     use mod_continuity
     use mod_multiphase
+    use mod_mixture_3d
     use mod_solid_phase
     use mod_melting_3d
     use mod_scrap_collapse
@@ -386,7 +387,11 @@ program eaf_3d_simulator
             end if
 
             ! Multiphase SIMPLE iteration
-            if (cfg%solve_flow .and. cfg%solve_multiphase) then
+            if (cfg%solve_flow .and. cfg%solve_multiphase .and. cfg%mixture_model) then
+                ! Plan G: modelo de mezcla con deslizamiento (mod_mixture_3d)
+                call mixture_iteration(liq, gas, liq_old, gas_old, sol, slag, &
+                                       sh, mesh, cfg, conv)
+            else if (cfg%solve_flow .and. cfg%solve_multiphase) then
                 call multiphase_iteration(liq, gas, liq_old, gas_old, sol, slag, &
                                           sh, mesh, cfg, drag_coef, conv)
             else if (cfg%solve_flow) then

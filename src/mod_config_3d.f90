@@ -91,6 +91,9 @@ contains
         cfg%pc_sat_gas_off = .false.      ! Plan E E1b (10-oct-2026): juez B1 negativo, nadie la activa
         cfg%pc_gas_spring = .false.       ! Plan F (12-oct-2026): juez B1 NEGATIVO, nadie la activa
         cfg%pc_keep_pore_floor = .false.  ! Plan F (diagnostico del banco)
+        cfg%mixture_model = .false.       ! Plan G (oct-2026): en evaluacion
+        cfg%tol_alpha_mix = 1.0e-4_dp
+        cfg%mix_eps_perm_min = 0.0_dp
         cfg%pc_drift_source = .false.     ! Plan E E2 (10-oct-2026): sin efecto medible en el banco con E1 (e12ns); off
         cfg%pc_spill_source = .false.
         cfg%n_pc_max = 1
@@ -233,7 +236,10 @@ contains
         close(iu)
         ! Plan F: la capacidad del liquido (liq_cap, mod_constants) es el hueco
         ! FISICO cuando el gas es siempre fluido del acople (sin piso F2.7)
-        pore_floor_on = .not. cfg%pc_gas_spring .or. cfg%pc_keep_pore_floor
+        ! Plan G: en el modelo de mezcla la capacidad del liquido es el hueco
+        ! fisico; el piso de gas de poro (F2.7) existia para que la fila del
+        ! liquido del modelo de dos fluidos nunca quedara sellada
+        pore_floor_on = .not. (cfg%pc_gas_spring .or. cfg%mixture_model) .or. cfg%pc_keep_pore_floor
     end subroutine config_read
 
     ! Posicion del primer '#' o '!' precedido de blanco/tabulador (0 si no hay)
@@ -312,6 +318,9 @@ contains
         case ('pc_sat_gas_off'); cfg%pc_sat_gas_off = parse_bool(val)
         case ('pc_gas_spring'); cfg%pc_gas_spring = parse_bool(val)
         case ('pc_keep_pore_floor'); cfg%pc_keep_pore_floor = parse_bool(val)
+        case ('mixture_model'); cfg%mixture_model = parse_bool(val)
+        case ('tol_alpha_mix'); call parse_real(val, key, cfg%tol_alpha_mix)
+        case ('mix_eps_perm_min'); call parse_real(val, key, cfg%mix_eps_perm_min)
         case ('pc_drift_source'); cfg%pc_drift_source = parse_bool(val)
         case ('pc_spill_source'); cfg%pc_spill_source = parse_bool(val)
         case ('n_pc_max'); call parse_int(val, key, cfg%n_pc_max)

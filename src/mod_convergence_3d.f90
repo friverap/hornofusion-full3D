@@ -141,6 +141,11 @@ contains
             if (conv%res_ur > cfg%tol_mom)     converged = .false.
             if (conv%res_uth > cfg%tol_mom)    converged = .false.
             if (conv%res_uz > cfg%tol_mom)     converged = .false.
+            ! Plan G: acople alpha-p IMPLICITO del modelo de mezcla — el paso
+            ! no converge mientras alpha cambie entre iteraciones externas
+            if (cfg%mixture_model .and. cfg%solve_multiphase) then
+                if (conv%dalpha_pc > cfg%tol_alpha_mix) converged = .false.
+            end if
         end if
 
         if (cfg%solve_energy) then
