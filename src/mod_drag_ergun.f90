@@ -32,12 +32,20 @@ contains
     ! F2.14 aplica al drift del liquido disperso, de modo que las dos ramas
     ! (continua y dispersa) coinciden en el umbral ALPHA_LIQ_CONT. Solo para
     ! el LIQUIDO: el gas de la celda de encima no drena al lecho.
-    subroutine compute_ergun_drag(ph, sol, m, cfg, drag_coef, on_bed)
+    subroutine compute_ergun_drag(ph, sol, m, cfg, drag_coef, on_bed, alpha_held)
         type(phase_t), intent(in)  :: ph
         type(solid_t), intent(in)  :: sol
         type(mesh_t), intent(in)   :: m
         type(config_t), intent(in) :: cfg
         logical, intent(in), optional :: on_bed
+        ! Fraccion de la OTRA fase fluida retenida en el poro (auditoria M29):
+        ! para el GAS de un lecho parcialmente inundado el liquido retenido es
+        ! obstaculo adicional -> porosidad efectiva del gas 1 - alpha_s -
+        ! alpha_l (modelo de permeabilidad relativa de Saez & Carbonell, AIChE
+        ! J. 31 (1985) 52; Attou, Boyer & Ferschneider, Chem. Eng. Sci. 54
+        ! (1999) 785). Antes el gas veia epsilon = 1 - alpha_s aunque el poro
+        ! estuviera casi lleno de liquido. Solo en celdas del lecho propio.
+        real(dp), intent(in), optional :: alpha_held(-1:,-1:,-1:)
         ! Cota inferior explícita: los arrays con halos tienen LB=-1 y un
         ! dummy (:,:,:) los remapearía a 1 desplazando el campo +2 celdas
         ! (regla GFortran, ver CLAUDE.md). El contrato anterior (:,:,:) tenía
@@ -90,6 +98,10 @@ contains
                         end if
                     end if
                     if (alpha_s < 1.0e-6_dp .or. fade <= 0.0_dp) cycle
+                    if (present(alpha_held)) then
+                        if (sol%alpha_s(i,j,k) >= 1.0e-6_dp) &
+                            alpha_s = min(alpha_s + max(alpha_held(i,j,k), 0.0_dp), 0.99_dp)
+                    end if
 
                     ! Ergun (1952): coef = A + B |v| con la unica definicion de
                     ! los coeficientes (mod_constants::ergun_coefficients)

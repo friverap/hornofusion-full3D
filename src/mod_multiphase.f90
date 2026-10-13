@@ -120,7 +120,7 @@ contains
         if (.not. allocated(drag_gas)) then
             allocate(drag_gas, mold=liq%ur); drag_gas = 0.0_dp
         end if
-        call compute_ergun_drag(gas, sol, m, cfg, drag_gas)
+        call compute_ergun_drag(gas, sol, m, cfg, drag_gas, alpha_held=liq%alpha)
 
         ! Percolacion del gas (F2.16) y, con ella, las celdas que tienen
         ! presion de fluido (Bug 16). El gas atrapado no la tiene.
