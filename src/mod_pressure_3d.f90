@@ -741,8 +741,20 @@ contains
         ! La celda tiene presion de fluido definida? (Bug 16)
         pure logical function pv_cell(ii, jj, kk)
             integer, intent(in) :: ii, jj, kk
-            pv_cell = (m%cell_type(ii,jj,kk) /= 0) .and. &
-                      (act_l(ii,jj,kk) .or. act_g(ii,jj,kk))
+            ! MISMA mascara de pared que el predictor de momento (ws_pv_active)
+            ! para los gradientes de celda del Rhie-Chow y el corrector: el
+            ! termino d_f (media de gradientes de celda - gradiente de cara)
+            ! solo cancela el gradiente que llevo u* si es el mismo operador.
+            ! Antes se usaba act_l/act_g DESPUES de F2.21/F2.31/E1b, y en las
+            ! celdas que F2.31 saca del acople (piso del lecho) aparecian flujos
+            ! de cara espurios (auditoria 12-oct-2026, A17). La conectividad de
+            ! la matriz sigue siendo la del acople final (link/act).
+            if (ws_pv_valid) then
+                pv_cell = (m%cell_type(ii,jj,kk) /= 0) .and. ws_pv_active(ii,jj,kk)
+            else
+                pv_cell = (m%cell_type(ii,jj,kk) /= 0) .and. &
+                          (act_l(ii,jj,kk) .or. act_g(ii,jj,kk))
+            end if
             ! D2.2b: para el gradiente del LIQUIDO la celda sellada es pared
             if (liq_mask_on .and. .not. grad_is_gas) pv_cell = pv_cell .and. ws_pv_liq(ii,jj,kk)
         end function pv_cell
