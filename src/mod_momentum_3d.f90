@@ -346,6 +346,14 @@ contains
                                       fs_nb(i-1,j,k), fs_nb(i+1,j,k), m%rf(i-1), m%rf(i))
                         ! Centrifugal: +rho*u_th^2/r  +  Lorentz r-stirring
                         src_extra = alpha_f * ph%rho(i,j,k) * ph%uth(i,j,k)**2 / m%r(i)
+                        ! Laplaciano VECTORIAL en cilindricas (auditoria M27):
+                        ! mu [lap u_r - u_r/r^2 - (2/r^2) du_th/dth]; -u_r/r^2
+                        ! implicito (diagonal), el acople con u_th explicito
+                        aP_extra = aP_extra + max(alpha_q(i,j,k), 0.0_dp) * ph%mu_eff(i,j,k) &
+                                   / m%r(i)**2 * vol
+                        src_extra = src_extra - max(alpha_q(i,j,k), 0.0_dp) * ph%mu_eff(i,j,k) &
+                                    * 2.0_dp / m%r(i)**2 * (ph%uth(i,jp,k) - ph%uth(i,jm,k)) &
+                                    / (m%theta(jp) - m%theta(jm))
                         ! Lorentz SOLO en el liquido (auditoria M11: se sumaba
                         ! tambien al gas -> fuerza contada dos veces)
                         if (.not. is_gas) src_extra = src_extra + sh%F_lorentz_r(i,j,k)
@@ -374,6 +382,13 @@ contains
                         src_extra = -alpha_f * ph%rho(i,j,k) * &
                                     min(ph%ur(i,j,k), 0.0_dp) * ph%uth(i,j,k) / m%r(i)
                         if (.not. is_gas) src_extra = src_extra + sh%F_lorentz_th(i,j,k)
+                        ! Laplaciano vectorial (M27): mu [lap u_th - u_th/r^2
+                        ! + (2/r^2) du_r/dth]
+                        aP_extra = aP_extra + max(alpha_q(i,j,k), 0.0_dp) * ph%mu_eff(i,j,k) &
+                                   / m%r(i)**2 * vol
+                        src_extra = src_extra + max(alpha_q(i,j,k), 0.0_dp) * ph%mu_eff(i,j,k) &
+                                    * 2.0_dp / m%r(i)**2 * (ph%ur(i,jp,k) - ph%ur(i,jm,k)) &
+                                    / (m%theta(jp) - m%theta(jm))
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
                                    + (-alpha_f * dp_dth + src_extra) * vol
 
