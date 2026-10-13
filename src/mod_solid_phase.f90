@@ -11,6 +11,7 @@ module mod_solid_phase
     use mod_melting_3d
     use mod_scrap_collapse
     use mod_interphase_ht
+    use mod_workspace, only: ensure_workspace, ws_Tsrc
     implicit none
 
 contains
@@ -29,6 +30,11 @@ contains
         real(dp), intent(in)         :: dt
 
         call compute_melting(sol, liq, m, cfg, dt)
+        ! T de entrada del fundido ANTES del colapso (auditoria A3): el
+        ! colapso funde en sol%T_s la entalpia de la chatarra que cae y el
+        ! fundido del paso entraba al liquido a esa T mezclada
+        call ensure_workspace(m)
+        ws_Tsrc = sol%T_s
         call apply_scrap_collapse(sol, liq, m, cfg)
 
         ! Restricción de volumen (C1.9, hallazgo 3.22b): fusión y colapso

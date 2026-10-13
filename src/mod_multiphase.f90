@@ -26,7 +26,7 @@ module mod_multiphase
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
                              ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, &
                              ws_liq_fr, ws_liq_fth, ws_liq_fz, &
-                             ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id
+                             ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, ws_Tsrc
     implicit none
 
 contains
@@ -349,7 +349,7 @@ contains
         ! Energy
         if (cfg%solve_energy) then
             call solve_energy_3d(liq, liq_old%T, sh, m, cfg, liq%alpha, &
-                                 gas%alpha, liq_old%alpha, sol%mdot, sol%T_s, &
+                                 gas%alpha, liq_old%alpha, sol%mdot, ws_Tsrc, &
                                  .false., res_energy_l)
             call relax_field(liq%T, p_lT, cfg%alpha_T, m)
             call phase_exchange_halos(liq, m)
@@ -357,7 +357,7 @@ contains
             ! gas: alpha_old no se usa (forma T con rho(T)); se pasa la
             ! fracción actual por uniformidad de la interfaz
             call solve_energy_3d(gas, gas_old%T, sh, m, cfg, gas%alpha, &
-                                 liq%alpha, gas%alpha, sol%mdot, sol%T_s, &
+                                 liq%alpha, gas%alpha, sol%mdot, ws_Tsrc, &
                                  .true., res_energy_g)
             call relax_field(gas%T, p_gT, cfg%alpha_T, m)
             call phase_exchange_halos(gas, m)

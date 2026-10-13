@@ -129,6 +129,12 @@ module mod_workspace
     ! peso disperso de las gotas libres (logistica AIAD), 0 fuera
     real(dp), allocatable :: ws_mFd(:,:,:)
     logical, save :: ws_mix_valid = .false.
+    ! Temperatura de ENTRADA del fundido del paso [K] (auditoria 12-oct-2026,
+    ! A3): copia de sol%T_s tomada justo despues de compute_melting y ANTES del
+    ! colapso, que mezcla en sol%T_s la chatarra que cae sobre la celda que
+    ! funde. La energia del liquido la usa como T_src de mdot. Se recalcula
+    ! cada paso antes de usarse: sin estado en el reinicio.
+    real(dp), allocatable :: ws_Tsrc(:,:,:)
     integer, save :: ws_mix_id = -huge(1)
     ! Correccion de la presion que ve el GAS en una celda de bano (Plan C
     ! F1): p_gas = p + rho_l g_eff dz (1/2 - alpha_l). El Poisson de mezcla
@@ -208,6 +214,7 @@ contains
         allocate(ws_pcorr_g, mold=ws_aW); ws_pcorr_g = 0.0_dp
         allocate(ws_liq_room, mold=ws_aW); ws_liq_room = 1.0_dp
         allocate(ws_sat_goff, mold=ws_liq_cont); ws_sat_goff = .false.
+        allocate(ws_Tsrc, mold=ws_aW); ws_Tsrc = 0.0_dp
         allocate(ws_mQ_r, ws_mQ_th, ws_mQ_z, ws_mW, ws_mKl, ws_mKg, ws_mFd, mold=ws_aW)
         ws_mFd = 0.0_dp
         ws_mQ_r = 0.0_dp; ws_mQ_th = 0.0_dp; ws_mQ_z = 0.0_dp; ws_mW = 0.0_dp

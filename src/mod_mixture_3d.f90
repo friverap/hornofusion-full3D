@@ -64,7 +64,7 @@ module mod_mixture_3d
     use mod_workspace, only: ensure_workspace, aW => ws_aW, aE => ws_aE, aS => ws_aS, &
         aN => ws_aN, aB => ws_aB, aT => ws_aT, aP => ws_aP, Su => ws_Su, &
         ws_liq_cont, ws_liq_cont_valid, ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, ws_mQ_r, ws_mQ_th, ws_mQ_z, ws_mW, &
-        ws_mix_valid, ws_mix_id, ws_mKl, ws_mKg, ws_mFd
+        ws_mix_valid, ws_mix_id, ws_mKl, ws_mKg, ws_mFd, ws_Tsrc
     implicit none
     private
     public :: mixture_iteration
@@ -231,12 +231,12 @@ contains
         !    flujos de masa del transporte de alpha, ws_Fr/ws_Fth/ws_Fz)
         if (cfg%solve_energy) then
             call solve_energy_3d(liq, liq_old%T, sh, m, cfg, liq%alpha, &
-                                 gas%alpha, liq_old%alpha, sol%mdot, sol%T_s, &
+                                 gas%alpha, liq_old%alpha, sol%mdot, ws_Tsrc, &
                                  .false., res_el)
             call relax_field(liq%T, p_lT, cfg%alpha_T, m)
             call phase_exchange_halos(liq, m)
             call solve_energy_3d(gas, gas_old%T, sh, m, cfg, gas%alpha, &
-                                 liq%alpha, gas%alpha, sol%mdot, sol%T_s, &
+                                 liq%alpha, gas%alpha, sol%mdot, ws_Tsrc, &
                                  .true., res_eg)
             call relax_field(gas%T, p_gT, cfg%alpha_T, m)
             call exchange_gas_liquid(liq, gas, m, cfg)
