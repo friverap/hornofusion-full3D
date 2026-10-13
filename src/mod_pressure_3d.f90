@@ -1398,30 +1398,36 @@ contains
                     if (.not. act(i,j,k)) cycle
 
                     if (.not. consistent) then
-                        ! u_r correction
+                        ! Estencil con las MISMAS paredes que el predictor (Bug 16:
+                        ! celdas sin fluido, tazon, selladas -> diferencia
+                        ! unilateral; pgrad), sin la superficie libre de D2.6.
+                        ! Antes era el central crudo y leia pp = 0 de esas celdas
+                        ! (auditoria 12-oct-2026, A16)
                         skip_r = (i == istart .and. at_rmin) .or. &
                                  (i == iend   .and. at_rmax)
                         if (.not. skip_r .and. abs(ph%aP_ur(i,j,k)) > SMALL) then
                             d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_ur(i,j,k)
                             ph%ur(i,j,k) = ph%ur(i,j,k) - d_coeff * &
-                                (sh%pp(i+1,j,k) - sh%pp(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
+                                pgrad(sh%pp(i-1,j,k), sh%pp(i,j,k), sh%pp(i+1,j,k), &
+                                      m%r(i-1), m%r(i), m%r(i+1), &
+                                      (i > 1) .and. pv(i-1,j,k), (i < iend) .and. pv(i+1,j,k))
                         end if
-
-                        ! u_theta correction
                         if (abs(ph%aP_uth(i,j,k)) > SMALL) then
                             d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_uth(i,j,k)
                             ph%uth(i,j,k) = ph%uth(i,j,k) - d_coeff * &
-                                (sh%pp(i,jp,k) - sh%pp(i,jm,k)) / &
-                                (m%r(i) * (m%theta(jp) - m%theta(jm)))
+                                pgrad(sh%pp(i,jm,k), sh%pp(i,j,k), sh%pp(i,jp,k), &
+                                      m%r(i) * m%theta(jm), m%r(i) * m%theta(j), &
+                                      m%r(i) * m%theta(jp), pv(i,jm,k), pv(i,jp,k))
                         end if
-
-                        ! u_z correction
                         skip_z = (k == kstart .and. at_zmin) .or. &
                                  (k == kend   .and. at_zmax)
                         if (.not. skip_z .and. abs(ph%aP_uz(i,j,k)) > SMALL) then
                             d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_uz(i,j,k)
                             ph%uz(i,j,k) = ph%uz(i,j,k) - d_coeff * &
-                                (sh%pp(i,j,k+1) - sh%pp(i,j,k-1)) / (m%z(k+1) - m%z(k-1))
+                                pgrad(sh%pp(i,j,k-1), sh%pp(i,j,k), sh%pp(i,j,k+1), &
+                                      m%z(k-1), m%z(k), m%z(k+1), &
+                                      (k > kstart .or. .not. at_zmin) .and. pv(i,j,k-1), &
+                                      (k < kend   .or. .not. at_zmax) .and. pv(i,j,k+1))
                         end if
                     else
                         ! D2.6: el MISMO operador que el predictor (pgrad_fs con
