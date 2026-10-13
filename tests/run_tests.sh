@@ -191,6 +191,8 @@ full | rebaseline)
     run_case arc_noscrap 4
     # Cesta 2 durante la corrida (auditoria A5): carga aditiva y auditada
     run_case cold_bucket2 4
+    # Drenaje del lecho con la fuerza balanceada (auditoria 2, N-C1)
+    run_case bed_drain 4
 
     for d in "$OUT"/cold_10step_n*; do
         check_invariants "$d" cold_10step
@@ -264,6 +266,9 @@ full | rebaseline)
     run_script "bed_flood" \
         $PY $INT/check_bath.py "$OUT/bed_flood_n4" --config "$CFG/bed_flood.dat" --fill \
         --xfail "$(xfail_ids bed_flood)"
+    check_invariants "$OUT/bed_drain_n4" bed_drain
+    run_script "bed_drain" \
+        $PY $INT/check_drain.py "$OUT/bed_drain_n4" --xfail "$(xfail_ids bed_drain)"
     # Auditoria de energia/masa/arco en TODA corrida de la matriz (auditoria
     # 2, N-C3: antes 13 de 26 no se auditaban; bath_freeze fallaba con err 1)
     for d in "$OUT"/*_n*; do
@@ -272,6 +277,7 @@ full | rebaseline)
             arc_noscrap_*)   x=audit_arcnoscrap ;;
             noflow_energy_*) x=audit_noflow ;;
             bath_fill_mix_*) x=audit_fillmix ;;
+            bed_drain_*)     x=audit_beddrain ;;
             *)               x="" ;;
         esac
         check_audit_if_present "$d" $x

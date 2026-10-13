@@ -23,7 +23,7 @@ module mod_multiphase
     use mod_probe, only: probe_report, probe_current_step
     use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
     use mod_mpi_topology, only: mpi_allreduce_max
-    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
+    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_bed, ws_bed_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
                              ws_liq_room, ws_liq_room_valid, &
                              ws_liq_fr, ws_liq_fth, ws_liq_fz, &
                              ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, ws_Tsrc
@@ -89,6 +89,11 @@ contains
         ! Mascara de liquido CONTINUO (Bug 15; halos de alpha ya intercambiados)
         call ensure_workspace(m)
         call liquid_continuity_mask(liq, sol, m, ws_liq_cont)
+        ! mascara del lecho (N-C1): misma regla que liq_continuous, halos
+        ! incluidos (sol%alpha_s ya intercambiado; los halos fisicos tienen
+        ! cell_type = 0)
+        ws_bed = merge(1.0_dp, 0.0_dp, sol%alpha_s >= 1.0e-2_dp .and. m%cell_type /= 0)
+        ws_bed_valid = .true.
         ws_liq_cont_valid = .true.
         ! (la mascara de presion de fluido, ws_pv_active, se fija mas abajo:
         !  necesita el arrastre de Ergun del gas para la percolacion, F2.16)

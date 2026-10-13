@@ -24,7 +24,9 @@ audit_noflow:arc_budget
 # 22-23 iteraciones (antes 36-40). Con la fuente (p^k - p^n) las primeras
 # iteraciones del encendido quedan mas lejos del punto fijo y el hook (sobre
 # el campo relajado, M5) lo muestra.
-audit_cold:energy_balance
+# RETIRADO 13-oct-2026 (auditoria 2): con la identidad estricta (gap frente a
+# etol x fuentes) y la flotacion relativa del lecho (N-C1) cierra a 0.66 de lo
+# permitido en n1/n4/n8/n12.
 # --- Banco del bano de liquido puro: bath_rest y bath_hydrostatic RETIRADOS
 # 13-oct-2026. La corriente fantasma par-impar de 0.17-0.22 m/s y el error
 # ferrostatico de ~1 % eran la fuerza de cuerpo NO balanceada del liquido: p
@@ -67,3 +69,12 @@ audit_cold:energy_balance
 # resuelve la energia de la mezcla (flujos Q_l y Q - Q_l, M36). La mezcla no
 # se usa en B1 (Plan G cerrado negativo).
 audit_fillmix:energy_balance
+# bed_drain (auditoria 2, N-A7, 13-oct-2026): energia del GAS en el lecho que
+# funde. Por fases: solido cierra a +-60 J/paso y liquido a +-200 J/paso; el gap
+# es el libro del gas (E_gas_abs frente a -E_iph_gas) y el defecto convectivo
+# del hook (+2.9e7 J con max_outer 5, +4.6e7 con 10) que no llega a los
+# inventarios: residuo del lazo externo de la energia del gas con la interfase
+# gas-solido fuerte aplicada DESPUES del solve. Con el lazo convergido (60
+# outers, tol 1e-10) baja ~20x pero no a cero (-1.6e4 J/paso, crece). Mas el
+# paso 1: la palanca funde 1.8e11 J y 5 outers dejan -3.4e7 J (convergido: -31 J).
+audit_beddrain:energy_balance

@@ -123,6 +123,11 @@ module mod_workspace
     ! p^n de la densidad rho(P0 + p^n, T^n) en la fuente de compresibilidad.
     ! Se copia de sh%p al empezar cada paso (sh%p va al reinicio).
     real(dp), allocatable :: ws_p_n(:,:,:)
+    ! Celda del LECHO (alpha_s propio >= 1e-2, la regla de liq_continuous):
+    ! con la fuerza balanceada, ahi cada fase recupera su flotacion relativa
+    ! (goteo a contracorriente; auditoria 2, N-C1). 1 = lecho, 0 = fuera.
+    real(dp), allocatable :: ws_bed(:,:,:)
+    logical, save :: ws_bed_valid = .false.
     ! Flujos de MASA conservativos del GAS por las caras + [kg/s] (auditoria
     ! M24, gas): Q = Q* + a (pp_P - pp_N) del Poisson por la densidad del
     ! dador (la misma upwind del termino advectivo de la compresibilidad).
@@ -207,6 +212,7 @@ contains
         allocate(ws_lim_step, mold=ws_aW); ws_lim_step = 1.0_dp
         allocate(ws_cc, ws_cc_new, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
         allocate(ws_p_n, mold=ws_aW); ws_p_n = 0.0_dp
+        allocate(ws_bed, mold=ws_aW); ws_bed = 0.0_dp
         allocate(ws_Fg_r, ws_Fg_th, ws_Fg_z, mold=ws_aW)
         ws_Fg_r = 0.0_dp; ws_Fg_th = 0.0_dp; ws_Fg_z = 0.0_dp
         allocate(ws_Fg_lk_r(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))

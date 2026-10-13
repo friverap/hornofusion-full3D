@@ -85,7 +85,7 @@ contains
                                          alpha_old, rho_old, mdot_m)
         use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, &
-            ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, &
+            ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, ws_bed, ws_bed_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             aW => ws_aW, &
@@ -464,14 +464,17 @@ contains
                         src_extra = -alpha_f * ph%rho(i,j,k) * GRAVITY &
                                   + sh%S_arc_mom(i,j,k)
                         ! fuerza balanceada: el peso del gas va en W_f
-                        if (is_gas .and. lbf_m) src_extra = sh%S_arc_mom(i,j,k)
+                        if (is_gas .and. lbf_m) src_extra = sh%S_arc_mom(i,j,k) &
+                            + bed_buoyancy(ph%rho(i,j,k) * GRAVITY)
                         if (.not. is_gas) then
                             src_extra = src_extra &
                                   + alpha_f * ph%rho(i,j,k) * cfg%beta_expansion &
                                     * GRAVITY * (ph%T(i,j,k) - cfg%T_ref_boussinesq) &
                                   + sh%F_lorentz_z(i,j,k)
                             ! fuerza balanceada: el peso del liquido esta en W_f
-                            if (lbf_m) src_extra = sh%S_arc_mom(i,j,k) + sh%F_lorentz_z(i,j,k)
+                            if (lbf_m) src_extra = sh%S_arc_mom(i,j,k) + sh%F_lorentz_z(i,j,k) &
+                                + bed_buoyancy(ph%rho(i,j,k) * GRAVITY * (1.0_dp &
+                                  - cfg%beta_expansion * (ph%T(i,j,k) - cfg%T_ref_boussinesq)))
                         end if
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
                                    + (-alpha_f * dp_dz + src_extra) * vol
@@ -561,6 +564,26 @@ contains
         ! vecina inactiva: tazon, coraza, piso, techo). Antes la conductancia
         ! hacia la pared se ponia a cero: deslizamiento libre en todas partes
         ! aunque la CC decia no-slip. El eje (r = rmin) es simetria: sin pared.
+        ! FLOTACION RELATIVA en el LECHO (auditoria 2, N-C1). Con la fuerza
+        ! balanceada ninguna fase lleva peso de celda: es lo correcto en una
+        ! interfase grande (bano estratificado), pero en el lecho el liquido
+        ! continuo (desde alpha_l 0.01) gotea a contracorriente del gas: sin su
+        ! flotacion relativa quedaba colgado (u_l = u_g = 0 punto fijo de una
+        ! columna uniforme; debia percolar ~0.1 m/s). En el lecho cada fase
+        ! recupera -alpha_q (rho_q g - W_P): suma cero sobre las fases (W_P es
+        ! el peso de la mezcla continua por volumen de fluido), asi que la
+        ! mezcla sigue balanceada por caras; y como fuerza de cuerpo
+        ! interpolada se cancela en el Rhie-Chow (Mencinger & Zun 2007). En una
+        ! columna de lecho uniforme equivale EXACTO a la forma clasica
+        ! -alpha grad p - alpha rho g (test_bed_buoyancy).
+        real(dp) function bed_buoyancy(w_own)
+            real(dp), intent(in) :: w_own
+            bed_buoyancy = 0.0_dp
+            if (.not. ws_bed_valid) return
+            if (ws_bed(i,j,k) <= 0.0_dp) return
+            bed_buoyancy = -alpha_f * (w_own - cell_w(i, j, k))
+        end function bed_buoyancy
+
         function wall_shear() result(ap_w)
             real(dp) :: ap_w, am
             ap_w = 0.0_dp

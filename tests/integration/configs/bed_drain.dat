@@ -1,0 +1,34 @@
+# Banco bed_drain (auditoria 2, N-C1, 13-oct-2026): DRENAJE por gravedad del
+# liquido continuo a traves del lecho con la fuerza balanceada (default). Misma
+# receta que bed_flood (lecho denso abajo, suelto arriba) a 1700 K sin heel ni
+# arco: la palanca funde ~48 % en el paso 1 y deja liquido continuo en los poros
+# (alpha_l >= 0.01 en el lecho). Criterio (check_drain.py): el centroide
+# vertical del liquido baja >= 0.1 m entre el primer snapshot con liquido y el
+# ultimo. Medido: 0.23 m con la flotacion relativa del lecho; 0.02 m sin ella
+# (el liquido quedaba colgado: el bug N-C1).
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+charge_recipe_file = input/recipe_bed_flood.dat
+dt = 0.002
+t_final = 0.7
+adaptive_dt = false
+heel_mass = 0.0
+T_initial = 1700.0
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = false
+solve_radiation = false
+solve_chemistry = false
+solve_arc = false
+solve_multiphase = true
+alpha_p = 0.3
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 200
+audit_freq = 1
+output_freq = 50
+monitor_freq = 100

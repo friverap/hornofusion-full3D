@@ -30,6 +30,7 @@ fuerza balanceada; volúmenes de `eafutil` con eje real.
 | id | V | Hallazgo | Dónde |
 |---|---|---|---|
 | N-C4 | ✔ | **Sin transporte de α de dos fluidos (ramas de una sola fase y solo energía) el ṁ de fusión/congelación no se aplicaba al líquido**: el sólido ganaba la masa congelada sin que el líquido la perdiera (bath_freeze sin flujo: +18 t de acero y +1.4e10 J por paso). Usan `solve_flow = false` chem_test, slag_chem_test, ecs_test, noflow_energy y dos configs de input | `main_3d.f90`, `mod_solid_phase.f90` |
+| N-A7 | ✔ | **Energía del gas en el lecho que funde (bed_drain):** sólido y líquido cierran por separado, el descuadre es el libro del gas (E_gas_abs frente a −E_iph_gas) más un defecto convectivo del hook que no llega a los inventarios (+4.6e7 J con max_outer 10): residuo del lazo externo de la energía del gas con la interfase gas–sólido fuerte aplicada después del solve; convergido baja ~20× pero deriva. xfail `audit_beddrain` | `mod_energy_3d` hook, `mod_interphase_ht`, orden del lazo |
 | N-C5 | ✔ | **El residual de energía se normaliza con la temperatura ABSOLUTA** (Σ\|aP T\|): un desfase de 0.7 K sobre 1550 K pasa `tol_energy = 1e-3` y el lazo externo se corta con 2.8 % de las fuentes del paso sin aplicar (bath_freeze sin flujo: −7e7 J por paso, igual con max_outer = 60) | `mod_solver_3d.f90:388-401`, `mod_config_3d.f90:51` |
 
 ## Altos

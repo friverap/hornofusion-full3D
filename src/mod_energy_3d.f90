@@ -23,6 +23,7 @@ contains
                                alpha_old, mdot, T_src, is_gas, residual)
         use mod_face_flux, only: face_mass_fluxes_noalpha
         use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
+            ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, &
             ws_flux_valid, ws_mQ_r, ws_mQ_th, ws_mQ_z, ws_mix_valid, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su
@@ -178,6 +179,16 @@ contains
                             Fn = gflux(ws_mQ_th(i,j,k)  - ws_Fth(i,j,k)  / cfg%rho_steel, i, j, k, i, jp, k)
                             Fb = gflux(ws_mQ_z(i,j,k-1) - ws_Fz(i,j,k-1) / cfg%rho_steel, i, j, k-1, i, j, k)
                             Ft = gflux(ws_mQ_z(i,j,k)   - ws_Fz(i,j,k)   / cfg%rho_steel, i, j, k, i, j, k+1)
+                        else if (is_gas .and. ws_Fg_valid) then
+                            ! GAS con los flujos de MASA conservativos de su
+                            ! Poisson (auditoria 2, N-M3), los mismos que su
+                            ! momento (M24): la reconstruccion simetrica de
+                            ! centro no es solenoidal y el deficit convectivo de
+                            ! la forma acotada ~ T x (desbalance de masa) no
+                            ! cerraba la energia (bed_drain: -9e7 J)
+                            Fw = ws_Fg_r(i-1,j,k);  Fe = ws_Fg_r(i,j,k)
+                            Fs = ws_Fg_th(i,jm,k);  Fn = ws_Fg_th(i,j,k)
+                            Fb = ws_Fg_z(i,j,k-1);  Ft = ws_Fg_z(i,j,k)
                         else if (is_gas) then
                             call face_mass_fluxes(alpha_q, ph%rho, ph%ur, &
                                 ph%uth, ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
