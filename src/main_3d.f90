@@ -98,14 +98,21 @@ program eaf_3d_simulator
     ! INITIALIZATION
     !===================================================================
     
-    ! Read configuration FIRST (before MPI init!)
+    ! MPI se inicializa ANTES de leer el config (auditoria, bajos): la lectura
+    ! la hacen todos los ranks y asi solo rank 0 imprime sus mensajes. La
+    ! TOPOLOGIA (que necesita las dimensiones de la malla) va despues.
+    block
+        use mpi
+        integer :: ierr_init
+        call MPI_Init(ierr_init)
+    end block
     call config_set_defaults(cfg)
     nargs = command_argument_count()
     if (nargs >= 1) then
         call get_command_argument(1, config_file)
         call config_read(cfg, config_file)
     else
-        print *, ' [MAIN] No config file specified, using defaults.'
+        if (cfg_root()) print *, ' [MAIN] No config file specified, using defaults.'
     end if
     call config_validate(cfg)
     

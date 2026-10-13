@@ -83,9 +83,16 @@ contains
         integer :: ierr
         logical :: periods(3), reorder
         
-        ! Initialize MPI
-        call MPI_Init(ierr)
-        call check_mpi(ierr, 'MPI_Init')
+        ! Initialize MPI (main ya lo inicializa antes de leer el config, para
+        ! que solo rank 0 imprima; los tests unitarios no)
+        block
+            logical :: init
+            call MPI_Initialized(init, ierr)
+            if (.not. init) then
+                call MPI_Init(ierr)
+                call check_mpi(ierr, 'MPI_Init')
+            end if
+        end block
 
         topo%comm_world = MPI_COMM_WORLD
         call MPI_Comm_rank(topo%comm_world, topo%rank, ierr)

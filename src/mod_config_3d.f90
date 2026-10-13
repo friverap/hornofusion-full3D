@@ -213,10 +213,10 @@ contains
 
         open(newunit=iu, file=trim(filename), status='old', iostat=ios)
         if (ios /= 0) then
-            print '(A,A)', ' [CONFIG] ERROR: cannot open config file: ', trim(filename)
+            if (cfg_root()) print '(A,A)', ' [CONFIG] ERROR: cannot open config file: ', trim(filename)
             stop 1
         end if
-        print '(A,A)', ' [CONFIG] Reading: ', trim(filename)
+        if (cfg_root()) print '(A,A)', ' [CONFIG] Reading: ', trim(filename)
 
         do
             read(iu, '(A)', iostat=ios) line
@@ -417,7 +417,7 @@ contains
         case ('Sc_t_species');    call parse_real(val, key, cfg%Sc_t_species)
         case ('alpha_Y_species'); call parse_real(val, key, cfg%alpha_Y_species)
         case default
-            print '(A,A,A)', ' [CONFIG] WARNING: unknown key "', trim(key), &
+            if (cfg_root()) print '(A,A,A)', ' [CONFIG] WARNING: unknown key "', trim(key), &
                   '" ignored (check for typos)'
         end select
     end subroutine config_set_value
@@ -434,7 +434,7 @@ contains
 
         read(val, *, iostat=ios) tmp
         if (ios /= 0) then
-            print '(5A)', ' [CONFIG] ERROR: invalid value "', trim(val), &
+            if (cfg_root()) print '(5A)', ' [CONFIG] ERROR: invalid value "', trim(val), &
                   '" for key "', trim(key), '"'
             stop 1
         end if
@@ -449,7 +449,7 @@ contains
 
         read(val, *, iostat=ios) tmp
         if (ios /= 0) then
-            print '(5A)', ' [CONFIG] ERROR: invalid value "', trim(val), &
+            if (cfg_root()) print '(5A)', ' [CONFIG] ERROR: invalid value "', trim(val), &
                   '" for key "', trim(key), '"'
             stop 1
         end if
@@ -478,7 +478,7 @@ contains
         case ('false', '.false.', 'f', '.f.', 'no', 'off', '0')
             b = .false.
         case default
-            print '(3A)', ' [CONFIG] ERROR: invalid boolean value "', trim(val), '"'
+            if (cfg_root()) print '(3A)', ' [CONFIG] ERROR: invalid boolean value "', trim(val), '"'
             stop 1
         end select
     end function parse_bool
@@ -553,7 +553,7 @@ contains
         end if
 
         if (.not. ok) then
-            print *, ' [CONFIG] Aborting due to invalid configuration.'
+            if (cfg_root()) print *, ' [CONFIG] Aborting due to invalid configuration.'
             stop 1
         end if
     end subroutine config_validate
@@ -564,7 +564,7 @@ contains
         logical, intent(inout) :: ok
 
         if (.not. cond) then
-            print '(A,A)', ' [CONFIG] ERROR: ', msg
+            if (cfg_root()) print '(A,A)', ' [CONFIG] ERROR: ', msg
             ok = .false.
         end if
     end subroutine require
@@ -589,5 +589,18 @@ contains
               ' turb=', cfg%solve_turb
         print *, '============================================================'
     end subroutine config_print
+
+    ! Solo rank 0 imprime al leer/validar el config (auditoria, bajos: todos
+    ! los ranks leen el archivo y cada uno repetia los mensajes)
+    logical function cfg_root()
+        use mpi
+        integer :: rk, ierr
+        logical :: init
+        cfg_root = .true.
+        call MPI_Initialized(init, ierr)
+        if (.not. init) return
+        call MPI_Comm_rank(MPI_COMM_WORLD, rk, ierr)
+        cfg_root = (rk == 0)
+    end function cfg_root
 
 end module mod_config_3d
