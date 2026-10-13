@@ -464,8 +464,11 @@ contains
                         src_extra = -alpha_f * ph%rho(i,j,k) * GRAVITY &
                                   + sh%S_arc_mom(i,j,k)
                         ! fuerza balanceada: el peso del gas va en W_f
-                        if (is_gas .and. lbf_m) src_extra = sh%S_arc_mom(i,j,k) &
-                            + bed_buoyancy(ph%rho(i,j,k) * GRAVITY)
+                        ! (el gas en el lecho conserva el gradiente reducido sin
+                        ! flotacion relativa, como F2.3: con la forma clasica
+                        ! veia la hidrostatica del liquido del poro y el anillo
+                        ! del eje divergia -bath_freeze n1/n4 0.58-)
+                        if (is_gas .and. lbf_m) src_extra = sh%S_arc_mom(i,j,k)
                         if (.not. is_gas) then
                             src_extra = src_extra &
                                   + alpha_f * ph%rho(i,j,k) * cfg%beta_expansion &
@@ -474,7 +477,8 @@ contains
                             ! fuerza balanceada: el peso del liquido esta en W_f
                             if (lbf_m) src_extra = sh%S_arc_mom(i,j,k) + sh%F_lorentz_z(i,j,k) &
                                 + bed_buoyancy(ph%rho(i,j,k) * GRAVITY * (1.0_dp &
-                                  - cfg%beta_expansion * (ph%T(i,j,k) - cfg%T_ref_boussinesq)))
+                                  - cfg%beta_expansion * (ph%T(i,j,k) - cfg%T_ref_boussinesq)), &
+                                  ok_bot, ok_top)
                         end if
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
                                    + (-alpha_f * dp_dz + src_extra) * vol
@@ -564,24 +568,36 @@ contains
         ! vecina inactiva: tazon, coraza, piso, techo). Antes la conductancia
         ! hacia la pared se ponia a cero: deslizamiento libre en todas partes
         ! aunque la CC decia no-slip. El eje (r = rmin) es simetria: sin pared.
-        ! FLOTACION RELATIVA en el LECHO (auditoria 2, N-C1). Con la fuerza
-        ! balanceada ninguna fase lleva peso de celda: es lo correcto en una
-        ! interfase grande (bano estratificado), pero en el lecho el liquido
+        ! FLOTACION RELATIVA del LIQUIDO en el LECHO (auditoria 2, N-C1). Con
+        ! la fuerza balanceada ninguna fase lleva peso de celda: correcto en una
+        ! interfase grande (baño estratificado), pero en el lecho el liquido
         ! continuo (desde alpha_l 0.01) gotea a contracorriente del gas: sin su
-        ! flotacion relativa quedaba colgado (u_l = u_g = 0 punto fijo de una
-        ! columna uniforme; debia percolar ~0.1 m/s). En el lecho cada fase
-        ! recupera -alpha_q (rho_q g - W_P): suma cero sobre las fases (W_P es
-        ! el peso de la mezcla continua por volumen de fluido), asi que la
-        ! mezcla sigue balanceada por caras; y como fuerza de cuerpo
-        ! interpolada se cancela en el Rhie-Chow (Mencinger & Zun 2007). En una
-        ! columna de lecho uniforme equivale EXACTO a la forma clasica
-        ! -alpha grad p - alpha rho g (test_bed_buoyancy).
-        real(dp) function bed_buoyancy(w_own)
+        ! flotacion quedaba colgado (u_l = u_g = 0 punto fijo de una columna
+        ! uniforme; debia percolar ~0.1 m/s). En el lecho el liquido recupera
+        ! -alpha_l (rho_l g - Wbar): la forma CLASICA -alpha grad p - alpha rho g
+        ! (la del liquido antes de la fuerza balanceada, que drenaba y era
+        ! invariante). El gas conserva el gradiente reducido sin flotacion
+        ! (F2.3). Wbar es el MISMO peso de cara que entra en el gradiente
+        ! reducido (media de las caras que existen), no el de la celda: con W_P
+        ! de la celda la fuerza no era la clasica en el tope del lecho. Como
+        ! fuerza de cuerpo interpolada se cancela en el Rhie-Chow.
+        real(dp) function bed_buoyancy(w_own, okb, okt)
             real(dp), intent(in) :: w_own
+            logical, intent(in)  :: okb, okt
+            real(dp) :: wbar
             bed_buoyancy = 0.0_dp
             if (.not. ws_bed_valid) return
             if (ws_bed(i,j,k) <= 0.0_dp) return
-            bed_buoyancy = -alpha_f * (w_own - cell_w(i, j, k))
+            if (okb .and. okt) then
+                wbar = 0.5_dp * (liq_weight_f(i, j, k-1, k) + liq_weight_f(i, j, k, k+1))
+            else if (okt) then
+                wbar = liq_weight_f(i, j, k, k+1)
+            else if (okb) then
+                wbar = liq_weight_f(i, j, k-1, k)
+            else
+                wbar = 0.0_dp
+            end if
+            bed_buoyancy = -alpha_f * (w_own - wbar)
         end function bed_buoyancy
 
         function wall_shear() result(ap_w)

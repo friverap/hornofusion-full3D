@@ -87,7 +87,7 @@ run_restart_case() {
         return 1
     fi
     local rtol=1e-12
-    [ "$np" = "$npb" ] || rtol=1e-3
+    [ "$np" = "$npb" ] || rtol=1e-10   # (medido 8.5e-13; antes 1e-3)
     run_script "restart_${base}_n${npb}_to_n${np}" \
         $PY $INT/compare_decomposition.py "$dir" "$src" --rtol $rtol
 }
@@ -170,12 +170,17 @@ full | rebaseline)
     run_case ecs_test 8
     run_case slag_chem_test 1
     run_case slag_chem_test 8
+    # (auditoria 2, N-A4) descomposiciones cuyas fronteras CRUZAN las fases:
+    # n9 = 1x3x3 corta z en la superficie del baño (k 5|6), n12 = 2x3x2 corta
+    # r a traves del baño (n4/n8 cortan z en k = 8, sobre las fases)
+    run_case slag_chem_test 9
     run_case slag_chem_flow 4
     # Bug 19 (Plan C, F0): bancos del bano de liquido puro — reposo (n1/n4)
     # y llenado por fusion (n4). Sus checks propios (bath:*) llevan xfail
     # con causa hasta F1/F2; los invariantes duros (nan/bounds) NO.
     run_case bath_test 1
     run_case bath_test 4
+    run_case bath_test 12
     run_case bath_fill 4
     run_case bath_mix 4
     run_case bath_fill_mix 4
@@ -183,6 +188,7 @@ full | rebaseline)
     # Descomposicion del lecho inundado/congelado (auditoria M22: celdas
     # selladas en la frontera entre ranks; antes 9.7 % en alpha_l n1 vs n4)
     run_case bath_freeze 1
+    run_case bath_freeze 9
     # Lecho INUNDADO (Plan D D0): poros llenos bajo chatarra que funde y drena;
     # reproduce el regimen de B1 a ~320 s. Su check bed_flood:bath_pv_bounded
     # lleva xfail con causa.
@@ -209,11 +215,11 @@ full | rebaseline)
     check_invariants "$OUT/symmetry_3elec_n6" symmetry_3elec
 
     run_script "decomposition_cold_n1" \
-        $PY $INT/compare_decomposition.py "$OUT/cold_10step_n1" "$OUT/cold_10step_n8"
+        $PY $INT/compare_decomposition.py "$OUT/cold_10step_n1" "$OUT/cold_10step_n8" --rtol 1e-10
     run_script "decomposition_cold_n4" \
-        $PY $INT/compare_decomposition.py "$OUT/cold_10step_n4" "$OUT/cold_10step_n8"
+        $PY $INT/compare_decomposition.py "$OUT/cold_10step_n4" "$OUT/cold_10step_n8" --rtol 1e-10
     run_script "decomposition_cold_r" \
-        $PY $INT/compare_decomposition.py "$OUT/cold_10step_n1" "$OUT/cold_10step_n12"
+        $PY $INT/compare_decomposition.py "$OUT/cold_10step_n1" "$OUT/cold_10step_n12" --rtol 1e-10
     run_script "symmetry" \
         $PY $INT/check_symmetry.py "$OUT/symmetry_3elec_n6"
     run_script "melt" \
@@ -225,7 +231,7 @@ full | rebaseline)
     run_script "ecs" \
         $PY $INT/check_ecs.py "$OUT/ecs_test_n8" --config "$CFG/ecs_test.dat"
     run_script "decomposition_ecs" \
-        $PY $INT/compare_decomposition.py "$OUT/ecs_test_n1" "$OUT/ecs_test_n8"
+        $PY $INT/compare_decomposition.py "$OUT/ecs_test_n1" "$OUT/ecs_test_n8" --rtol 1e-12
     run_script "slag_chem" \
         $PY $INT/check_slag_chem.py "$OUT/slag_chem_test_n8" --config "$CFG/slag_chem_test.dat"
     run_script "slag_chem_flow" \
@@ -234,9 +240,9 @@ full | rebaseline)
     # ECS con r DESCOMPUESTO (12 ranks -> 2x3x2): antes de la auditoria M38
     # la carga no se depositaba (indice radial local tomado como global)
     run_case ecs_test 12 && run_script "decomposition_ecs_r" \
-        $PY $INT/compare_decomposition.py "$OUT/ecs_test_n12" "$OUT/ecs_test_n1"
+        $PY $INT/compare_decomposition.py "$OUT/ecs_test_n12" "$OUT/ecs_test_n1" --rtol 1e-12
     run_script "decomposition_slag" \
-        $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n8" --rtol 1e-6
+        $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n8" --rtol 1e-4
     for d in "$OUT"/bath_test_n*; do
         check_invariants "$d" bath_test
         run_script "bath_test" \
@@ -285,9 +291,15 @@ full | rebaseline)
         check_audit_if_present "$d" "$x" "$more"
     done
     run_script "decomposition_bath" \
-        $PY $INT/compare_decomposition.py "$OUT/bath_test_n1" "$OUT/bath_test_n4"
+        $PY $INT/compare_decomposition.py "$OUT/bath_test_n1" "$OUT/bath_test_n4" --rtol 1e-8
+    run_script "decomposition_bath_r" \
+        $PY $INT/compare_decomposition.py "$OUT/bath_test_n1" "$OUT/bath_test_n12" --rtol 1e-8
+    run_script "decomposition_freeze_z" \
+        $PY $INT/compare_decomposition.py "$OUT/bath_freeze_n1" "$OUT/bath_freeze_n9" --rtol 1e-5
+    run_script "decomposition_slag_z" \
+        $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n9" --rtol 1e-4
     run_script "decomposition_freeze" \
-        $PY $INT/compare_decomposition.py "$OUT/bath_freeze_n1" "$OUT/bath_freeze_n4"
+        $PY $INT/compare_decomposition.py "$OUT/bath_freeze_n1" "$OUT/bath_freeze_n4" --rtol 1e-5
     # Reinicio desde snapshot: mismo numero de ranks y distinto (lectura por
     # hyperslab), y sobre el regimen de fusion (melt_forced, paso 6 de 11)
     run_restart_case cold_10step 8 8 5

@@ -9,9 +9,9 @@
 !      hidrostatica de la mezcla continua: la velocidad vertical del LIQUIDO
 !      tras un solve de momento con la forma balanceada + flotacion del lecho
 !      es IGUAL (1e-10 relativo) a la de la forma clasica -alpha grad p -
-!      alpha rho g (la que usa el camino Plan D); el liquido baja y el gas de
-!      poro sube (la forma clasica para el gas en el lecho: F2.3, que le
-!      quitaba el peso del liquido, no aplica dentro del lecho).
+!      alpha rho g (la que usa el camino Plan D) y el liquido gotea respecto
+!      del gas (el gas conserva el gradiente reducido de F2.3: con la forma
+!      clasica veia la hidrostatica del poro y el anillo del eje divergia).
 !   2. Misma columna SIN chatarra (alpha_l 0.4 continuo, fuera del lecho):
 !      la forma balanceada NO lleva flotacion relativa (interfase grande): el
 !      liquido no se separa del gas por gravedad en un paso.
@@ -70,7 +70,7 @@ program test_bed_buoyancy
         print '(A,ES11.3)', '   FAIL caso 1: liquido con la forma balanceada /= clasica en el lecho: ', err_l
         ok = .false.
     end if
-    if (.not. (ul_bal(ic,jc,kc) < 0.0_dp .and. ug_bal(ic,jc,kc) > 0.0_dp)) then
+    if (.not. (ul_bal(ic,jc,kc) < 0.0_dp .and. ul_bal(ic,jc,kc) < ug_bal(ic,jc,kc))) then
         print '(A,2ES11.3)', '   FAIL caso 1: el liquido no gotea respecto del gas: u_l, u_g = ', &
             ul_bal(ic,jc,kc), ug_bal(ic,jc,kc)
         ok = .false.
