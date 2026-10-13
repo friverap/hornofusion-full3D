@@ -58,9 +58,15 @@ module mod_pressure_3d
 
     ! Término acústico low-Mach: rho(p,T) = rho(T)*(1 + p'/P0) aporta
     ! d(alpha*rho)/dp' * V/dt = alpha*rho/P0 * V/dt a la DIAGONAL del
-    ! Poisson. Acota la respuesta de pp (los picos se absorben como
-    ! compresión física del gas en vez de exigir velocidades imposibles) y
-    ! es la pieza que faltaba para que el lazo externo converja a CFL alto:
+    ! Poisson. AUDITORIA M25: es SEUDO-compresibilidad, no compresion
+    ! fisica. Esta solo en la diagonal de pp, sin la fuente (p^k - p^n): al
+    ! converger el lazo externo pp -> 0 y el termino desaparece; la EOS del
+    ! gas es rho(P0, T) (low-Mach: la presion dinamica no cambia la densidad).
+    ! Actua como relajacion de pp, es decir, solo cuenta mientras el lazo no
+    ! converge. La compresion fisica (rho(P0 + p, T) y la fuente con
+    ! p^k - p^n) cambiaria la formulacion entera y no esta implementada; con
+    ! |p| ~ P0 (water packing del lecho) la hipotesis low-Mach deja de valer.
+    ! Es la pieza que faltaba para que el lazo externo converja a CFL alto:
     ! sin él, n1/n4 divergían (p -> 2e9 Pa) mientras n8 encontraba el
     ! cuasi-estado por suerte de barrido. La corrección de densidad
     ! asociada (~pp/P0 ~ 1%) se DESCARTA tras el paso — aproximación
@@ -83,7 +89,7 @@ contains
 
     subroutine solve_pressure_correction(liq, gas, gas_T_old, sh, m, cfg, &
                                           residual)
-        use mod_workspace, only: ensure_workspace, aW => ws_aW, &
+        use mod_workspace, only: ensure_workspace, ws_cc, ws_cc_new, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
@@ -424,7 +430,8 @@ contains
         ! alpha por fusión/colapso es de segundo orden aquí).
         if (cfg%gas_compressibility .and. cfg%solve_multiphase) then
         block
-            real(dp) :: src, cap
+            real(dp) :: src, cap, dvol, dcl
+            ws_cc_new = 0.0_dp
             do k = kstart, kend
                 do j = jstart, jend
                     do i = istart, iend
@@ -435,15 +442,21 @@ contains
                               (gas%rho(i,j,k) - cfg%rho_gas * cfg%T_ambient &
                                / max(gas_T_old(i,j,k), T_MIN_GAS)) / max(gas%rho(i,j,k), SMALL)
                         cap = COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt
-                        Su(i,j,k) = Su(i,j,k) - max(-cap, min(cap, src))
-                        ! A8: advectiva (expansion > 0 -> Su sube -> salida)
-                        Su(i,j,k) = Su(i,j,k) + max(-cap, min(cap, gadv(i,j,k)))
-                        ! M14: fuente de MASA del gas por las reacciones
-                        ! (C del solido -> CO, O2 -> escoria, ...): volumen
-                        ! S_gas/rho_g, la continuidad del gas con fuente
-                        Su(i,j,k) = Su(i,j,k) + max(-cap, min(cap, &
-                            (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) &
-                            * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL)))
+                        ! Demanda de volumen del gas [m3/s]: expansion termica
+                        ! (-src), A8 advectiva (gadv), M14 fuente de masa de las
+                        ! reacciones (S_gas/rho_g) y lo que el tope no dejo
+                        ! salir en el paso anterior (M26). UN solo tope sobre el
+                        ! total; el exceso se ACARREA (antes se perdia: el
+                        ! comentario decia que la demanda se re-emitia, pero la
+                        ! referencia del paso siguiente ya es la T nueva)
+                        dvol = -src + gadv(i,j,k) &
+                             + (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) &
+                               * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL) &
+                             + ws_cc(i,j,k) / cfg%dt
+                        dcl = max(-cap, min(cap, dvol))
+                        Su(i,j,k) = Su(i,j,k) + dcl
+                        ws_cc_new(i,j,k) = sign(min(abs(dvol - dcl) * cfg%dt, &
+                            gas%alpha(i,j,k) * m%vol(i,j,k)), dvol - dcl)
                     end do
                 end do
             end do

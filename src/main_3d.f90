@@ -32,7 +32,7 @@ program eaf_3d_simulator
     use mod_continuity
     use mod_multiphase
     use mod_mixture_3d
-    use mod_workspace, only: ensure_workspace, ws_Tsrc, ws_flux_valid
+    use mod_workspace, only: ensure_workspace, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new
     use mod_solid_phase
     use mod_melting_3d
     use mod_scrap_collapse
@@ -510,6 +510,9 @@ program eaf_3d_simulator
             if (conv%converged) exit
         end do
         call timer_stop(T_SIMPLE)
+        ! Acarreo del exceso de compresibilidad: el de la ultima iteracion
+        ! externa pasa al paso siguiente (M26)
+        ws_cc = ws_cc_new
 
         call probe_report('fin-SIMPLE    ', liq, gas, sol, sh, mesh, cfg)
 

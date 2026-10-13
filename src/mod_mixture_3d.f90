@@ -61,7 +61,7 @@ module mod_mixture_3d
     use mod_multiphase, only: cap_gas_velocity, cap_liquid_velocity
     use mod_probe, only: probe_current_step
     use mod_audit, only: AUD_IPH_GAS, AUD_IPH_LIQ
-    use mod_workspace, only: ensure_workspace, aW => ws_aW, aE => ws_aE, aS => ws_aS, &
+    use mod_workspace, only: ensure_workspace, ws_cc, ws_cc_new, aW => ws_aW, aE => ws_aE, aS => ws_aS, &
         aN => ws_aN, aB => ws_aB, aT => ws_aT, aP => ws_aP, Su => ws_Su, &
         ws_liq_cont, ws_liq_cont_valid, ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, ws_mQ_r, ws_mQ_th, ws_mQ_z, ws_mW, &
         ws_mix_valid, ws_mix_id, ws_mKl, ws_mKg, ws_mFd, ws_Tsrc
@@ -843,7 +843,7 @@ contains
         real(dp), intent(out)         :: residual
 
         integer  :: i, j, k, n_it, nnb, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: q, a, flux_ref, sum_su, tmp, src, cap, ag, al, cg_res, psum
+        real(dp) :: q, a, flux_ref, sum_su, tmp, src, cap, ag, al, cg_res, psum, dvol, dcl
         real(dp), allocatable :: Qs_r(:,:,:), Qs_th(:,:,:), Qs_z(:,:,:)
         real(dp), allocatable :: gadv(:,:,:)
         real(dp), allocatable :: ac_r(:,:,:), ac_th(:,:,:), ac_z(:,:,:)
@@ -908,6 +908,7 @@ contains
         end do
 
         ! diagonal, acustica y compresibilidad del gas
+        ws_cc_new = 0.0_dp
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
@@ -931,13 +932,16 @@ contains
                               (gas%rho(i,j,k) - cfg%rho_gas * cfg%T_ambient &
                                / max(Tg_ref(i,j,k), T_MIN_GAS)) / max(gas%rho(i,j,k), SMALL)
                         cap = COMP_SRC_CAP * ag * m%vol(i,j,k) / cfg%dt
-                        Su(i,j,k) = Su(i,j,k) - max(-cap, min(cap, src))
-                        ! A8: termino advectivo (ver gadv_add)
-                        Su(i,j,k) = Su(i,j,k) + max(-cap, min(cap, gadv(i,j,k)))
-                        ! M14: fuente de masa del gas por las reacciones
-                        Su(i,j,k) = Su(i,j,k) + max(-cap, min(cap, &
-                            (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) &
-                            * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL)))
+                        ! demanda total con un solo tope y acarreo (M26; ver
+                        ! mod_pressure_3d)
+                        dvol = -src + gadv(i,j,k) &
+                             + (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) &
+                               * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL) &
+                             + ws_cc(i,j,k) / cfg%dt
+                        dcl = max(-cap, min(cap, dvol))
+                        Su(i,j,k) = Su(i,j,k) + dcl
+                        ws_cc_new(i,j,k) = sign(min(abs(dvol - dcl) * cfg%dt, &
+                            ag * m%vol(i,j,k)), dvol - dcl)
                     end if
                     aP(i,j,k) = aP(i,j,k) + al * m%vol(i,j,k) / &
                                 (liq%rho(i,j,k) * C_SOUND_LIQ**2 * cfg%dt)

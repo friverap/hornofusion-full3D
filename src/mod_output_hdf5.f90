@@ -8,7 +8,7 @@ module mod_output_hdf5
     use mod_constants
     use mod_types_3d
     use mod_mpi_topology
-    use mod_workspace, only: ensure_workspace, ws_liq_cont_prev
+    use mod_workspace, only: ensure_workspace, ws_liq_cont_prev, ws_cc
     use mod_ecs_feed, only: m_ecs_pending
     use hdf5
     use mpi
@@ -301,6 +301,7 @@ contains
         liqc_i = merge(1, 0, ws_liq_cont_prev)
         call write_3d_field_int(group_id, 'liq_cont_prev', liqc_i, m, plist_xfer)
         deallocate(liqc_i)
+        call write_3d_field(group_id, 'comp_carry', ws_cc, m, plist_xfer)   ! M26
 
         ! Atributos escalares y por electrodo (metadatos: todos los ranks)
         adims(1) = 1

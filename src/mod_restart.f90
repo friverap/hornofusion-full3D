@@ -43,7 +43,7 @@ module mod_restart
     use mod_melting_3d, only: solid_enthalpy
     use mod_properties_3d, only: update_properties
     use mod_electrode_3d, only: ARC_LENGTH_SET, BORE_IN_SPEED
-    use mod_workspace, only: ensure_workspace, ws_liq_cont_prev
+    use mod_workspace, only: ensure_workspace, ws_liq_cont_prev, ws_cc
     use mod_ecs_feed, only: m_ecs_pending
     use hdf5
     use mpi
@@ -166,6 +166,11 @@ contains
                 call read_3d_field_int(rid, 'liq_cont_prev', liqc_i, m, plist_xfer)
                 ws_liq_cont_prev = (liqc_i /= 0)
                 deallocate(liqc_i)
+            end if
+            call h5lexists_f(rid, 'comp_carry', ex, error)
+            if (ex) then
+                call ensure_workspace(m)
+                call read_3d_field(rid, 'comp_carry', ws_cc, m, plist_xfer)
             end if
 
             adims(1) = 1

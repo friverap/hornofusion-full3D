@@ -14,7 +14,10 @@ audit_noflow:arc_budget
 # 1.0000: es el instrumento, no una fuga. En régimen convergido el
 # balance cierra a 3e-6 (gate deep, sigue activo). Fix real pendiente:
 # acumular en cada update de T con el rho local (pendiente del audit).
-audit_cold:energy_balance
+# RETIRADO 13-oct-2026 (auditoria M26): con el acarreo del exceso de
+# compresibilidad el volumen expandido en el encendido se ventea en vez de
+# perderse y el balance baja de 1.25 % a 0.75 % (el error de cuadratura
+# del libro del gas sigue ahi, ahora bajo la tolerancia).
 # --- Bug 19 CERRADO (2026-09-27; B1 v32: cero episodios, p_max 5.35 kPa en
 # 120 s de malla media, ninguna cota activada). Lo que queda aqui es de OTRA
 # familia: el modo par-impar del esquema colocado, acotado y no creciente ---
