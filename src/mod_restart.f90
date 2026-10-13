@@ -43,6 +43,8 @@ module mod_restart
     use mod_melting_3d, only: solid_enthalpy
     use mod_properties_3d, only: update_properties
     use mod_electrode_3d, only: ARC_LENGTH_SET, BORE_IN_SPEED
+    use mod_workspace, only: ensure_workspace, ws_liq_cont_prev
+    use mod_ecs_feed, only: m_ecs_pending
     use hdf5
     use mpi
     implicit none
@@ -69,7 +71,7 @@ contains
         integer :: error, rank, c, e, ne
         logical :: has_restart, ex
         real(dp), allocatable :: xdiag(:,:,:), rv(:)
-        integer,  allocatable :: iv(:)
+        integer,  allocatable :: iv(:), liqc_i(:,:,:)
         integer(HSIZE_T) :: adims(1)
         character(len=9), parameter :: XNAME(N_SLAG_COMP) = &
             ['m_FeO    ', 'm_CaO    ', 'm_SiO2   ', 'm_MgO    ', 'm_C_slag ']
@@ -150,9 +152,26 @@ contains
             else
                 sh%Tg_end = -1.0_dp
             end if
+            ! Estado persistente omitido antes de la auditoria (M3/M4):
+            ! espuma (entra a la DO y al arco antes de recalcularse), mascara de
+            ! liquido continuo del paso anterior (reset_new_continuous) y
+            ! excedente pendiente de la carga continua
+            call h5lexists_f(rid, 'alpha_foam_rst', ex, error)
+            if (ex) call read_3d_field(rid, 'alpha_foam_rst', slag%alpha_foam, m, plist_xfer)
+            call h5lexists_f(rid, 'liq_cont_prev', ex, error)
+            if (ex) then
+                call ensure_workspace(m)
+                allocate(liqc_i, mold=sol%layer_id)
+                liqc_i = 1
+                call read_3d_field_int(rid, 'liq_cont_prev', liqc_i, m, plist_xfer)
+                ws_liq_cont_prev = (liqc_i /= 0)
+                deallocate(liqc_i)
+            end if
 
             adims(1) = 1
             call read_attr_real(rid, 'dt', cfg%dt, adims)
+            call h5aexists_f(rid, 'm_ecs_pending', ex, error)
+            if (ex) call read_attr_real(rid, 'm_ecs_pending', m_ecs_pending, adims)
             ne = size(elec)
             allocate(rv(ne), iv(ne))
             adims(1) = ne
@@ -186,6 +205,7 @@ contains
             slag%m_sl = slag%alpha_sl * cfg%rho_slag * m%vol
             slag%E_sl = slag%m_sl * cfg%cp_slag * slag%T_sl
             allocate(xdiag, mold=slag%m_sl)
+            xdiag = 0.0_dp   ! halos fisicos: nadie los escribe (Bug 22, M34)
             do c = 1, N_SLAG_COMP
                 call h5lexists_f(gid, trim(XFRAC(c)), ex, error)
                 if (ex) then

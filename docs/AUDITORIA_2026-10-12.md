@@ -138,3 +138,32 @@ Rutas relativas a `src/`.
 - Forma acotada con α^n del líquido y conversiones E↔T.
 - Buckley–Leverett de la mezcla y simetría/unidades de su Poisson.
 - Reinicio de la mezcla (`Tg_end`).
+
+## Resolución (en curso, en orden de severidad)
+
+Cada pieza es un commit que pasa `make test-quick`; los goldens se
+rebaselinean solo cuando cambia la numérica (versión indicada).
+
+| Hallazgo | Commit | Golden | Verificación |
+|---|---|---|---|
+| C1 | d8a645a | — | `arc_noscrap` (arco sin chatarra) |
+| C2 | 8c64682 | — | regulador con l_a en m (1150 V/m) |
+| A1 | 0a1f777 | — | `slag_chem_flow`, invarianza n1/n8 |
+| A2 | a8e5b2e | — | especies sin relajación |
+| A3 | 8713d98 | — | defecto latente (0 casos en 100 pasos de B1) |
+| A4 | 52affbb | v38 | `test_scrap_collapse` (0.71 → ≤ 0.55) |
+| A5 | e08f957 | v38 | `cold_bucket2`: error de energía 0.998 → 4e-5 |
+| A6 | 1f6e3ee | v39 | `test_ergun` con valores a mano |
+| A7 | 5309bf2 | v40 | `test_poisson_bath`, `check_bath.py` |
+| A8 | fa3c2e9 | v41 | `bed_flood:bath_pv_bounded` sale de xfail |
+| A9, M13 | 3799a70 | v42 | tope de estado en vez de 2 K/paso |
+| A10 | 9b2eeab | v43 | `arc_noscrap` sale de xfail |
+| A11 | 0a594e9 | v44 | equilibrio isotermo de la DO |
+| A12 | 0a92029 | v45 | h_gs = max(Wakao, alta T) |
+| A13 | b892a57 | — | k-ε con ancla temporal |
+| A14, M17, M18, M20 | 070f90f | v46 | `decomposition_slag` 3e-14 |
+| A15 | b49aa3f | v47 | aP del eje físico |
+| A16 | 747ac36 | v48 | corrector con `pgrad` |
+| A17 | f08257c | — | bit a bit |
+| A18 | 25ad37b | — | orden de la energía de mezcla |
+| M1–M4, M34 | (este commit) | — | reinicios bit a bit; reanudar en el mismo directorio conserva el snapshot de origen y el audit previo (`audit_prev_<paso>.csv`) |

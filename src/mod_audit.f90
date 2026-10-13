@@ -142,6 +142,20 @@ contains
 
         audit_path = trim(cfg%output_dir) // '/audit.csv'
         if (is_writer(m)) then
+            ! Al reanudar sobre un directorio con audit.csv, el anterior se
+            ! conserva como audit_prev_<paso>.csv (auditoria M4: status='replace'
+            ! borraba el historial)
+            block
+                logical :: ex
+                character(len=600) :: bak
+                inquire(file=trim(audit_path), exist=ex)
+                if (ex .and. len_trim(cfg%restart_file) > 0) then
+                    write(bak, '(A,A,I8.8,A)') trim(cfg%output_dir), '/audit_prev_', step, '.csv'
+                    ! rename() es extension GNU (no enlaza con -std=f2008)
+                    call execute_command_line('mv "'//trim(audit_path)//'" "'//trim(bak)//'"', &
+                                              wait=.true.)
+                end if
+            end block
             open(newunit=iu, file=trim(audit_path), status='replace', &
                  action='write')
             write(iu, '(A)') 'step,time,dt,' // &

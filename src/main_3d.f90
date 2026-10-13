@@ -232,9 +232,19 @@ program eaf_3d_simulator
                           sh, elec, step, time)
     end if
 
-    ! Write initial state (t=0, step=0; o el estado reanudado)
-    call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, elec, cfg%dt, &
-                             step, time, cfg%output_dir)
+    ! Write initial state (t=0, step=0; o el estado reanudado). Al reanudar
+    ! NO se sobrescribe un snapshot existente (auditoria 12-oct-2026, M4): si
+    ! restart_file estaba en output_dir, se truncaba el snapshot de origen y se
+    ! reescribia con las fuentes en cero.
+    block
+        character(len=512) :: fn0
+        logical :: ex0
+        write(fn0, '(A,A,I8.8,A)') trim(cfg%output_dir), '/eaf3d_', step, '.h5'
+        inquire(file=trim(fn0), exist=ex0)
+        if (.not. (restarting .and. ex0)) &
+            call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, elec, cfg%dt, &
+                                     step, time, cfg%output_dir)
+    end block
 
     ! Auditoría de balances: encabezado + línea del estado inicial
     if (cfg%audit_freq > 0) then

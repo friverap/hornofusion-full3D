@@ -8,6 +8,8 @@ module mod_output_hdf5
     use mod_constants
     use mod_types_3d
     use mod_mpi_topology
+    use mod_workspace, only: ensure_workspace, ws_liq_cont_prev
+    use mod_ecs_feed, only: m_ecs_pending
     use hdf5
     use mpi
     implicit none
@@ -265,6 +267,7 @@ contains
         character(len=9), parameter :: XNAME(N_SLAG_COMP) = &
             ['m_FeO    ', 'm_CaO    ', 'm_SiO2   ', 'm_MgO    ', 'm_C_slag ']
         integer :: c
+        integer, allocatable :: liqc_i(:,:,:)
 
         call h5gcreate_f(file_id, '/restart', group_id, error)
         call check_h5(error, 'h5gcreate_f: /restart', m%topo%rank)
@@ -288,12 +291,25 @@ contains
         call write_3d_field(group_id, 'mu_eff_liquid', liq%mu_eff, m, plist_xfer)
         ! Plan G: referencia de la fuente de compresibilidad (mod_mixture_3d)
         call write_3d_field(group_id, 'Tg_end', sh%Tg_end, m, plist_xfer)
+        ! Estado entre pasos (auditoria 12-oct-2026, M1-M3): espuma de la DO del
+        ! paso siguiente, mascara de liquido continuo del ultimo outer
+        ! (reset_new_continuous) y masa pendiente del ECS
+        call write_3d_field(group_id, 'alpha_foam_rst', slag%alpha_foam, m, plist_xfer)
+        call ensure_workspace(m)
+        allocate(liqc_i, mold=sol%layer_id)
+        liqc_i = merge(1, 0, ws_liq_cont_prev)
+        call write_3d_field_int(group_id, 'liq_cont_prev', liqc_i, m, plist_xfer)
+        deallocate(liqc_i)
 
         ! Atributos escalares y por electrodo (metadatos: todos los ranks)
         adims(1) = 1
         call h5screate_simple_f(1, adims, aspace_id, error)
         call h5acreate_f(group_id, 'dt', H5T_NATIVE_DOUBLE, aspace_id, attr_id, error)
         call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, dt, adims, error)
+        call h5aclose_f(attr_id, error)
+        ! Excedente de carga continua pendiente (auditoria M4): estado 'save'
+        call h5acreate_f(group_id, 'm_ecs_pending', H5T_NATIVE_DOUBLE, aspace_id, attr_id, error)
+        call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, m_ecs_pending, adims, error)
         call h5aclose_f(attr_id, error)
         call h5sclose_f(aspace_id, error)
 
