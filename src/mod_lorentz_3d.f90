@@ -17,7 +17,8 @@
 ! update_electrodes): con chatarra entre el arco y el baño la corriente entra
 ! al baño por su superficie. Sin baño bajo el electrodo no hay fuerza.
 ! Regularizacion en el pie del arco: rho_eff^2 = rho^2 + R_elec^2 (mancha del
-! arco del orden del radio del electrodo). Con AC la fuerza va con I^2 (no
+! arco del orden del radio del electrodo), es decir fuente a profundidad
+! efectiva sqrt(dz^2 + R_elec^2): cos th = dz_ef/rho_eff (N-A3). Con AC la fuerza va con I^2 (no
 ! cambia de signo); I es el valor eficaz.
 !
 ! Antes (modelo de Trindade-Vilela simplificado): J vertical uniforme en z con
@@ -90,9 +91,17 @@ contains
                         r_loc = sqrt(xi**2 + eta**2)
                         if (r_loc < 1.0e-6_dp) cycle    ! sobre el eje: F = 0
 
+                        ! Mancha del arco = fuente puntual a profundidad
+                        ! EFECTIVA dz_ef = sqrt(dz^2 + R_elec^2) (auditoria 2,
+                        ! N-A3): cos th = dz_ef/rho y sin th = r_loc/rho forman
+                        ! un vector unitario y la corriente encerrada
+                        ! I (1 - cos th) se anula en el eje (B ~ r_loc). Antes
+                        ! cos th = dz/rho con el rho regularizado: 1 - cos th no
+                        ! se anulaba y B divergia como 1/r_loc junto al eje de
+                        ! cada electrodo (0.29 T a 1 cm frente a 5e-4 fisico)
                         rho2 = r_loc**2 + dz**2 + cfg%R_elec**2
                         rho  = sqrt(rho2)
-                        cth = dz / rho
+                        cth = sqrt(dz**2 + cfg%R_elec**2) / rho
                         sth = r_loc / rho
                         J_rho = abs(I_electrode) / (TWO_PI * rho2)
                         B_phi = MU_0 * abs(I_electrode) * (1.0_dp - cth) / (TWO_PI * r_loc)

@@ -9,6 +9,12 @@
 !   3. cero sobre el pie del arco y en liquido disperso (alpha_l < 0.3)
 !   4. rotacional no nulo: a la misma distancia al eje, la fuerza horizontal
 !      cambia con la profundidad (antes era independiente de z: un gradiente)
+!   (auditoria 2, N-A3) el caso 2 era TAUTOLOGICO (misma formula que el
+!   codigo). Ahora se contrasta con la fuente puntual FISICA sin regularizar,
+!      J = I/(2 pi rho^2),  B = mu0 I (1 - dz/rho)/(2 pi r),  F_h = J B cos th
+!   2. lejos de la mancha (dz >> R_elec) coincide con la fisica al 10 %
+!   5. junto al eje del electrodo nunca la supera: con 1 - cos th evaluado con
+!      el rho regularizado B_phi divergia como 1/r_loc (500x a 1 cm)
 !===============================================================================
 program test_lorentz
     use mod_constants
@@ -28,8 +34,8 @@ program test_lorentz
     type(shared_t) :: sh
     type(electrode_t) :: elec(1)
     real(dp), parameter :: I_EL = 50.0e3_dp
-    integer  :: i, j, k, ka, kb, kfog, ic
-    real(dp) :: z_att, xi, eta, rl, dz, rho2, cth, Fref, Frad, Fh1, Fh2, xe, ye
+    integer  :: i, j, jj, k, ka, kb, kfog, ic
+    real(dp) :: z_att, xi, eta, rl, dz, Fref, Frad, Fh1, Fh2, xe, ye
     logical  :: ok
 
     call config_set_defaults(cfg)
@@ -71,16 +77,37 @@ program test_lorentz
         ok = .false.
     end if
 
-    ! 2. valor analitico (componente horizontal)
+    ! 2. contra la fuente puntual FISICA, en la celda mas profunda (dz/R_elec
+    !    grande): la regularizacion de la mancha solo cambia O(R^2/dz^2)
     xi = mesh%r(ic) * cos(mesh%theta(j)) - xe; eta = mesh%r(ic) * sin(mesh%theta(j)) - ye
-    rl = sqrt(xi**2 + eta**2); dz = z_att - mesh%z(ka)
-    rho2 = rl**2 + dz**2 + cfg%R_elec**2; cth = dz / sqrt(rho2)
-    Fref = I_EL / (TWO_PI * rho2) * MU_0 * I_EL * (1.0_dp - cth) / (TWO_PI * rl) * cth
-    Frad = sqrt(sh%F_lorentz_r(ic,j,ka)**2 + sh%F_lorentz_th(ic,j,ka)**2)
-    if (abs(Frad - Fref) > 1.0e-10_dp * Fref) then
-        print '(A,2ES14.6)', '   FAIL caso 2: |F_h| vs analitico = ', Frad, Fref
+    rl = sqrt(xi**2 + eta**2); dz = z_att - mesh%z(kb)
+    Fref = fphys(rl, dz)
+    Frad = sqrt(sh%F_lorentz_r(ic,j,kb)**2 + sh%F_lorentz_th(ic,j,kb)**2)
+    if (abs(Frad - Fref) > 0.1_dp * Fref) then
+        print '(A,2ES14.6,A,F6.2)', '   FAIL caso 2: |F_h| vs fuente puntual fisica = ', Frad, Fref, &
+            '  dz/R = ', dz / cfg%R_elec
         ok = .false.
     end if
+
+    ! 5. junto al eje del electrodo, nunca por encima de la fisica (B -> 0)
+    do k = 1, mesh%nz
+        dz = z_att - mesh%z(k)
+        if (dz <= 0.0_dp .or. k == kfog) cycle
+        do jj = 1, mesh%ntheta
+            do i = 1, mesh%nr
+                if (mesh%cell_type(i,jj,k) == 0) cycle
+                xi = mesh%r(i) * cos(mesh%theta(jj)) - xe; eta = mesh%r(i) * sin(mesh%theta(jj)) - ye
+                rl = sqrt(xi**2 + eta**2)
+                if (rl > 2.0_dp * cfg%R_elec .or. rl < 1.0e-6_dp) cycle
+                Frad = sqrt(sh%F_lorentz_r(i,jj,k)**2 + sh%F_lorentz_th(i,jj,k)**2)
+                if (Frad > fphys(rl, dz) * (1.0_dp + 1.0e-9_dp)) then
+                    print '(A,3ES12.4)', '   FAIL caso 5: |F_h| supera la fisica junto al eje (r_loc, F, F_fis): ', &
+                        rl, Frad, fphys(rl, dz)
+                    ok = .false.
+                end if
+            end do
+        end do
+    end do
 
     ! 3. cero sobre el pie del arco y en la niebla
     do k = 1, mesh%nz
@@ -104,4 +131,14 @@ program test_lorentz
     else
         stop 1
     end if
+
+contains
+
+    ! Fuente puntual fisica sin regularizar: |F_h| = J B cos th
+    pure real(dp) function fphys(r, d)
+        real(dp), intent(in) :: r, d
+        real(dp) :: rh
+        rh = sqrt(r**2 + d**2)
+        fphys = I_EL / (TWO_PI * rh**2) * MU_0 * I_EL * (1.0_dp - d / rh) / (TWO_PI * r) * (d / rh)
+    end function fphys
 end program test_lorentz

@@ -332,7 +332,7 @@ entre el pie del arco y el tope del baño bajo el electrodo, y se reparte
 radialmente en el hemisferio inferior:
 
 ```
-J = I / (2π ρ²),   B_φ = μ₀ I (1 − cos θ) / (2π r_loc),   ρ² ← ρ² + R_elec²
+J = I / (2π ρ²),   B_φ = μ₀ I (1 − cos θ) / (2π r_loc),   ρ² ← ρ² + R_elec²,   cos θ = √(dz² + R_elec²)/ρ  (fuente a profundidad efectiva: B → 0 en el eje del electrodo; auditoría 2, N-A3)
 F = −J B θ̂,   θ̂ = cos θ ê_h + sin θ ẑ    (hacia el eje y hacia abajo)
 ```
 
