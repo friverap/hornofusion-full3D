@@ -842,12 +842,14 @@ contains
         integer  :: i, j, k, n_it, nnb, istart, iend, jstart, jend, kstart, kend
         real(dp) :: q, a, flux_ref, sum_su, tmp, src, cap, ag, al, cg_res, psum
         real(dp), allocatable :: Qs_r(:,:,:), Qs_th(:,:,:), Qs_z(:,:,:)
+        real(dp), allocatable :: gadv(:,:,:)
         real(dp), allocatable :: ac_r(:,:,:), ac_th(:,:,:), ac_z(:,:,:)
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
         allocate(Qs_r, Qs_th, Qs_z, ac_r, ac_th, ac_z, mold=vr)
+        allocate(gadv, mold=vr); gadv = 0.0_dp
         Qs_r = 0.0_dp; Qs_th = 0.0_dp; Qs_z = 0.0_dp
         ac_r = 0.0_dp; ac_th = 0.0_dp; ac_z = 0.0_dp
 
@@ -868,28 +870,34 @@ contains
                     if (fl(i-1,j,k)) then
                         call face_rc(i-1, j, k, 1, q, a)
                         aW(i,j,k) = a; Su(i,j,k) = Su(i,j,k) + q; flux_ref = flux_ref + abs(q)
+                        call gadv_add(i, j, k, i-1, j, k, q)
                     end if
                     if (fl(i+1,j,k)) then
                         call face_rc(i, j, k, 1, q, a)
                         aE(i,j,k) = a; Su(i,j,k) = Su(i,j,k) - q; flux_ref = flux_ref + abs(q)
+                        call gadv_add(i, j, k, i+1, j, k, -q)
                         Qs_r(i,j,k) = q; ac_r(i,j,k) = a
                     end if
                     if (fl(i,j-1,k)) then
                         call face_rc(i, j-1, k, 2, q, a)
                         aS(i,j,k) = a; Su(i,j,k) = Su(i,j,k) + q; flux_ref = flux_ref + abs(q)
+                        call gadv_add(i, j, k, i, j-1, k, q)
                     end if
                     if (fl(i,j+1,k)) then
                         call face_rc(i, j, k, 2, q, a)
                         aN(i,j,k) = a; Su(i,j,k) = Su(i,j,k) - q; flux_ref = flux_ref + abs(q)
+                        call gadv_add(i, j, k, i, j+1, k, -q)
                         Qs_th(i,j,k) = q; ac_th(i,j,k) = a
                     end if
                     if (fl(i,j,k-1)) then
                         call face_rc(i, j, k-1, 3, q, a)
                         aB(i,j,k) = a; Su(i,j,k) = Su(i,j,k) + q; flux_ref = flux_ref + abs(q)
+                        call gadv_add(i, j, k, i, j, k-1, q)
                     end if
                     if (fl(i,j,k+1)) then
                         call face_rc(i, j, k, 3, q, a)
                         aT(i,j,k) = a; Su(i,j,k) = Su(i,j,k) - q; flux_ref = flux_ref + abs(q)
+                        call gadv_add(i, j, k, i, j, k+1, -q)
                         Qs_z(i,j,k) = q; ac_z(i,j,k) = a
                     end if
                 end do
@@ -921,6 +929,8 @@ contains
                                / max(Tg_ref(i,j,k), T_MIN_GAS)) / max(gas%rho(i,j,k), SMALL)
                         cap = COMP_SRC_CAP * ag * m%vol(i,j,k) / cfg%dt
                         Su(i,j,k) = Su(i,j,k) - max(-cap, min(cap, src))
+                        ! A8: termino advectivo (ver gadv_add)
+                        Su(i,j,k) = Su(i,j,k) + max(-cap, min(cap, gadv(i,j,k)))
                     end if
                     aP(i,j,k) = aP(i,j,k) + al * m%vol(i,j,k) / &
                                 (liq%rho(i,j,k) * C_SOUND_LIQ**2 * cfg%dt)
@@ -1020,9 +1030,25 @@ contains
             end do
         end do
         call mpi_exchange_halos_3d(sh%p, m%topo)
-        deallocate(Qs_r, Qs_th, Qs_z, ac_r, ac_th, ac_z)
+        deallocate(Qs_r, Qs_th, Qs_z, ac_r, ac_th, ac_z, gadv)
 
     contains
+
+        ! Termino ADVECTIVO de la compresibilidad del gas (auditoria A8): el gas
+        ! que entra por una cara (fraccion de gas del dador por el flujo de
+        ! mezcla) cambia de volumen al tomar la densidad de la celda:
+        ! Q_g,in (rho_N - rho_P)/rho_P
+        subroutine gadv_add(ii, jj, kk, in_, jn_, kn_, qin)
+            integer, intent(in)  :: ii, jj, kk, in_, jn_, kn_
+            real(dp), intent(in) :: qin
+            real(dp) :: fg
+            if (.not. cfg%gas_compressibility) return
+            if (qin <= 0.0_dp) return
+            if (eps(in_,jn_,kn_) <= EPS_MIX) return
+            fg = max(gas%alpha(in_,jn_,kn_), 0.0_dp) / eps(in_,jn_,kn_)
+            gadv(ii,jj,kk) = gadv(ii,jj,kk) + fg * qin * (gas%rho(in_,jn_,kn_) - gas%rho(ii,jj,kk)) &
+                                                       / max(gas%rho(ii,jj,kk), SMALL)
+        end subroutine gadv_add
 
         ! Velocidad normal intersticial de la cara + de (ii,jj,kk): Q/(eps_f A);
         ! 0 si la cara no es fluida (pared, solido)

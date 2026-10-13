@@ -134,6 +134,7 @@ contains
         ! conservativo F = F* + a_nb (pp_P - pp_nb) tras el CG (Bug 19, F1)
         ! Fraccion del gas en los coeficientes de cara (F2.17: la REAL)
         real(dp), allocatable :: ag_eff(:,:,:)
+        real(dp), allocatable :: gadv(:,:,:)   ! A8: fuente advectiva del gas [m3/s]
         real(dp), allocatable :: Fs_r(:,:,:), Fs_th(:,:,:), Fs_z(:,:,:)
         real(dp), allocatable :: ac_r(:,:,:), ac_th(:,:,:), ac_z(:,:,:)
         integer  :: n_iter_cg
@@ -166,6 +167,7 @@ contains
         allocate(pvl, fsl, pvg, mold=act_l)
         liq_mask_on = cfg%pc_liq_sealed_wall .and. ws_pv_liq_valid .and. (ws_pv_liq_id == probe_current_step())
         allocate(ag_eff, mold=sh%pp)
+        allocate(gadv, mold=sh%pp); gadv = 0.0_dp
         allocate(Fs_r, Fs_th, Fs_z, ac_r, ac_th, ac_z, mold=sh%pp)
         ! Completos a cero (halos incluidos): las caras de frontera fisica
         ! no las escribe nadie y el transporte de alpha las lee (leccion v10)
@@ -434,6 +436,8 @@ contains
                                / max(gas_T_old(i,j,k), T_MIN_GAS)) / max(gas%rho(i,j,k), SMALL)
                         cap = COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt
                         Su(i,j,k) = Su(i,j,k) - max(-cap, min(cap, src))
+                        ! A8: advectiva (expansion > 0 -> Su sube -> salida)
+                        Su(i,j,k) = Su(i,j,k) + max(-cap, min(cap, gadv(i,j,k)))
                     end do
                 end do
             end do
@@ -661,12 +665,31 @@ contains
         end block
         call mpi_exchange_halos_3d(sh%p, m%topo)
 
-        deallocate(gpr, gpth, gpz, act_l, act_g, ag_eff, sealed, lcoef)
+        deallocate(gpr, gpth, gpz, act_l, act_g, ag_eff, sealed, lcoef, gadv)
         deallocate(lcoef_r, lcoef_th, lcoef_z, pvl, fsl, pvg)
         deallocate(Fs_r, Fs_th, Fs_z, ac_r, ac_th, ac_z)
         if (allocated(p_g)) deallocate(p_g, gpr_g, gpth_g, gpz_g)
 
     contains
+
+        ! Termino ADVECTIVO de la compresibilidad del gas (auditoria 12-oct-2026,
+        ! A8): la continuidad de VOLUMEN del gas es d alpha/dt + div(alpha u) =
+        ! -(alpha/rho)(d rho/dt + u.grad rho); solo estaba d rho/dt. Upwind:
+        ! el gas que ENTRA por una cara con la densidad de la vecina cambia de
+        ! volumen al tomar la de la celda, Q_in (rho_N - rho_P)/rho_P (frio que
+        ! entra a una celda caliente se expande); el que sale no aporta. Se
+        ! acumula en gadv y entra a Su con el tope COMP_SRC_CAP, como la parte
+        ! temporal. Sin esto, en un chorro estacionario calentado por el arco
+        ! el gas no conservaba masa (flujo de volumen igual con densidades
+        ! distintas).
+        subroutine gas_adv(ii, jj, kk, in_, jn_, kn_, qin)
+            integer, intent(in)  :: ii, jj, kk, in_, jn_, kn_
+            real(dp), intent(in) :: qin
+            if (.not. (cfg%gas_compressibility .and. cfg%solve_multiphase)) return
+            if (qin <= 0.0_dp) return
+            gadv(ii,jj,kk) = gadv(ii,jj,kk) + qin * (gas%rho(in_,jn_,kn_) - gas%rho(ii,jj,kk)) &
+                                                  / max(gas%rho(ii,jj,kk), SMALL)
+        end subroutine gas_adv
 
         ! Peso del liquido en la cara (ka,kb) [N/m3], con Boussinesq (F2.3)
         pure function liq_weight_f(ii, jj, ka, kb) result(w)
@@ -808,6 +831,7 @@ contains
                                 lcoef_r(ii,jj,kk) = lcoef_r(ii,jj,kk) + af * d_f * m%Ar(ii-1,jj,kk) / delta
                             end if
                             Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Ar(ii-1,jj,kk)
+                            if (isg) call gas_adv(ii, jj, kk, ii-1, jj, kk,  af * u_f * m%Ar(ii-1,jj,kk))
                             flux_ref = flux_ref + abs(af * u_f * m%Ar(ii-1,jj,kk))
                             end if
                         else if (fs_on) then
@@ -841,6 +865,7 @@ contains
                                 lcoef_r(ii,jj,kk) = lcoef_r(ii,jj,kk) + af * d_f * m%Ar(ii,jj,kk) / delta
                             end if
                             Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Ar(ii,jj,kk)
+                            if (isg) call gas_adv(ii, jj, kk, ii+1, jj, kk, -af * u_f * m%Ar(ii,jj,kk))
                             flux_ref = flux_ref + abs(af * u_f * m%Ar(ii,jj,kk))
                             if (export) then
                                 Fs_r(ii,jj,kk) = af * u_f * m%Ar(ii,jj,kk)
@@ -884,6 +909,7 @@ contains
                                 lcoef_th(ii,jj,kk) = lcoef_th(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
                             end if
                             Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Ath(ii,jj,kk)
+                            if (isg) call gas_adv(ii, jj, kk, ii, jjm, kk,  af * u_f * m%Ath(ii,jj,kk))
                             flux_ref = flux_ref + abs(af * u_f * m%Ath(ii,jj,kk))
                             end if
                         else if (fs_on) then
@@ -917,6 +943,7 @@ contains
                                 lcoef_th(ii,jj,kk) = lcoef_th(ii,jj,kk) + af * d_f * m%Ath(ii,jj,kk) / delta
                             end if
                             Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Ath(ii,jj,kk)
+                            if (isg) call gas_adv(ii, jj, kk, ii, jjp, kk, -af * u_f * m%Ath(ii,jj,kk))
                             flux_ref = flux_ref + abs(af * u_f * m%Ath(ii,jj,kk))
                             if (export) then
                                 Fs_th(ii,jj,kk) = af * u_f * m%Ath(ii,jj,kk)
@@ -961,6 +988,7 @@ contains
                                 lcoef_z(ii,jj,kk) = lcoef_z(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk-1) / delta
                             end if
                             Su(ii,jj,kk) = Su(ii,jj,kk) + af * u_f * m%Az(ii,jj,kk-1)
+                            if (isg) call gas_adv(ii, jj, kk, ii, jj, kk-1,  af * u_f * m%Az(ii,jj,kk-1))
                             flux_ref = flux_ref + abs(af * u_f * m%Az(ii,jj,kk-1))
                             end if
                         else if (fs_on) then
@@ -995,6 +1023,7 @@ contains
                                 lcoef_z(ii,jj,kk) = lcoef_z(ii,jj,kk) + af * d_f * m%Az(ii,jj,kk) / delta
                             end if
                             Su(ii,jj,kk) = Su(ii,jj,kk) - af * u_f * m%Az(ii,jj,kk)
+                            if (isg) call gas_adv(ii, jj, kk, ii, jj, kk+1, -af * u_f * m%Az(ii,jj,kk))
                             flux_ref = flux_ref + abs(af * u_f * m%Az(ii,jj,kk))
                             if (export) then
                                 Fs_z(ii,jj,kk) = af * u_f * m%Az(ii,jj,kk)

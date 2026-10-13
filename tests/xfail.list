@@ -50,7 +50,9 @@ bath:bath_hydrostatic
 # rafagas de gas. D2.2b/D2.4/D2.5/D2.6 bajan los picos >100 kPa de 8 a 1 %
 # de los pasos pero no el nivel del poro. Se retira cuando el acople
 # alpha-p lo acote (ver docs/PLAN_D_acople_implicito_alpha_p.md).
-bed_flood:bath_pv_bounded
+# RETIRADO 12-oct-2026 (auditoria A8): con el termino advectivo de la
+# compresibilidad del gas el banco de 3 s queda acotado (p_max 163 kPa <
+# 3x ferrostatica, gas 172 m/s). El banco NO predice B1.
 # arc_noscrap (auditoria 12-oct-2026, C1): el gate es arc_budget. El
 # energy_balance falla ~1.4 % por el MISMO error de cuadratura del libro del gas
 # en el encendido frio que audit_cold:energy_balance (gas a 300 K sobre acero
