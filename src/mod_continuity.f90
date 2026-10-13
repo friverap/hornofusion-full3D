@@ -122,6 +122,9 @@ contains
         lim_new = 1.0_dp
         allocate(ur_e, uth_e, uz_e, mold=liq%alpha)
         allocate(Gr, Gth, Gz, mold=liq%alpha)
+        ! (workspace asignado ANTES de tomar su forma: regresion de Plan G,
+        ! los unit tests llegan aqui sin workspace)
+        call ensure_workspace(m)
         allocate(cont, mold=ws_liq_cont)
         if (.not. mixture) then
         call effective_liquid_velocity(liq, gas, sol, m, cfg, ur_e, uth_e, uz_e)
