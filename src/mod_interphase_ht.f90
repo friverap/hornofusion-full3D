@@ -5,7 +5,9 @@
 !   T_g <= 1373 K: h_vgs = (K_g/d_s)*(2 + 1.1*Pr_g^0.333*Re_gs^0.6)
 !   T_g >  1373 K: h_gs*A_gs = A*f_omega*|v_g|^0.9*T_g^0.3/d_s^0.75
 !
-! Liquid-solid: convective exchange based on Nusselt correlations.
+! Liquid-solid: Ranz-Marshall Nu = 2 + 0.6 Re^1/2 Pr^1/3 con la velocidad del
+! liquido (auditoria M39). Gas-solido con la conductividad MOLECULAR
+! mu cp/Pr (Pr = 0.7), no la efectiva cfg%k_gas.
 !
 ! Computes volumetric heat source Q_s_bar for solid energy balance (Eq. 8).
 !===============================================================================
@@ -27,6 +29,7 @@ module mod_interphase_ht
     real(dp), parameter :: T_TRANSITION = 1373.0_dp  ! K
     real(dp), parameter :: A_RADIATION  = 3.6_dp     ! empirical constant
     real(dp), parameter :: F_OMEGA      = 0.7_dp     ! view factor parameter
+    real(dp), parameter :: PR_GAS_MOL   = 0.7_dp     ! Prandtl molecular del gas (N2/aire caliente)
 
 contains
 
@@ -41,7 +44,7 @@ contains
         real(dp) :: vmag_g, Re_gs, Pr_g, h_gs, h_ls
         real(dp) :: Q_gs, Q_ls, Q_total
         real(dp) :: A_sv, eps_s, cap_g, cap_l, cap_s, G_gs, G_ls, b_g, b_l, T_sn
-        real(dp) :: f_l, f_g, w_l, w_g
+        real(dp) :: f_l, f_g, w_l, w_g, k_mol, vmag_l, Re_ls, Pr_l
 
         d_s = cfg%d_particle
         tau_iph_local = 1.0e30_dp
@@ -79,7 +82,13 @@ contains
                     G_gs = 0.0_dp
                     if (w_g > 0.0_dp) then
                         vmag_g = sqrt(gas%ur(i,j,k)**2 + gas%uth(i,j,k)**2 + gas%uz(i,j,k)**2)
-                        Pr_g = gas%mu(i,j,k) * gas%cp(i,j,k) / (gas%kth(i,j,k) + SMALL)
+                        ! Conductividad MOLECULAR del gas para la correlacion
+                        ! (auditoria M39): Wakao se define con k molecular y
+                        ! Pr ~ 0.7; cfg%k_gas (0.5) es la conductividad
+                        ! efectiva de la difusion del gas y daba Pr = 0.1 y
+                        ! un h ~4x mayor que el de la literatura
+                        k_mol = gas%mu(i,j,k) * gas%cp(i,j,k) / PR_GAS_MOL
+                        Pr_g = PR_GAS_MOL
                         Re_gs = gas%rho(i,j,k) * vmag_g * d_s / (gas%mu(i,j,k) + SMALL)
 
                         ! Wakao (Nu = 2 + 1.1 Pr^1/3 Re^0.6) siempre; sobre
@@ -89,7 +98,7 @@ contains
                         ! conductivo Nu = 2), y saltaba x2.4-8.6 en T_TRANSITION.
                         ! El gas de poro estancado bajo el arco quedaba sin acople
                         ! termico con la chatarra.
-                        h_gs = (gas%kth(i,j,k) / d_s) * &
+                        h_gs = (k_mol / d_s) * &
                                (2.0_dp + 1.1_dp * Pr_g**0.333_dp * Re_gs**0.6_dp)
                         if (T_g > T_TRANSITION) h_gs = max(h_gs, &
                             A_RADIATION * F_OMEGA * vmag_g**0.9_dp * &
@@ -101,7 +110,15 @@ contains
                     end if
                     G_ls = 0.0_dp
                     if (w_l > 0.0_dp) then
-                        h_ls = (liq%kth(i,j,k) / d_s) * 6.0_dp
+                        ! Ranz-Marshall REAL con la velocidad del liquido
+                        ! respecto de la chatarra quieta (auditoria M39; antes
+                        ! Nu = 6 fijo, ~2-4 kW/m2K frente a 5-20 de la
+                        ! literatura de fusion de chatarra en baño agitado)
+                        vmag_l = sqrt(liq%ur(i,j,k)**2 + liq%uth(i,j,k)**2 + liq%uz(i,j,k)**2)
+                        Re_ls = liq%rho(i,j,k) * vmag_l * d_s / (liq%mu(i,j,k) + SMALL)
+                        Pr_l = liq%mu(i,j,k) * liq%cp(i,j,k) / (liq%kth(i,j,k) + SMALL)
+                        h_ls = (liq%kth(i,j,k) / d_s) * &
+                               (2.0_dp + 0.6_dp * sqrt(Re_ls) * Pr_l**(1.0_dp/3.0_dp))
                         G_ls = h_ls * A_sv * w_l * m%vol(i,j,k)
                     end if
 

@@ -107,7 +107,10 @@ contains
     end subroutine setup
 
     subroutine clone_gas_props()
-        liq%rho = gas%rho; liq%cp = gas%cp; liq%kth = 2.0_dp * gas%kth / 6.0_dp
+        ! con u = 0: h_gs = 2 k_mol/d (k_mol = mu cp/0.7) y h_ls = 2 k_l/d
+        liq%rho = gas%rho; liq%cp = gas%cp; liq%mu = gas%mu
+        liq%kth = gas%mu * gas%cp / 0.7_dp
+        liq%ur = 0.0_dp; liq%uth = 0.0_dp; liq%uz = 0.0_dp
     end subroutine clone_gas_props
 
     function energy() result(e)
