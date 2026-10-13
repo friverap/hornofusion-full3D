@@ -61,21 +61,23 @@ contains
     ! serial run, so the totals are bit-identical regardless of the MPI
     ! decomposition.  Deposits are then applied only to locally-owned cells.
     !---------------------------------------------------------------------------
-    subroutine distribute_arc_heat(elec, sh, sol, m, cfg, alpha_g, n_elec)
-        type(electrode_t), intent(in)   :: elec(:)
+    subroutine distribute_arc_heat(elec, sh, sol, m, cfg, alpha_g, n_elec, alpha_lg)
+        type(electrode_t), intent(inout) :: elec(:)
         type(shared_t), intent(inout)   :: sh
         type(solid_t), intent(inout)    :: sol
         type(mesh_t), intent(in)        :: m
         type(config_t), intent(in)      :: cfg
         real(dp), intent(in)            :: alpha_g(:,:,:)
         integer, intent(in)             :: n_elec
+        ! alpha_l GLOBAL (N-A2): P_elec va al baño bajo el electrodo
+        real(dp), intent(in)            :: alpha_lg(:,:,:)
 
-        integer  :: e, ig, jg, kg, il, jl, kl, kg_tip, kg_scrap
+        integer  :: e, ig, jg, kg, il, jl, kl, kg_tip, kg_scrap, kc_lo, kc_hi
         real(dp) :: P_total, P_rad_arc, P_conv, P_elec_flow
         real(dp) :: x_elec, y_elec, x_cell, y_cell, dist
         real(dp) :: r2, sigma_r, gw
         real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol
-        logical  :: found_scrap, owned
+        logical  :: found_scrap, owned, any_liq
         ! (El tope de 2 K por paso al solido se sustituyo por el tope de estado
         ! solid_arc_room: auditoria 12-oct-2026, M13.)
 
@@ -91,6 +93,7 @@ contains
             ! El MC (si está activo) toma SU parte del presupuesto frac_rad;
             ! el depósito directo recibe el resto (C1.6a: antes el MC era
             ! aditivo y se inyectaba 1 + 0.5*frac_rad veces P_arc)
+            elec(e)%mc_share = MC_RAD_SHARE
             if (cfg%n_beams > 0) then
                 P_rad_arc = P_total * cfg%frac_rad * (1.0_dp - MC_RAD_SHARE)
             else
@@ -139,6 +142,29 @@ contains
                 end do
             end do kscrap
 
+            ! ── Superficie del BAÑO bajo el electrodo (auditoria 2, N-A2) ───
+            ! Sin chatarra, el chorro de plasma pega en el baño: P_conv va a la
+            ! capa de la superficie del baño (antes a la columna de gas bajo la
+            ! punta, que no podia cederlo al baño: N-A1)
+            kc_lo = kg_scrap; kc_hi = kg_tip
+            if (.not. found_scrap) then
+                kbath: do kg = kg_tip, 1, -1
+                    do jg = 1, m%nth_g
+                        do ig = 1, m%nr_g
+                            if (m%cell_type_global(ig,jg,kg) == 0) cycle
+                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
+                            dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
+                            if (dist <= sigma_r * 2.0_dp .and. &
+                                alpha_lg(ig,jg,kg) >= ALPHA_LIQ_CONT) then
+                                kc_lo = kg; kc_hi = kg
+                                exit kbath
+                            end if
+                        end do
+                    end do
+                end do kbath
+            end if
+
             ! ── P_rad: first pass — Gaussian weight sum at scrap surface ───
             total_gw_vol_rad = 0.0_dp
             if (found_scrap) then
@@ -162,7 +188,7 @@ contains
 
             ! ── P_conv: first pass — weight sum over full arc column ────────
             total_gw_vol_conv = 0.0_dp
-            do kg = kg_scrap, kg_tip
+            do kg = kc_lo, kc_hi
                 do jg = 1, m%nth_g
                     do ig = 1, m%nr_g
                         if (m%cell_type_global(ig,jg,kg) == 0) cycle
@@ -177,6 +203,16 @@ contains
                     end do
                 end do
             end do
+
+            ! Sin superficie de chatarra que reciba P_rad directo y con MC:
+            ! TODA la radiacion del arco la traza el MC (auditoria 2, N-A2:
+            ! antes iba a la columna de gas kg_tip +- 3 -incluso dentro del
+            ! grafito-, ~7 MW por electrodo que no llegaban al baño; con baño
+            ! plano el liquido recibia el 6.9 % del arco absorbido)
+            if (cfg%n_beams > 0 .and. .not. (found_scrap .and. total_gw_vol_rad > SMALL)) then
+                elec(e)%mc_share = 1.0_dp
+                P_rad_arc = 0.0_dp
+            end if
 
             ! ── P_rad: second pass — deposit DIRECTLY into solid energy ──────
             ! P_rad bypasses the gas: arc photons hit the scrap surface and
@@ -216,6 +252,7 @@ contains
                 ! chatarra pero total_gw_vol_rad = 0 no entraba en ninguna rama y
                 ! P_rad se perdía.
                 total_vol = 0.0_dp
+                if (P_rad_arc > 0.0_dp) then
                 do kg = max(1, kg_tip-3), min(m%nz_g, kg_tip+3)
                     do jg = 1, m%nth_g
                         do ig = 1, m%nr_g
@@ -229,6 +266,7 @@ contains
                         end do
                     end do
                 end do
+                end if
                 if (total_vol > SMALL) then
                 do kg = max(1, kg_tip-3), min(m%nz_g, kg_tip+3)
                     do jg = 1, m%nth_g
@@ -254,7 +292,7 @@ contains
 
             ! ── P_conv: second pass — deposit over arc column ───────────────
             if (total_gw_vol_conv > SMALL) then
-                do kg = kg_scrap, kg_tip
+                do kg = kc_lo, kc_hi
                     do jg = 1, m%nth_g
                         do ig = 1, m%nr_g
                             if (m%cell_type_global(ig,jg,kg) == 0) cycle
@@ -276,7 +314,23 @@ contains
             end if
 
             ! ── P_elec: electron-flow heating to liquid bath (post bore-in) ─
+            ! (N-A2) peso alpha_l V: la columna bajo la punta incluye el gas
+            ! entre el baño y la punta y la chatarra residual (~20 % de P_elec
+            ! iba al gas); sin baño en la columna, por volumen como antes
             if (elec(e)%bore_in_done) then
+                any_liq = .false.
+                do kg = 1, kg_tip
+                    do jg = 1, m%nth_g
+                        do ig = 1, m%nr_g
+                            if (m%cell_type_global(ig,jg,kg) == 0) cycle
+                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
+                            dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
+                            if (dist <= cfg%R_elec * 2.0_dp .and. alpha_lg(ig,jg,kg) > ALPHA_CUTOFF) &
+                                any_liq = .true.
+                        end do
+                    end do
+                end do
                 total_vol = 0.0_dp
                 do kg = 1, kg_tip
                     do jg = 1, m%nth_g
@@ -286,7 +340,7 @@ contains
                             y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
                             if (dist <= cfg%R_elec * 2.0_dp) then
-                                total_vol = total_vol + m%vol_global(ig,jg,kg)
+                                total_vol = total_vol + wel(ig, jg, kg)
                             end if
                         end do
                     end do
@@ -304,8 +358,10 @@ contains
                                 call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
                                 if (.not. owned) cycle
 
+                                if (wel(ig, jg, kg) <= 0.0_dp) cycle
                                 call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), &
-                                    m%vol_global(ig,jg,kg), P_elec_flow / total_vol, -1.0_dp)
+                                    m%vol_global(ig,jg,kg), P_elec_flow * wel(ig, jg, kg) &
+                                    / (total_vol * m%vol_global(ig,jg,kg)), -1.0_dp)
                             end do
                         end do
                     end do
@@ -314,6 +370,16 @@ contains
 
         end do
 
+    contains
+
+        pure real(dp) function wel(ig, jg, kg)
+            integer, intent(in) :: ig, jg, kg
+            if (any_liq) then
+                wel = max(alpha_lg(ig,jg,kg), 0.0_dp) * m%vol_global(ig,jg,kg)
+            else
+                wel = m%vol_global(ig,jg,kg)
+            end if
+        end function wel
 
     end subroutine distribute_arc_heat
 

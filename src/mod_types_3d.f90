@@ -340,6 +340,11 @@ module mod_types_3d
         real(dp) :: voltage       ! Current voltage [V]
         real(dp) :: current       ! Current current [A]
         logical  :: bore_in_done  ! Has bore-in completed?
+        ! Fraccion de frac_rad que traza el MC en ESTE paso (auditoria 2,
+        ! N-A2): MC_RAD_SHARE con chatarra bajo el electrodo (el resto va
+        ! directo a su superficie); 1 sin ella (antes iba a la columna de gas).
+        ! La fija distribute_arc_heat antes del MC; no es estado del reinicio.
+        real(dp) :: mc_share = 0.5_dp   ! = MC_RAD_SHARE (mod_constants)
     end type electrode_t
 
     !---------------------------------------------------------------------------

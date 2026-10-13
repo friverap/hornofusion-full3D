@@ -247,12 +247,16 @@ contains
                     w_src = alpha_q(i,j,k) / &
                             (alpha_q(i,j,k) + alpha_other(i,j,k) + SMALL)
                     ! Radiacion: reparto por ABSORCION kappa_q alpha_q (A11; el
-                    ! liquido es opaco en la DO). Arco y quimica siguen por
-                    ! fraccion de volumen.
+                    ! liquido es opaco en la DO). El ARCO tambien (auditoria 2,
+                    ! N-A2): S_arc es sobre todo radiacion del MC y el chorro
+                    ! que pega en la superficie; por fraccion de volumen el gas
+                    ! de una celda de superficie se llevaba 50-70 % (con baño
+                    ! plano el liquido recibia el 6.9 % del arco absorbido). La
+                    ! quimica va al gas (w_chem).
                     w_rad = rad_weight(alpha_q(i,j,k), alpha_other(i,j,k))
                     T_it = max(ph%T(i,j,k), 200.0_dp)
                     Su(i,j,k) = rho_cp_vol_dt * T_old(i,j,k) &
-                               + (sh%S_arc(i,j,k) * w_src &
+                               + (sh%S_arc(i,j,k) * w_rad &
                                   + sh%S_chem(i,j,k) * w_chem(i,j,k, w_src)) * vol &
                                + w_rad * sh%kappa_f(i,j,k) * vol * &
                                  (sh%G_rad(i,j,k) + 12.0_dp * &
@@ -488,7 +492,8 @@ contains
                         Tit = max(Tpre(ii,jj,kk), 200.0_dp)
                         s_abs = s_abs + rcv * (Tk(ii,jj,kk) - &
                                 T_old(ii,jj,kk)) * cfg%dt
-                        s_arc = s_arc + sh%S_arc(ii,jj,kk) * ww * vv * cfg%dt
+                        s_arc = s_arc + sh%S_arc(ii,jj,kk) &
+                                * rad_weight(alpha_q(ii,jj,kk), alpha_other(ii,jj,kk)) * vv * cfg%dt
                         s_chem = s_chem + sh%S_chem(ii,jj,kk) * w_chem(ii,jj,kk, ww) * vv * cfg%dt
                         s_rad = s_rad + rad_weight(alpha_q(ii,jj,kk), alpha_other(ii,jj,kk)) &
                                 * sh%kappa_f(ii,jj,kk) * vv * &

@@ -120,8 +120,8 @@ check_invariants() {  # <rundir> <config_name>
     fi
 }
 
-check_audit_if_present() {  # <rundir> [prefijo_xfail_extra]
-    local extra=""
+check_audit_if_present() {  # <rundir> [prefijo_xfail_extra] [args extra]
+    local extra="" more="${3:-}"
     [ -n "${2:-}" ] && extra=",$(xfail_ids "$2")"
     # config del caso (nombre del directorio sin _nN): solve_energy = false
     # => el balance de energia no aplica (auditoria 2, N-C3)
@@ -129,7 +129,7 @@ check_audit_if_present() {  # <rundir> [prefijo_xfail_extra]
     base=$(basename "$1"); base=${base%_n*}
     [ -f "$CFG/$base.dat" ] && cfgarg="--config $CFG/$base.dat"
     if [ -f "$1/audit.csv" ]; then
-        if ! $PY $INT/check_audit.py "$1" $cfgarg --xfail "$(xfail_ids audit)$extra"; then
+        if ! $PY $INT/check_audit.py "$1" $cfgarg $more --xfail "$(xfail_ids audit)$extra"; then
             echo ">> FAIL auditoría en $1"
             note_fail
         fi
@@ -272,6 +272,10 @@ full | rebaseline)
     # Auditoria de energia/masa/arco en TODA corrida de la matriz (auditoria
     # 2, N-C3: antes 13 de 26 no se auditaban; bath_freeze fallaba con err 1)
     for d in "$OUT"/*_n*; do
+        more=""
+        case $(basename "$d") in
+            arc_noscrap_*)   more="--min-liq-arc 0.6" ;;
+        esac
         case $(basename "$d") in
             cold_10step_*)   x=audit_cold ;;
             arc_noscrap_*)   x=audit_arcnoscrap ;;
@@ -280,7 +284,7 @@ full | rebaseline)
             bed_drain_*)     x=audit_beddrain ;;
             *)               x="" ;;
         esac
-        check_audit_if_present "$d" $x
+        check_audit_if_present "$d" "$x" "$more"
     done
     run_script "decomposition_bath" \
         $PY $INT/compare_decomposition.py "$OUT/bath_test_n1" "$OUT/bath_test_n4"

@@ -108,7 +108,7 @@ contains
         do e = 1, n_elec
             ! Parte del presupuesto frac_rad asignada al MC (C1.6a): el
             ! complemento lo deposita distribute_arc_heat directo al sólido
-            total_P_rad = elec(e)%arc_power * cfg%frac_rad * MC_RAD_SHARE
+            total_P_rad = elec(e)%arc_power * cfg%frac_rad * elec(e)%mc_share
             if (total_P_rad < 1.0_dp) cycle
 
             P_rad_per_beam = total_P_rad / real(cfg%n_beams, dp)

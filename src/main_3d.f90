@@ -347,11 +347,12 @@ program eaf_3d_simulator
             if (.not. allocated(alpha_sg)) &
                 allocate(alpha_sg(mesh%nr_g, mesh%nth_g, mesh%nz_g))
             call gather_global_field(sol%alpha_s, alpha_sg, mesh)
-            call distribute_arc_heat(elec, sh, sol, mesh, cfg, alpha_sg, N_ELECTRODES)
-            ! M12: el impacto en el baño se decide con alpha_l global
+            ! M12: el impacto en el baño se decide con alpha_l global (y N-A2:
+            ! P_elec va al baño bajo el electrodo)
             if (.not. allocated(alpha_lg)) &
                 allocate(alpha_lg(mesh%nr_g, mesh%nth_g, mesh%nz_g))
             call gather_global_field(liq%alpha, alpha_lg, mesh)
+            call distribute_arc_heat(elec, sh, sol, mesh, cfg, alpha_sg, N_ELECTRODES, alpha_lg)
             call distribute_arc_radiation_mc(elec, sh, sol, mesh, cfg, alpha_sg, &
                                              alpha_lg, N_ELECTRODES, step)
             ! (mod_arc_impingement retirado en C4.4: unidades N/m4 en vez

@@ -40,6 +40,9 @@ def main():
     ap.add_argument("--xfail", default="")
     ap.add_argument("--config", default=None)
     ap.add_argument("--htol", type=float, default=1e-4)
+    # fraccion minima del arco ABSORBIDO que recibe el liquido (casos de
+    # baño plano; auditoria 2, N-A2: con reparto por volumen era 0.069)
+    ap.add_argument("--min-liq-arc", type=float, default=None)
     ap.add_argument("--etol", type=float, default=0.01)
     ap.add_argument("--arctol", type=float, default=1e-3)
     ap.add_argument("--mtol", type=float, default=0.005)
@@ -146,6 +149,15 @@ def main():
                    f"{disc:.3e} J, tol {args.arctol})")
     else:
         print("  PASS  arc_budget  (sin potencia de arco: no aplica)")
+
+    if args.min_liq_arc is not None:
+        L = sum(r.get("E_src_liq_arc", 0.0) for r in steps)
+        G = sum(r.get("E_src_gas_arc", 0.0) for r in steps)
+        S = sum(r.get("E_arc_direct_sol", 0.0) for r in steps)
+        share = L / max(L + G + S, 1e-30)
+        chk.report("arc_liquid_share", share >= args.min_liq_arc,
+                   f"liquido {share:.3f} del arco absorbido (min {args.min_liq_arc}; "
+                   f"liq {L:.3e}, gas {G:.3e}, solido {S:.3e} J)")
 
     # -- mass_liq ------------------------------------------------------------
     dm_l = last["m_liq"] - first["m_liq"]

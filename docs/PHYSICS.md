@@ -264,12 +264,17 @@ este modelo no resuelve.
 | Fracción | Destino |
 |----------|---------|
 | `frac_rad` × `MC_RAD_SHARE` (0.5) | Monte Carlo (§7) |
-| `frac_rad` × (1 − `MC_RAD_SHARE`) | depósito directo en la superficie de la chatarra bajo el electrodo |
-| `frac_conv` | columna de gas entre la punta y la superficie |
-| `frac_elec` | punta del electrodo |
+| `frac_rad` × (1 − `MC_RAD_SHARE`) | depósito directo en la superficie de la chatarra bajo el electrodo; **sin chatarra, también al MC** (`mc_share` = 1) |
+| `frac_conv` | columna de gas entre la punta y la superficie de chatarra; **sin chatarra, la capa de la superficie del baño** (chorro de plasma que impacta) |
+| `frac_elec` | tras el bore-in, el baño bajo el electrodo (radio 2 R_elec, peso α_l V); antes, con `frac_conv` |
+
+(Auditoría 2, N-A2: con baño plano el líquido recibía el 6.9 % del arco
+absorbido; ahora 71 %, el resto es la atenuación del gas en el camino del MC.)
 
 En una celda con chatarra el depósito se reparte por **absorción**
-(κ_s α_s frente a κ_g α_g, F2.30); la parte del sólido entra a `E_s` con un
+(κ_s α_s frente a κ_g α_g, F2.30), y lo que queda en `S_arc` se reparte entre
+líquido y gas también por absorción (κ_l α_l frente a κ_g α_g, el mismo peso
+que la radiación de la DO); la parte del sólido entra a `E_s` con un
 tope de **estado** (T_s ≤ T_liq + 100 K, `solid_arc_room`) y el exceso va a
 `S_arc`. La escoria intercepta su parte de `S_arc` también por absorción
 (κ_sl α_sl + κ_foam α_foam frente a κ_l α_l + κ_g α_g).
