@@ -291,6 +291,12 @@ full | rebaseline)
     run_restart_case cold_10step 8 8 5
     run_restart_case cold_10step 8 4 5
     run_restart_case melt_forced 8 8 6
+    # (auditoria 2, N-A5) reinicios que ejercen el estado del lecho y la
+    # mascara liq_cont_prev (transiciones disperso->continuo), la
+    # congelacion y la descomposicion que parte r
+    run_restart_case bed_drain 4 4 150
+    run_restart_case bath_freeze 4 4 50
+    run_restart_case cold_10step 12 12 5
 
     if [ "$MODE" = "rebaseline" ]; then
         $PY $INT/metrics_snapshot.py "$OUT" --mode rebaseline \

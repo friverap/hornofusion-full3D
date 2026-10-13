@@ -164,6 +164,15 @@ contains
                 allocate(liqc_i, mold=sol%layer_id)
                 liqc_i = 1
                 call read_3d_field_int(rid, 'liq_cont_prev', liqc_i, m, plist_xfer)
+                ! halos: la lectura solo llena las celdas propias y
+                ! reset_new_continuous lee las vecinas (auditoria 2, N-A5:
+                ! quedaban en .true. -> la vecina de otro rank contaba como
+                ! continua aunque no lo fuera; el reinicio dejaba de ser bit a bit)
+                if (m%is_parallel) then
+                    call mpi_exchange_halos_3d_int(liqc_i, m%topo)
+                else
+                    call fill_periodic_theta_int(liqc_i, m%ntheta)
+                end if
                 ws_liq_cont_prev = (liqc_i /= 0)
                 deallocate(liqc_i)
             end if
