@@ -591,7 +591,7 @@ contains
         end if
         
         ! Write data
-        write(iu, '(I8,F12.2,ES14.6,4ES12.4,I6)') &
+        write(iu, '(I8,F12.2,ES14.6,3ES12.4,I6)') &
             step, time, m_s_total, conv%res_cont, conv%res_ur, conv%res_energy, conv%n_outer
         
         close(iu)

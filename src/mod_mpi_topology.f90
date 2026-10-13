@@ -127,6 +127,22 @@ contains
         
         ! Decompose domain
         call decompose_domain(topo)
+
+        ! Auditoria M32: cada bloque local necesita >= 2 celdas por direccion
+        ! (halos de 2 capas; la vecina de un bloque de 1 celda devolveria
+        ! celdas que no son suyas). r, theta y z SI se descomponen
+        ! (factorize_3d); los restos de r y z van al ultimo rank, theta debe
+        ! dividir exacto.
+        if (topo%nr_global / topo%npr < 2 .or. topo%nth_global / topo%npth < 2 .or. &
+            topo%nz_global / topo%npz < 2) then
+            if (topo%rank == 0) then
+                print '(A,I4,A,3I4,A,3I5)', ' [MPI] ERROR: ', topo%nprocs, &
+                    ' ranks -> rejilla ', topo%npr, topo%npth, topo%npz, &
+                    ' deja bloques de menos de 2 celdas; malla ', nr, nth, nz
+                print '(A)', '       elegir otro numero de procesos (docs/RUNNING.md §3)'
+            end if
+            call MPI_Abort(MPI_COMM_WORLD, 2, ierr)
+        end if
         
         ! Setup neighbors
         call setup_neighbors(topo)

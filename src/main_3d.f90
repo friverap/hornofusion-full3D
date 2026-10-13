@@ -585,8 +585,11 @@ program eaf_3d_simulator
         ! OUTPUT (HDF5 parallel)
         !---------------------------------------------------------------
         if (mod(step, cfg%monitor_freq) == 0) then
+            ! monitor.log (auditoria M33: la documentacion lo usaba y nunca se
+            ! escribia). Colectiva: la masa de solido se reduce en todos los
+            ! ranks; solo rank 0 escribe.
+            call write_monitor_line(mesh, step, time, conv, sol, cfg%output_dir)
             if (should_print(mesh)) then
-                ! TODO: Implement print_monitor_3d or use monitor.log
                 print '(A,I8,A,F10.2,A,I3,A,5ES12.4)', &
                     ' [STEP] ', step, '  t=', time, '  outer=', conv%n_outer, &
                     '  res: ', conv%res_ur, conv%res_cont, conv%res_energy

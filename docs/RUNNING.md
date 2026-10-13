@@ -62,32 +62,44 @@ Si no se especifica archivo de config, se usan los valores por defecto de `mod_c
 
 ## 3. Elección del número de procesos MPI
 
-El código descompone el dominio en **theta × z** (r no se descompone; todos los ranks tienen el rango r completo).
+El código descompone el dominio en **r × theta × z** (`factorize_3d` en
+`mod_mpi_topology`): prueba todas las factorizaciones de NPROCS y elige la de
+bloques más cúbicos. Reglas (auditoría M32, oct-2026):
 
-### Regla: ntheta y nz deben ser exactamente divisibles
+- `ntheta` debe ser divisible exactamente por el número de procesos en theta
+  (la costura periódica lo exige); la factorización solo considera esos.
+- En r y z NO hace falta divisibilidad: el resto va al último rank de cada
+  dirección.
+- Cada bloque local necesita **al menos 2 celdas por dirección** (halos de dos
+  capas). Si no, el programa aborta al arrancar con un mensaje.
 
-```
-Decomposición global: 1 × p_theta × p_z   (donde p_theta × p_z = NPROCS)
-```
+### Descomposiciones reales para la malla de producción (60×120×84)
 
-### Tabla de descomposiciones válidas para la malla de producción (60×120×84)
-
-| NPROCS | Descomp. | ntheta/proc | nz/proc | Celdas/proc |
-|--------|----------|-------------|---------|-------------|
-| 8 | 1×4×2 | 30 | 42 | 75,600 |
-| **12** | **2×3×2** | **40** | **42** | **50,400** |
-| 16 | 1×4×4 | 30 | 21 | 37,800 |
-| 24 | 1×6×4 | 20 | 21 | 25,200 |
+| NPROCS | r×θ×z | Bloque local (r, θ, z) | Celdas/proc |
+|--------|-------|------------------------|-------------|
+| 8 | 1×4×2 | 60, 30, 42 | 75,600 |
+| **12** | **2×3×2** | **30, 40, 42** | **50,400** |
+| 16 | 2×4×2 | 30, 30, 42 | 37,800 |
+| 24 | 2×4×3 | 30, 30, 28 | 25,200 |
 
 > **Recomendado en M4 Pro (12 núcleos):** `mpirun -n 12`
 
-### Para el test de regresión (18×36×24)
+### Malla media (30×60×42)
 
-| NPROCS | Descomp. | Válido |
-|--------|----------|--------|
-| 8 | 1×4×2 | ✓ (ntheta/4=9, nz/2=12) |
-| 4 | 1×4×1 | ✓ |
-| 1 | 1×1×1 | ✓ |
+| NPROCS | r×θ×z | Bloque local |
+|--------|-------|--------------|
+| 12 | 2×3×2 | 15, 20, 21 |
+| 14 | 1×2×7 | 30, 30, 6 |
+| 15 | 1×5×3 | 30, 12, 14 |
+| 16 | 2×4×2 | 15, 15, 21 |
+
+### Mallas de los tests (12×24×16)
+
+| NPROCS | r×θ×z | Bloque local |
+|--------|-------|--------------|
+| 1 | 1×1×1 | 12, 24, 16 |
+| 4 | 1×2×2 | 12, 12, 8 |
+| 8 | 1×4×2 | 12, 6, 8 |
 
 ---
 
