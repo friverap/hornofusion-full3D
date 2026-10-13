@@ -160,6 +160,7 @@ full | rebaseline)
     run_case chem_test 4
     run_case ecs_test 1
     run_case ecs_test 8
+    run_case slag_chem_test 1
     run_case slag_chem_test 8
     run_case slag_chem_flow 4
     # Bug 19 (Plan C, F0): bancos del bano de liquido puro — reposo (n1/n4)
@@ -221,6 +222,9 @@ full | rebaseline)
         $PY $INT/check_slag_chem.py "$OUT/slag_chem_test_n8" --config "$CFG/slag_chem_test.dat"
     run_script "slag_chem_flow" \
         $PY $INT/check_slag_chem.py "$OUT/slag_chem_flow_n4" --config "$CFG/slag_chem_flow.dat"
+    # escoria por columna global (auditoria A14): invariante a la descomposicion
+    run_script "decomposition_slag" \
+        $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n8" --rtol 1e-6
     for d in "$OUT"/bath_test_n*; do
         check_invariants "$d" bath_test
         run_script "bath_test" \

@@ -11,9 +11,9 @@
 module mod_slag_3d
     use mod_constants
     use mod_types_3d
-    use mod_mpi_topology, only: mpi_allreduce_max, mpi_allreduce_sum
-    use mod_audit, only: audit_add, AUD_FLUX_MASS, AUD_FLUX_E
-    use mod_audit, only: audit_add, AUD_SLAG_INTERCEPT
+    use mod_mpi_topology, only: mpi_allreduce_max, mpi_allreduce_sum, mpi_exchange_halos_3d
+    use mod_parallel_utils, only: gather_global_field, global_to_local
+    use mod_audit, only: audit_add, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT
     implicit none
 
     real(dp), parameter :: SMALL_SL = 1.0e-6_dp
@@ -293,127 +293,150 @@ contains
         end do
     end subroutine slag_additions
 
-    subroutine update_slag(slag, liq, gas, sh, m, cfg, dt)
+    subroutine update_slag(slag, liq, gas, sol, m, cfg, dt)
         type(slag_t),  intent(inout) :: slag
         type(phase_t), intent(inout) :: liq, gas
-        type(shared_t),intent(inout) :: sh
+        type(solid_t), intent(in)    :: sol
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
         real(dp),      intent(in)    :: dt
 
-        call slag_buoyancy(slag, liq, gas, m, cfg)
-        call slag_energy(slag, liq, gas, sh, m, cfg, dt)
+        call slag_buoyancy(slag, liq, gas, sol, m, cfg)
+        call slag_energy(slag, liq, gas, m, cfg, dt)
     end subroutine update_slag
 
     !---------------------------------------------------------------------------
-    ! Buoyancy: sweep k=kstart..kend-1 upward, float slag above liquid
+    ! Flotacion por COLUMNA GLOBAL (auditoria 12-oct-2026: A14, M17, M18).
+    ! Cada columna (r, theta) reune su escoria (masa, entalpia, componentes) y
+    ! la coloca sobre la SUPERFICIE del material condensado (bano continuo o
+    ! lecho de chatarra), llenando el hueco libre 1 - alpha_s - alpha_l hacia
+    ! arriba; alpha_sl = m_sl/(rho_slag V) siempre. Antes: barridos locales
+    ! k = kstart..kend-1 (la escoria no cruzaba la frontera de rank en z: la
+    ! capa dependia de la descomposicion), solo SUBIA y solo con liquido en su
+    ! celda (quedaba suspendida en el freeboard al fundirse la chatarra), el
+    ! hueco de arriba ignoraba la chatarra (Sigma alpha > 1) y alpha_sl no
+    ! seguia a m_sl en las adiciones y la quimica. Patron invariante: gather
+    ! global + mismo barrido en todos los ranks + escritura de celdas propias.
     !---------------------------------------------------------------------------
-    subroutine slag_buoyancy(slag, liq, gas, m, cfg)
+    subroutine slag_buoyancy(slag, liq, gas, sol, m, cfg)
         type(slag_t),  intent(inout) :: slag
         type(phase_t), intent(inout) :: liq, gas
+        type(solid_t), intent(in)    :: sol
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
 
-        integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend, isweep
-        real(dp) :: frac, frac_new, avail_above, frac_ratio
+        integer  :: i, j, k, c, ks, kk, il, jl, kl
+        logical  :: owned
+        real(dp) :: Mcol, Ecol, Xcol(N_SLAG_COMP), vneed, room, dv, f
+        real(dp), allocatable :: ms_g(:,:,:), es_g(:,:,:), as_g(:,:,:), al_g(:,:,:)
+        real(dp), allocatable :: x_g(:,:,:,:), ms_n(:,:,:), es_n(:,:,:), x_n(:,:,:,:)
+        real(dp), allocatable :: tmp(:,:,:)
 
-        if (m%is_parallel) then
-            istart = m%topo%istart; iend = m%topo%iend
-            jstart = m%topo%jstart; jend = m%topo%jend
-            kstart = m%topo%kstart; kend = m%topo%kend
-        else
-            istart = 1; iend = m%nr
-            jstart = 1; jend = m%ntheta
-            kstart = 1; kend = m%nz
-        end if
-
-        ! 3 upward sweeps for stability
-        do isweep = 1, 3
-            do k = kstart, kend - 1
-                do j = jstart, jend
-                    do i = istart, iend
-                        if (m%cell_type(i,j,k)   == 0) cycle
-                        if (m%cell_type(i,j,k+1) == 0) cycle
-                        if (slag%alpha_sl(i,j,k) < SMALL_SL) cycle
-                        if (liq%alpha(i,j,k)     < SMALL_SL) cycle
-
-                        frac = slag%alpha_sl(i,j,k)
-
-                        ! Available space in cell above: not occupied by liq or slag
-                        avail_above = max(0.0_dp, 1.0_dp - liq%alpha(i,j,k+1) &
-                                                          - slag%alpha_sl(i,j,k+1))
-                        frac_new = min(frac, avail_above)
-                        if (frac_new < SMALL_SL) cycle
-
-                        frac_ratio = frac_new / frac
-
-                        ! Transfer mass and energy from k to k+1
-                        slag%m_sl(i,j,k+1)     = slag%m_sl(i,j,k+1)  + slag%m_sl(i,j,k)  * frac_ratio
-                        slag%E_sl(i,j,k+1)     = slag%E_sl(i,j,k+1)  + slag%E_sl(i,j,k)  * frac_ratio
-                        slag%alpha_sl(i,j,k+1) = slag%alpha_sl(i,j,k+1) + frac_new
-                        ! Componentes: viajan CON la masa (mismo frac_ratio
-                        ! => conservación exacta por componente, E2.1)
-                        slag%m_X(i,j,k+1,:) = slag%m_X(i,j,k+1,:) &
-                                            + slag%m_X(i,j,k,:) * frac_ratio
-
-                        ! Remove from k
-                        slag%m_sl(i,j,k)     = slag%m_sl(i,j,k)  * (1.0_dp - frac_ratio)
-                        slag%E_sl(i,j,k)     = slag%E_sl(i,j,k)  * (1.0_dp - frac_ratio)
-                        slag%alpha_sl(i,j,k) = slag%alpha_sl(i,j,k) - frac_new
-                        slag%m_X(i,j,k,:)    = slag%m_X(i,j,k,:) * (1.0_dp - frac_ratio)
-
-                        ! Gas compensates volume
-                        gas%alpha(i,j,k)   = min(1.0_dp, gas%alpha(i,j,k)   + frac_new)
-                        gas%alpha(i,j,k+1) = max(0.0_dp, gas%alpha(i,j,k+1) - frac_new)
-
-                        ! Clear nearly-empty cell k
-                        if (slag%alpha_sl(i,j,k) < SMALL_SL) then
-                            ! Los residuos de componentes NO se descartan:
-                            ! suben con el resto (conservación)
-                            slag%m_X(i,j,k+1,:) = slag%m_X(i,j,k+1,:) &
-                                                + slag%m_X(i,j,k,:)
-                            slag%m_sl(i,j,k+1)  = slag%m_sl(i,j,k+1) &
-                                                + slag%m_sl(i,j,k)
-                            slag%E_sl(i,j,k+1)  = slag%E_sl(i,j,k+1) &
-                                                + slag%E_sl(i,j,k)
-                            slag%alpha_sl(i,j,k) = 0.0_dp
-                            slag%m_sl(i,j,k)     = 0.0_dp
-                            slag%E_sl(i,j,k)     = 0.0_dp
-                            slag%T_sl(i,j,k)     = 0.0_dp
-                            slag%m_X(i,j,k,:)    = 0.0_dp
-                        end if
-                    end do
-                end do
-            end do
+        allocate(ms_g(m%nr_g, m%nth_g, m%nz_g), es_g(m%nr_g, m%nth_g, m%nz_g))
+        allocate(as_g(m%nr_g, m%nth_g, m%nz_g), al_g(m%nr_g, m%nth_g, m%nz_g))
+        allocate(ms_n(m%nr_g, m%nth_g, m%nz_g), es_n(m%nr_g, m%nth_g, m%nz_g))
+        allocate(x_g(m%nr_g, m%nth_g, m%nz_g, N_SLAG_COMP), x_n(m%nr_g, m%nth_g, m%nz_g, N_SLAG_COMP))
+        allocate(tmp, mold=slag%m_sl)
+        call gather_global_field(slag%m_sl, ms_g, m)
+        call gather_global_field(slag%E_sl, es_g, m)
+        call gather_global_field(liq%alpha, al_g, m)
+        call gather_global_field(sol%alpha_s, as_g, m)
+        do c = 1, N_SLAG_COMP
+            tmp = slag%m_X(:,:,:,c)
+            call gather_global_field(tmp, x_g(:,:,:,c), m)
         end do
+        ms_n = 0.0_dp; es_n = 0.0_dp; x_n = 0.0_dp
 
-        ! Update T_sl from E_sl and m_sl after buoyancy movement
-        do k = kstart, kend
-            do j = jstart, jend
-                do i = istart, iend
-                    if (slag%m_sl(i,j,k) > SMALL_SL) then
-                        slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / (slag%m_sl(i,j,k) * cfg%cp_slag)
-                        slag%T_sl(i,j,k) = max(300.0_dp, slag%T_sl(i,j,k))
+        do j = 1, m%nth_g
+            do i = 1, m%nr_g
+                Mcol = 0.0_dp; Ecol = 0.0_dp; Xcol = 0.0_dp
+                do k = 1, m%nz_g
+                    if (m%cell_type_global(i,j,k) == 0) cycle
+                    Mcol = Mcol + ms_g(i,j,k); Ecol = Ecol + es_g(i,j,k)
+                    Xcol = Xcol + x_g(i,j,k,:)
+                end do
+                if (Mcol <= SMALL_SL) then
+                    ! residuos de componentes sin masa: se conservan donde estan
+                    x_n(i,j,:,:) = x_g(i,j,:,:)
+                    cycle
+                end if
+                ! superficie: celda activa mas alta con bano continuo o lecho;
+                ! sin material, la celda activa mas baja
+                ks = -1
+                do k = m%nz_g, 1, -1
+                    if (m%cell_type_global(i,j,k) == 0) cycle
+                    if (al_g(i,j,k) >= ALPHA_LIQ_CONT .or. as_g(i,j,k) >= 1.0e-2_dp) then
+                        ks = k; exit
                     end if
                 end do
+                if (ks < 0) then
+                    do k = 1, m%nz_g
+                        if (m%cell_type_global(i,j,k) /= 0) then
+                            ks = k; exit
+                        end if
+                    end do
+                end if
+                if (ks < 0) cycle
+                vneed = Mcol / cfg%rho_slag
+                do kk = ks, m%nz_g
+                    if (vneed <= 0.0_dp) exit
+                    if (m%cell_type_global(i,j,kk) == 0) cycle
+                    room = max(0.0_dp, 1.0_dp - al_g(i,j,kk) - as_g(i,j,kk)) * m%vol_global(i,j,kk)
+                    if (kk == m%nz_g) room = vneed           ! techo: lo que no cupo queda aqui
+                    dv = min(vneed, room)
+                    if (dv <= 0.0_dp) cycle
+                    f = dv / (Mcol / cfg%rho_slag)
+                    ms_n(i,j,kk) = ms_n(i,j,kk) + f * Mcol
+                    es_n(i,j,kk) = es_n(i,j,kk) + f * Ecol
+                    x_n(i,j,kk,:) = x_n(i,j,kk,:) + f * Xcol
+                    vneed = vneed - dv
+                end do
             end do
         end do
 
+        do k = 1, m%nz_g
+            do j = 1, m%nth_g
+                do i = 1, m%nr_g
+                    call global_to_local(m, i, j, k, il, jl, kl, owned)
+                    if (.not. owned) cycle
+                    if (m%cell_type(il,jl,kl) == 0) cycle
+                    slag%m_sl(il,jl,kl) = ms_n(i,j,k)
+                    slag%E_sl(il,jl,kl) = es_n(i,j,k)
+                    slag%m_X(il,jl,kl,:) = x_n(i,j,k,:)
+                    slag%alpha_sl(il,jl,kl) = ms_n(i,j,k) / (cfg%rho_slag * m%vol(il,jl,kl))
+                    if (ms_n(i,j,k) > SMALL_SL) then
+                        slag%T_sl(il,jl,kl) = es_n(i,j,k) / (ms_n(i,j,k) * cfg%cp_slag)
+                    else
+                        slag%T_sl(il,jl,kl) = 0.0_dp
+                        slag%alpha_foam(il,jl,kl) = 0.0_dp
+                    end if
+                    gas%alpha(il,jl,kl) = max(0.0_dp, 1.0_dp - as_g(i,j,k) - liq%alpha(il,jl,kl) &
+                                          - slag%alpha_sl(il,jl,kl))
+                end do
+            end do
+        end do
+        deallocate(ms_g, es_g, as_g, al_g, ms_n, es_n, x_g, x_n, tmp)
     end subroutine slag_buoyancy
 
     !---------------------------------------------------------------------------
-    ! Explicit energy update for slag
+    ! Intercambio de calor de la escoria con el bano y el gas: paso partido
+    ! EXACTO de dos nodos (relajacion exponencial hacia el equilibrio,
+    ! conservativo e incondicionalmente estable; auditoria M20: el explicito
+    ! con el tope del lado del fluido oscilaba con escoria escasa). El bano es
+    ! el de la propia celda si lo hay, si no el de abajo (otro rank posible:
+    ! dos pasadas con halos, auditoria A14). La T de la escoria es E/(m cp)
+    ! sin recorte (el recorte a 300 K desacoplaba T de E).
     !---------------------------------------------------------------------------
-    subroutine slag_energy(slag, liq, gas, sh, m, cfg, dt)
+    subroutine slag_energy(slag, liq, gas, m, cfg, dt)
         type(slag_t),  intent(inout) :: slag
         type(phase_t), intent(inout) :: liq, gas
-        type(shared_t),intent(inout) :: sh
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
         real(dp),      intent(in)    :: dt
 
         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: dE, Q_sl, Q_lim, dT_liq, dT_gas, vol
+        real(dp) :: Cs, Cf, hA, f, Q
+        real(dp), allocatable :: qdown(:,:,:)
 
         if (m%is_parallel) then
             istart = m%topo%istart; iend = m%topo%iend
@@ -424,58 +447,57 @@ contains
             jstart = 1; jend = m%ntheta
             kstart = 1; kend = m%nz
         end if
+        allocate(qdown, mold=slag%m_sl); qdown = 0.0_dp
 
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
-                    if (slag%alpha_sl(i,j,k) < SMALL_SL) cycle
-                    if (slag%m_sl(i,j,k)     < SMALL_SL) cycle
-
-                    vol = m%vol(i,j,k)
-
-                    ! (La intercepción de S_arc se hace en slag_intercept_arc,
-                    !  ANTES de que las ecuaciones de energía consuman S_arc)
-
-                    ! 2. Slag-liquid HT (liquid in cell below at k-1)
-                    !    Guard: k > kstart so k-1 is in this rank's interior (safe to write)
-                    if (k > kstart .and. liq%alpha(i,j,k-1) > SMALL_SL) then
-                        Q_sl = cfg%h_contact_sl * m%Az(i,j,k-1) &
-                               * (liq%T(i,j,k-1) - slag%T_sl(i,j,k))
-                        Q_lim = liq%alpha(i,j,k-1) * liq%rho(i,j,k-1) * liq%cp(i,j,k-1) &
-                                * m%vol(i,j,k-1) * abs(liq%T(i,j,k-1) - slag%T_sl(i,j,k)) / dt
-                        Q_sl = sign(min(abs(Q_sl), Q_lim), Q_sl)
-
-                        slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q_sl * dt
-                        dT_liq = Q_sl * dt / (liq%alpha(i,j,k-1) * liq%rho(i,j,k-1) &
-                                              * liq%cp(i,j,k-1) * m%vol(i,j,k-1))
-                        liq%T(i,j,k-1) = liq%T(i,j,k-1) - dT_liq
+                    if (slag%m_sl(i,j,k) <= SMALL_SL) cycle
+                    Cs = slag%m_sl(i,j,k) * cfg%cp_slag
+                    ! bano: propia celda o la de abajo
+                    if (liq%alpha(i,j,k) > SMALL_SL) then
+                        Cf = liq%alpha(i,j,k) * liq%rho(i,j,k) * liq%cp(i,j,k) * m%vol(i,j,k)
+                        hA = cfg%h_contact_sl * m%Az(i,j,k-1)
+                        f = 1.0_dp - exp(-dt * hA * (1.0_dp / Cs + 1.0_dp / Cf))
+                        Q = Cs * Cf / (Cs + Cf) * (liq%T(i,j,k) - slag%E_sl(i,j,k) / Cs) * f
+                        slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
+                        liq%T(i,j,k) = liq%T(i,j,k) - Q / Cf
+                    else if (m%cell_type(i,j,k-1) /= 0 .and. liq%alpha(i,j,k-1) > SMALL_SL) then
+                        Cf = liq%alpha(i,j,k-1) * liq%rho(i,j,k-1) * liq%cp(i,j,k-1) * m%vol(i,j,k-1)
+                        hA = cfg%h_contact_sl * m%Az(i,j,k-1)
+                        f = 1.0_dp - exp(-dt * hA * (1.0_dp / Cs + 1.0_dp / Cf))
+                        Q = Cs * Cf / (Cs + Cf) * (liq%T(i,j,k-1) - slag%E_sl(i,j,k) / Cs) * f
+                        slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
+                        qdown(i,j,k) = Q        ! se le resta al bano de abajo en la pasada 2
                     end if
-
-                    ! 3. Slag-gas HT (gas co-located in same cell)
+                    ! gas de la propia celda
                     if (gas%alpha(i,j,k) > SMALL_SL) then
-                        Q_sl = cfg%h_contact_sl * m%Az(i,j,k) &
-                               * (gas%T(i,j,k) - slag%T_sl(i,j,k))
-                        Q_lim = gas%alpha(i,j,k) * gas%rho(i,j,k) * gas%cp(i,j,k) &
-                                * vol * abs(gas%T(i,j,k) - slag%T_sl(i,j,k)) / dt
-                        Q_sl = sign(min(abs(Q_sl), Q_lim), Q_sl)
-
-                        slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q_sl * dt
-                        dT_gas = Q_sl * dt / (gas%alpha(i,j,k) * gas%rho(i,j,k) &
-                                              * gas%cp(i,j,k) * vol)
-                        gas%T(i,j,k) = gas%T(i,j,k) - dT_gas
+                        Cf = gas%alpha(i,j,k) * gas%rho(i,j,k) * gas%cp(i,j,k) * m%vol(i,j,k)
+                        hA = cfg%h_contact_sl * m%Az(i,j,k)
+                        f = 1.0_dp - exp(-dt * hA * (1.0_dp / Cs + 1.0_dp / Cf))
+                        Q = Cs * Cf / (Cs + Cf) * (gas%T(i,j,k) - slag%E_sl(i,j,k) / Cs) * f
+                        slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
+                        gas%T(i,j,k) = gas%T(i,j,k) - Q / Cf
                     end if
-
-                    ! 4. Update slag temperature
-                    if (slag%m_sl(i,j,k) > SMALL_SL) then
-                        slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / (slag%m_sl(i,j,k) * cfg%cp_slag)
-                    end if
-                    slag%T_sl(i,j,k) = max(300.0_dp, slag%T_sl(i,j,k))
-
+                    slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / Cs
                 end do
             end do
         end do
 
+        ! pasada 2: el bano de abajo cede lo que recibio la escoria de arriba
+        call mpi_exchange_halos_3d(qdown, m%topo)
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (qdown(i,j,k+1) == 0.0_dp) cycle
+                    Cf = liq%alpha(i,j,k) * liq%rho(i,j,k) * liq%cp(i,j,k) * m%vol(i,j,k)
+                    if (Cf > 0.0_dp) liq%T(i,j,k) = liq%T(i,j,k) - qdown(i,j,k+1) / Cf
+                end do
+            end do
+        end do
+        deallocate(qdown)
     end subroutine slag_energy
 
 end module mod_slag_3d

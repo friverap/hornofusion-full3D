@@ -478,7 +478,9 @@ program eaf_3d_simulator
             call slag_additions(slag, mesh, cfg, &
                 interpolate_rate(cal_prof, time), &
                 interpolate_rate(cinj_prof, time), cfg%dt)
-            call update_slag(slag, liq, gas, sh, mesh, cfg, cfg%dt)
+            call update_slag(slag, liq, gas, sol, mesh, cfg, cfg%dt)
+            call phase_exchange_halos(liq, mesh)
+            call phase_exchange_halos(gas, mesh)
             call slag_exchange_halos(slag, mesh)
         end if
         call timer_stop(T_SLAG)
