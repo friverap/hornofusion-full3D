@@ -77,7 +77,7 @@ contains
         real(dp) :: step_size, total_P_rad
         integer  :: ig, jg, kg, il, jl, kl
         real(dp) :: rnd1, rnd2, rnd3, rnd4
-        real(dp) :: P_beam, dP_abs, kap, z_att, xe2, ye2, rdot
+        real(dp) :: P_beam, dP_abs, kap, z_att, xe2, ye2
         integer  :: e2
         logical  :: shadow
         integer  :: n_steps
@@ -161,17 +161,6 @@ contains
 
                     ! Check bounds - use .not.(<=) to correctly handle NaN
                     r_pos = sqrt(x**2 + y**2)
-                    ! Pasador del eje (r < rf(0)): la DO lo trata como pared
-                    ! que re-irradia (flujo neto nulo); para un rayo eso es
-                    ! reflexion especular de la componente radial (auditoria,
-                    ! bajos: antes el rayo lo cruzaba como si fuera la celda 1)
-                    if (r_pos < m%rf_global(0) .and. r_pos > 0.0_dp) then
-                        rdot = (dx * x + dy * y) / r_pos
-                        if (rdot < 0.0_dp) then
-                            dx = dx - 2.0_dp * rdot * x / r_pos
-                            dy = dy - 2.0_dp * rdot * y / r_pos
-                        end if
-                    end if
                     if (.not. (r_pos <= cfg%R_shell)) then
                         call audit_add(AUD_MC_LOST, P_beam * cfg%dt)
                         exit trace

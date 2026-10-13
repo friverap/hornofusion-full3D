@@ -185,7 +185,7 @@ rebaselinean solo cuando cambia la numérica (versión indicada).
 | M28 | — | — | PENDIENTE con causa: la alternativa local ya existe y se midió (D2.5, `pc_fs_liquid_gradient`: cara de superficie libre unilateral) y se cerró NEGATIVA en el juez B1 (Plan D, 10-oct-2026). Lo que falta es el acople implícito α–p (NEPTUNE_CFD, Liles & Reed), no otra regla local |
 | M29 | fb68144 | v59 | Ergun del gas con el líquido retenido como obstáculo (ε_g = 1 − α_s − α_l en celdas del lecho; Sáez & Carbonell 1985, Attou et al. 1999). Efecto acotado en los bancos (bath_freeze p_max 69.9 → 67.7 kPa) |
 | M30 (PEA en el Poisson) | e22653b | v60 | el PEA deja en `aP_*` el coeficiente equivalente α V/d con la respuesta acoplada d_l = V(α_l a_g + KVα_g)/det (Karema & Lo 1999): Poisson y corrector ven la respuesta de la mezcla cuando K es grande. bed_flood p_max 247 → 232 kPa |
-| M31 | — | — | decisión de diseño aceptada: el eje es un pasador de 2 cm (r_min = 0.02 m) en un horno de 7.6 m de diámetro, fuera del triángulo de electrodos (R_pcd = 0.85 m); el bloqueo es despreciable y un tratamiento de polo no cambia la física de interés |
+| M31 | (este commit) | v67 | EJE REAL: `R_AXIS_MIN` = 0, la cara del eje tiene área nula y las celdas del primer anillo son cuñas que se tocan en el eje (exacto en volumen finito: ninguna masa atraviesa una línea; el flujo que cruza el eje pasa por las caras θ del anillo). Se retira el pasador sólido de 4 cm y la reflexión del MC en él (el trazado cartesiano cruza el eje). Los gradientes de centro del primer anillo siguen siendo unilaterales hacia el eje (sin halo diametral). Bancos acotados: bed_flood p_max 232 → 223 kPa, bath_rest 0.22 m/s (xfail), simetría 120° e invarianza MPI intactas |
 | M32, M33 | a1c107f | — | validación al arrancar: cada bloque local ≥ 2 celdas por dirección (aborta con mensaje); RUNNING.md §3 y CLAUDE.md con la descomposición real r×θ×z; `monitor.log` se escribe cada `monitor_freq` (la rutina tenía además un formato roto que nunca se había ejecutado) |
 | M35, M36, M37 | b720f73 | — | mezcla: velocidad de celda reconstruida también junto a coraza/piso/techo (solo el eje fuera); energía del gas con el complemento Q − Q_l del flujo de mezcla; deslizamiento del lecho con flujo de Godunov de Buckley–Leverett. Banco `bath_fill` en mezcla (n4, 0.5 s): p_max 220 → 136 kPa, gas 287 → 77 m/s; baño en reposo igual. La matriz no tiene casos de mezcla (bit a bit en dos fluidos) |
 | M38 (+ hallazgo nuevo) | 77b2a32 | v61 | el tope del baño es superficie para la carga ECS. HALLAZGO NUEVO, más grave: `ecs_feed` suponía r sin descomponer (índice radial local = global); con 12 ranks (2×3×2) la carga NO se depositaba (0 de 300 kg en ecs_test). Índices globales; `decomposition_ecs_r` (n12 vs n1: 4e-16) en la matriz. CONFIGURATION.md corregido |
@@ -213,7 +213,6 @@ rebaselinean solo cuando cambia la numérica (versión indicada).
   en el lecho inundado.
 - **M28.** La alternativa local (cara de superficie libre unilateral, D2.5)
   ya se cerró negativa en el juez B1; lo que falta es el acople implícito α–p.
-- **M31.** Decisión de diseño aceptada (pasador de 2 cm en el eje).
 
 ### Hallazgos nuevos durante la resolución
 

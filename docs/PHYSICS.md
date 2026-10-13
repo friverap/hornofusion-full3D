@@ -286,8 +286,8 @@ Una recarga de cesta retrae los electrodos y reinicia el bore-in.
 3. Impacto: chatarra (α_s > `ALPHA_SCRAP_SURF` = 0.05) o superficie del baño
    (α_l ≥ `ALPHA_LIQ_CONT`).
 4. El rayo que entra en un electrodo (sombra) o sale del dominio se audita como
-   `E_mc_lost`; en el pasador del eje se refleja especularmente (coherente con
-   la pared re-irradiante de la DO).
+   `E_mc_lost`. El trazado es cartesiano: el rayo cruza el eje sin obstáculo
+   (eje real, auditoría M31).
 5. Depósito por absorción sólido/fluido como el depósito directo (§6).
 
 Semilla por paso, la misma en todos los ranks (aritmética de 64 bits); los

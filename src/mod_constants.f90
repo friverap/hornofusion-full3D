@@ -164,8 +164,12 @@ module mod_constants
     ! T_ambient = 900 K tenia aire de 1.2 kg/m3 a 900 K (3x)
     real(dp), parameter :: T_RHO_GAS_REF = 300.0_dp
 
-    ! Minimum radius of the cylindrical mesh axis hole [m]
-    real(dp), parameter :: R_AXIS_MIN = 0.02_dp
+    ! Radio de la primera cara radial [m]. EJE REAL (auditoria M31, oct-2026):
+    ! la cara del eje tiene area nula (A_r = r_f dtheta dz = 0) y las celdas
+    ! del primer anillo son cunas que se tocan en el eje, lo que es exacto
+    ! en volumen finito (ningun flujo atraviesa una linea). Antes 0.02 m: un
+    ! pasador solido de 4 cm de diametro con pared en el eje.
+    real(dp), parameter :: R_AXIS_MIN = 0.0_dp
 
     ! Ergun porous media defaults
     real(dp), parameter :: D_PARTICLE = 0.10_dp   ! m (characteristic scrap chunk size)
