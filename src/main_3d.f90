@@ -265,6 +265,14 @@ program eaf_3d_simulator
 
     time_loop: do while (time < cfg%t_final)
 
+        ! El ultimo paso termina EXACTAMENTE en t_final (auditoria, bajos: el
+        ! lazo lo rebasaba y, por el redondeo de la suma de dt, podia dar un
+        ! paso de mas: melt_forced t_final 0.11 / dt 0.01 corria 12 pasos)
+        if (time + cfg%dt > cfg%t_final) then
+            if (cfg%t_final - time <= 1.0e-6_dp * cfg%dt) exit time_loop
+            cfg%dt = cfg%t_final - time
+        end if
+
         step = step + 1
         time = time + cfg%dt
         
@@ -556,7 +564,7 @@ program eaf_3d_simulator
         ! diagnostico y se aborta (exit 3). Decision GLOBAL: todos los
         ! ranks salen juntos (ver nan_guard_triggered).
         !---------------------------------------------------------------
-        if (nan_guard_triggered(conv, liq, gas, sol, sh, mesh, step, time)) then
+        if (nan_guard_triggered(conv, liq, gas, sol, sh, mesh, step, time, slag)) then
             if (should_print(mesh)) then
                 print '(A)', ''
                 print '(A)', ' ================================================'

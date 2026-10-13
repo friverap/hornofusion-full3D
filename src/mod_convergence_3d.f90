@@ -25,7 +25,7 @@ contains
     ! corrupto (m_sol -> 0.24 kg, m_liq -> 65 t espurios). El coste del
     ! barrido es <1 % del paso; el de NO frenar, dias.
     !---------------------------------------------------------------------------
-    function nan_guard_triggered(conv, liq, gas, sol, sh, m, step, time) &
+    function nan_guard_triggered(conv, liq, gas, sol, sh, m, step, time, slag) &
              result(bad)
         type(convergence_t), intent(in) :: conv
         type(phase_t), intent(in)       :: liq, gas
@@ -34,6 +34,7 @@ contains
         type(mesh_t), intent(in)        :: m
         integer, intent(in)             :: step
         real(dp), intent(in)            :: time
+        type(slag_t), intent(in), optional :: slag
         logical :: bad
 
         real(dp) :: local_flag, global_flag
@@ -60,6 +61,7 @@ contains
         call scan_field(liq%T,      'liq%T',      local_flag, rank, step, m)
         call scan_field(liq%alpha,  'liq%alpha',  local_flag, rank, step, m)
         call scan_field(gas%ur,     'gas%ur',     local_flag, rank, step, m)
+        call scan_field(gas%uth,    'gas%uth',    local_flag, rank, step, m)
         call scan_field(gas%uz,     'gas%uz',     local_flag, rank, step, m)
         call scan_field(gas%T,      'gas%T',      local_flag, rank, step, m)
         call scan_field(gas%alpha,  'gas%alpha',  local_flag, rank, step, m)
@@ -68,6 +70,17 @@ contains
         call scan_field(sol%E_s,    'sol%E_s',    local_flag, rank, step, m)
         call scan_field(sol%m_s,    'sol%m_s',    local_flag, rank, step, m)
         call scan_field(sol%alpha_s,'sol%alpha_s',local_flag, rank, step, m)
+        ! auditoria (bajos): turbulencia, especies y escoria tambien
+        call scan_field(sh%tke,     'sh%tke',     local_flag, rank, step, m)
+        call scan_field(sh%eps,     'sh%eps',     local_flag, rank, step, m)
+        call scan_field(sh%Y_O2,    'sh%Y_O2',    local_flag, rank, step, m)
+        call scan_field(sh%Y_CO,    'sh%Y_CO',    local_flag, rank, step, m)
+        call scan_field(sh%Y_CO2,   'sh%Y_CO2',   local_flag, rank, step, m)
+        if (present(slag)) then
+            call scan_field(slag%m_sl, 'slag%m_sl', local_flag, rank, step, m)
+            call scan_field(slag%E_sl, 'slag%E_sl', local_flag, rank, step, m)
+            call scan_field(slag%T_sl, 'slag%T_sl', local_flag, rank, step, m)
+        end if
 
         if (m%is_parallel) then
             call mpi_allreduce_max(local_flag, global_flag, m%topo)
@@ -127,13 +140,15 @@ contains
             return
         end if
 
-        ! Safety: check for invalid residuals (NaN or Inf)
-        if (cfg%solve_flow) then
-            if (ieee_is_nan(conv%res_cont) .or. .not. ieee_is_finite(conv%res_cont) &
-                .or. conv%res_cont > 1.0e100_dp) then
-                converged = .false.  ! NaN or Inf detected
-                return
-            end if
+        ! Safety: ningun residual no finito cuenta como convergido (auditoria,
+        ! bajos: solo se miraba res_cont; un NaN en energia o k-eps hacia
+        ! falsa la comparacion '> tol' y el paso se declaraba convergido)
+        if (bad_value(conv%res_cont) .or. bad_value(conv%res_ur) .or. &
+            bad_value(conv%res_uth) .or. bad_value(conv%res_uz) .or. &
+            bad_value(conv%res_energy) .or. bad_value(conv%res_tke) .or. &
+            bad_value(conv%res_eps) .or. conv%res_cont > 1.0e100_dp) then
+            converged = .false.
+            return
         end if
 
         if (cfg%solve_flow) then

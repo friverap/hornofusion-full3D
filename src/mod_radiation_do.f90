@@ -50,6 +50,7 @@ module mod_radiation_do
     ! relativo global hace la intensidad invariante a la descomposición
     ! hasta RTE_SWEEP_TOL.
     integer, parameter :: MAX_SWEEPS_RTE = 24
+    integer, save :: n_rte_unconv = 0
     real(dp), parameter :: RTE_SWEEP_TOL = 1.0e-10_dp
 
 contains
@@ -207,6 +208,15 @@ contains
                 end if
                 if (dmax_g <= RTE_SWEEP_TOL * max(inorm_g, SMALL)) exit
             end do
+            ! Aviso de no convergencia (auditoria, bajos): primero y cada 1000
+            if (isw > MAX_SWEEPS_RTE) then
+                n_rte_unconv = n_rte_unconv + 1
+                if ((mod(n_rte_unconv, 1000) == 1) .and. &
+                    (.not. m%is_parallel .or. m%topo%rank == 0)) &
+                    print '(A,I0,A,ES10.3,A,I0,A)', ' [DO] AVISO: direccion ', d, &
+                        ' sin converger (dI/I = ', dmax_g / max(inorm_g, SMALL), &
+                        '; ', n_rte_unconv, ' casos acumulados)'
+            end if
 
             ! Acumular G y el flujo neto a paredes (diagnóstico de auditoría)
             wall_net_step = 0.0_dp

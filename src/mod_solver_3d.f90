@@ -14,6 +14,9 @@ module mod_solver_3d
     use mod_parallel_utils
     implicit none
 
+    integer, save :: n_cg_unconv = 0   ! solves de CG que agotaron max_iter
+
+
 contains
 
     !---------------------------------------------------------------------------
@@ -557,6 +560,16 @@ contains
                 z(istart:iend, jstart:jend, kstart:kend) + &
                 beta_cg * pv(istart:iend, jstart:jend, kstart:kend)
         end do
+        ! Aviso al agotar iteraciones sin llegar a tol (auditoria, bajos):
+        ! el primero y cada 1000 (la decision es global: residual reducido)
+        if (residual >= tol .and. n_iter >= max_iter) then
+            n_cg_unconv = n_cg_unconv + 1
+            if (mod(n_cg_unconv, 1000) == 1 .and. &
+                (.not. m%is_parallel .or. m%topo%rank == 0)) &
+                print '(A,I0,A,ES10.3,A,ES10.3,A,I0,A)', ' [CG] AVISO: ', max_iter, &
+                    ' iteraciones sin converger (res ', residual, ' > tol ', tol, &
+                    '; ', n_cg_unconv, ' casos acumulados)'
+        end if
 
         ! Halos de phi coherentes para las correcciones posteriores.
         ! INCONDICIONAL: en serial hace la copia periódica en theta — con

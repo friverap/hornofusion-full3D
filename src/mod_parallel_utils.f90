@@ -77,11 +77,10 @@ contains
         type(mesh_t), intent(in) :: m
         logical :: do_print
 
-        if (m%is_parallel) then
-            do_print = (m%topo%rank == 0)
-        else
-            do_print = .true.
-        end if
+        ! Solo el rank de la topologia (auditoria, bajos): main llama antes de
+        ! mesh_generate_parallel, cuando is_parallel aun no tiene valor; el
+        ! rank lo fija mpi_init_topology (0 en serie)
+        do_print = (m%topo%rank == 0)
     end function should_print
 
     !---------------------------------------------------------------------------
