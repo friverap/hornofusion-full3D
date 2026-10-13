@@ -40,7 +40,8 @@ contains
         real(dp) :: T_g, T_l, T_s, alpha_s, d_s
         real(dp) :: vmag_g, Re_gs, Pr_g, h_gs, h_ls
         real(dp) :: Q_gs, Q_ls, Q_total
-        real(dp) :: A_sv, eps_s, Q_lim, Q_lim_sol, cap_g, cap_l
+        real(dp) :: A_sv, eps_s, cap_g, cap_l, cap_s, G_gs, G_ls, b_g, b_l, T_sn
+        real(dp) :: f_l, f_g, w_l, w_g
 
         d_s = cfg%d_particle
         tau_iph_local = 1.0e30_dp
@@ -57,13 +58,26 @@ contains
                     T_g = gas%T(i,j,k)
                     T_l = liq%T(i,j,k)
 
-                    ! Specific surface area of solid (sphere packing)
+                    ! Superficie especifica del solido (esferas), REPARTIDA entre
+                    ! las fases que la mojan (auditoria M7): gas y liquido usaban
+                    ! cada uno 6 alpha_s/d completo -> area contada dos veces en
+                    ! toda celda con ambos fluidos. Reparto por fraccion de poro
+                    ! (mojado proporcional; sin modelo de pelicula).
                     eps_s = max(1.0_dp - alpha_s, 0.01_dp)
                     A_sv = 6.0_dp * alpha_s / (d_s + SMALL)
+                    f_l = 0.0_dp
+                    if (liq%alpha(i,j,k) > 1.0e-6_dp) f_l = liq%alpha(i,j,k)
+                    f_g = 0.0_dp
+                    if (gas%alpha(i,j,k) > 1.0e-6_dp) f_g = gas%alpha(i,j,k)
+                    if (f_l + f_g > 0.0_dp) then
+                        w_l = f_l / (f_l + f_g); w_g = f_g / (f_l + f_g)
+                    else
+                        w_l = 0.0_dp; w_g = 0.0_dp
+                    end if
 
-                    ! Gas-solid heat transfer
-                    Q_gs = 0.0_dp
-                    if (gas%alpha(i,j,k) > 1.0e-6_dp) then
+                    ! Conductancias G = h A V [W/K]
+                    G_gs = 0.0_dp
+                    if (w_g > 0.0_dp) then
                         vmag_g = sqrt(gas%ur(i,j,k)**2 + gas%uth(i,j,k)**2 + gas%uz(i,j,k)**2)
                         Pr_g = gas%mu(i,j,k) * gas%cp(i,j,k) / (gas%kth(i,j,k) + SMALL)
                         Re_gs = gas%rho(i,j,k) * vmag_g * d_s / (gas%mu(i,j,k) + SMALL)
@@ -80,33 +94,47 @@ contains
                         if (T_g > T_TRANSITION) h_gs = max(h_gs, &
                             A_RADIATION * F_OMEGA * vmag_g**0.9_dp * &
                             T_g**0.3_dp / (d_s**0.75_dp + SMALL))
-
+                        G_gs = h_gs * A_sv * w_g * m%vol(i,j,k)
                         tau_iph_local = min(tau_iph_local, &
                             gas%alpha(i,j,k) * gas%rho(i,j,k) * &
-                            gas%cp(i,j,k) / (h_gs * A_sv + SMALL))
-                        Q_gs = h_gs * A_sv * (T_g - T_s) * m%vol(i,j,k)
-                        ! Clamp por AMBOS lados: ni el gas ni el sólido pueden
-                        ! rebasar la T del otro en un paso explícito. El clamp
-                        ! solo-fluido dejaba dispararse T_s en celdas casi
-                        ! fundidas (m_s pequeña): medido T_s = 66000 K.
-                        Q_lim = gas%alpha(i,j,k) * gas%rho(i,j,k) * gas%cp(i,j,k) * &
-                                m%vol(i,j,k) * abs(T_g - T_s) / cfg%dt
-                        Q_lim_sol = sol%m_s(i,j,k) * cfg%cp_s * &
-                                    abs(T_g - T_s) / cfg%dt
-                        Q_gs = sign(min(abs(Q_gs), Q_lim, Q_lim_sol), Q_gs)
+                            gas%cp(i,j,k) / (h_gs * A_sv * w_g + SMALL))
+                    end if
+                    G_ls = 0.0_dp
+                    if (w_l > 0.0_dp) then
+                        h_ls = (liq%kth(i,j,k) / d_s) * 6.0_dp
+                        G_ls = h_ls * A_sv * w_l * m%vol(i,j,k)
                     end if
 
-                    ! Liquid-solid heat transfer (Ranz-Marshall)
-                    Q_ls = 0.0_dp
-                    if (liq%alpha(i,j,k) > 1.0e-6_dp) then
-                        h_ls = (liq%kth(i,j,k) / d_s) * 6.0_dp
-                        Q_ls = h_ls * A_sv * (T_l - T_s) * m%vol(i,j,k)
-                        ! Clamp por ambos lados (ver Q_gs)
-                        Q_lim = liq%alpha(i,j,k) * liq%rho(i,j,k) * liq%cp(i,j,k) * &
-                                m%vol(i,j,k) * abs(T_l - T_s) / cfg%dt
-                        Q_lim_sol = sol%m_s(i,j,k) * cfg%cp_s * &
-                                    abs(T_l - T_s) / cfg%dt
-                        Q_ls = sign(min(abs(Q_ls), Q_lim, Q_lim_sol), Q_ls)
+                    ! Paso IMPLICITO exacto de tres nodos (auditoria M6). Antes
+                    ! cada flujo se recortaba por separado a min(Q, C_f dT/dt,
+                    ! C_s dT/dt): el tope C dT/dt deja cruzar el equilibrio
+                    ! C_f C_s/(C_f+C_s) dT, y Q_gs y Q_ls recortados cada uno
+                    ! contra su propio dT podian llevar T_s por encima de AMBOS
+                    ! fluidos. Euler implicito de
+                    !   C_g dT_g = -G_gs (T_g - T_s) dt, C_l dT_l = -G_ls (T_l - T_s) dt,
+                    !   C_s dT_s = G_gs (T_g - T_s) dt + G_ls (T_l - T_s) dt
+                    ! (todas en el nivel nuevo) se resuelve en cerrado:
+                    !   b_q = a_q C_q/(C_q + a_q), a_q = G_q dt,
+                    !   T_s' = (C_s T_s + b_g T_g + b_l T_l)/(C_s + b_g + b_l),
+                    !   Q_q dt = b_q (T_q - T_s')
+                    ! T_s' es una media ponderada (acotada por los tres) y cada
+                    ! fluido queda entre su T y T_s': sin rebase con ningun dt.
+                    ! C_s = m_s cp_s sin latente: con fusion la capacidad real es
+                    ! mayor y la T_s final (de la entalpia) queda por debajo de
+                    ! T_s' -> sigue acotada.
+                    cap_g = gas%alpha(i,j,k) * gas%rho(i,j,k) * gas%cp(i,j,k) * m%vol(i,j,k)
+                    cap_l = liq%alpha(i,j,k) * liq%rho(i,j,k) * liq%cp(i,j,k) * m%vol(i,j,k)
+                    cap_s = sol%m_s(i,j,k) * cfg%cp_s
+                    b_g = 0.0_dp; b_l = 0.0_dp
+                    if (G_gs > 0.0_dp .and. cap_g > 0.0_dp) &
+                        b_g = G_gs * cfg%dt * cap_g / (cap_g + G_gs * cfg%dt)
+                    if (G_ls > 0.0_dp .and. cap_l > 0.0_dp) &
+                        b_l = G_ls * cfg%dt * cap_l / (cap_l + G_ls * cfg%dt)
+                    Q_gs = 0.0_dp; Q_ls = 0.0_dp
+                    if (b_g + b_l > 0.0_dp .and. cap_s > 0.0_dp) then
+                        T_sn = (cap_s * T_s + b_g * T_g + b_l * T_l) / (cap_s + b_g + b_l)
+                        Q_gs = b_g * (T_g - T_sn) / cfg%dt
+                        Q_ls = b_l * (T_l - T_sn) / cfg%dt
                     end if
 
                     Q_total = Q_gs + Q_ls
