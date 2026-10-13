@@ -32,7 +32,7 @@ program eaf_3d_simulator
     use mod_continuity
     use mod_multiphase
     use mod_mixture_3d
-    use mod_workspace, only: ensure_workspace, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new, ws_p_n
+    use mod_workspace, only: ensure_workspace, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new, ws_p_n, ws_Fg_valid
     use mod_solid_phase
     use mod_melting_3d
     use mod_scrap_collapse
@@ -462,8 +462,9 @@ program eaf_3d_simulator
         ! Los flujos conservativos del transporte de alpha valen dentro del
         ! paso (el momento del liquido los usa desde la 2a iteracion externa,
         ! M24); los del paso anterior no se arrastran: no son estado del
-        ! snapshot y romperian el reinicio bit a bit
+        ! snapshot y romperian el reinicio bit a bit. Igual los del gas (M24)
         ws_flux_valid = .false.
+        ws_Fg_valid = .false.
         do outer = 1, cfg%max_outer
 
             ! Multiphase SIMPLE iteration

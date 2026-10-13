@@ -25,7 +25,7 @@ program test_sealed_cell
     use mod_momentum_3d, only: solve_momentum_3d
     use mod_pressure_3d, only: solve_pressure_correction
     use mod_drag_ergun, only: compute_ergun_drag
-    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
+    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_Fg_valid, &
                              ws_pv_active, ws_pv_valid
     implicit none
 
@@ -111,6 +111,9 @@ contains
         liq_old%alpha = liq%alpha; liq_old%T = liq%T
         gas_old%ur = gas%ur; gas_old%uth = gas%uth; gas_old%uz = gas%uz
         gas_old%alpha = gas%alpha; gas_old%T = gas%T
+        ! inicio de paso como en main (M24)
+        liq_old%rho = liq%rho; gas_old%rho = gas%rho
+        ws_Fg_valid = .false.
         ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s); ws_liq_cont_valid = .true.
         ws_pv_active = (ws_liq_cont .or. gas%alpha >= ALPHA_FLOW_CUTOFF) .and. (mesh%cell_type /= 0)
         ws_pv_valid = .true.

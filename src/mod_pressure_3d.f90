@@ -100,6 +100,7 @@ contains
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
             ws_Fc_af_r, ws_Fc_af_th, ws_Fc_af_z, ws_liq_fr, ws_liq_fth, ws_liq_fz, &
+            ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_lk_r, ws_Fg_lk_th, ws_Fg_lk_z, ws_Fg_valid, &
             ws_liq_room, ws_liq_room_valid, ws_pv_active, ws_pv_valid, &
             ws_sat_goff, ws_sat_goff_id, &
             ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
@@ -152,6 +153,7 @@ contains
         real(dp), allocatable :: ag_eff(:,:,:)
         real(dp), allocatable :: gadv(:,:,:)   ! A8: fuente advectiva del gas [m3/s]
         real(dp), allocatable :: Fs_r(:,:,:), Fs_th(:,:,:), Fs_z(:,:,:)
+        real(dp), allocatable :: Fg_r(:,:,:), Fg_th(:,:,:), Fg_z(:,:,:), ag_r(:,:,:), ag_th(:,:,:), ag_z(:,:,:)
         real(dp), allocatable :: ac_r(:,:,:), ac_th(:,:,:), ac_z(:,:,:)
         integer  :: n_iter_cg
         real(dp) :: cg_res
@@ -192,6 +194,11 @@ contains
         ws_Fc_r = 0.0_dp; ws_Fc_th = 0.0_dp; ws_Fc_z = 0.0_dp
         ws_Fc_lk_r = 0; ws_Fc_lk_th = 0; ws_Fc_lk_z = 0
         ws_Fc_af_r = 0.0_dp; ws_Fc_af_th = 0.0_dp; ws_Fc_af_z = 0.0_dp
+        allocate(Fg_r, Fg_th, Fg_z, ag_r, ag_th, ag_z, mold=sh%pp)
+        Fg_r = 0.0_dp; Fg_th = 0.0_dp; Fg_z = 0.0_dp
+        ag_r = 0.0_dp; ag_th = 0.0_dp; ag_z = 0.0_dp
+        ws_Fg_r = 0.0_dp; ws_Fg_th = 0.0_dp; ws_Fg_z = 0.0_dp
+        ws_Fg_lk_r = 0; ws_Fg_lk_th = 0; ws_Fg_lk_z = 0
         if (ws_liq_cont_valid) then
             act_l = ws_liq_cont
         else
@@ -645,6 +652,32 @@ contains
         call mpi_exchange_halos_3d(ws_Fc_af_z,  m%topo)
         ws_Fc_valid = .true.
 
+        ! Flujos de MASA conservativos del GAS (auditoria M24, gas): el
+        ! volumetrico corregido por la densidad del DADOR. El momento del gas
+        ! los usa desde la 2.a iteracion externa del paso.
+        if (cfg%gas_in_poisson .and. cfg%solve_multiphase) then
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        if (m%cell_type(i,j,k) == 0) cycle
+                        if (ws_Fg_lk_r(i,j,k) == 1) ws_Fg_r(i,j,k) = gmass(Fg_r(i,j,k) + &
+                            ag_r(i,j,k) * (sh%pp(i,j,k) - sh%pp(i+1,j,k)), i, j, k, i+1, j, k)
+                        if (ws_Fg_lk_th(i,j,k) == 1) ws_Fg_th(i,j,k) = gmass(Fg_th(i,j,k) + &
+                            ag_th(i,j,k) * (sh%pp(i,j,k) - sh%pp(i,j+1,k)), i, j, k, i, j+1, k)
+                        if (ws_Fg_lk_z(i,j,k) == 1) ws_Fg_z(i,j,k) = gmass(Fg_z(i,j,k) + &
+                            ag_z(i,j,k) * (sh%pp(i,j,k) - sh%pp(i,j,k+1)), i, j, k, i, j, k+1)
+                    end do
+                end do
+            end do
+            call mpi_exchange_halos_3d(ws_Fg_r,  m%topo)
+            call mpi_exchange_halos_3d(ws_Fg_th, m%topo)
+            call mpi_exchange_halos_3d(ws_Fg_z,  m%topo)
+            call mpi_exchange_halos_3d_int(ws_Fg_lk_r,  m%topo)
+            call mpi_exchange_halos_3d_int(ws_Fg_lk_th, m%topo)
+            call mpi_exchange_halos_3d_int(ws_Fg_lk_z,  m%topo)
+            ws_Fg_valid = .true.
+        end if
+
         ! D2.6: el corrector usa el MISMO operador de gradiente que el
         ! predictor de este outer (pvl/fsl: paredes y superficie libre del
         ! liquido; pvg: paredes del gas) y la regla cinematica por direccion
@@ -702,9 +735,22 @@ contains
         deallocate(gpr, gpth, gpz, act_l, act_g, ag_eff, sealed, lcoef, gadv)
         deallocate(lcoef_r, lcoef_th, lcoef_z, pvl, fsl, pvg)
         deallocate(Fs_r, Fs_th, Fs_z, ac_r, ac_th, ac_z)
+        deallocate(Fg_r, Fg_th, Fg_z, ag_r, ag_th, ag_z)
         if (allocated(p_g)) deallocate(p_g, gpr_g, gpth_g, gpz_g)
 
     contains
+
+        ! Flujo de masa del gas por una cara: volumetrico q (orientado de P a N)
+        ! por la densidad del dador (M24, gas)
+        pure real(dp) function gmass(q, ip, jp_, kp, in_, jn_, kn_)
+            real(dp), intent(in) :: q
+            integer, intent(in)  :: ip, jp_, kp, in_, jn_, kn_
+            if (q >= 0.0_dp) then
+                gmass = q * gas%rho(ip,jp_,kp)
+            else
+                gmass = q * gas%rho(in_,jn_,kn_)
+            end if
+        end function gmass
 
         ! Termino ADVECTIVO de la compresibilidad del gas (auditoria 12-oct-2026,
         ! A8): la continuidad de VOLUMEN del gas es d alpha/dt + div(alpha u) =
@@ -932,6 +978,11 @@ contains
                                 ws_Fc_lk_r(ii,jj,kk) = 1
                                 ws_Fc_af_r(ii,jj,kk) = af
                             end if
+                            if (isg) then
+                                Fg_r(ii,jj,kk) = af * u_f * m%Ar(ii,jj,kk)
+                                ag_r(ii,jj,kk) = af * d_f * m%Ar(ii,jj,kk) / delta
+                                ws_Fg_lk_r(ii,jj,kk) = 1
+                            end if
                             end if
                         else if (fs_on) then
                             if (fs_cell(ii+1,jj,kk)) then
@@ -1009,6 +1060,11 @@ contains
                                 ac_th(ii,jj,kk) = af * d_f * m%Ath(ii,jj,kk) / delta
                                 ws_Fc_lk_th(ii,jj,kk) = 1
                                 ws_Fc_af_th(ii,jj,kk) = af
+                            end if
+                            if (isg) then
+                                Fg_th(ii,jj,kk) = af * u_f * m%Ath(ii,jj,kk)
+                                ag_th(ii,jj,kk) = af * d_f * m%Ath(ii,jj,kk) / delta
+                                ws_Fg_lk_th(ii,jj,kk) = 1
                             end if
                             end if
                         else if (fs_on) then
@@ -1089,6 +1145,11 @@ contains
                                 ac_z(ii,jj,kk) = af * d_f * m%Az(ii,jj,kk) / delta
                                 ws_Fc_lk_z(ii,jj,kk) = 1
                                 ws_Fc_af_z(ii,jj,kk) = af
+                            end if
+                            if (isg) then
+                                Fg_z(ii,jj,kk) = af * u_f * m%Az(ii,jj,kk)
+                                ag_z(ii,jj,kk) = af * d_f * m%Az(ii,jj,kk) / delta
+                                ws_Fg_lk_z(ii,jj,kk) = 1
                             end if
                             end if
                         else if (fs_on) then

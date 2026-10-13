@@ -44,7 +44,7 @@ program test_dispersed_liquid
     use mod_pressure_3d, only: solve_pressure_correction
     use mod_continuity, only: compute_liquid_drift
     use mod_drag_ergun, only: compute_ergun_drag
-    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid
+    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_Fg_valid
     implicit none
 
     type(config_t) :: cfg
@@ -192,6 +192,10 @@ contains
         liq_old%alpha = liq%alpha; liq_old%T = liq%T
         gas_old%ur = gas%ur; gas_old%uth = gas%uth; gas_old%uz = gas%uz
         gas_old%alpha = gas%alpha; gas_old%T = gas%T
+        ! inicio de paso como en main: densidades viejas y flujos del gas
+        ! del paso anterior invalidos (M24)
+        liq_old%rho = liq%rho; gas_old%rho = gas%rho
+        ws_Fg_valid = .false.
     end subroutine copy_old
 
     subroutine setup_bath(with_drop, uz_drop)

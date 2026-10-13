@@ -53,6 +53,7 @@ contains
         real(dp) :: al_c, ag_c, as_e, xb, f_bed, f_disp, K_int, K_disp, rho_mix  ! F2.22
         ! Velocidades del liquido USADAS por el solve del gas (PEA, F2.2)
         real(dp), allocatable :: ul_used_r(:,:,:), ul_used_th(:,:,:), ul_used_z(:,:,:)
+        real(dp), allocatable :: md_g(:,:,:)
         ! Solucion SIN relajar del momento del liquido (para el PEA)
         real(dp), allocatable :: ul_sol_r(:,:,:), ul_sol_th(:,:,:), ul_sol_z(:,:,:)
 
@@ -245,8 +246,13 @@ contains
         ! actúa sobre la velocidad propia de cada fase.
         allocate(ul_used_r, ul_used_th, ul_used_z, mold=liq%ur)
         ul_used_r = liq%ur; ul_used_th = liq%uth; ul_used_z = liq%uz
+        ! Masa que las reacciones anaden al gas [kg/s por celda] (M24, gas):
+        ! entra con velocidad nula
+        allocate(md_g, mold=gas%alpha)
+        md_g = max(sh%S_CO_src + sh%S_CO2_src + sh%S_O2_src, 0.0_dp) * m%vol
         call solve_momentum_3d(gas, gas_old, liq, Kexch, sh, m, cfg, gas%alpha, &
-                               drag_gas, .true., res_ur_g, res_uth_g, res_uz_g)
+                               drag_gas, .true., res_ur_g, res_uth_g, res_uz_g, md_g)
+        deallocate(md_g)
         ! Eliminacion parcial del arrastre (PEA; Spalding 1980, Karema & Lo
         ! 1999, Darwish & Moukalled 2001 ec. 29) en la etapa de momento y
         ! sobre las soluciones SIN relajar (la identidad H = aP u - K V

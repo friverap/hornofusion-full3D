@@ -49,8 +49,8 @@ contains
         ! duplicaba — hallazgo 3.13)
         logical, intent(in)          :: is_gas
         real(dp), intent(out)        :: res_ur, res_uth, res_uz
-        ! Fuente de masa del liquido por fusion [kg/s por celda] (M24): la
-        ! masa fundida entra con velocidad nula
+        ! Fuente de masa de la fase [kg/s por celda] (M24): fusion para el
+        ! liquido, gas de las reacciones para el gas; entra con velocidad nula
         real(dp), intent(in), optional :: mdot_l(-1:,-1:,-1:)
         real(dp), allocatable :: md(:,:,:)
 
@@ -61,17 +61,17 @@ contains
         call solve_momentum_component(ph%ur, ph_old%ur, ph_other%ur, Kexch, &
                                        ph, ph_other, sh, m, cfg, &
                                        alpha_q, drag_coef, is_gas, 'ur', res_ur, &
-                                       ph_old%alpha, md)
+                                       ph_old%alpha, ph_old%rho, md)
 
         call solve_momentum_component(ph%uth, ph_old%uth, ph_other%uth, Kexch, &
                                        ph, ph_other, sh, m, cfg, &
                                        alpha_q, drag_coef, is_gas, 'uth', res_uth, &
-                                       ph_old%alpha, md)
+                                       ph_old%alpha, ph_old%rho, md)
 
         call solve_momentum_component(ph%uz, ph_old%uz, ph_other%uz, Kexch, &
                                        ph, ph_other, sh, m, cfg, &
                                        alpha_q, drag_coef, is_gas, 'uz', res_uz, &
-                                       ph_old%alpha, md)
+                                       ph_old%alpha, ph_old%rho, md)
         deallocate(md)
 
     end subroutine solve_momentum_3d
@@ -82,9 +82,10 @@ contains
     subroutine solve_momentum_component(vel, vel_old, vel_other, Kexch, &
                                          ph, ph_other, sh, m, cfg, &
                                          alpha_q, drag_coef, is_gas, comp, residual, &
-                                         alpha_old, mdot_m)
+                                         alpha_old, rho_old, mdot_m)
         use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, &
+            ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             aW => ws_aW, &
@@ -105,8 +106,9 @@ contains
         character(len=*), intent(in) :: comp
         real(dp), intent(out)        :: residual
         real(dp), intent(in)         :: alpha_old(-1:,-1:,-1:)
+        real(dp), intent(in)         :: rho_old(-1:,-1:,-1:)
         real(dp), intent(in)         :: mdot_m(-1:,-1:,-1:)
-        logical :: cons_l
+        logical :: cons_l, cons_g, cons
         ! fuerza vertical balanceada por caras (liq_balanced_force)
         logical :: lbf_m
 
@@ -220,10 +222,17 @@ contains
                     ! hacia figurar la masa recien llegada como si tuviera la
                     ! velocidad vieja. La masa fundida entra con u = 0
                     ! (aP += mdot). Flujos del iterado externo anterior.
+                    ! GAS (auditoria M24, gas): la misma forma con los flujos
+                    ! de MASA conservativos de su Poisson (ws_Fg_*, volumetrico
+                    ! corregido por la densidad del dador) y transitorio con
+                    ! (alpha rho)^n; la masa de las reacciones entra con u = 0.
+                    ! Antes: interpolacion simetrica de alpha rho u de centro.
                     cons_l = (.not. is_gas) .and. ws_flux_valid
-                    if (cons_l) then
+                    cons_g = is_gas .and. ws_Fg_valid
+                    cons = cons_l .or. cons_g
+                    if (cons) then
                         rho_vol_dt = max(alpha_old(i,j,k), ALPHA_PHASE_MIN) &
-                                     * ph%rho(i,j,k) * vol / cfg%dt
+                                     * rho_old(i,j,k) * vol / cfg%dt
                     else
                         rho_vol_dt = alpha_f * ph%rho(i,j,k) * vol / cfg%dt
                     end if
@@ -312,6 +321,10 @@ contains
                         Fw = ws_Fr(i-1,j,k);  Fe = ws_Fr(i,j,k)
                         Fs = ws_Fth(i,jm,k);  Fn = ws_Fth(i,j,k)
                         Fb = ws_Fz(i,j,k-1);  Ft = ws_Fz(i,j,k)
+                    else if (cons_g) then
+                        Fw = ws_Fg_r(i-1,j,k);  Fe = ws_Fg_r(i,j,k)
+                        Fs = ws_Fg_th(i,jm,k);  Fn = ws_Fg_th(i,j,k)
+                        Fb = ws_Fg_z(i,j,k-1);  Ft = ws_Fg_z(i,j,k)
                     else if (is_gas) then
                         call face_mass_fluxes(alpha_q, ph%rho, ph%ur, ph%uth, &
                             ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
@@ -473,7 +486,7 @@ contains
                                + aB(i,j,k) + aT(i,j,k) + rho_vol_dt &
                                + drag_coef(i,j,k) * vol + aP_extra &
                                + Kexch(i,j,k) * vol + wall_shear() &
-                               + merge(mdot_m(i,j,k), 0.0_dp, cons_l)
+                               + merge(mdot_m(i,j,k), 0.0_dp, cons)
 
                     if (probe_here) then
                         if (i == pi_ .and. j == pj_ .and. k == pk_) then
