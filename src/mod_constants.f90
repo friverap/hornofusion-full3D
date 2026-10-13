@@ -16,7 +16,6 @@ module mod_constants
     real(dp), parameter :: STEFAN_BOLTZMANN = 5.670374419e-8_dp   ! W/(m^2 K^4)
     real(dp), parameter :: R_GAS = 8.314462_dp                     ! J/(mol K)
     real(dp), parameter :: GRAVITY = 9.81_dp                       ! m/s^2
-    real(dp), parameter :: KELVIN_OFFSET = 273.15_dp               ! K
     real(dp), parameter :: MU_0 = 1.2566370614e-6_dp              ! H/m
 
     ! Steel properties (Table 2 of paper)
@@ -54,7 +53,6 @@ module mod_constants
     ! Numerical
     real(dp), parameter :: SMALL = 1.0e-30_dp
     real(dp), parameter :: LARGE = 1.0e+30_dp
-    real(dp), parameter :: TOL_DEFAULT = 1.0e-6_dp
 
     ! Phase-fraction cutoff below which a cell is treated as void of the phase.
     ! Shared by energy, species and melting guards.
@@ -155,7 +153,6 @@ module mod_constants
     ! Pressure-reference "big coefficient" penalty (SIMPLE singular fix)
 
     ! SOR pressure solver defaults
-    real(dp), parameter :: SOR_OMEGA        = 1.5_dp
     real(dp), parameter :: SOR_TOL_PRESSURE = 1.0e-8_dp
     integer,  parameter :: SOR_HALO_EVERY   = 2   ! halo exchange interval (iters)
     integer,  parameter :: SOR_CHECK_EVERY  = 10  ! global residual check interval

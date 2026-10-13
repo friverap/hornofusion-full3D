@@ -1,14 +1,14 @@
 !===============================================================================
 ! mod_drag_ergun.f90 - Ergun porous media drag for fluid-solid interaction
 !
-! Non-Darcian momentum sink on fluid flowing through solid scrap:
-!   F_drag = -[ mu/K + C_F*rho*|v|/sqrt(K) ] * v = -coef * v
-!
-! Ergun correlations:
-!   K = d_p^2 * epsilon^3 / (150*(1-epsilon)^2)
-!   coef = A + B|v|, A = 150 mu (1-eps)^2/(d_p^2 eps^3), B = 1.75 rho (1-eps)/(d_p eps^3)
-!
-! where epsilon = 1 - alpha_s (porosity), d_p = particle diameter.
+! Sumidero de momento del fluido en el lecho de chatarra, F = -coef v con
+!   coef = eps^2 A_E + eps^3 B_E |v|      (forma de Gidaspow, velocidad
+!   A_E = 150 mu (1-eps)^2/(d_p^2 eps^3)   intersticial; auditoria A6)
+!   B_E = 1.75 rho (1-eps)/(d_p eps^3)
+! UNA definicion: mod_constants::ergun_coefficients. eps = 1 - alpha_s (para
+! el gas del lecho, 1 - alpha_s - alpha_l: el liquido retenido es obstaculo,
+! M29). (La forma Forchheimer mu/K + C_F rho|v|/sqrt(K) de versiones previas
+! tenia C_F con unidades de 1/m: Bug 21.)
 !
 ! C1.4 (hallazgo 3.11): devuelve el COEFICIENTE positivo coef [kg/(m^3 s)]
 ! para tratamiento IMPLÍCITO en momentum (aP += coef*vol). El tratamiento

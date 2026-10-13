@@ -52,7 +52,8 @@ module mod_mixture_3d
     use mod_solver_3d
     use mod_boundary_3d
     use mod_parallel_utils
-    use mod_mpi_topology, only: mpi_exchange_halos_3d, mpi_allreduce_max, mpi_allreduce_sum
+    use mod_mpi_topology, only: mpi_exchange_halos_3d, mpi_allreduce_max, mpi_allreduce_sum, &
+                                mpi_allreduce_min
     use mod_energy_3d
     use mod_continuity
     use mod_properties_3d
@@ -60,11 +61,11 @@ module mod_mixture_3d
     use mod_pressure_3d, only: P0_THERMO, C_SOUND_LIQ, COMP_SRC_CAP, P_HYDRO_CAP, PP_COMPLIANCE
     use mod_multiphase, only: cap_gas_velocity, cap_liquid_velocity
     use mod_probe, only: probe_current_step
-    use mod_audit, only: AUD_IPH_GAS, AUD_IPH_LIQ
+    use mod_audit, only: AUD_IPH_GAS, AUD_IPH_LIQ, AUD_MIX_INIT, audit_add
     use mod_workspace, only: ensure_workspace, ws_cc, ws_cc_new, aW => ws_aW, aE => ws_aE, aS => ws_aS, &
         aN => ws_aN, aB => ws_aB, aT => ws_aT, aP => ws_aP, Su => ws_Su, &
         ws_liq_cont, ws_liq_cont_valid, ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, ws_mQ_r, ws_mQ_th, ws_mQ_z, ws_mW, &
-        ws_mix_valid, ws_mix_id, ws_mKl, ws_mKg, ws_mFd, ws_Tsrc
+        ws_mix_valid, ws_mix_id, ws_mKl, ws_mKg, ws_Tsrc
     implicit none
     private
     public :: mixture_iteration
@@ -85,20 +86,12 @@ module mod_mixture_3d
     ! el liquido de un lecho con gas continuo lo sostiene el lecho)
     real(dp), allocatable, save :: rhoi(:,:,:)
     logical,  allocatable, save :: bedc(:,:,:)
-    ! liquido DISPERSO fuera del lecho (gotas, o pelicula sobre el lecho): su
-    ! velocidad es la deriva relajada de Bug 15 (compute_liquid_drift), no la
-    ! de la mezcla; la mezcla de esas celdas es el gas, con arrastre Kd de las
-    ! gotas (cero para la pelicula, cuyo peso lo carga el lecho)
-    logical,  allocatable, save :: dsp(:,:,:)
-    real(dp), allocatable, save :: fdw(:,:,:)   ! peso disperso (logistica AIAD) en [0,1]
-    ! Regimen de GOTAS con velocidad propia (deriva relajada de Bug 15 + arrastre
-    ! Kd con el gas) dentro de la mezcla: PROBADO Y NEGATIVO (12-oct-2026). Con
-    ! interruptor en alpha_l = 0.3 la celda pasaba de inercia/peso de mezcla a
-    ! los del gas (bf_rad 0.7 MPa, gas en la cota); con la logistica AIAD suave,
-    ! bath_fill 0.52 MPa y gas en la cota frente a 61 kPa sin el. Queda apagado;
-    ! las gotas siguen a la mezcla con deslizamiento terminal (equilibrio).
-    logical, parameter :: MIX_DROPLETS = .false.
-    real(dp), allocatable, save :: Kd(:,:,:)
+    ! (Regimen de GOTAS con velocidad propia dentro de la mezcla — deriva
+    ! relajada de Bug 15 + arrastre Kd con el gas —: PROBADO Y NEGATIVO el
+    ! 12-oct-2026 (bath_fill 0.52 MPa y gas en la cota frente a 61 kPa sin el).
+    ! El codigo, apagado por un parametro, se retiro en la auditoria (bajos):
+    ! las gotas siguen a la mezcla con deslizamiento terminal; ver la historia
+    ! de git (commit 9335d31) si se quiere reintentar.)
     real(dp), allocatable, save :: mass_o(:,:,:)                           ! masa fluida del paso anterior [kg]
     real(dp), allocatable, save :: Dr(:,:,:), Dth(:,:,:), Dz(:,:,:)        ! eps V / aP
     real(dp), allocatable, save :: Gr(:,:,:), Gth(:,:,:), Gz(:,:,:)        ! fuerza de celda (p + g) [N/m3]
@@ -128,6 +121,7 @@ contains
 
         integer  :: istart, iend, jstart, jend, kstart, kend
         real(dp) :: res_r, res_th, res_z, res_cont, res_el, res_eg, da_loc, da_glob
+        real(dp) :: fl_loc, fl_glob, e_liq0
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         call ensure_workspace(m)
@@ -142,7 +136,6 @@ contains
         ws_liq_cont_valid = .true.
         ! deriva del liquido disperso (gotas: relajacion de particula hacia gas +
         ! sedimentacion; pelicula sobre el lecho: percolacion, F2.14)
-        if (MIX_DROPLETS) call compute_liquid_drift(liq, gas, sol, m, cfg, liq_old)
 
         p_lT = liq%T; p_gT = gas%T; a_in = liq%alpha
         ! Fuente de compresibilidad contra la T del gas al FINAL del SIMPLE del
@@ -162,12 +155,29 @@ contains
             ! Poisson y esa T es la referencia. Sin esto el primer paso apagaba
             ! de golpe el gas a temperatura de arco que traia el bano (B1 a
             ! 300 s: succion de -1.6 MPa en celdas de bano con 26 % de gas).
-            if (all(sh%Tg_end < 0.0_dp)) then
+            ! Decision GLOBAL sobre celdas propias (auditoria, bajos): el
+            ! all() local incluia halos y dos ranks podian discrepar -> unos
+            ! entraban a los intercambios de halos colectivos y otros no
+            fl_loc = 1.0_dp
+            if (any(sh%Tg_end(istart:iend, jstart:jend, kstart:kend) >= 0.0_dp)) fl_loc = 0.0_dp
+            if (m%is_parallel) then
+                call mpi_allreduce_min(fl_loc, fl_glob, m%topo)
+            else
+                fl_glob = fl_loc
+            end if
+            if (fl_glob > 0.5_dp) then
+                ! energia que el gas cede al liquido en el equilibrio de
+                ! arranque: la referencia del gas se reinicia (gas_old = gas)
+                ! y esa perdida no quedaba en ningun libro -> columna propia
+                ! (E_mix_init) que entra a la identidad del balance
+                e_liq0 = liq_energy_local()
                 call exchange_gas_liquid(liq, gas, m, cfg, full=.true.)
+                call audit_add(AUD_MIX_INIT, liq_energy_local() - e_liq0)
                 call phase_exchange_halos(liq, m)
                 call phase_exchange_halos(gas, m)
                 call update_properties(liq, gas, sh, m, cfg)
                 gas_old%T = gas%T; liq_old%T = liq%T
+                gas_old%rho = gas%rho; liq_old%rho = liq%rho
                 sh%Tg_end = gas%T
             end if
             where (sh%Tg_end > 0.0_dp)
@@ -180,12 +190,11 @@ contains
 
         ! 1. propiedades de mezcla, v del paso anterior e iterado, deslizamiento
         call mixture_state(liq, gas, liq_old, gas_old, sol, slag, m)
-        ws_mFd = fdw
         call mixture_drag(liq, gas, sol, m, cfg)
         call slip_speed(liq, gas, sol, m, cfg)
 
         ! 2. fuerzas de celda (presion + gravedad) con el p actual
-        call cell_forces(sh%p, m, Gr, Gth, Gz, .true.)
+        call cell_forces(sh%p, m, Gr, Gth, Gz)
 
         ! 3. momento de la mezcla (predictor)
         pr_r = vr; pr_th = vth; pr_z = vz
@@ -222,8 +231,10 @@ contains
         ! 6. velocidades de fase (energia, especies, k-eps, salida)
         call slip_speed(liq, gas, sol, m, cfg)
         call phase_velocities(liq, gas, m)
-        call cap_liquid_velocity(liq, m)
-        call cap_gas_velocity(gas, m)
+        ! topes CENTINELA que conservan el flujo de mezcla (auditoria, bajos:
+        ! cap_liquid/cap_gas_velocity por separado rompian alpha_l u_l +
+        ! alpha_g u_g = eps v)
+        call cap_phases_mixture(liq, gas, m)
         call phase_exchange_halos(liq, m)
         call phase_exchange_halos(gas, m)
 
@@ -254,6 +265,25 @@ contains
         conv%res_ur = res_r; conv%res_uth = res_th; conv%res_uz = res_z
         conv%res_cont = res_cont
         conv%res_energy = max(res_el, res_eg)
+    contains
+
+        ! energia sensible del liquido en celdas propias [J] (la diferencia
+        ! antes/despues del equilibrio de arranque; masa constante)
+        function liq_energy_local() result(e)
+            real(dp) :: e
+            integer :: ii, jj, kk
+            e = 0.0_dp
+            do kk = kstart, kend
+                do jj = jstart, jend
+                    do ii = istart, iend
+                        if (m%cell_type(ii,jj,kk) == 0) cycle
+                        e = e + max(liq%alpha(ii,jj,kk), 0.0_dp) * liq%rho(ii,jj,kk) &
+                              * liq%cp(ii,jj,kk) * liq%T(ii,jj,kk) * m%vol(ii,jj,kk)
+                    end do
+                end do
+            end do
+        end function liq_energy_local
+
     end subroutine mixture_iteration
 
     !---------------------------------------------------------------------------
@@ -267,9 +297,6 @@ contains
         allocate(p_lT, p_gT, a_in, Tg_ref, mold=vr)
         allocate(fl(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         allocate(bedc, mold=fl); bedc = .false.
-        allocate(dsp, mold=fl); dsp = .false.
-        allocate(Kd, mold=vr); Kd = 0.0_dp
-        allocate(fdw, mold=vr); fdw = 0.0_dp
         vr = 0.0_dp; vth = 0.0_dp; vz = 0.0_dp
         vr_o = 0.0_dp; vth_o = 0.0_dp; vz_o = 0.0_dp
         pr_r = 0.0_dp; pr_th = 0.0_dp; pr_z = 0.0_dp
@@ -318,24 +345,6 @@ contains
                     rhob(i,j,k) = (al * liq%rho(i,j,k) * (1.0_dp - beta_b * (liq%T(i,j,k) - T_amb_b)) &
                                    + ag * gas%rho(i,j,k)) / e
                     rhoi(i,j,k) = rhom(i,j,k)
-                    dsp(i,j,k) = .false.; Kd(i,j,k) = 0.0_dp; fdw(i,j,k) = 0.0_dp
-                    onbed = .false.
-                    if (k - 1 >= lbound(eps,3)) onbed = (m%cell_type(i,j,k-1) /= 0) .and. &
-                                                        (sol%alpha_s(i,j,k-1) >= 1.0e-2_dp)
-                    if (MIX_DROPLETS .and. sol%alpha_s(i,j,k) < 1.0e-2_dp .and. .not. onbed &
-                        .and. liq%alpha(i,j,k) > 0.0_dp .and. .not. ws_liq_cont(i,j,k)) then
-                        ! GOTAS libres: peso disperso suave (logistica AIAD sobre
-                        ! alpha_l, F2.22: mezcla, nunca interruptor). La inercia
-                        ! y el peso de la celda pasan de los de la mezcla a los
-                        ! del gas y las gotas entran por su arrastre Kd
-                        fdw(i,j,k) = 1.0_dp / (1.0_dp + exp(min(max(A_AIAD * (al/e - ALPHA_AIAD_LIM), &
-                                                                     -60.0_dp), 60.0_dp)))
-                        dsp(i,j,k) = fdw(i,j,k) > 1.0e-6_dp
-                        rhoi(i,j,k) = (1.0_dp - fdw(i,j,k)) * rhom(i,j,k) + fdw(i,j,k) * ag * gas%rho(i,j,k) / e
-                        rhob(i,j,k) = (1.0_dp - fdw(i,j,k)) * rhob(i,j,k) + fdw(i,j,k) * ag * gas%rho(i,j,k) / e
-                        if (ws_ut(i,j,k) > SMALL) Kd(i,j,k) = fdw(i,j,k) * al &
-                            * max(liq%rho(i,j,k) - gas%rho(i,j,k), 0.0_dp) * GRAVITY / ws_ut(i,j,k)
-                    end if
                     mum(i,j,k)  = (al * liq%mu_eff(i,j,k) + ag * gas%mu_eff(i,j,k)) / e
                     mul(i,j,k)  = (al * liq%mu(i,j,k) + ag * gas%mu(i,j,k)) / e
                     ! iterado: reconstruccion con las fracciones de fase guardadas
@@ -348,9 +357,9 @@ contains
                     ! paso anterior (ancla temporal)
                     al = max(liq_old%alpha(i,j,k), 0.0_dp); ag = max(gas_old%alpha(i,j,k), 0.0_dp)
                     eo = al + ag
-                    mass_o(i,j,k) = (al * liq%rho(i,j,k) + ag * gas%rho(i,j,k)) * m%vol(i,j,k)
-                    if (dsp(i,j,k)) mass_o(i,j,k) = (1.0_dp - fdw(i,j,k)) * mass_o(i,j,k) &
-                        + fdw(i,j,k) * ag * gas%rho(i,j,k) * m%vol(i,j,k)
+                    ! masa del PASO ANTERIOR con las densidades del paso
+                    ! anterior (auditoria, bajos: mezclaba alpha^n con rho^k)
+                    mass_o(i,j,k) = (al * liq_old%rho(i,j,k) + ag * gas_old%rho(i,j,k)) * m%vol(i,j,k)
                     if (eo > EPS_MIX) then
                         vr_o(i,j,k)  = (al * liq_old%ur(i,j,k)  + ag * gas_old%ur(i,j,k))  / eo
                         vth_o(i,j,k) = (al * liq_old%uth(i,j,k) + ag * gas_old%uth(i,j,k)) / eo
@@ -359,6 +368,11 @@ contains
                 end do
             end do
         end do
+        ! halos de la velocidad de mezcla reconstruida (auditoria, bajos: el
+        ! primer predictor leia los de la iteracion/paso anterior)
+        call mpi_exchange_halos_3d(vr,  m%topo)
+        call mpi_exchange_halos_3d(vth, m%topo)
+        call mpi_exchange_halos_3d(vz,  m%topo)
     end subroutine mixture_state
 
     !---------------------------------------------------------------------------
@@ -527,14 +541,12 @@ contains
     !---------------------------------------------------------------------------
     ! Fuerza de CELDA por unidad de volumen fluido en cada direccion: media de
     ! las fuerzas de las caras fluidas (presion y, en z, gravedad con la
-    ! densidad de cara). Con with_g = .false. es el gradiente de pp del
-    ! corrector (mismo operador). Celdas propias + halos.
+    ! densidad de cara). Celdas propias + halos.
     !---------------------------------------------------------------------------
-    subroutine cell_forces(pf, m, fr, fth, fz, with_g)
+    subroutine cell_forces(pf, m, fr, fth, fz)
         real(dp), intent(in)  :: pf(-1:,-1:,-1:)
         type(mesh_t), intent(in) :: m
         real(dp), intent(out) :: fr(-1:,-1:,-1:), fth(-1:,-1:,-1:), fz(-1:,-1:,-1:)
-        logical, intent(in)   :: with_g
         integer  :: i, j, k, n, istart, iend, jstart, jend, kstart, kend
         real(dp) :: s
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -544,16 +556,16 @@ contains
                 do i = istart, iend
                     if (.not. fl(i,j,k)) cycle
                     s = 0.0_dp; n = 0
-                    if (fl(i-1,j,k)) then; s = s + face_force(pf, m, i-1, j, k, 1, with_g); n = n + 1; end if
-                    if (fl(i+1,j,k)) then; s = s + face_force(pf, m, i, j, k, 1, with_g);   n = n + 1; end if
+                    if (fl(i-1,j,k)) then; s = s + face_force(pf, m, i-1, j, k, 1); n = n + 1; end if
+                    if (fl(i+1,j,k)) then; s = s + face_force(pf, m, i, j, k, 1);   n = n + 1; end if
                     if (n > 0) fr(i,j,k) = s / real(n, dp)
                     s = 0.0_dp; n = 0
-                    if (fl(i,j-1,k)) then; s = s + face_force(pf, m, i, j-1, k, 2, with_g); n = n + 1; end if
-                    if (fl(i,j+1,k)) then; s = s + face_force(pf, m, i, j, k, 2, with_g);   n = n + 1; end if
+                    if (fl(i,j-1,k)) then; s = s + face_force(pf, m, i, j-1, k, 2); n = n + 1; end if
+                    if (fl(i,j+1,k)) then; s = s + face_force(pf, m, i, j, k, 2);   n = n + 1; end if
                     if (n > 0) fth(i,j,k) = s / real(n, dp)
                     s = 0.0_dp; n = 0
-                    if (fl(i,j,k-1)) then; s = s + face_force(pf, m, i, j, k-1, 3, with_g); n = n + 1; end if
-                    if (fl(i,j,k+1)) then; s = s + face_force(pf, m, i, j, k, 3, with_g);   n = n + 1; end if
+                    if (fl(i,j,k-1)) then; s = s + face_force(pf, m, i, j, k-1, 3); n = n + 1; end if
+                    if (fl(i,j,k+1)) then; s = s + face_force(pf, m, i, j, k, 3);   n = n + 1; end if
                     if (n > 0) fz(i,j,k) = s / real(n, dp)
                 end do
             end do
@@ -565,11 +577,10 @@ contains
 
     ! Fuerza de la cara + de la celda (i,j,k) en la direccion dir [N/m3]:
     ! -(p_N - p_P)/delta (- rho_f g en z)
-    function face_force(pf, m, i, j, k, dir, with_g) result(f)
+    function face_force(pf, m, i, j, k, dir) result(f)
         real(dp), intent(in) :: pf(-1:,-1:,-1:)
         type(mesh_t), intent(in) :: m
         integer, intent(in)  :: i, j, k, dir
-        logical, intent(in)  :: with_g
         real(dp) :: f
         select case (dir)
         case (1)
@@ -578,7 +589,7 @@ contains
             f = -(pf(i,j+1,k) - pf(i,j,k)) / (m%r(i) * (m%theta(j+1) - m%theta(j)))
         case default
             f = -(pf(i,j,k+1) - pf(i,j,k)) / (m%z(k+1) - m%z(k))
-            if (with_g) f = f - 0.5_dp * (rhob(i,j,k) + rhob(i,j,k+1)) * GRAVITY
+            f = f - 0.5_dp * (rhob(i,j,k) + rhob(i,j,k+1)) * GRAVITY
         end select
     end function face_force
 
@@ -635,17 +646,17 @@ contains
 
                     ! difusion viscosa (eps de cara armonica: nula hacia solido)
                     Dw = 0.0_dp; De = 0.0_dp; Ds = 0.0_dp; Dn = 0.0_dp; Db = 0.0_dp; Dt = 0.0_dp
-                    if (fl(i-1,j,k)) Dw = hface(e, eps(i-1,j,k)) * 0.5_dp*(mum(i,j,k)+mum(i-1,j,k)) &
+                    if (fl(i-1,j,k)) Dw = hface(e, eps(i-1,j,k)) * hface(mum(i,j,k), mum(i-1,j,k)) &
                                           * m%Ar(i-1,j,k) / (m%r(i) - m%r(i-1))
-                    if (fl(i+1,j,k)) De = hface(e, eps(i+1,j,k)) * 0.5_dp*(mum(i,j,k)+mum(i+1,j,k)) &
+                    if (fl(i+1,j,k)) De = hface(e, eps(i+1,j,k)) * hface(mum(i,j,k), mum(i+1,j,k)) &
                                           * m%Ar(i,j,k) / (m%r(i+1) - m%r(i))
-                    if (fl(i,j-1,k)) Ds = hface(e, eps(i,j-1,k)) * 0.5_dp*(mum(i,j,k)+mum(i,j-1,k)) &
+                    if (fl(i,j-1,k)) Ds = hface(e, eps(i,j-1,k)) * hface(mum(i,j,k), mum(i,j-1,k)) &
                                           * m%Ath(i,j,k) / (m%r(i) * (m%theta(j) - m%theta(j-1)))
-                    if (fl(i,j+1,k)) Dn = hface(e, eps(i,j+1,k)) * 0.5_dp*(mum(i,j,k)+mum(i,j+1,k)) &
+                    if (fl(i,j+1,k)) Dn = hface(e, eps(i,j+1,k)) * hface(mum(i,j,k), mum(i,j+1,k)) &
                                           * m%Ath(i,j,k) / (m%r(i) * (m%theta(j+1) - m%theta(j)))
-                    if (fl(i,j,k-1)) Db = hface(e, eps(i,j,k-1)) * 0.5_dp*(mum(i,j,k)+mum(i,j,k-1)) &
+                    if (fl(i,j,k-1)) Db = hface(e, eps(i,j,k-1)) * hface(mum(i,j,k), mum(i,j,k-1)) &
                                           * m%Az(i,j,k-1) / (m%z(k) - m%z(k-1))
-                    if (fl(i,j,k+1)) Dt = hface(e, eps(i,j,k+1)) * 0.5_dp*(mum(i,j,k)+mum(i,j,k+1)) &
+                    if (fl(i,j,k+1)) Dt = hface(e, eps(i,j,k+1)) * hface(mum(i,j,k), mum(i,j,k+1)) &
                                           * m%Az(i,j,k) / (m%z(k+1) - m%z(k))
 
                     ! flujos de masa de cara (orientados +)
@@ -688,14 +699,7 @@ contains
                         Su(i,j,k) = mt * vz_o(i,j,k) + src * vol
                     end select
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) + aB(i,j,k) + aT(i,j,k) &
-                               + mt + drag(i,j,k) * vol + apx + Kd(i,j,k) * vol
-                    if (Kd(i,j,k) > 0.0_dp) then
-                        select case (comp)
-                        case ('r');  Su(i,j,k) = Su(i,j,k) + Kd(i,j,k) * vol * ws_ud_r(i,j,k)
-                        case ('th'); Su(i,j,k) = Su(i,j,k) + Kd(i,j,k) * vol * ws_ud_th(i,j,k)
-                        case default; Su(i,j,k) = Su(i,j,k) + Kd(i,j,k) * vol * ws_ud_z(i,j,k)
-                        end select
-                    end if
+                               + mt + drag(i,j,k) * vol + apx
                 end do
             end do
         end do
@@ -719,7 +723,7 @@ contains
                 do i = istart, iend
                     if (.not. fl(i,j,k)) cycle
                     rho_e = cfg%alpha_u + (1.0_dp - cfg%alpha_u) &
-                            * min(1.0_dp, (drag(i,j,k) + Kd(i,j,k)) * m%vol(i,j,k) / max(aP(i,j,k), SMALL))
+                            * min(1.0_dp, drag(i,j,k) * m%vol(i,j,k) / max(aP(i,j,k), SMALL))
                     select case (comp)
                     case ('r');  vel(i,j,k) = rho_e * vel(i,j,k) + (1.0_dp - rho_e) * pr_r(i,j,k)
                     case ('th'); vel(i,j,k) = rho_e * vel(i,j,k) + (1.0_dp - rho_e) * pr_th(i,j,k)
@@ -857,7 +861,7 @@ contains
         ac_r = 0.0_dp; ac_th = 0.0_dp; ac_z = 0.0_dp
 
         ! fuerzas de celda con el p de ESTE momento (no ha cambiado)
-        call cell_forces(sh%p, m, Gr, Gth, Gz, .true.)
+        call cell_forces(sh%p, m, Gr, Gth, Gz)
 
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
@@ -1096,19 +1100,19 @@ contains
             case (1)
                 in = ii + 1
                 df = 0.5_dp * (Dr(ii,jj,kk) + Dr(in,jn,kn))
-                vf = 0.5_dp * (vr(ii,jj,kk) + vr(in,jn,kn)) + df * (face_force(sh%p, m, ii, jj, kk, 1, .true.) &
+                vf = 0.5_dp * (vr(ii,jj,kk) + vr(in,jn,kn)) + df * (face_force(sh%p, m, ii, jj, kk, 1) &
                      - 0.5_dp * (Gr(ii,jj,kk) + Gr(in,jn,kn)))
                 area = m%Ar(ii,jj,kk); dl = m%r(in) - m%r(ii)
             case (2)
                 jn = jj + 1
                 df = 0.5_dp * (Dth(ii,jj,kk) + Dth(in,jn,kn))
-                vf = 0.5_dp * (vth(ii,jj,kk) + vth(in,jn,kn)) + df * (face_force(sh%p, m, ii, jj, kk, 2, .true.) &
+                vf = 0.5_dp * (vth(ii,jj,kk) + vth(in,jn,kn)) + df * (face_force(sh%p, m, ii, jj, kk, 2) &
                      - 0.5_dp * (Gth(ii,jj,kk) + Gth(in,jn,kn)))
                 area = m%Ath(ii,jj,kk); dl = m%r(ii) * (m%theta(jn) - m%theta(jj))
             case default
                 kn = kk + 1
                 df = 0.5_dp * (Dz(ii,jj,kk) + Dz(in,jn,kn))
-                vf = 0.5_dp * (vz(ii,jj,kk) + vz(in,jn,kn)) + df * (face_force(sh%p, m, ii, jj, kk, 3, .true.) &
+                vf = 0.5_dp * (vz(ii,jj,kk) + vz(in,jn,kn)) + df * (face_force(sh%p, m, ii, jj, kk, 3) &
                      - 0.5_dp * (Gz(ii,jj,kk) + Gz(in,jn,kn)))
                 area = m%Az(ii,jj,kk); dl = m%z(kn) - m%z(kk)
             end select
@@ -1208,15 +1212,7 @@ contains
                         if (al*al/ws_mKl(i,j,k) + ag*ag/ws_mKg(i,j,k) > 0.0_dp) &
                             ff = (al*al/ws_mKl(i,j,k)) / (al*al/ws_mKl(i,j,k) + ag*ag/ws_mKg(i,j,k))
                     end if
-                    if (dsp(i,j,k) .and. ag > 1.0e-12_dp) then
-                        ! gotas: el liquido va a su deriva (pesada por fdw), el gas lleva el resto
-                        liq%ur(i,j,k) = fdw(i,j,k) * ws_ud_r(i,j,k) + (1.0_dp - fdw(i,j,k)) * vr(i,j,k)
-                        liq%uth(i,j,k) = fdw(i,j,k) * ws_ud_th(i,j,k) + (1.0_dp - fdw(i,j,k)) * vth(i,j,k)
-                        liq%uz(i,j,k) = fdw(i,j,k) * ws_ud_z(i,j,k) + (1.0_dp - fdw(i,j,k)) * (vz(i,j,k) - (1.0_dp - s) * w)
-                        gas%ur(i,j,k)  = (e * vr(i,j,k)  - al * liq%ur(i,j,k))  / ag
-                        gas%uth(i,j,k) = (e * vth(i,j,k) - al * liq%uth(i,j,k)) / ag
-                        gas%uz(i,j,k)  = (e * vz(i,j,k)  - al * liq%uz(i,j,k))  / ag
-                    else if (abs(ff - s) <= 1.0e-14_dp .or. al <= 1.0e-12_dp .or. ag <= 1.0e-12_dp) then
+                    if (abs(ff - s) <= 1.0e-14_dp .or. al <= 1.0e-12_dp .or. ag <= 1.0e-12_dp) then
                         liq%ur(i,j,k) = vr(i,j,k); liq%uth(i,j,k) = vth(i,j,k)
                         gas%ur(i,j,k) = vr(i,j,k); gas%uth(i,j,k) = vth(i,j,k)
                         liq%uz(i,j,k) = vz(i,j,k) - (1.0_dp - s) * w
@@ -1234,5 +1230,47 @@ contains
             end do
         end do
     end subroutine phase_velocities
+
+    !---------------------------------------------------------------------------
+    ! Topes de velocidad de fase (U_LIQ_MAX, U_GAS_MAX: centinelas) aplicados
+    ! conservando el flujo volumetrico de mezcla: la fase que no se recorta
+    ! absorbe el resto por la identidad alpha_l u_l + alpha_g u_g = e v. Solo
+    ! con las DOS fases en su tope queda un residuo (ambas centinelas activas).
+    !---------------------------------------------------------------------------
+    subroutine cap_phases_mixture(liq, gas, m)
+        type(phase_t), intent(inout) :: liq, gas
+        type(mesh_t), intent(in)     :: m
+        integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
+        real(dp) :: al, ag, e, ul(3), ug(3), vm(3), sp
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    al = max(liq%alpha(i,j,k), 0.0_dp); ag = max(gas%alpha(i,j,k), 0.0_dp)
+                    e = al + ag
+                    vm = [vr(i,j,k), vth(i,j,k), vz(i,j,k)]
+                    ul = [liq%ur(i,j,k), liq%uth(i,j,k), liq%uz(i,j,k)]
+                    ug = [gas%ur(i,j,k), gas%uth(i,j,k), gas%uz(i,j,k)]
+                    sp = norm2(ul)
+                    if (sp > U_LIQ_MAX) then
+                        ul = ul * (U_LIQ_MAX / sp)
+                        if (ag > 1.0e-12_dp) ug = (e * vm - al * ul) / ag
+                    end if
+                    sp = norm2(ug)
+                    if (sp > U_GAS_MAX) then
+                        ug = ug * (U_GAS_MAX / sp)
+                        if (al > 1.0e-12_dp) then
+                            ul = (e * vm - ag * ug) / al
+                            sp = norm2(ul)
+                            if (sp > U_LIQ_MAX) ul = ul * (U_LIQ_MAX / sp)
+                        end if
+                    end if
+                    liq%ur(i,j,k) = ul(1); liq%uth(i,j,k) = ul(2); liq%uz(i,j,k) = ul(3)
+                    gas%ur(i,j,k) = ug(1); gas%uth(i,j,k) = ug(2); gas%uz(i,j,k) = ug(3)
+                end do
+            end do
+        end do
+    end subroutine cap_phases_mixture
 
 end module mod_mixture_3d

@@ -40,7 +40,7 @@ module mod_audit
     public :: AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
     public :: AUD_RESID_MASS, AUD_RESID_E, AUD_SPILL_MASS
     public :: AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
-    public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2, AUD_GAS_VOLFIX, AUD_SLAG_TCLIP
+    public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2, AUD_GAS_VOLFIX, AUD_SLAG_TCLIP, AUD_MIX_INIT
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -91,7 +91,11 @@ module mod_audit
     integer, parameter :: AUD_GAS_VOLFIX      = 37
     ! J que el piso T_sl >= 300 K inyecta en la escoria (E_sl coherente con T)
     integer, parameter :: AUD_SLAG_TCLIP      = 38
-    integer, parameter :: N_AUD = 38
+    ! J que el liquido recibe del gas en el equilibrio de arranque del modelo
+    ! de mezcla (la referencia del gas se reinicia: sin esta columna la
+    ! perdida del gas no quedaba en ningun libro)
+    integer, parameter :: AUD_MIX_INIT        = 39
+    integer, parameter :: N_AUD = 39
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -186,7 +190,7 @@ contains
                 'm_resid_closed,E_resid_closed,m_spill,' // &
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
-                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip'
+                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init'
             close(iu)
         end if
         acc = 0.0_dp
@@ -338,7 +342,7 @@ contains
                 ',', mx_glob(1), ',', mx_glob(2), ',', mx_glob(3), &
                 ',', a(AUD_CHARGE_MASS), ',', a(AUD_CHARGE_E), ',', a(AUD_C_OXID), &
                 ',', a(AUD_DIL_O2), ',', a(AUD_DIL_CO), ',', a(AUD_DIL_CO2), &
-                ',', a(AUD_GAS_VOLFIX), ',', a(AUD_SLAG_TCLIP)
+                ',', a(AUD_GAS_VOLFIX), ',', a(AUD_SLAG_TCLIP), ',', a(AUD_MIX_INIT)
             close(iu)
         end if
     end subroutine audit_write_step

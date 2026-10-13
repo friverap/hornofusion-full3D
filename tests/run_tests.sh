@@ -169,6 +169,8 @@ full | rebaseline)
     run_case bath_test 1
     run_case bath_test 4
     run_case bath_fill 4
+    run_case bath_mix 4
+    run_case bath_fill_mix 4
     run_case bath_freeze 4
     # Descomposicion del lecho inundado/congelado (auditoria M22: celdas
     # selladas en la frontera entre ranks; antes 9.7 % en alpha_l n1 vs n4)
@@ -242,6 +244,17 @@ full | rebaseline)
     run_script "bath_fill" \
         $PY $INT/check_bath.py "$OUT/bath_fill_n4" --config "$CFG/bath_fill.dat" --fill \
         --xfail "$(xfail_ids bath_fill)"
+    # Modelo de MEZCLA (Plan G): baño en reposo y llenado con fusion y arco
+    check_invariants "$OUT/bath_mix_n4" bath_mix
+    check_audit_if_present "$OUT/bath_mix_n4"
+    run_script "bath_mix" \
+        $PY $INT/check_bath.py "$OUT/bath_mix_n4" --config "$CFG/bath_mix.dat" \
+        --xfail "$(xfail_ids bath_mix)"
+    check_invariants "$OUT/bath_fill_mix_n4" bath_fill_mix
+    check_audit_if_present "$OUT/bath_fill_mix_n4"
+    run_script "bath_fill_mix" \
+        $PY $INT/check_bath.py "$OUT/bath_fill_mix_n4" --config "$CFG/bath_fill_mix.dat" --fill \
+        --xfail "$(xfail_ids bath_fill_mix)"
     check_invariants "$OUT/bath_freeze_n4" bath_freeze
     run_script "bath_freeze" \
         $PY $INT/check_bath.py "$OUT/bath_freeze_n4" --config "$CFG/bath_freeze.dat" --fill \

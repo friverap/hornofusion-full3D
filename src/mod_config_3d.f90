@@ -312,7 +312,7 @@ contains
         case ('cp_s');       call parse_real(val, key, cfg%cp_s)
         case ('cp_l');       call parse_real(val, key, cfg%cp_l)
         case ('h_fusion');   call parse_real(val, key, cfg%h_fusion)
-        case ('k_s');        call parse_real(val, key, cfg%k_s)
+        case ('k_s');        call parse_real(val, key, cfg%k_s); call warn_noeffect(key)
         case ('k_l');        call parse_real(val, key, cfg%k_l)
         case ('d_particle'); call parse_real(val, key, cfg%d_particle)
         case ('d_droplet');  call parse_real(val, key, cfg%d_droplet)
@@ -345,7 +345,7 @@ contains
         case ('probe_cell_i');    call parse_int(val, key, cfg%probe_cell_i)
         case ('probe_cell_j');    call parse_int(val, key, cfg%probe_cell_j)
         case ('probe_cell_k');    call parse_int(val, key, cfg%probe_cell_k)
-        case ('emissivity'); call parse_real(val, key, cfg%emissivity)
+        case ('emissivity'); call parse_real(val, key, cfg%emissivity); call warn_noeffect(key)
         case ('T_initial');  call parse_real(val, key, cfg%T_initial)
         case ('T_ambient');  call parse_real(val, key, cfg%T_ambient)
         case ('T_wall');     call parse_real(val, key, cfg%T_wall)
@@ -371,12 +371,12 @@ contains
         case ('frac_conv');  call parse_real(val, key, cfg%frac_conv)
         case ('frac_rad');   call parse_real(val, key, cfg%frac_rad)
         case ('frac_elec');  call parse_real(val, key, cfg%frac_elec)
-        case ('arc_w');      call parse_real(val, key, cfg%arc_w)
+        case ('arc_w');      call parse_real(val, key, cfg%arc_w); call warn_noeffect(key)
         case ('n_beams');    call parse_int(val, key, cfg%n_beams)
         ! Slag
         case ('rho_slag');     call parse_real(val, key, cfg%rho_slag)
         case ('cp_slag');      call parse_real(val, key, cfg%cp_slag)
-        case ('k_slag');       call parse_real(val, key, cfg%k_slag)
+        case ('k_slag');       call parse_real(val, key, cfg%k_slag); call warn_noeffect(key)
         case ('h_contact_sl'); call parse_real(val, key, cfg%h_contact_sl)
         case ('m_slag_init');  call parse_real(val, key, cfg%m_slag_init)
         case ('solve_slag');   cfg%solve_slag = parse_bool(val)
@@ -411,9 +411,9 @@ contains
         case ('ecs_carbon_frac');  call parse_real(val, key, cfg%ecs_carbon_frac)
         case ('ecs_t_start');      call parse_real(val, key, cfg%ecs_t_start)
         case ('ecs_t_stop');       call parse_real(val, key, cfg%ecs_t_stop)
-        case ('ecs_mode');         cfg%ecs_mode = trim(val)
-        case ('ecs_k_power');      call parse_real(val, key, cfg%ecs_k_power)
-        case ('ecs_total_mass');   call parse_real(val, key, cfg%ecs_total_mass)
+        case ('ecs_mode');         cfg%ecs_mode = trim(val); call warn_noeffect(key)
+        case ('ecs_k_power');      call parse_real(val, key, cfg%ecs_k_power); call warn_noeffect(key)
+        case ('ecs_total_mass');   call parse_real(val, key, cfg%ecs_total_mass); call warn_noeffect(key)
         case ('Sc_t_species');    call parse_real(val, key, cfg%Sc_t_species)
         case ('alpha_Y_species'); call parse_real(val, key, cfg%alpha_Y_species)
         case default
@@ -526,6 +526,17 @@ contains
                      'material properties must be > 0', ok)
         call require(cfg%R_shell > 0.0_dp .and. cfg%H_total > 0.0_dp, &
                      'R_shell and H_total must be > 0', ok)
+        ! auditoria (bajos): validaciones que faltaban
+        call require(cfg%stretch_r > 0.0_dp .and. cfg%stretch_z > 0.0_dp, &
+                     'stretch_r and stretch_z must be > 0', ok)
+        call require(cfg%H_bowl >= 0.0_dp .and. cfg%H_bowl < cfg%H_total, &
+                     'requires 0 <= H_bowl < H_total', ok)
+        call require(cfg%R_bowl > 0.0_dp .and. cfg%R_bowl <= cfg%R_shell, &
+                     'requires 0 < R_bowl <= R_shell', ok)
+        call require(cfg%R_elec > 0.0_dp .and. cfg%R_pcd + cfg%R_elec < cfg%R_shell, &
+                     'requires R_elec > 0 and R_pcd + R_elec < R_shell', ok)
+        if (cfg%adaptive_dt) call require(cfg%dt >= cfg%dt_min .and. cfg%dt <= cfg%dt_max, &
+                     'requires dt_min <= dt <= dt_max (adaptive_dt)', ok)
         call require(cfg%do_quadrature == 4 .or. cfg%do_quadrature == 6 &
                      .or. cfg%do_quadrature == 8, &
                      'do_quadrature must be 4, 6 or 8', ok)
@@ -547,9 +558,10 @@ contains
                          'ecs_rate must be >= 0', ok)
             call require(cfg%ecs_T_charge > 0.0_dp, &
                          'ecs_T_charge must be > 0', ok)
-            call require(trim(cfg%ecs_mode) == 'table' .or. &
-                         trim(cfg%ecs_mode) == 'coupled', &
-                         "ecs_mode must be 'table' or 'coupled'", ok)
+            ! 'coupled' (caudal ligado a la potencia, v2) esta DISEÑADO pero no
+            ! implementado: se aceptaba sin efecto (auditoria, bajos)
+            call require(trim(cfg%ecs_mode) == 'table', &
+                         "ecs_mode must be 'table' ('coupled' no implementado)", ok)
         end if
 
         if (.not. ok) then
@@ -589,6 +601,14 @@ contains
               ' turb=', cfg%solve_turb
         print *, '============================================================'
     end subroutine config_print
+
+    ! Claves que se leen pero NO tienen efecto en el modelo (auditoria, bajos):
+    ! se avisa en vez de aceptarlas en silencio
+    subroutine warn_noeffect(key)
+        character(len=*), intent(in) :: key
+        if (cfg_root()) print '(3A)', ' [CONFIG] AVISO: la clave "', trim(key), &
+            '" no tiene efecto en esta version (se ignora)'
+    end subroutine warn_noeffect
 
     ! Solo rank 0 imprime al leer/validar el config (auditoria, bajos: todos
     ! los ranks leen el archivo y cada uno repetia los mensajes)

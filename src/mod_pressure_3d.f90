@@ -21,6 +21,15 @@
 ! Correcciones de celda: u_P -= (V_P/aP_P) * grad(pp)|_P (esténcil central,
 ! estándar en colocado con Rhie-Chow). Fases/celdas bajo ALPHA_FLOW_CUTOFF
 ! no participan (C2.2).
+!
+! ESTADO ACTUAL (auditoria 12-oct-2026; lo de arriba es historia): la ecuacion
+! es la de VOLUMEN, Sum_q continuidad_q/rho_q (Plan C F2, GCBA), con
+! d = alpha V/aP (aP equivalente del PEA, M30), gradientes con las paredes del
+! predictor (pgrad + ws_pv_active, A16/A17), filas selladas = pared con
+! Neumann (F2.29, mascara intercambiada en halos, M22), fuente de
+! compresibilidad del gas termica + advectiva (A8) + reacciones (M14) con UN
+! tope COMP_SRC_CAP y acarreo del exceso (ws_cc, M26), termino acustico como
+! seudo-compresibilidad (M25). Solver: CG precondicionado (cg_3d_mpi).
 !===============================================================================
 module mod_pressure_3d
     use mod_constants
@@ -94,7 +103,7 @@ contains
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
             ws_Fc_af_r, ws_Fc_af_th, ws_Fc_af_z, ws_liq_fr, ws_liq_fth, ws_liq_fz, &
-            ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, ws_pv_active, ws_pv_valid, &
+            ws_liq_room, ws_liq_room_valid, ws_pv_active, ws_pv_valid, &
             ws_sat_goff, ws_sat_goff_id, &
             ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
             ws_pc_unl, ws_pc_unl_valid, ws_pc_unl_id, &
@@ -324,7 +333,7 @@ contains
         !-----------------------------------------------------------------------
         ! Gradientes de presión de celda por fase (central en el interior,
         ! one-sided SOLO en frontera física; mismas fórmulas que momentum).
-        ! Liquido: p del Poisson. Gas: p + ws_pcorr_g (superficie libre).
+        ! Liquido: p del Poisson. Gas: p con gas_pgrad_z en las caras verticales (F2.3).
         !-----------------------------------------------------------------------
         grad_is_gas = .false.
         call cell_gradients(sh%p, .false., gpr, gpth, gpz)
@@ -813,7 +822,7 @@ contains
             ! Fase gas: caras verticales sin el peso del liquido (F2.3)
             logical, intent(in)       :: isg
             ! Presion y gradientes de celda que ve ESTA fase (el gas lleva la
-            ! correccion de superficie libre ws_pcorr_g)
+            ! correccion de superficie libre: gas_pgrad_z, F2.3)
             real(dp), intent(in)      :: pf(-1:,-1:,-1:)
             real(dp), intent(in)      :: gr(-1:,-1:,-1:), gth(-1:,-1:,-1:), gz(-1:,-1:,-1:)
             ! Guardar Q* y a_nb de las caras + (solo el liquido, F1)

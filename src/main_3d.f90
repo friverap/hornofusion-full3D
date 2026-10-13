@@ -294,6 +294,9 @@ program eaf_3d_simulator
         gas_old%T   = gas%T;   gas_old%ur  = gas%ur
         gas_old%uth = gas%uth; gas_old%uz  = gas%uz
         gas_old%alpha = gas%alpha
+        ! densidades del paso anterior (auditoria, bajos: la masa del
+        ! transitorio de la mezcla las usa; antes *_old%rho no se copiaba)
+        liq_old%rho = liq%rho; gas_old%rho = gas%rho
         ! Ancla temporal de k-eps (auditoria A13)
         tke_n = sh%tke; eps_n = sh%eps
 
@@ -459,11 +462,6 @@ program eaf_3d_simulator
         ws_flux_valid = .false.
         do outer = 1, cfg%max_outer
 
-            ! Ergun drag coefficient from solid
-            if (cfg%solve_flow) then
-                call compute_ergun_drag(liq, sol, mesh, cfg, drag_coef)
-            end if
-
             ! Multiphase SIMPLE iteration
             if (cfg%solve_flow .and. cfg%solve_multiphase .and. cfg%mixture_model) then
                 ! Plan G: modelo de mezcla con deslizamiento (mod_mixture_3d)
@@ -473,6 +471,10 @@ program eaf_3d_simulator
                 call multiphase_iteration(liq, gas, liq_old, gas_old, sol, slag, &
                                           sh, mesh, cfg, drag_coef, conv)
             else if (cfg%solve_flow) then
+                ! Ergun solo en la rama de una fase: el modelo de dos fluidos
+                ! calcula el suyo (on_bed) y la mezcla no lo usa (auditoria,
+                ! bajos: se calculaba en vano en cada iteracion externa)
+                call compute_ergun_drag(liq, sol, mesh, cfg, drag_coef)
                 prev_ur = liq%ur; prev_uth = liq%uth
                 prev_uz = liq%uz; prev_T = liq%T
                 call solve_momentum_3d(liq, liq_old, gas, K_zero, sh, mesh, &

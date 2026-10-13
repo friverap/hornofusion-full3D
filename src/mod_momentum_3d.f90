@@ -85,7 +85,6 @@ contains
                                          alpha_old, mdot_m)
         use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, &
-            ws_pcorr_g, ws_pcorr_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             aW => ws_aW, &
@@ -117,7 +116,7 @@ contains
         real(dp) :: dp_dr, dp_dth, dp_dz, src_extra, aP_extra
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax, ok_bot, ok_top
         ! Presion que ve ESTA fase: la del Poisson, y para el gas ademas la
-        ! correccion de superficie libre (ws_pcorr_g, mod_workspace)
+        ! correccion de superficie libre del gas: gas_pgrad_z (F2.3)
         real(dp), allocatable :: pf(:,:,:)
         ! aP fisico del anillo del eje (A15)
         real(dp) :: aP_axis(lbound(vel,2):ubound(vel,2), lbound(vel,3):ubound(vel,3))

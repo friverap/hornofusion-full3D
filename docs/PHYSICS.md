@@ -11,15 +11,15 @@ Documentación completa de todos los modelos físicos implementados en el simula
 3. [Algoritmo SIMPLE](#3-algoritmo-simple)
 4. [Turbulencia k-ε](#4-turbulencia-k-ε)
 5. [Transferencia de calor y energía](#5-transferencia-de-calor-y-energía)
-6. [Modelo de arco eléctrico Cassie-Mayr](#6-modelo-de-arco-eléctrico-cassie-mayr)
+6. [Arco eléctrico](#6-arco-eléctrico)
 7. [Radiación Monte Carlo del arco](#7-radiación-monte-carlo-del-arco)
 8. [Radiación Ordenadas Discretas (DO)](#8-radiación-ordenadas-discretas-do)
-9. [Fuerza de Lorentz electromagnética](#9-fuerza-de-lorentz-electromagnética)
+9. [Fuerza de Lorentz](#9-fuerza-de-lorentz)
 10. [Arrastre Ergun (lecho poroso)](#10-arrastre-ergun-lecho-poroso)
 11. [Fusión y solidificación](#11-fusión-y-solidificación)
 12. [Química del carbono](#12-química-del-carbono)
-13. [Transporte de especies CO / CO₂](#13-transporte-de-especies-co--co₂)
-14. [Capa de escoria](#14-capa-de-escoria)
+13. [Transporte de especies O₂ / CO / CO₂](#13-transporte-de-especies-o₂--co--co₂)
+14. [Escoria](#14-escoria)
 15. [Transferencia de calor interfase](#15-transferencia-de-calor-interfase)
 16. [Buoyancy de Boussinesq](#16-buoyancy-de-boussinesq)
 17. [Constantes físicas](#17-constantes-físicas)
@@ -164,8 +164,14 @@ dt = clamp(dt_new, dt_min, dt_max)
 ### Viscosidad turbulenta
 
 ```
-μt = Cμ ρ k²/ε
+μt = min(Cμ ρ k²/ε, 10⁵ μ)        (tope de la razón de viscosidad)
 ```
+
+Solo en líquido **continuo**. Producción de flotabilidad
+`G_b = max(0, −β g (μt/Prt) ∂T/∂z)` (caliente abajo = inestable; signo
+corregido en M8). En la celda junto a una pared, función de pared de alto
+Reynolds (Launder–Spalding): `ε = Cμ^¾ k^{3/2}/(κ y_P)`, κ = 0.41, y_P la
+media celda normal a la pared (el eje es simetría).
 
 ### Constantes del modelo k-ε estándar
 
@@ -217,370 +223,223 @@ Difusión: diferencias centrales
 
 ---
 
-## 6. Modelo de arco eléctrico Cassie-Mayr
+## 6. Arco eléctrico
 
-### ODE de Cassie-Mayr
+> Revisado tras la auditoría del 12-oct-2026 (C2, A9, A10, B4–B8). La EDO de
+> Cassie–Mayr que esta sección describía se retiró: su R no se usaba y su
+> término P_rad·R no era dimensionalmente coherente.
+
+### Estado eléctrico
+
+V e I por electrodo vienen del perfil medido (`electrode_profile_file`, por
+defecto `input/electrode_profile.dat`; `''` = constante `elec_V_const` /
+`elec_I_const`; un archivo configurado que no abre es error):
 
 ```
-dR/dt = (1/τ)(R - R_eq)
-R_eq  = ARC_W · R² / P_arc
-P_arc = |V · I|
+P_arc = |V · I|                    potencia del arco por electrodo
+l_a   = max((|V| − 40 V) / 1150 V/m, 0.01 m)   longitud de arco (gradiente de columna)
+R_arc = |V| / |I|                  diagnóstico
 ```
 
-donde:
-- `τ = ARC_TAU = 3×10⁻⁴ s` (constante de tiempo del arco)
-- `ARC_W = 30 W` (potencia de enfriamiento — calibrado para R_eq ≈ 9 mΩ)
-- `R_eq`: resistencia de equilibrio (dinámica)
-
-### Calibración eléctrica
-
-Con V = 500 V, I = 55,000 A por electrodo:
-```
-P_arc = 500 × 55000 = 27.5 MW/electrodo
-R_eq  = ARC_W × R² / P_arc ≈ 9 mΩ
-P_total (3 electrodos) ≈ 82.5 MW
-```
+**Corriente alterna sin desfase (decisión de diseño, auditoría bajos).** Los
+tres electrodos usan el mismo V/I **eficaz** del perfil, sin el desfase de
+120° de la trifásica. Es coherente con un modelo promediado en el ciclo de
+50/60 Hz (Δt ≫ 20 ms): potencia (V·I) y fuerza de Lorentz (∝ I²) son
+cantidades cuadráticas cuyo promedio no depende de la fase. Lo que se pierde
+es la interacción magnética instantánea entre arcos (deflexión de arco), que
+este modelo no resuelve.
 
 ### Distribución del calor del arco
 
-| Fracción | Valor | Destino |
-|----------|-------|---------|
-| `frac_rad` | 0.50 | Superficie del scrap (nivel k_scrap) |
-| `frac_conv` | 0.30 | Columna de gas (k_scrap → k_tip) |
-| `frac_elec` | 0.20 | Punta del electrodo |
+| Fracción | Destino |
+|----------|---------|
+| `frac_rad` × `MC_RAD_SHARE` (0.5) | Monte Carlo (§7) |
+| `frac_rad` × (1 − `MC_RAD_SHARE`) | depósito directo en la superficie de la chatarra bajo el electrodo |
+| `frac_conv` | columna de gas entre la punta y la superficie |
+| `frac_elec` | punta del electrodo |
 
-El algoritmo `distribute_arc_heat` busca la celdas del scrap debajo de cada electrodo (búsqueda `kscrap_loop`) y deposita `P_rad` exactamente en esa superficie. Si no hay scrap, deposita en la columna de arco (pre-bore-in).
+En una celda con chatarra el depósito se reparte por **absorción**
+(κ_s α_s frente a κ_g α_g, F2.30); la parte del sólido entra a `E_s` con un
+tope de **estado** (T_s ≤ T_liq + 100 K, `solid_arc_room`) y el exceso va a
+`S_arc`. La escoria intercepta su parte de `S_arc` también por absorción
+(κ_sl α_sl + κ_foam α_foam frente a κ_l α_l + κ_g α_g).
 
-### Control de electrodos
+### Regulación de electrodos
 
 ```
-Fase bore-in:    z_tip -= BORE_IN_SPEED × dt   (0.01 m/s)
-Fase regulación: Δz = -K_REG × (L_arc - L_set)  (K_REG=0.02, L_set=0.20 m)
+z_target = z_superficie + l_a          superficie = tope de chatarra (α_s > 0.05) o de baño (α_l ≥ 0.3)
+bore-in:     dz = clamp(z_target − z_tip, −BORE_IN_SPEED dt, +ELEC_SPEED_MAX dt)
+regulación:  dz = clamp((z_target − z_tip) min(1, dt/TAU_REG), ±ELEC_SPEED_MAX dt)
 ```
+
+El bore-in termina cuando el material superior bajo el electrodo es baño.
+Una recarga de cesta retrae los electrodos y reinicia el bore-in.
 
 ---
 
 ## 7. Radiación Monte Carlo del arco
 
-### Método
+1. Emisión isótropa desde puntos repartidos a lo largo de la **columna** del
+   arco (de la punta al pie z_tip − l_a), `n_beams` rayos por electrodo.
+2. Paso `0.5 × min(dr)`; en cada celda el gas absorbe por Beer–Lambert
+   `dP = P (1 − exp(−κ_g α_g ds))` y lo deposita en esa celda.
+3. Impacto: chatarra (α_s > `ALPHA_SCRAP_SURF` = 0.05) o superficie del baño
+   (α_l ≥ `ALPHA_LIQ_CONT`).
+4. El rayo que entra en un electrodo (sombra) o sale del dominio se audita como
+   `E_mc_lost`; en el pasador del eje se refleja especularmente (coherente con
+   la pared re-irradiante de la DO).
+5. Depósito por absorción sólido/fluido como el depósito directo (§6).
 
-Trazado de rayos estocástico desde cada punta de electrodo hacia la carga. Cada rayo:
-
-1. Se lanza con dirección aleatoria isótropa en la semiesfera inferior
-2. Se propaga con paso `step_size = 0.5 × min(dr(1:nr))`
-3. Se absorbe cuando impacta scrap (α_s > 0.5) o pared (cell_type = 2)
-4. El calor se deposita en la celda de impacto
-
-### Guard de seguridad
-
-```fortran
-if (step_size < 1e-6) step_size = 0.01    ! fallback anti-loop
-MAX_TRACE_STEPS = 50000                    ! límite de trazado
-```
-
-La condición de salida usa `.not. (r_pos <= R_shell)` para capturar NaN correctamente.
+Semilla por paso, la misma en todos los ranks (aritmética de 64 bits); los
+rayos se reparten round-robin y el depósito se reduce con `MPI_SUM`.
 
 ---
 
 ## 8. Radiación Ordenadas Discretas (DO)
 
-### Ecuación de transporte radiativo (ERT)
-
-Para cada dirección discretizada `s_i` (6 direcciones principales):
-
-```
-s_i · ∇I_i = κ(B - I_i)
-```
-
-donde:
-- `I_i`: intensidad radiativa en dirección i
-- `κ`: coeficiente de absorción (mezcla gas/sólido)
-- `B = σT⁴/π`: función de Planck
-
-### Fuente de radiación
+Cuadratura de simetría de nivel S4/S6/S8 (`do_quadrature`: 24/48/80
+direcciones), barridos TDMA iterados hasta `RTE_SWEEP_TOL` (aviso si no
+converge). Proyecciones de cara integradas exactas en cilíndricas.
 
 ```
-S_rad = κ (G - 4σT⁴)    [W/m³]
+s · ∇I = κ (B − I),   κ = κ_g α_g + κ_l α_l + κ_s α_s + κ_foam α_foam
+κ_g = 0.3, κ_l = 100, κ_s = 10, κ_foam = 30 1/m   (una sola definición, mod_constants)
+S_rad,q = (κ_q α_q / Σκα) κ_f (G − 4σT_q⁴)        reparto por absorción (A11)
 ```
 
-donde `G = Σ_i I_i w_i` es la irradiancia integrada (suma sobre direcciones con pesos).
-
-**Nota signo:** La fuente es positiva cuando G > 4σT⁴ (absorción neta) y negativa cuando G < 4σT⁴ (emisión neta). Esto es termodinámicamente correcto.
-
-### Coeficiente de absorción
-
-```
-κ = κ_gas × (1 - α_s) + κ_solid × α_s     (suave, sin umbral binario)
-```
-
-### Límite de estabilidad
-
-```
-S_rad = clamp(S_rad, -S_RAD_LIMIT, +S_RAD_LIMIT)    con S_RAD_LIMIT = 1×10⁴ W/m³
-```
-
-Esto limita ΔT_gas ≤ 4.2 K/paso (dt = 0.5 s, cp_gas = 1000 J/kg·K).
-
-### Condición de borde en paralelo
-
-El barrido DO es local por rank. No hay comunicación MPI entre ranks para los halos de intensidad (limitación conocida). La condición de frontera de entrada usa `I_dir = σT⁴/π` (warm start) en lugar de cero para evitar enfriamiento espurio global.
+Sin limitador de `S_rad`: la radiación es implícita (linearización de Newton
+alrededor del iterado). Paredes: la coraza y el techo son frías; el tazón, el
+piso y el eje re-irradian (`Bmix` de la celda). La DO no es invariante a
+rotaciones de 120° (efecto de rayos de S4).
 
 ---
 
-## 9. Fuerza de Lorentz electromagnética
+## 9. Fuerza de Lorentz
 
-### Modelo analítico
-
-Corriente vertical gaussiana alrededor de cada electrodo:
-
-```
-J_z(r,θ,z) = I/(π σ_J²) × exp(-d²/(2σ_J²))  [A/m²]
-```
-
-donde `d` = distancia horizontal al eje del electrodo, `σ_J = 3 × R_elec`.
-
-Campo magnético (ley de Ampère, aproximación axisimétrica):
+Fuente puntual de corriente en un conductor semi-infinito (Shercliff 1970;
+Sozou 1971; auditoría M11). La corriente entra al baño en el punto P más bajo
+entre el pie del arco y el tope del baño bajo el electrodo, y se reparte
+radialmente en el hemisferio inferior:
 
 ```
-B_θ = μ₀/(2π r) × I_enclosed(r)
+J = I / (2π ρ²),   B_φ = μ₀ I (1 − cos θ) / (2π r_loc),   ρ² ← ρ² + R_elec²
+F = −J B θ̂,   θ̂ = cos θ ê_h + sin θ ẑ    (hacia el eje y hacia abajo)
 ```
 
-### Fuerza de Lorentz
-
-```
-F = J × B
-F_r  = J_z × B_θ × cos(θ_offset)    [N/m³]
-F_θ  = J_z × B_θ × sin(θ_offset)    [N/m³]
-```
-
-### Aplicación
-
-- Solo donde `α_liquid > 10⁻⁴` (solo en acero fundido)
-- Sumada sobre los 3 electrodos
-- Almacenada en `sh%F_lorentz_r`, `sh%F_lorentz_th`
-- Añadida como fuente en las ecuaciones de momentum del líquido
+Rotacional no nulo: impulsa el chorro descendente bajo el electrodo. Solo en
+líquido **continuo** (α_l ≥ 0.3) y solo en la ecuación del líquido.
+Magnitud típica 10²–10³ N/m³ cerca del electrodo.
 
 ---
 
 ## 10. Arrastre Ergun (lecho poroso)
 
-### Correlación de Ergun
-
 ```
-S_drag = -(A + B|u|) × u          (ε = 1 − α_s, porosidad del lecho)
-
-A = 150 μ (1 − ε)² / (d_p² ε³)    [kg/(m³·s)]
-B = 1.75 ρ (1 − ε)  / (d_p  ε³)    [kg/m⁴]
+A_E = 150 μ (1 − ε)² / (d_p² ε³),   B_E = 1.75 ρ (1 − ε) / (d_p ε³)
+coef = ε² A_E + ε³ B_E |u|          (forma de Gidaspow para velocidad intersticial, A6)
 ```
 
-donde `d_p = 0.10 m` (tamaño característico del fragmento de chatarra).
-Es la correlación de Ergun (1952) en su forma original y la ÚNICA
-definición del código (`mod_constants::ergun_coefficients`: momento de
-ambas fases, velocidad de percolación del líquido disperso, `test_ergun`).
-Hasta 2026-09-25 el término de Forchheimer se escribía `C_F ρ|u|/√K` con
-`C_F = 1.75/(d_p ε³)` (1/m) en lugar del adimensional `1.75/√(150 ε³)`:
-quedaba `√150/(d_p ε^1.5)` veces mayor (~500–800× con d_p = 0.075–0.10 m).
-Con ello el líquido percolaba a 2–3 mm/s (Ergun: 0.1–0.2 m/s) y el gas de
-poro no podía ventear por el lecho, origen de las "bolsas hidráulicamente
-bloqueadas" que respondían con kPa–MPa (Bug 18/19).
-
-La fuerza de arrastre se aplica al fluido (gas o líquido) en las celdas donde `α_s > 0`.
+ε = 1 − α_s para el líquido; para el gas del lecho, ε = 1 − α_s − α_l (el
+líquido retenido es obstáculo: Sáez & Carbonell 1985, M29). Única definición:
+`mod_constants::ergun_coefficients`. El Ergun efectivo del lecho sobre una
+celda de líquido se desvanece con su α_l (F2.28).
 
 ---
 
 ## 11. Fusión y solidificación
 
-### Enthalpía efectiva
-
-El calor de fusión se distribuye linealmente entre T_solidus y T_liquidus:
+Entalpía única del sólido (C1.8), con el latente en la zona mushy:
 
 ```
-H_eff(T) = cp_s × T                              T < T_solidus
-H_eff(T) = cp_s × T_sol + L × f_l               T_solidus ≤ T ≤ T_liquidus
-H_eff(T) = cp_l × T + L                         T > T_liquidus
-
-f_l = (T - T_solidus)/(T_liquidus - T_solidus)   (fracción líquida local)
+e_s(T) = c_s T                                T ≤ T_sol
+       = c_s T_sol + c_m (T − T_sol)          T_sol < T ≤ T_liq,   c_m = c_s + L/(T_liq − T_sol)
+       = e_lb + c_l (T − T_liq)               T > T_liq,           e_lb = c_s T_liq + L
+e_l(T) = c_l T + C0,   C0 = (c_s − c_l) T_liq + L   (mismo dato: e_l = e_s sobre T_liq)
 ```
 
-### Tasa de fusión
+**Regla de la palanca (auditoría M9):** fusión y congelación son estados, no
+tasas por paso.
 
 ```
-mdot = (H_eff(T_s) - H_ref) × m_s / (L × dt)    [kg/s]
+sólido con e > e_sol:  f = (e − e_sol)/(e_lb − e_sol),  dm = f m_s sale a e_lb (T_liq),
+                       el resto queda en e_sol;  con e ≥ e_lb la parcela entera sale con su e
+líquido con T < T_liq: dm = M (e_lb − e_l)/(e_lb − e_entry),  e_entry = min(e_sol, e_l),
+                       acotado por RESOLID_LIMITER M (positividad del transporte de α)
 ```
 
-La masa se transfiere de `sol%m_s` a `liq%alpha` cada paso temporal.
+La fusión por paso resulta Q/(e_lb − e_sol): la condición de Stefan con el
+calor recibido. `compute_melting` devuelve la T de entrada del fundido
+(`ws_Tsrc`). El remanente bajo `ALPHA_SOLID_RESID` se cierra (masa y entalpía
+al líquido) solo si ya alcanzó el solidus (M10).
 
-### Colapso de scrap
+### Colapso de chatarra
 
-Cuando `α_s` local cae por debajo de un umbral, las celdas superiores de scrap colapsan gravitacionalmente para mantener coherencia física.
+La chatarra sobre un hueco cae conservando su **empaquetamiento** (α del
+trozo), sin superar el hueco libre de líquido y escoria; lo que no cabe se
+apila hacia arriba (A4). Una celda de baño no es hueco.
 
 ---
 
 ## 12. Química del carbono
 
-### Reacción primaria: C + ½O₂ → CO
+**Primaria (superficie de la chatarra), C + ½O₂ → CO:** cinética de Maahs
+con `P_O₂ = P0 · x_O₂` (fracción molar con la masa molar real de la mezcla
+O₂/CO/CO₂/N₂), limitada por el carbono del inventario `m_C` y por el O₂ de la
+celda en el paso (en la práctica siempre por el O₂). El carbono oxidado
+**sale del acero** (`m_s`, `E_s`; columna `m_C_oxid`, M15) y su entalpía
+pasa al gas; el calor de reacción (110.5 kJ/mol) va al sólido.
 
-**Tasa de Maahs (superficie de chatarra):**
-
-```
-rate = A_Maahs × P_O2 × exp(-E_Maahs / R T_s)    [kg_C / (m² s)]
-
-A_Maahs = 2.3×10⁵ kg/(m² s Pa)
-E_Maahs = 1.63×10⁵ J/mol
-```
-
-Solo activa donde `α_s > 0.01` y `T_s > 800 K`.
-
-**Área superficial específica (Ergun):**
-```
-A_surf = 6 α_s / d_p    [m²/m³]
-```
-
-**Fuente de calor:**
-```
-S_chem += (-ΔH_C→CO / MW_C) × rate × A_surf    [W/m³]
-ΔH_C→CO = -110.5 kJ/mol
-```
-
-**Fuente de CO:**
-```
-S_CO_src += rate × A_surf × (MW_CO / MW_C)    [kg_CO / (m³ s)]
-```
+**Secundaria (fase gas), CO + ½O₂ → CO₂:** segundo orden en densidades
+parciales, `r = A ρ_CO ρ_O₂ exp(−E/RT_g)`, limitada por el CO y el O₂ del
+paso; el calor (283 kJ/mol) va **solo al gas**.
 
 ---
 
-### Reacción secundaria: CO + ½O₂ → CO₂ (combustión en fase gas)
+## 13. Transporte de especies O₂ / CO / CO₂
 
-Solo donde `α_gas > 0` y `T_gas > 600 K`:
-
-**Ley de velocidad de Arrhenius:**
 ```
-r_CO2 = A_CO2 × Y_CO × P_O2 × exp(-E_CO2 / R T_g)    [kg_CO / (m³ s)]
-
-A_CO2 = 1.0×10⁶ m³/(kg s Pa)
-E_CO2 = 1.25×10⁵ J/mol
+α_g ρ_g DY_k/Dt = div(Γ_f ∇Y_k) + S_k − Y_k S_gas,    S_gas = Σ S_k
 ```
 
-**Anti-overshooting (clamp):**
-```
-r_CO2 = min(r_CO2, Y_CO × ρ_g × α_g / dt)
-```
-
-**Efectos:**
-```
-S_CO_src  -= r_CO2                           (consume CO)
-S_CO2_src += r_CO2 × (MW_CO2 / MW_CO)       (produce CO₂)
-S_chem    += (-ΔH_CO→CO2 / MW_CO) × r_CO2  (calor exotérmico)
-ΔH_CO→CO2 = -283.0 kJ/mol
-```
+La masa del gas la fija la ecuación de estado; la masa que aportan las
+reacciones entra al Poisson como fuente de volumen `S_gas/ρ_g` y en las
+especies como dilución `−Y_k S_gas` (M14; columnas `m_dil_*`): ΣY ≤ 1.
+Difusión de cara armónica `Γ_f` de α μ_eff/Sc_t, nula hacia celdas sin gas;
+sin convección entrante desde celdas sin gas (M16). Sin sub-relajación (se
+resuelven una vez por paso; A2). `solve_chemistry` exige `solve_species`.
 
 ---
 
-## 13. Transporte de especies CO / CO₂
+## 14. Escoria
 
-### Ecuación gobernante
-
-Para cada fracción másica Y ∈ {Y_CO, Y_CO₂}:
-
-```
-∂(αg ρg Y)/∂t + ∇·(αg ρg u Y) = ∇·(αg ρg D_eff ∇Y) + S_net    [kg/(m³ s)]
-```
-
-### Difusividad efectiva
-
-```
-D_eff = μ_eff / (ρ_g × Sc_t)
-
-Sc_t = 0.7    (Schmidt turbulento — configurable via Sc_t_species)
-```
-
-### Discretización
-
-Idéntica a la ecuación de energía:
-- Convección: upwind de primer orden
-- Difusión: diferencias centrales
-- Temporal: Euler implícito
-
-La conductancia difusiva reemplaza `αq kth` por `αg ρg D_eff`.
-
-### Condiciones de borde
-
-Neumann (gradiente cero) en todas las paredes y techo: `Y_bc = 0.0`  
-El CO/CO₂ sale convectado por el flujo de gas caliente ascendente.
-
-### Post-solve
-
-```
-Y = clamp(Y, 0.0, 1.0)
-Y = α_Y × Y_new + (1 - α_Y) × Y_old    (α_Y = 0.5 por defecto)
-```
-
----
-
-## 14. Capa de escoria
-
-### Diseño
-
-La escoria es una pseudo-fase sin ecuaciones N-S propias. Su fracción volumétrica `α_slag` evoluciona por flotabilidad: sube hacia las zonas de menor densidad (sobre el líquido, por debajo del gas).
-
-### Flotabilidad (3 barridos ascendentes por paso)
-
-```
-for k = nz-1 downto 1:
-    if α_gas(k+1) > threshold:
-        intercambiar α_slag(k) con α_slag(k+1)    (la escoria sube)
-```
-
-El gas compensa el volumen desplazado.
-
-### Balance de energía de la escoria
-
-```
-dT_slag/dt = Q_arc + Q_interface
-```
-
-**Intercepción del calor del arco:**
-```
-Q_arc = α_slag × S_arc × vol    [W]
-```
-
-**Intercambio interfacial:**
-```
-Q_sl = h_contact × A_contact × (T_slag - T_liquid)    con h_contact = 1000 W/(m² K)
-Q_sg = h_contact × A_contact × (T_slag - T_gas)
-```
-
-Clamp anti-overshooting: `ΔT_slag ≤ |T_slag - T_fluid|` en un paso.
-
-### Inicialización
-
-- 3 niveles k por encima de la superficie del scrap
-- Masa escalada a `m_slag_init = 3300 kg`
-- Temperatura inicial = `T_initial`
+Pseudo-fase sin momento propio. Flotación por **columna global** (gather +
+mismo barrido en todos los ranks): la escoria asciende hasta el tope del baño
+o desciende cuando el material de abajo desaparece, nunca entra a celdas
+llenas de chatarra, y `α_sl = m_sl/(ρ_sl V)` (A14). Intercambio escoria–fluido
+exacto de dos nodos (exponencial), en dos pasadas. Química FeO/C con
+conservación elemental (E2). Piso T_sl ≥ 300 K con E_sl coherente y la
+energía inyectada auditada (`E_slag_tclip`).
 
 ---
 
 ## 15. Transferencia de calor interfase
 
-### Gas ↔ Sólido y Líquido ↔ Sólido
-
 ```
-Q_gs = h_gs × A_surf × (T_gas - T_solid)    [W/m³]
-Q_ls = h_ls × A_surf × (T_liquid - T_solid)
-```
-
-El área superficial usa la misma correlación de Ergun que la química.
-
-### Clamp de estabilidad
-
-Para prevenir oscilaciones cuando `α_q` es pequeño:
-
-```
-Q_lim = α_q × ρ_q × cp_q × vol × |T_fluid - T_solid| / dt
-Q = sign(Q) × min(|Q|, Q_lim)
+gas–sólido:      h_gs = (k_mol/d)(2 + 1.1 Pr^⅓ Re^0.6) [Wakao], k_mol = μ c_p / 0.7;
+                 sobre 1373 K, max(Wakao, correlación radiativa de alta T) (A12, M39)
+líquido–sólido:  h_ls = (k_l/d)(2 + 0.6 Re^½ Pr^⅓) [Ranz–Marshall con |u_l|] (M39)
+área:            6 α_s/d repartida entre gas y líquido por fracción de poro (M7)
 ```
 
-Esto garantiza `ΔT_fluid ≤ |T_fluid - T_solid|` en un paso (sin overshooting).
+Paso **implícito exacto de tres nodos** (M6): con b_q = a_q C_q/(C_q + a_q),
+a_q = G_q dt,
+
+```
+T_s' = (C_s T_s + b_g T_g + b_l T_l) / (C_s + b_g + b_l),   Q_q dt = b_q (T_q − T_s')
+```
+
+Sin rebase del equilibrio con ningún dt. Gas–líquido (modelo de mezcla):
+intercambio de burbuja (AIAD) exacto de dos nodos.
 
 ---
 
@@ -589,7 +448,7 @@ Esto garantiza `ΔT_fluid ≤ |T_fluid - T_solid|` en un paso (sin overshooting)
 Aplicada solo a la componente `uz` del líquido:
 
 ```
-src_extra += α_liquid × ρ_liquid × β × g × (T - T_ambient)
+src_extra += α_liquid × ρ_liquid × β × g × (T - T_ref_boussinesq)    (T_ref_boussinesq = T_liquidus por defecto, A7)
 
 β = 1.2×10⁻⁴ K⁻¹    (coeficiente de expansión térmica del acero)
 g = -9.81 m/s²       (hacia abajo, z negativo)
@@ -614,15 +473,14 @@ g = -9.81 m/s²       (hacia abajo, z negativo)
 | k_solid | 35 | W/(m·K) | Conductividad térmica sólido |
 | k_liquid | 30 | W/(m·K) | Conductividad térmica líquido |
 | μ_liquid | 6×10⁻³ | Pa·s | Viscosidad dinámica acero |
-| ρ_gas | 1.2 | kg/m³ | Densidad gas referencia |
+| ρ_gas | 1.2 | kg/m³ | Densidad del gas a 300 K (EOS ρ = 1.2·300/T) |
 | cp_gas | 1000 | J/(kg·K) | Calor específico gas |
-| k_gas | 0.5 | W/(m·K) | Conductividad térmica gas |
+| k_gas | 0.5 | W/(m·K) | Conductividad EFECTIVA de la difusión del gas (la interfase usa μc_p/0.7) |
 | μ_gas | 5×10⁻⁵ | Pa·s | Viscosidad dinámica gas |
-| ε (emissivity) | 0.7 | — | Emisividad superficial acero |
+| ε (emissivity) | 0.7 | — | (sin efecto en el modelo: la DO usa κ) |
 | β | 1.2×10⁻⁴ | K⁻¹ | Expansión térmica acero |
 | d_particle | 0.10 | m | Tamaño chatarra (Ergun) |
-| ARC_TAU | 3×10⁻⁴ | s | Constante tiempo arco |
-| ARC_W | 30 | W | Potencia enfriamiento arco |
+| ARC_LENGTH_GRAD | 1150 | V/m | Gradiente de la columna del arco |
 | MW_C | 0.012 | kg/mol | Masa molar carbono |
 | MW_CO | 0.028 | kg/mol | Masa molar monóxido de carbono |
 | MW_CO₂ | 0.044 | kg/mol | Masa molar dióxido de carbono |

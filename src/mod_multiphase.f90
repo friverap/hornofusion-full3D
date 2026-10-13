@@ -24,7 +24,7 @@ module mod_multiphase
     use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
     use mod_mpi_topology, only: mpi_allreduce_max
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
-                             ws_pcorr_g, ws_pcorr_valid, ws_liq_room, ws_liq_room_valid, &
+                             ws_liq_room, ws_liq_room_valid, &
                              ws_liq_fr, ws_liq_fth, ws_liq_fz, &
                              ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, ws_Tsrc
     implicit none
@@ -91,7 +91,6 @@ contains
         ws_liq_cont_valid = .true.
         ! (la mascara de presion de fluido, ws_pv_active, se fija mas abajo:
         !  necesita el arrastre de Ergun del gas para la percolacion, F2.16)
-        ws_pcorr_g = 0.0_dp; ws_pcorr_valid = .false.   ! (F2.3: sustituido por gas_pgrad_z)
         ! Hueco de poro del liquido en el lecho (F2.8; ver ws_liq_room)
         where (sol%alpha_s >= 1.0e-2_dp)
             ws_liq_room = liq_cap(sol%alpha_s, slag%alpha_sl) - liq%alpha

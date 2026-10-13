@@ -132,7 +132,6 @@ module mod_workspace
     ! lambda_l/lambda_T, lambda_q = alpha_q^2/K_q, con la alpha del sub-paso
     real(dp), allocatable :: ws_mKl(:,:,:), ws_mKg(:,:,:)
     ! peso disperso de las gotas libres (logistica AIAD), 0 fuera
-    real(dp), allocatable :: ws_mFd(:,:,:)
     logical, save :: ws_mix_valid = .false.
     ! Temperatura de ENTRADA del fundido del paso [K] (auditoria 12-oct-2026,
     ! A3): copia de sol%T_s tomada justo despues de compute_melting y ANTES del
@@ -153,8 +152,6 @@ module mod_workspace
     ! liquido continuo fuera del lecho (alpha_s < 1e-2); 0 en las demas.
     ! Lo usan el momento del gas y su contribucion al Poisson (gradientes
     ! de celda y de cara).
-    real(dp), allocatable :: ws_pcorr_g(:,:,:)
-    logical, save :: ws_pcorr_valid = .false.
     ! Hueco de poro que le queda al liquido en cada celda del LECHO (F2.8):
     ! liq_cap - alpha_l si alpha_s >= 1e-2, 1 en el resto. La cara del
     ! Poisson del liquido hacia una celda del lecho sin hueco se CIERRA
@@ -217,12 +214,10 @@ contains
         ws_liq_fr = .true.; ws_liq_fth = .true.; ws_liq_fz = .true.
         allocate(ws_gas_perc, ws_gas_reach, mold=ws_liq_cont)
         ws_gas_perc = .true.; ws_gas_reach = .true.
-        allocate(ws_pcorr_g, mold=ws_aW); ws_pcorr_g = 0.0_dp
         allocate(ws_liq_room, mold=ws_aW); ws_liq_room = 1.0_dp
         allocate(ws_sat_goff, mold=ws_liq_cont); ws_sat_goff = .false.
         allocate(ws_Tsrc, mold=ws_aW); ws_Tsrc = 0.0_dp
-        allocate(ws_mQ_r, ws_mQ_th, ws_mQ_z, ws_mW, ws_mKl, ws_mKg, ws_mFd, mold=ws_aW)
-        ws_mFd = 0.0_dp
+        allocate(ws_mQ_r, ws_mQ_th, ws_mQ_z, ws_mW, ws_mKl, ws_mKg, mold=ws_aW)
         ws_mQ_r = 0.0_dp; ws_mQ_th = 0.0_dp; ws_mQ_z = 0.0_dp; ws_mW = 0.0_dp
         ws_mKl = 0.0_dp; ws_mKg = 0.0_dp
     end subroutine ensure_workspace
