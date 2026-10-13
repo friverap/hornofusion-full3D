@@ -154,6 +154,7 @@ Los residuales son normas L2 globales (reducción MPI). El SIMPLE itera hasta qu
 | `rho_steel` | real | 7500.0 | kg/m³ | Densidad del acero (sólido y líquido) |
 | `T_solidus` | real | 1600.0 | K | Temperatura de solidus |
 | `T_liquidus` | real | 1809.0 | K | Temperatura de liquidus |
+| `T_ref_boussinesq` | real | T_liquidus | K | Temperatura de referencia del Boussinesq del líquido: el peso es ρ_steel g (1 − β (T − T_ref)). Antes era `T_ambient` (300 K) y el baño a 1850 K pesaba ×0.81 (auditoría 12-oct-2026, A7). |
 | `cp_s` | real | 400.0 | J/(kg·K) | Calor específico sólido |
 | `cp_l` | real | 696.4 | J/(kg·K) | Calor específico líquido |
 | `h_fusion` | real | 247000.0 | J/kg | Calor latente de fusión |

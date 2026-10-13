@@ -64,6 +64,7 @@ contains
         cfg%mu_l        = MU_LIQUID
         cfg%emissivity  = EMISSIVITY
         cfg%beta_expansion = BETA_EXPANSION
+        cfg%T_ref_boussinesq = cfg%T_liquidus   ! (un valor < 0 en el config tambien significa T_liquidus)
 
         ! Material - gas
         cfg%rho_gas = RHO_GAS_REF
@@ -240,6 +241,11 @@ contains
         ! fisico; el piso de gas de poro (F2.7) existia para que la fila del
         ! liquido del modelo de dos fluidos nunca quedara sellada
         pore_floor_on = .not. (cfg%pc_gas_spring .or. cfg%mixture_model) .or. cfg%pc_keep_pore_floor
+        ! Boussinesq del liquido referido a la T de su densidad rho_steel (la del
+        ! liquido recien fundido), no a T_ambient = 300 K: con 300 K el peso del
+        ! bano a 1850 K quedaba x0.81 mientras la inercia usaba 7500 (auditoria
+        ! 12-oct-2026, A7)
+        if (cfg%T_ref_boussinesq < 0.0_dp) cfg%T_ref_boussinesq = cfg%T_liquidus
     end subroutine config_read
 
     ! Posicion del primer '#' o '!' precedido de blanco/tabulador (0 si no hay)
@@ -298,6 +304,7 @@ contains
         case ('rho_steel');  call parse_real(val, key, cfg%rho_steel)
         case ('T_solidus');  call parse_real(val, key, cfg%T_solidus)
         case ('T_liquidus'); call parse_real(val, key, cfg%T_liquidus)
+        case ('T_ref_boussinesq'); call parse_real(val, key, cfg%T_ref_boussinesq)
         case ('cp_s');       call parse_real(val, key, cfg%cp_s)
         case ('cp_l');       call parse_real(val, key, cfg%cp_l)
         case ('h_fusion');   call parse_real(val, key, cfg%h_fusion)

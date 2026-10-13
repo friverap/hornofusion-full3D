@@ -26,10 +26,11 @@ import h5py
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from eafutil import Checker, parse_xfail_arg, safe_float
+from eafutil import Checker, parse_xfail_arg, safe_float, read_config
 
 RHO_L, G = 7500.0, 9.81
-BETA, T_AMB = 1.2e-4, 300.0   # Boussinesq del liquido (mod_constants): g_eff = g (1 - beta (T_l - T_amb))
+BETA = 1.2e-4   # Boussinesq del liquido (mod_constants): g_eff = g (1 - beta (T_l - T_ref))
+T_LIQ_DEFAULT = 1809.0   # T_ref por defecto = T_liquidus (auditoria A7)
 
 
 def load(fn):
@@ -68,8 +69,12 @@ def main():
     # caliente es rho g (1 - beta (T_l - T_amb)) h, no rho g h
     with h5py.File(snaps[-1], "r") as f:
         Tl_all = f["fields/T_liquid"][...]
-    T_l = float(np.median(Tl_all[pure0])) if pure0.any() else T_AMB
-    g_eff = G * (1.0 - BETA * (T_l - T_AMB))
+    cfgd = read_config(a.config)
+    T_REF = float(cfgd.get("T_ref_boussinesq", cfgd.get("T_liquidus", T_LIQ_DEFAULT)))
+    if T_REF < 0:
+        T_REF = float(cfgd.get("T_liquidus", T_LIQ_DEFAULT))
+    T_l = float(np.median(Tl_all[pure0])) if pure0.any() else T_REF
+    g_eff = G * (1.0 - BETA * (T_l - T_REF))
     p_ferro = RHO_L * g_eff * H
 
     if not a.fill:

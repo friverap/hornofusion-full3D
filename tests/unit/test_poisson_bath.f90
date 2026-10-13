@@ -3,7 +3,8 @@
 !
 ! Motivo: Bug 19. El acople presion-velocidad debe ADMITIR un bano en
 ! reposo: dominio lleno de liquido puro (alpha_l = 1), u = 0 y
-! p = rho_l g_eff (z_top - z) exacta, con g_eff = g (1 - beta (T_l - T_amb))
+! p = rho_l g_eff (z_top - z) exacta, con g_eff = g (1 - beta (T_l - T_ref)),
+! T_ref = T_ref_boussinesq (= T_liquidus; auditoria A7)
 ! porque el momento del liquido lleva Boussinesq. Con p lineal, dp/dz central y unilateral valen -rho_l g
 ! exactamente y cancelan la gravedad del momento; la velocidad de cara de
 ! Rhie-Chow es 0 y la divergencia tambien => UNA iteracion momento+presion
@@ -76,8 +77,8 @@ program test_poisson_bath
     liq%T = 1850.0_dp; sh%S_arc_mom = 0.0_dp
     ztop = mesh%z(nz)
     ! g efectiva con Boussinesq (el momento del liquido lo lleva):
-    ! dp/dz = -rho g (1 - beta (T_l - T_amb))
-    g_eff = GRAVITY * (1.0_dp - cfg%beta_expansion * (1850.0_dp - cfg%T_ambient))
+    ! dp/dz = -rho g (1 - beta (T_l - T_ref))
+    g_eff = GRAVITY * (1.0_dp - cfg%beta_expansion * (1850.0_dp - cfg%T_ref_boussinesq))
     do k = lbound(sh%p,3), ubound(sh%p,3)
         p_hyd(:,:,k) = liq%rho(1,1,1) * g_eff * (ztop - mesh%z(k))
     end do

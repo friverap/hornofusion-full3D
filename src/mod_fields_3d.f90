@@ -736,7 +736,7 @@ contains
         real(dp) :: p_here
 
         allocate(rf, mold=liq%alpha)
-        rf = liq%alpha * liq%rho * (1.0_dp - cfg%beta_expansion * (liq%T - cfg%T_ambient)) &
+        rf = liq%alpha * liq%rho * (1.0_dp - cfg%beta_expansion * (liq%T - cfg%T_ref_boussinesq)) &
            + gas%alpha * gas%rho
         allocate(rf_g(m%nr_g, m%nth_g, m%nz_g), p_g(m%nr_g, m%nth_g, m%nz_g))
         call gather_global_field(rf, rf_g, m)

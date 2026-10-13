@@ -176,7 +176,7 @@ contains
                 Tg_ref = gas_old%T
             end where
         end if
-        beta_b = cfg%beta_expansion; T_amb_b = cfg%T_ambient
+        beta_b = cfg%beta_expansion; T_amb_b = cfg%T_ref_boussinesq
 
         ! 1. propiedades de mezcla, v del paso anterior e iterado, deslizamiento
         call mixture_state(liq, gas, liq_old, gas_old, sol, slag, m)

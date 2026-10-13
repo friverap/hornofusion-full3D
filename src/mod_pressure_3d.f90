@@ -676,10 +676,10 @@ contains
             w = 0.5_dp * GRAVITY * ( &
                 merge(1.0_dp, 0.0_dp, act_l(ii,jj,ka)) * &
                 liq%alpha(ii,jj,ka) * liq%rho(ii,jj,ka) * &
-                    (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,ka) - cfg%T_ambient)) + &
+                    (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,ka) - cfg%T_ref_boussinesq)) + &
                 merge(1.0_dp, 0.0_dp, act_l(ii,jj,kb)) * &
                 liq%alpha(ii,jj,kb) * liq%rho(ii,jj,kb) * &
-                    (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,kb) - cfg%T_ambient)))
+                    (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,kb) - cfg%T_ref_boussinesq)))
         end function liq_weight_f
 
         ! Gradiente vertical de celda que ve el GAS: caras sin el peso del

@@ -372,7 +372,7 @@ contains
                         if (.not. is_gas) then
                             src_extra = src_extra &
                                   + alpha_f * ph%rho(i,j,k) * cfg%beta_expansion &
-                                    * GRAVITY * (ph%T(i,j,k) - cfg%T_ambient)
+                                    * GRAVITY * (ph%T(i,j,k) - cfg%T_ref_boussinesq)
                         end if
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
                                    + (-alpha_f * dp_dz + src_extra) * vol
@@ -505,10 +505,10 @@ contains
             w = 0.5_dp * GRAVITY * ( &
                 merge(1.0_dp, 0.0_dp, cont_ok(ii,jj,ka)) * &
                 ph_other%alpha(ii,jj,ka) * ph_other%rho(ii,jj,ka) * &
-                    (1.0_dp - cfg%beta_expansion * (ph_other%T(ii,jj,ka) - cfg%T_ambient)) + &
+                    (1.0_dp - cfg%beta_expansion * (ph_other%T(ii,jj,ka) - cfg%T_ref_boussinesq)) + &
                 merge(1.0_dp, 0.0_dp, cont_ok(ii,jj,kb)) * &
                 ph_other%alpha(ii,jj,kb) * ph_other%rho(ii,jj,kb) * &
-                    (1.0_dp - cfg%beta_expansion * (ph_other%T(ii,jj,kb) - cfg%T_ambient)))
+                    (1.0_dp - cfg%beta_expansion * (ph_other%T(ii,jj,kb) - cfg%T_ref_boussinesq)))
         end function liq_weight_f
 
         pure logical function cont_ok(ii, jj, kk)

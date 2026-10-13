@@ -49,6 +49,7 @@ module mod_types_3d
         real(dp) :: cp_s, cp_l, h_fusion
         real(dp) :: k_s, k_l, mu_l
         real(dp) :: emissivity, beta_expansion
+        real(dp) :: T_ref_boussinesq   ! T de referencia del Boussinesq del liquido [K] (auditoria A7; default T_liquidus)
         real(dp) :: rho_gas, cp_gas, k_gas, mu_gas
 
         ! Ergun
