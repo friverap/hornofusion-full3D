@@ -40,6 +40,7 @@ module mod_audit
     public :: AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
     public :: AUD_RESID_MASS, AUD_RESID_E, AUD_SPILL_MASS
     public :: AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
+    public :: AUD_CHARGE_MASS, AUD_CHARGE_E
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -74,7 +75,11 @@ module mod_audit
     integer, parameter :: AUD_VOL_DALPHA      = 28 ! m3: sum |alpha_l(tras transporte) - alpha_l(iterado entrante)| V
     integer, parameter :: AUD_VOL_LIM         = 29 ! m3: entrada de liquido BLOQUEADA por el limitador de hueco
     integer, parameter :: AUD_VOL_UNLINKED    = 30 ! m3: flujo de liquido por caras NO enlazadas en el Poisson (disperso/drift)
-    integer, parameter :: N_AUD = 30
+    ! Carga de cestas DESPUES del arranque (cesta 2): masa y entalpia que entran
+    ! al solido (auditoria 12-oct-2026, A5; antes un salto sin termino fuente)
+    integer, parameter :: AUD_CHARGE_MASS     = 31 ! kg cargados por cestas tras el arranque
+    integer, parameter :: AUD_CHARGE_E        = 32 ! J de entalpia de esa carga
+    integer, parameter :: N_AUD = 32
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -154,7 +159,7 @@ contains
                 'E_iph_sol,E_iph_gas,E_iph_liq,' // &
                 'm_resid_closed,E_resid_closed,m_spill,' // &
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
-                'p_max,u_gas_max,u_liq_max'
+                'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in'
             close(iu)
         end if
         acc = 0.0_dp
@@ -303,7 +308,8 @@ contains
                 ',', a(AUD_IPH_SOL), ',', a(AUD_IPH_GAS), ',', a(AUD_IPH_LIQ), &
                 ',', a(AUD_RESID_MASS), ',', a(AUD_RESID_E), ',', a(AUD_SPILL_MASS), &
                 ',', a(AUD_VOL_DALPHA), ',', a(AUD_VOL_LIM), ',', a(AUD_VOL_UNLINKED), &
-                ',', mx_glob(1), ',', mx_glob(2), ',', mx_glob(3)
+                ',', mx_glob(1), ',', mx_glob(2), ',', mx_glob(3), &
+                ',', a(AUD_CHARGE_MASS), ',', a(AUD_CHARGE_E)
             close(iu)
         end if
     end subroutine audit_write_step

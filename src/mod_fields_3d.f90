@@ -7,7 +7,8 @@ module mod_fields_3d
     use mod_constants
     use mod_types_3d
     use mod_mpi_topology
-    use mod_melting_3d, only: solid_enthalpy
+    use mod_melting_3d, only: solid_enthalpy, solid_T_from_enthalpy
+    use mod_audit, only: audit_add, AUD_CHARGE_MASS, AUD_CHARGE_E
     use mod_parallel_utils, only: global_to_local, gather_global_field
     implicit none
 
@@ -498,7 +499,7 @@ contains
         integer :: i, j, k, k_global, n
         real(dp) :: vfrac
         real(dp) :: mass_rem, mass_take, mass_level, vfrac_eff
-        real(dp) :: bulk_avail, take_bulk, best_mass
+        real(dp) :: bulk_avail, take_bulk, best_mass, dm_c, de_c
         integer  :: best_layer
         real(dp) :: z_top, z_top_global
         real(dp) :: local_vol_add, global_vol_add
@@ -648,15 +649,34 @@ contains
                         do j = jstart, jend
                             do i = istart, iend
                                 if (m%cell_type(i,j,k) == 1) then
-                                    sol%alpha_s(i,j,k) = vfrac_eff
-                                    sol%m_s(i,j,k) = cfg%rho_steel * vfrac_eff * m%vol(i,j,k)
-                                    sol%T_s(i,j,k) = cfg%T_initial
-                                    ! Entalpía consistente con la función única
-                                    sol%E_s(i,j,k) = sol%m_s(i,j,k) * &
-                                        solid_enthalpy(cfg%T_initial, cfg)
-                                    sol%m_C(i,j,k) = cfg%carbon_frac * sol%m_s(i,j,k)
+                                    ! La carga SUMA a lo que hay (auditoria
+                                    ! 12-oct-2026, A5): antes sobrescribia
+                                    ! m_s/E_s/m_C (borraba sin auditar el
+                                    ! solido residual sobre z_top) y ponia
+                                    ! gas = 1 - vfrac ignorando liquido y
+                                    ! escoria. La chatarra desplaza primero
+                                    ! al gas; si no cabe, el derrame del
+                                    ! transporte de alpha sube el liquido
+                                    ! (conservativo y auditado).
+                                    dm_c = cfg%rho_steel * vfrac_eff * m%vol(i,j,k)
+                                    de_c = dm_c * solid_enthalpy(cfg%T_initial, cfg)
+                                    sol%m_s(i,j,k) = sol%m_s(i,j,k) + dm_c
+                                    sol%E_s(i,j,k) = sol%E_s(i,j,k) + de_c
+                                    sol%m_C(i,j,k) = sol%m_C(i,j,k) + cfg%carbon_frac * dm_c
+                                    if (sol%m_s(i,j,k) > dm_c) then
+                                        sol%alpha_s(i,j,k) = sol%m_s(i,j,k) / &
+                                            (cfg%rho_steel * m%vol(i,j,k))
+                                    else
+                                        sol%alpha_s(i,j,k) = vfrac_eff   ! celda vacia: exacto
+                                    end if
+                                    sol%T_s(i,j,k) = solid_T_from_enthalpy( &
+                                        sol%E_s(i,j,k) / sol%m_s(i,j,k), cfg)
                                     sol%layer_id(i,j,k) = best_layer
-                                    gas%alpha(i,j,k) = 1.0_dp - vfrac_eff
+                                    gas%alpha(i,j,k) = max(0.0_dp, gas%alpha(i,j,k) - vfrac_eff)
+                                    if (bucket > 1) then
+                                        call audit_add(AUD_CHARGE_MASS, dm_c)
+                                        call audit_add(AUD_CHARGE_E, de_c)
+                                    end if
                                 end if
                             end do
                         end do

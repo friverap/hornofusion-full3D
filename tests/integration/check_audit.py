@@ -69,6 +69,7 @@ def main():
                r.get("E_rad_sol", 0.0) + r.get("E_conv_defect", 0.0) -
                r.get("E_wall_conv", 0.0) + r.get("E_chem_sol", 0.0) +
                r.get("E_ecs_in", 0.0) + r.get("E_flux_in", 0.0) +
+               r.get("E_charge_in", 0.0) +
                r.get("E_slag_ox", 0.0) - r.get("E_slag_red", 0.0) +
                r.get("E_rad_foam", 0.0)
                for r in steps)

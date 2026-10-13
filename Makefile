@@ -118,7 +118,7 @@ $(OBJDIR)/mod_chemistry_carbon.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_
 $(OBJDIR)/mod_species_transport.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_solver_3d.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_workspace.o
 $(OBJDIR)/mod_convergence_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o
 $(OBJDIR)/mod_input_profiles.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
-$(OBJDIR)/mod_fields_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_melting_3d.o
+$(OBJDIR)/mod_fields_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_melting_3d.o $(OBJDIR)/mod_audit.o
 $(OBJDIR)/mod_output_hdf5.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o
 $(OBJDIR)/mod_restart.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_fields_3d.o $(OBJDIR)/mod_melting_3d.o $(OBJDIR)/mod_electrode_3d.o $(OBJDIR)/mod_properties_3d.o
 $(OBJDIR)/mod_foam.o: $(OBJDIR)/mod_constants.o

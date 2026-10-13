@@ -271,6 +271,8 @@ program eaf_3d_simulator
             time >= cfg%t_bucket2_charge .and. &
             time - cfg%dt < cfg%t_bucket2_charge) then
             call charge_scrap(sol, gas, mesh, cfg, 2)
+            call solid_exchange_halos(sol, mesh)
+            call phase_exchange_halos(gas, mesh)
             if (should_print(mesh)) then
                 print '(A,F10.1)', ' [MAIN] Second bucket charged at t=', time
             end if

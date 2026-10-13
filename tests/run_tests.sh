@@ -175,6 +175,8 @@ full | rebaseline)
     run_case bed_flood 4
     # Arco sin chatarra (auditoria 12-oct, C1): respaldo de P_rad
     run_case arc_noscrap 4
+    # Cesta 2 durante la corrida (auditoria A5): carga aditiva y auditada
+    run_case cold_bucket2 4
 
     for d in "$OUT"/cold_10step_n*; do
         check_invariants "$d" cold_10step
@@ -236,6 +238,8 @@ full | rebaseline)
     check_invariants "$OUT/bed_flood_n4" bed_flood
     check_invariants "$OUT/arc_noscrap_n4" arc_noscrap
     check_audit_if_present "$OUT/arc_noscrap_n4" audit_arcnoscrap
+    check_invariants "$OUT/cold_bucket2_n4" cold_bucket2
+    check_audit_if_present "$OUT/cold_bucket2_n4"
     run_script "bed_flood" \
         $PY $INT/check_bath.py "$OUT/bed_flood_n4" --config "$CFG/bed_flood.dat" --fill \
         --xfail "$(xfail_ids bed_flood)"
