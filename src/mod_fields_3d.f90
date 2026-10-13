@@ -748,6 +748,16 @@ contains
         allocate(rf, mold=liq%alpha)
         rf = liq%alpha * liq%rho * (1.0_dp - cfg%beta_expansion * (liq%T - cfg%T_ref_boussinesq)) &
            + gas%alpha * gas%rho
+        ! Fuerza balanceada (liq_balanced_force): la hidrostatica del fluido
+        ! es por volumen de FLUIDO (en un poro lleno grad p = rho_l g); igual
+        ! que el W_f de momento y Poisson, asi el estado inicial es su punto fijo
+        if (cfg%liq_balanced_force .and. .not. cfg%pc_fs_liquid_gradient) then
+            where (liq%alpha + gas%alpha > 1.0e-12_dp)
+                rf = rf / (liq%alpha + gas%alpha)
+            elsewhere
+                rf = 0.0_dp
+            end where
+        end if
         allocate(rf_g(m%nr_g, m%nth_g, m%nz_g), p_g(m%nr_g, m%nth_g, m%nz_g))
         call gather_global_field(rf, rf_g, m)
         nzg = m%nz_g

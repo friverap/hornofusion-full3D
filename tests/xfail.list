@@ -25,35 +25,17 @@ audit_noflow:arc_budget
 # iteraciones del encendido quedan mas lejos del punto fijo y el hook (sobre
 # el campo relajado, M5) lo muestra.
 audit_cold:energy_balance
-# --- Bug 19 CERRADO (2026-09-27; B1 v32: cero episodios, p_max 5.35 kPa en
-# 120 s de malla media, ninguna cota activada). Lo que queda aqui es de OTRA
-# familia: el modo par-impar del esquema colocado, acotado y no creciente ---
-# --- Banco del bano de liquido puro (Plan C, F2 2026-09-24) ---
-# Con el Poisson de VOLUMEN + factor alpha + PEA + gas sin el peso del
-# liquido continuo (rama planc-f2-volumen) el bano es estable: ferrostatica
-# 0.9 %, gas <= 21 m/s, p acotada, masa exacta. Quedan:
-# - corriente fantasma de centro de 0.17 m/s (flujos de cara ~0): modo
-#   par-impar del colocado, ACOTADA y no creciente; Liu et al. 2024 la
-#   documentan como no eliminable con los metodos actuales;
-#   (bath_alpha_frozen se RETIRO el 29-sep-2026: con el tratamiento de fase
-#   evanescente — velocidad atada a la otra fase en vez de cero, F2.20 — el
-#   d alpha de un bano en reposo pasa de 1.1e-3 a 0.000 EXACTO. La deriva de
-#   composicion que se daba por inevitable era la inconsistencia de aparicion
-#   de fase, no el esquema colocado.)
-bath:bath_rest
-# - ferrostatica: el banco ya estaba AL FILO (0.9 % con tolerancia del 1 %,
-#   ver arriba). Con el caudal DONOR-CELL del liquido en momento (F2.24,
-#   29-sep-2026) la corriente fantasma sube de 0.158 a 0.175 m/s y el error
-#   pasa a 1.05 %. NO es un fenomeno nuevo: es la MISMA corriente par-impar
-#   ya listada, que con el bano de solo 3 celdas de este banco mueve la
-#   ferrostatica medida un 1 %. La contrapartida esta medida: F2.24 elimina
-#   la realimentacion positiva del 18 % por iteracion que llevaba la
-#   superficie del bano a U_LIQ_MAX en 0.24 s en cuanto el arco perforaba el
-#   lecho (juez de 208-212 s: la base entra en la cota en 209.066 y llega a
-#   27 kPa; con F2.24 ninguna cota se activa y el liquido satura en 8.2 m/s
-#   y baja a 7.0). Se retira cuando se cierre bath_rest: las dos son la
-#   misma corriente.
-bath:bath_hydrostatic
+# --- Banco del bano de liquido puro: bath_rest y bath_hydrostatic RETIRADOS
+# 13-oct-2026. La corriente fantasma par-impar de 0.17-0.22 m/s y el error
+# ferrostatico de ~1 % eran la fuerza de cuerpo NO balanceada del liquido: p
+# tiene un quiebre en la superficie libre (la cara bajo la celda de superficie
+# pesa la mezcla) y la diferencia central de un p con quiebre no equilibra el
+# peso uniforme de celda (la celda llena bajo la superficie quedaba con 11
+# kPa/m netos en el estado hidrostatico exacto). Con la fuerza balanceada por
+# caras (liq_balanced_force; Francois 2006, Mencinger & Zun 2007) el bano en
+# reposo es punto fijo discreto: ferrostatica 2e-11, |u_l| 9e-11, d alpha
+# 1.5e-10, gas 2e-6 m/s. (Choi/Majumdar, el remedio que se suponia, se midio
+# NEGATIVO: rama choi-intento.)
 # --- Banco del lecho inundado (Plan D, D0 2026-10-05) ---
 # Poros del lecho llenos de liquido bajo chatarra que funde: el poro lleno es
 # un "numerical dead end" (water packing, RELAP5 §3.4.6 / TRACE cap. 2) y la

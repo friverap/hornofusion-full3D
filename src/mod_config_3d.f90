@@ -90,6 +90,7 @@ contains
         cfg%pc_fs_liquid_gradient = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
         cfg%pc_fs_liquid_face = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
         cfg%pc_consistent_corrector = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
+        cfg%liq_balanced_force = .true.         ! fuerza del liquido balanceada por caras (oct-2026)
         cfg%pc_liq_closed_dir = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
         cfg%pc_sat_open = .false.         ! Plan E E1 (10-oct-2026): juez B1 negativo, solo banco
         cfg%pc_sat_gas_off = .false.      ! Plan E E1b (10-oct-2026): juez B1 negativo, nadie la activa
@@ -327,6 +328,7 @@ contains
         case ('pc_fs_liquid_gradient'); cfg%pc_fs_liquid_gradient = parse_bool(val)
         case ('pc_fs_liquid_face'); cfg%pc_fs_liquid_face = parse_bool(val)
         case ('pc_consistent_corrector'); cfg%pc_consistent_corrector = parse_bool(val)
+        case ('liq_balanced_force'); cfg%liq_balanced_force = parse_bool(val)
         case ('pc_liq_closed_dir'); cfg%pc_liq_closed_dir = parse_bool(val)
         case ('pc_sat_open'); cfg%pc_sat_open = parse_bool(val)
         case ('pc_sat_gas_off'); cfg%pc_sat_gas_off = parse_bool(val)

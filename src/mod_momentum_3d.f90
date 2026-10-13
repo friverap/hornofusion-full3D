@@ -107,6 +107,8 @@ contains
         real(dp), intent(in)         :: alpha_old(-1:,-1:,-1:)
         real(dp), intent(in)         :: mdot_m(-1:,-1:,-1:)
         logical :: cons_l
+        ! fuerza vertical balanceada por caras (liq_balanced_force)
+        logical :: lbf_m
 
         integer :: i, j, k, jm, jp
         integer :: istart, iend, jstart, jend, kstart, kend
@@ -127,6 +129,7 @@ contains
         ! Get loop bounds
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
+        lbf_m = cfg%liq_balanced_force .and. .not. cfg%pc_fs_liquid_gradient
 
         ! Allocate coefficient arrays (with same dimensions as fields)
         call ensure_workspace(m)
@@ -411,6 +414,28 @@ contains
                             ! quita del gradiente. Media de las caras que
                             ! existen, como pgrad.
                             dp_dz = gas_pgrad_z(i, j, k, ok_bot, ok_top)
+                        else if (lbf_m) then
+                            ! FUERZA BALANCEADA POR CARAS del liquido continuo
+                            ! (oct-2026; Francois et al. 2006, Mencinger & Zun
+                            ! 2007, JCP 221). Con una sola p por celda, p tiene
+                            ! un QUIEBRE en la superficie libre (la cara bajo la
+                            ! celda de superficie pesa la MEZCLA, 0.7 rho_l en
+                            ! bath_test) y la diferencia central de un p con
+                            ! quiebre no equilibra un peso de celda uniforme:
+                            ! la celda llena bajo la superficie quedaba con 11
+                            ! kPa/m netos hacia abajo en el estado hidrostatico
+                            ! exacto. Esa era la fuente del modo par-impar del
+                            ! bano (u_z alternando, p en escalera; F1b). El
+                            ! liquido ve ahora la presion REDUCIDA del gas
+                            ! (F2.3): media de las caras de (p_N - p_P)/dz + W_f,
+                            ! con W_f el peso del liquido continuo en la cara, y
+                            ! su peso (con Boussinesq) va DENTRO de W_f, no como
+                            ! fuerza de celda. La suma de fases da la mezcla
+                            ! balanceada por caras; entre el liquido continuo y
+                            ! el gas no queda flotacion relativa (interfase
+                            ! grande, como ya hacia F2.3 con el gas). El Rhie-
+                            ! Chow del liquido usa la misma forma (mod_pressure).
+                            dp_dz = gas_pgrad_z(i, j, k, ok_bot, ok_top)
                         else
                             ! D2.5: superficie libre -> la presion del gas
                             ! actua en la cara (ver pgrad_fs)
@@ -423,11 +448,15 @@ contains
                         ! rho(T) de gas ideal (hallazgo 3.13)
                         src_extra = -alpha_f * ph%rho(i,j,k) * GRAVITY &
                                   + sh%S_arc_mom(i,j,k)
+                        ! fuerza balanceada: el peso del gas va en W_f
+                        if (is_gas .and. lbf_m) src_extra = sh%S_arc_mom(i,j,k)
                         if (.not. is_gas) then
                             src_extra = src_extra &
                                   + alpha_f * ph%rho(i,j,k) * cfg%beta_expansion &
                                     * GRAVITY * (ph%T(i,j,k) - cfg%T_ref_boussinesq) &
                                   + sh%F_lorentz_z(i,j,k)
+                            ! fuerza balanceada: el peso del liquido esta en W_f
+                            if (lbf_m) src_extra = sh%S_arc_mom(i,j,k) + sh%F_lorentz_z(i,j,k)
                         end if
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
                                    + (-alpha_f * dp_dz + src_extra) * vol
@@ -596,21 +625,50 @@ contains
             ! morfologia AIAD): el disperso (niebla) SI carga al gas via
             ! el arrastre de las gotas, con la flotacion de la mezcla que lo
             ! compensa (test_dispersed_liquid caso 4).
-            w = 0.5_dp * GRAVITY * ( &
-                merge(1.0_dp, 0.0_dp, cont_ok(ii,jj,ka)) * &
-                ph_other%alpha(ii,jj,ka) * ph_other%rho(ii,jj,ka) * &
-                    (1.0_dp - cfg%beta_expansion * (ph_other%T(ii,jj,ka) - cfg%T_ref_boussinesq)) + &
-                merge(1.0_dp, 0.0_dp, cont_ok(ii,jj,kb)) * &
-                ph_other%alpha(ii,jj,kb) * ph_other%rho(ii,jj,kb) * &
-                    (1.0_dp - cfg%beta_expansion * (ph_other%T(ii,jj,kb) - cfg%T_ref_boussinesq)))
+            w = 0.5_dp * (cell_w(ii, jj, ka) + cell_w(ii, jj, kb))
         end function liq_weight_f
+
+        ! Peso por unidad de volumen de la celda que entra en W_f.
+        ! Sin fuerza balanceada (F2.3, solo el gas): alpha_l rho_l g del
+        ! liquido continuo. Con fuerza balanceada (liq_balanced_force): peso
+        ! de la MEZCLA CONTINUA (liquido continuo + gas) por volumen de
+        ! FLUIDO, (alpha_l rho_l + alpha_g rho_g) g / (alpha_l + alpha_g), y
+        ! ninguna fase lleva peso de celda propio. Con el gas fuera de W, la
+        ! hidrostatica de la mezcla empujaba al liquido de la celda de
+        ! superficie (alpha_l alpha_g rho_g g: deriva lineal en bath_test); y
+        ! por volumen de fluido porque en un poro lleno la hidrostatica es la
+        ! intrinseca, grad p = rho_l g, el solido se sostiene solo
+        ! (test_poisson_bath caso 5).
+        pure real(dp) function cell_w(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            real(dp) :: al, rl, Tl, ag, rg, eps
+            if (is_gas) then
+                al = ph_other%alpha(ii,jj,kk); rl = ph_other%rho(ii,jj,kk); Tl = ph_other%T(ii,jj,kk)
+                ag = ph%alpha(ii,jj,kk); rg = ph%rho(ii,jj,kk)
+            else
+                al = ph%alpha(ii,jj,kk); rl = ph%rho(ii,jj,kk); Tl = ph%T(ii,jj,kk)
+                ag = ph_other%alpha(ii,jj,kk); rg = ph_other%rho(ii,jj,kk)
+            end if
+            cell_w = GRAVITY * merge(1.0_dp, 0.0_dp, cont_ok(ii,jj,kk)) * al * rl &
+                   * (1.0_dp - cfg%beta_expansion * (Tl - cfg%T_ref_boussinesq))
+            if (lbf_m) then
+                eps = max(al, 0.0_dp) + max(ag, 0.0_dp)
+                if (eps > 1.0e-12_dp) then
+                    cell_w = (cell_w + GRAVITY * max(ag, 0.0_dp) * rg) / eps
+                else
+                    cell_w = 0.0_dp
+                end if
+            end if
+        end function cell_w
 
         pure logical function cont_ok(ii, jj, kk)
             integer, intent(in) :: ii, jj, kk
             if (ws_liq_cont_valid) then
                 cont_ok = ws_liq_cont(ii,jj,kk)
-            else
+            else if (is_gas) then
                 cont_ok = (ph_other%alpha(ii,jj,kk) >= ALPHA_LIQ_CONT)
+            else
+                cont_ok = (ph%alpha(ii,jj,kk) >= ALPHA_LIQ_CONT)
             end if
         end function cont_ok
 

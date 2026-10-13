@@ -65,6 +65,7 @@ module mod_types_3d
         logical :: pc_liq_sealed_wall ! Plan D D2.2b: celda sellada para el liquido = pared de su gradiente de presion
         logical :: pc_fs_liquid_face  ! Plan D D2.6: la superficie libre es cara de liquido (unilateral) del Poisson
         logical :: pc_consistent_corrector ! Plan D D2.6: corrector de velocidad con el operador de gradiente del predictor
+        logical :: liq_balanced_force ! fuerza vertical del liquido continuo balanceada por caras (presion reducida)
         logical :: pc_liq_closed_dir  ! Plan D D2.6: componente del liquido nula sin cara abierta en esa direccion
         integer  :: n_pc_max          ! Plan E E2: pasadas maximas del corrector interno alpha<->p (1 = segregado)
         real(dp) :: tol_alpha_pc      ! Plan E E2: tolerancia de salida del corrector (max |dalpha| entre pasadas)

@@ -140,6 +140,10 @@ contains
         ! superior): gas residual por debajo de este umbral
         real(dp), parameter :: FS_FULL_EPS = 1.0e-3_dp
         logical :: grad_is_gas = .false.
+        ! Fuerza vertical del liquido balanceada por caras (liq_balanced_force;
+        ! ver mod_momentum_3d): el liquido ve la MISMA presion reducida que el
+        ! gas, (p_N - p_P)/dz + W_f, en el Rhie-Chow y en sus gradientes de celda
+        logical :: lbf
         logical :: liq_mask_on               ! D2.2b: mascara del liquido del outer anterior (mismo paso)
         ! Flujo de Rhie-Chow F* y coeficiente a_nb del LIQUIDO en las caras +
         ! (este/norte/tope) de cada celda propia, para exportar el flujo
@@ -333,6 +337,7 @@ contains
         ! Liquido: p del Poisson. Gas: p con gas_pgrad_z en las caras verticales (F2.3).
         !-----------------------------------------------------------------------
         grad_is_gas = .false.
+        lbf = cfg%liq_balanced_force .and. .not. cfg%pc_fs_liquid_gradient
         call cell_gradients(sh%p, .false., gpr, gpth, gpz)
         if (cfg%gas_in_poisson .and. cfg%solve_multiphase) then
             allocate(p_g, gpr_g, gpth_g, gpz_g, mold=sh%pp)
@@ -725,14 +730,27 @@ contains
             integer, intent(in) :: ii, jj, ka, kb
             real(dp) :: w
             ! Solo liquido CONTINUO (act_l): ver nota en mod_momentum_3d
-            w = 0.5_dp * GRAVITY * ( &
-                merge(1.0_dp, 0.0_dp, act_l(ii,jj,ka)) * &
-                liq%alpha(ii,jj,ka) * liq%rho(ii,jj,ka) * &
-                    (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,ka) - cfg%T_ref_boussinesq)) + &
-                merge(1.0_dp, 0.0_dp, act_l(ii,jj,kb)) * &
-                liq%alpha(ii,jj,kb) * liq%rho(ii,jj,kb) * &
-                    (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,kb) - cfg%T_ref_boussinesq)))
+            ! (cell_w alli: con fuerza balanceada, mezcla continua por volumen
+            ! de fluido)
+            w = 0.5_dp * (cell_wp(ii, jj, ka) + cell_wp(ii, jj, kb))
         end function liq_weight_f
+
+        pure real(dp) function cell_wp(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            real(dp) :: eps
+            cell_wp = GRAVITY * merge(1.0_dp, 0.0_dp, act_l(ii,jj,kk)) * &
+                liq%alpha(ii,jj,kk) * liq%rho(ii,jj,kk) * &
+                (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,kk) - cfg%T_ref_boussinesq))
+            if (lbf) then
+                eps = max(liq%alpha(ii,jj,kk), 0.0_dp) + max(gas%alpha(ii,jj,kk), 0.0_dp)
+                if (eps > 1.0e-12_dp) then
+                    cell_wp = (cell_wp + GRAVITY * max(gas%alpha(ii,jj,kk), 0.0_dp) &
+                               * gas%rho(ii,jj,kk)) / eps
+                else
+                    cell_wp = 0.0_dp
+                end if
+            end if
+        end function cell_wp
 
         ! Gradiente vertical de celda que ve el GAS: caras sin el peso del
         ! liquido, media de las existentes (mismo esquema que momentum)
@@ -1019,7 +1037,7 @@ contains
                             u_f = 0.5_dp * (ph%uz(ii,jj,kk-1) + ph%uz(ii,jj,kk)) &
                                 + d_f * (0.5_dp*(gz(ii,jj,kk-1) + gz(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii,jj,kk-1)) / delta &
-                                         - merge(liq_weight_f(ii,jj,kk-1,kk), 0.0_dp, isg))
+                                         - merge(liq_weight_f(ii,jj,kk-1,kk), 0.0_dp, isg .or. lbf))
                             fl = face_lim(isg, u_f, ii,jj,kk-1, ii,jj,kk)
                             if (fl > 0.0_dp) then
                             af = af * fl
@@ -1054,7 +1072,7 @@ contains
                             u_f = 0.5_dp * (ph%uz(ii,jj,kk) + ph%uz(ii,jj,kk+1)) &
                                 + d_f * (0.5_dp*(gz(ii,jj,kk) + gz(ii,jj,kk+1)) &
                                          - (pf(ii,jj,kk+1) - pf(ii,jj,kk)) / delta &
-                                         - merge(liq_weight_f(ii,jj,kk,kk+1), 0.0_dp, isg))
+                                         - merge(liq_weight_f(ii,jj,kk,kk+1), 0.0_dp, isg .or. lbf))
                             fl = face_lim(isg, u_f, ii,jj,kk, ii,jj,kk+1)
                             if (fl > 0.0_dp) then
                             af = af * fl
@@ -1289,7 +1307,7 @@ contains
                                        (k > kstart .or. .not. at_zmin) .and. pv_cell(i,j,k-1), &
                                        (k < kend   .or. .not. at_zmax) .and. pv_cell(i,j,k+1), &
                                        fs_cell(i,j,k-1), fs_cell(i,j,k+1), m%zf(k-1), m%zf(k))
-                    if (isg) gz(i,j,k) = gas_gz(pfld, i, j, k, &
+                    if (isg .or. lbf) gz(i,j,k) = gas_gz(pfld, i, j, k, &
                                        (k > kstart .or. .not. at_zmin) .and. pv_cell(i,j,k-1), &
                                        (k < kend   .or. .not. at_zmax) .and. pv_cell(i,j,k+1))
                 end do

@@ -62,9 +62,18 @@ def main():
     z = last["z"]
     # profundidad del charco: desde el fondo activo hasta la superficie
     # (nivel mas alto con liquido > 0.5 en el ultimo snapshot)
-    liq_k = np.nonzero((last["alpha_liquid"] > 0.5).any(axis=(1, 2)))[0]
-    k_bot, k_top = liq_k.min(), liq_k.max()
-    H = z[k_top] - z[k_bot] + 0.5 * (z[1] - z[0])
+    # Columna de FLUIDO: con la fuerza balanceada la hidrostatica es la
+    # intrinseca (en un poro lleno grad p = rho_l g), asi que cuenta toda celda
+    # cuyo FLUIDO es mayoritariamente liquido (alpha_l / (alpha_l + alpha_g)
+    # > 0.5), con o sin chatarra/solido; la mas profunda de primer y ultimo
+    # snapshot (bath_freeze arranca con el remanente congelado por capas y
+    # liquido en los poros: la columna de poro es la presion fisica inicial)
+    def depth(s):
+        fl = s["alpha_liquid"] + s["alpha_gas"]
+        frac = np.where(fl > 0.05, s["alpha_liquid"] / np.maximum(fl, 1e-12), 0.0)
+        kk = np.nonzero((frac > 0.5).any(axis=(1, 2)))[0]
+        return z[kk.max()] - z[kk.min()] + 0.5 * (z[1] - z[0])
+    H = max(depth(first), depth(last))
     # el momento del liquido lleva Boussinesq: la ferrostatica de un charco
     # caliente es rho g (1 - beta (T_l - T_amb)) h, no rho g h
     with h5py.File(snaps[-1], "r") as f:
