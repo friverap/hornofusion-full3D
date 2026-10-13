@@ -139,7 +139,7 @@ Rutas relativas a `src/`.
 - Buckley–Leverett de la mezcla y simetría/unidades de su Poisson.
 - Reinicio de la mezcla (`Tg_end`).
 
-## Resolución (en curso, en orden de severidad)
+## Resolución (completada el 13-oct-2026, en orden de severidad)
 
 Cada pieza es un commit que pasa `make test-quick`; los goldens se
 rebaselinean solo cuando cambia la numérica (versión indicada).
@@ -197,5 +197,40 @@ rebaselinean solo cuando cambia la numérica (versión indicada).
 | B19 (prints por rank) | a779258 | — | MPI se inicializa antes de leer el config y los mensajes de lectura/validación salen solo de rank 0 (antes uno por rank); `mpi_init_topology` inicializa MPI solo si hace falta. Bit a bit |
 | B12, B14, B15 (halos, volumen, EOS) | 18de789 | v65 | `fs_shear` con diferencias unilaterales junto a celdas inactivas y α_s de abajo solo si existe (antes leía halos físicos y el tazón); columna `m_gas_volfix` para el gas que crea/destruye la restricción de volumen; EOS del gas continua en `T_MIN_GAS` y referida a 300 K (`T_RHO_GAS_REF`), no a `T_ambient` (chem_test tenía aire de 1.2 kg/m³ a 900 K), y el campo inicial con la misma EOS. `check_slag_chem` con la tolerancia de la resolución del CSV. Los errores pequeños de cierre residual (masas < 1e-9 de m_min, energía < 1e-20 J) quedan documentados como despreciables |
 | B16, B17 (k-ε de pared, piso de escoria) | cf69bf0 | — | función de pared de Launder–Spalding para ε en celdas de líquido continuo junto a pared y tope μ_t/μ ≤ 1e5; piso T_sl ≥ 300 K con E_sl coherente y energía auditada (`E_slag_tclip`, en la identidad del balance). Colateral: el formato de la fila del audit admitía 60 pares y la columna 38 partía la fila en dos líneas; ahora 100. Sin cambio en la matriz (no hay casos k-ε con líquido) |
-| B20 (mezcla) | (este commit) | v66 | decisión global del equilibrio de arranque (antes predicado local antes de colectivas) y su energía auditada (`E_mix_init`); topes de fase que conservan el flujo de mezcla; halos de v tras `mixture_state`; `mass_o` con las densidades del paso anterior (y `*_old%rho` ahora se copia: la omisión rompía la mezcla, encontrada por bisección); CFL con ffrac/s; derrame sale sin progreso posible; μ de cara armónica; código muerto de gotas (`MIX_DROPLETS`, `dsp`, `Kd`, `fdw`, `ws_mFd`, `dispc`, `with_g`) retirado. `bath_mix` y `bath_fill_mix` en la matriz (bath_fill en mezcla: 178 kPa, gas 76 m/s; hidrostática 2e-15) |
-| B11, B21, B22, B23 (config, docs, código muerto) | (este commit) | — | aviso por cada clave sin efecto (`k_s`, `emissivity`, `arc_w`, `k_slag`, `ecs_*`), `ecs_mode = 'coupled'` rechazado (no implementado); validación de estiramiento, geometría y dt (con paso adaptativo); PHYSICS.md §4, §6–16 reescritas al código actual y AC sin desfase documentada; cabeceras de `mod_pressure_3d`, `mod_drag_ergun`, `mod_solver_3d`; CLAUDE.md (avisos del config); retirados SOR (serie y MPI), TDMA 3D serie, residual serie, `ws_pcorr_g`, constantes sin uso y el Ergun redundante de `main`. Bit a bit |
+| B20 (mezcla) | ef97106 | v66 | decisión global del equilibrio de arranque (antes predicado local antes de colectivas) y su energía auditada (`E_mix_init`); topes de fase que conservan el flujo de mezcla; halos de v tras `mixture_state`; `mass_o` con las densidades del paso anterior (y `*_old%rho` ahora se copia: la omisión rompía la mezcla, encontrada por bisección); CFL con ffrac/s; derrame sale sin progreso posible; μ de cara armónica; código muerto de gotas (`MIX_DROPLETS`, `dsp`, `Kd`, `fdw`, `ws_mFd`, `dispc`, `with_g`) retirado. `bath_mix` y `bath_fill_mix` en la matriz (bath_fill en mezcla: 178 kPa, gas 76 m/s; hidrostática 2e-15) |
+| B11, B21, B22, B23 (config, docs, código muerto) | ef97106 | — | aviso por cada clave sin efecto (`k_s`, `emissivity`, `arc_w`, `k_slag`, `ecs_*`), `ecs_mode = 'coupled'` rechazado (no implementado); validación de estiramiento, geometría y dt (con paso adaptativo); PHYSICS.md §4, §6–16 reescritas al código actual y AC sin desfase documentada; cabeceras de `mod_pressure_3d`, `mod_drag_ergun`, `mod_solver_3d`; CLAUDE.md (avisos del config); retirados SOR (serie y MPI), TDMA 3D serie, residual serie, `ws_pcorr_g`, constantes sin uso y el Ergun redundante de `main`. Bit a bit |
+
+### Pendientes con causa (no resueltos por decisión o por evidencia)
+
+- **M24, parte del gas.** El gas no tiene ecuación de masa transportada (EOS
+  más compresibilidad acotada): no hay flujo que cumpla su continuidad exacta
+  para restarla, y cambiar su forma convectiva ya llevó `bath_fill` a la
+  centinela (F2.24). Requiere exportar los flujos de Rhie–Chow del gas y pasar
+  por el juez B1.
+- **M25, compresión física.** Decisión de formulación: el término acústico es
+  seudo-compresibilidad (documentado). La compresión física (ρ(P0 + p, T) y
+  fuente p^k − pⁿ) cambia la formulación low-Mach; es relevante cuando |p| ~ P0
+  en el lecho inundado.
+- **M28.** La alternativa local (cara de superficie libre unilateral, D2.5)
+  ya se cerró negativa en el juez B1; lo que falta es el acople implícito α–p.
+- **M31.** Decisión de diseño aceptada (pasador de 2 cm en el eje).
+
+### Hallazgos nuevos durante la resolución
+
+- `ecs_feed` suponía r sin descomponer: con 12 ranks no depositaba la carga
+  (M38).
+- `init_heel` dejaba una astilla de redondeo con T = heel_T según la
+  descomposición (M22).
+- `*_old%rho` nunca se copiaba al inicio del paso (lo destapó B20 en la mezcla).
+- `gas%rho` inicial no seguía la EOS; `check_chem` usaba otra densidad.
+- La fila del audit se partía al pasar de 60 pares de columnas.
+- El lazo temporal daba un paso de más por redondeo (cold_10step corría 11).
+- `monitor.log` tenía un formato roto que nunca se había ejecutado.
+
+### Consecuencia para B1
+
+Varias piezas cambian la física de forma apreciable (regla de la palanca M9,
+Lorentz M11, MC M12, interfase M6/M7/M39, carbono M15, densidad del gas de
+referencia, química al gas). El juez estadístico previo de B1 deja de ser
+representativo: hay que volver a juzgar B1 desde el inicio con el código
+actual antes de sacar conclusiones sobre el colapso de ~320 s.
