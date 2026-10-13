@@ -303,7 +303,7 @@ program eaf_3d_simulator
         if (cfg%solve_ecs .and. time >= cfg%ecs_t_start .and. &
             time <= cfg%ecs_t_stop) then
             mdot_ecs = interpolate_rate(ecs_prof, time)
-            call ecs_feed(sol, gas, mesh, cfg, mdot_ecs, cfg%dt)
+            call ecs_feed(sol, gas, liq, mesh, cfg, mdot_ecs, cfg%dt)
             call solid_exchange_halos(sol, mesh)
             if (mesh%is_parallel) &
                 call mpi_exchange_halos_3d(gas%alpha, mesh%topo)

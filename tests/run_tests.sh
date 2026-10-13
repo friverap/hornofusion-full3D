@@ -226,6 +226,10 @@ full | rebaseline)
     run_script "slag_chem_flow" \
         $PY $INT/check_slag_chem.py "$OUT/slag_chem_flow_n4" --config "$CFG/slag_chem_flow.dat"
     # escoria por columna global (auditoria A14): invariante a la descomposicion
+    # ECS con r DESCOMPUESTO (12 ranks -> 2x3x2): antes de la auditoria M38
+    # la carga no se depositaba (indice radial local tomado como global)
+    run_case ecs_test 12 && run_script "decomposition_ecs_r" \
+        $PY $INT/compare_decomposition.py "$OUT/ecs_test_n12" "$OUT/ecs_test_n1"
     run_script "decomposition_slag" \
         $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n8" --rtol 1e-6
     for d in "$OUT"/bath_test_n*; do

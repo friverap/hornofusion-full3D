@@ -72,14 +72,17 @@ Claves desconocidas se ignoran silenciosamente.
 
 ### Descomposición MPI
 
-El dominio se descompone en **θ × z** (r no se descompone).  
-`ntheta` y `nz` deben ser exactamente divisibles por los factores de la descomposición.
+El dominio se descompone en **r × θ × z** (`factorize_3d`, bloques lo más
+cúbicos posible). Solo `ntheta` debe dividir exacto; los restos de r y z van al
+último rank, y cada bloque local necesita al menos 2 celdas por dirección (se
+valida al arrancar). Tabla completa en `docs/RUNNING.md` §3.
 
-| NPROCS | Descomp. | ntheta/proc | nz/proc |
-|--------|----------|-------------|---------|
-| 8 | 1×4×2 | 30 | 42 |
-| 12 | 2×3×2 | 40 | 42 |
-| 16 | 1×4×4 | 30 | 21 |
+| NPROCS | r×θ×z (malla 60×120×84) |
+|--------|-------------------------|
+| 8 | 1×4×2 |
+| 12 | 2×3×2 |
+| 16 | 2×4×2 |
+| 24 | 2×4×3 |
 
 ### Configuraciones de malla predefinidas
 

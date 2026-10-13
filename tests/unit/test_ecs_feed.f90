@@ -55,7 +55,7 @@ program test_ecs_feed
     e0 = sum(sol%E_s(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz))
 
     do n = 1, 20
-        call ecs_feed(sol, gas, mesh, cfg, MDOT, DT)
+        call ecs_feed(sol, gas, liq, mesh, cfg, MDOT, DT)
     end do
 
     m1 = sum(sol%m_s(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz))

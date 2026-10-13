@@ -49,9 +49,11 @@ module mod_ecs_feed
 
 contains
 
-    subroutine ecs_feed(sol, gas, m, cfg, mdot, dt)
+    subroutine ecs_feed(sol, gas, liq, m, cfg, mdot, dt)
         type(solid_t), intent(inout) :: sol
         type(phase_t), intent(inout) :: gas
+        ! liquido: el tope del BAÑO tambien es superficie (auditoria M38)
+        type(phase_t), intent(in)    :: liq
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
         real(dp), intent(in)         :: mdot   ! kg/s (ya evaluado en main)
@@ -62,35 +64,44 @@ contains
         logical,  allocatable :: in_band(:,:)
         real(dp) :: dm_total, dm_level, dm_cell
         real(dp) :: c_loc, c_glob, cap_alpha, vol, e_in, dth
-        integer  :: i, jg, kg, il, jl, kl, lvl, k, ierr
+        integer  :: i, ig, jg, kg, il, jl, kl, lvl, k, ierr
         logical  :: owned
 
         dm_total = mdot * dt + m_ecs_pending
         m_ecs_pending = 0.0_dp
         if (dm_total <= 0.0_dp) return
 
-        ! ── 1. Altura de material por columna (GLOBAL; r no se descompone,
-        !      i local == i global) ─────────────────────────────────────────
-        allocate(h_loc(m%nr, m%nth_g), h_glob(m%nr, m%nth_g))
-        allocate(k0_glob(m%nr, m%nth_g), in_band(m%nr, m%nth_g))
+        ! ── 1. Altura de material por columna (GLOBAL en r y theta) ─────────
+        ! Auditoria (M32/M38): r SI se descompone (factorize_3d; 12 ranks ->
+        ! 2x3x2): el indice radial es GLOBAL (iglobal_start), no el local.
+        ! Antes se suponia i local == i global y con npr > 1 la superficie y la
+        ! banda quedaban mal asignadas. El tope del BAÑO (alpha_l >=
+        ! ALPHA_LIQ_CONT) es superficie: la chatarra cae sobre el baño (el
+        ! colapso no la hunde y la fusion la consume); antes solo contaban la
+        ! chatarra y el tazon, y con mas de ECS_MAX_LEVELS celdas de baño en la
+        ! banda (sin gas: capacidad 0) toda la carga quedaba pendiente.
+        allocate(h_loc(m%nr_g, m%nth_g), h_glob(m%nr_g, m%nth_g))
+        allocate(k0_glob(m%nr_g, m%nth_g), in_band(m%nr_g, m%nth_g))
         h_loc = 0.0_dp   ! piso: sin material => superficie en z=0/bowl
 
         do kl = 1, m%nz
             do jl = 1, m%ntheta
                 jg = m%topo%jglobal_start + jl - 1
                 do i = 1, m%nr
+                    ig = m%topo%iglobal_start + i - 1
                     if (m%cell_type(i,jl,kl) == 0) then
                         ! el bowl también es "superficie": se apila encima
-                        h_loc(i,jg) = max(h_loc(i,jg), m%zf(kl))
+                        h_loc(ig,jg) = max(h_loc(ig,jg), m%zf(kl))
                         cycle
                     end if
-                    if (sol%alpha_s(i,jl,kl) > ECS_SURF_ALPHA) &
-                        h_loc(i,jg) = max(h_loc(i,jg), m%zf(kl))
+                    if (sol%alpha_s(i,jl,kl) > ECS_SURF_ALPHA .or. &
+                        liq%alpha(i,jl,kl) >= ALPHA_LIQ_CONT) &
+                        h_loc(ig,jg) = max(h_loc(ig,jg), m%zf(kl))
                 end do
             end do
         end do
         if (m%is_parallel) then
-            ! un solo allreduce del array completo (nr x nth_g)
+            ! un solo allreduce del array completo (nr_g x nth_g)
             h_glob = h_loc
             call MPI_Allreduce(MPI_IN_PLACE, h_glob, size(h_glob), &
                                MPI_DOUBLE_PRECISION, MPI_MAX, &
@@ -103,8 +114,8 @@ contains
         do jg = 1, m%nth_g
             dth = atan2(sin(m%theta_global(jg) - cfg%ecs_theta_center), &
                         cos(m%theta_global(jg) - cfg%ecs_theta_center))
-            do i = 1, m%nr
-                in_band(i,jg) = (m%r(i) >= cfg%ecs_r_inner) .and. &
+            do i = 1, m%nr_g
+                in_band(i,jg) = (m%r_global(i) >= cfg%ecs_r_inner) .and. &
                                 (abs(dth) <= 0.5_dp * cfg%ecs_theta_width)
                 ! primera celda global cuyo centro queda sobre la superficie
                 k0_glob(i,jg) = m%nz_g + 1
@@ -126,7 +137,7 @@ contains
             ! capacidad local de las celdas propias del nivel
             c_loc = 0.0_dp
             do jg = 1, m%nth_g
-                do i = 1, m%nr
+                do i = 1, m%nr_g
                     if (.not. in_band(i,jg)) cycle
                     kg = k0_glob(i,jg) + lvl
                     if (kg > m%nz_g) cycle
@@ -150,7 +161,7 @@ contains
             dm_level = min(dm_total, c_glob)
 
             do jg = 1, m%nth_g
-                do i = 1, m%nr
+                do i = 1, m%nr_g
                     if (.not. in_band(i,jg)) cycle
                     kg = k0_glob(i,jg) + lvl
                     if (kg > m%nz_g) cycle
