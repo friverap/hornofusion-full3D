@@ -4,7 +4,9 @@
 ! Distributes the radiative fraction of arc power via random beams
 ! emitted isotropically from the arc column. Each beam carries a fraction
 ! of the total radiative power and deposits it in the first solid/liquid
-! cell it hits.
+! cell it hits. Auditoria M12 (oct-2026): emision repartida a lo largo de la
+! columna del arco, atenuacion Beer-Lambert del gas en el camino, impacto en
+! el baño por alpha_l (no por altura) y sombra de los electrodos.
 !
 ! Decomposition-invariant implementation:
 !   - The RNG is seeded with a FIXED seed (reproducible runs); every rank
@@ -48,13 +50,16 @@ contains
         deallocate(seed)
     end subroutine reseed_rng
 
-    subroutine distribute_arc_radiation_mc(elec, sh, sol, m, cfg, alpha_g, n_elec, step)
+    subroutine distribute_arc_radiation_mc(elec, sh, sol, m, cfg, alpha_g, alpha_lg, n_elec, step)
         type(electrode_t), intent(in)   :: elec(:)
         type(shared_t), intent(inout)   :: sh
         type(solid_t), intent(inout)    :: sol
         type(mesh_t), intent(in)        :: m
         type(config_t), intent(in)      :: cfg
+        ! alpha_g: alpha_s GLOBAL replicado (nombre historico); alpha_lg:
+        ! alpha_l GLOBAL replicado (auditoria M12)
         real(dp), intent(in)            :: alpha_g(:,:,:)
+        real(dp), intent(in)            :: alpha_lg(:,:,:)
         integer, intent(in)             :: n_elec
         integer, intent(in)             :: step
 
@@ -66,7 +71,10 @@ contains
         real(dp) :: phi_rand, cos_theta, sin_theta
         real(dp) :: step_size, total_P_rad
         integer  :: ig, jg, kg, il, jl, kl
-        real(dp) :: rnd1, rnd2, rnd3
+        real(dp) :: rnd1, rnd2, rnd3, rnd4
+        real(dp) :: P_beam, dP_abs, kap, z_att, xe2, ye2
+        integer  :: e2
+        logical  :: shadow
         integer  :: n_steps
         logical  :: owned
         integer  :: idx, ierr
@@ -102,13 +110,16 @@ contains
 
             x0 = cfg%R_pcd * cos(elec(e)%theta_pos)
             y0 = cfg%R_pcd * sin(elec(e)%theta_pos)
-            z0 = elec(e)%z_tip
+            ! Columna del arco (auditoria M12): la emision se reparte a lo
+            ! largo del arco, de la punta al pie (antes un punto en la punta)
+            z_att = max(elec(e)%z_tip - max(elec(e)%arc_length, 0.0_dp), 0.0_dp)
 
             do beam = 1, cfg%n_beams
                 ! Random direction (isotropic) — same sequence on every rank
                 call random_number(rnd1)
                 call random_number(rnd2)
                 call random_number(rnd3)
+                call random_number(rnd4)
 
                 idx = idx + 1
                 if (mod(idx - 1, m%topo%nprocs) /= m%topo%rank) cycle
@@ -122,8 +133,10 @@ contains
                 dz = cos_theta
 
                 ! Trace beam on the global geometry
+                z0 = z_att + rnd4 * (elec(e)%z_tip - z_att)
                 x = x0; y = y0; z_pos = z0
                 n_steps = 0
+                P_beam = P_rad_per_beam
 
                 ! Beams que escapan (fuera del dominio, celda inactiva o
                 ! MAX_TRACE) se AUDITAN como E_mc_lost: radiación del arco
@@ -133,7 +146,7 @@ contains
                 trace: do
                     n_steps = n_steps + 1
                     if (n_steps > MAX_TRACE_STEPS) then
-                        call audit_add(AUD_MC_LOST, P_rad_per_beam * cfg%dt)
+                        call audit_add(AUD_MC_LOST, P_beam * cfg%dt)
                         exit trace
                     end if
 
@@ -144,11 +157,11 @@ contains
                     ! Check bounds - use .not.(<=) to correctly handle NaN
                     r_pos = sqrt(x**2 + y**2)
                     if (.not. (r_pos <= cfg%R_shell)) then
-                        call audit_add(AUD_MC_LOST, P_rad_per_beam * cfg%dt)
+                        call audit_add(AUD_MC_LOST, P_beam * cfg%dt)
                         exit trace
                     end if
                     if (.not. (z_pos >= 0.0_dp .and. z_pos <= cfg%H_total)) then
-                        call audit_add(AUD_MC_LOST, P_rad_per_beam * cfg%dt)
+                        call audit_add(AUD_MC_LOST, P_beam * cfg%dt)
                         exit trace
                     end if
 
@@ -158,22 +171,52 @@ contains
 
                     call find_cell_global(r_pos, theta_pos, z_pos, m, ig, jg, kg)
                     if (ig < 1 .or. kg < 1) then
-                        call audit_add(AUD_MC_LOST, P_rad_per_beam * cfg%dt)
+                        call audit_add(AUD_MC_LOST, P_beam * cfg%dt)
                         exit trace
                     end if
                     if (m%cell_type_global(ig, jg, kg) == 0) then
-                        call audit_add(AUD_MC_LOST, P_rad_per_beam * cfg%dt)
+                        call audit_add(AUD_MC_LOST, P_beam * cfg%dt)
                         exit trace
                     end if
 
-                    ! Check if beam hits solid or liquid
-                    if (alpha_g(ig, jg, kg) > 0.1_dp .or. &
-                        z_pos < cfg%H_bowl + 0.5_dp) then
-                        ! Acumular POTENCIA en la celda global; el depósito
-                        ! real ocurre tras la reducción
-                        dep_g(ig, jg, kg) = dep_g(ig, jg, kg) + P_rad_per_beam
+                    ! Sombra de los electrodos (M12): el rayo que entra en
+                    ! la columna de grafito (sobre la punta, radio R_elec)
+                    ! lo absorbe el electrodo -> sale del horno (auditado
+                    ! como perdido, igual que el que escapa por el techo)
+                    shadow = .false.
+                    do e2 = 1, n_elec
+                        if (z_pos < elec(e2)%z_tip) cycle
+                        xe2 = cfg%R_pcd * cos(elec(e2)%theta_pos)
+                        ye2 = cfg%R_pcd * sin(elec(e2)%theta_pos)
+                        if ((x - xe2)**2 + (y - ye2)**2 <= cfg%R_elec**2) shadow = .true.
+                    end do
+                    if (shadow) then
+                        call audit_add(AUD_MC_LOST, P_beam * cfg%dt)
                         exit trace
                     end if
+
+                    ! Impacto (auditoria M12): chatarra (alpha_s > 0.1) o
+                    ! superficie del BAÑO (alpha_l >= ALPHA_LIQ_CONT). Antes
+                    ! el liquido era un sustituto geometrico z < H_bowl + 0.5
+                    ! (rayos absorbidos en gas o chatarra fina bajo esa cota y
+                    ! nunca en un baño mas alto).
+                    if (alpha_g(ig, jg, kg) > 0.1_dp .or. &
+                        alpha_lg(ig, jg, kg) >= ALPHA_LIQ_CONT) then
+                        ! Acumular POTENCIA en la celda global; el depósito
+                        ! real ocurre tras la reducción
+                        dep_g(ig, jg, kg) = dep_g(ig, jg, kg) + P_beam
+                        exit trace
+                    end if
+
+                    ! Atenuacion del gas por el camino (Beer-Lambert, M12):
+                    ! la fraccion absorbida se deposita en la celda que
+                    ! atraviesa (mismo reparto por absorcion de abajo). La
+                    ! espuma la intercepta slag_intercept_arc (una sola
+                    ! intercepcion, regla de E2): no se atenua aqui.
+                    kap = KAPPA_GAS_ABS * max(1.0_dp - alpha_g(ig, jg, kg) - alpha_lg(ig, jg, kg), 0.0_dp)
+                    dP_abs = P_beam * (1.0_dp - exp(-kap * step_size))
+                    dep_g(ig, jg, kg) = dep_g(ig, jg, kg) + dP_abs
+                    P_beam = P_beam - dP_abs
                 end do trace
             end do
         end do

@@ -85,7 +85,7 @@ program eaf_3d_simulator
 
     ! Species transport old-timestep arrays
     real(dp), allocatable :: Y_CO_old(:,:,:), Y_CO2_old(:,:,:), Y_O2_old(:,:,:)
-    real(dp), allocatable :: alpha_sg(:,:,:)
+    real(dp), allocatable :: alpha_sg(:,:,:), alpha_lg(:,:,:)
     real(dp) :: res_Y_CO, res_Y_CO2, res_Y_O2
 
     ! Config and input files
@@ -325,8 +325,12 @@ program eaf_3d_simulator
                 allocate(alpha_sg(mesh%nr_g, mesh%nth_g, mesh%nz_g))
             call gather_global_field(sol%alpha_s, alpha_sg, mesh)
             call distribute_arc_heat(elec, sh, sol, mesh, cfg, alpha_sg, N_ELECTRODES)
+            ! M12: el impacto en el baño se decide con alpha_l global
+            if (.not. allocated(alpha_lg)) &
+                allocate(alpha_lg(mesh%nr_g, mesh%nth_g, mesh%nz_g))
+            call gather_global_field(liq%alpha, alpha_lg, mesh)
             call distribute_arc_radiation_mc(elec, sh, sol, mesh, cfg, alpha_sg, &
-                                             N_ELECTRODES, step)
+                                             alpha_lg, N_ELECTRODES, step)
             ! (mod_arc_impingement retirado en C4.4: unidades N/m4 en vez
             ! de N/m3 y magnitud ~0.2 N/m3 despreciable; la depresión del
             ! baño por el jet requiere búsqueda global de superficie —

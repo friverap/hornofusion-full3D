@@ -3,7 +3,8 @@
 # Formatos: unit:<binario> | invariants:<check> | script:<id>
 # arc_budget SOLO en noflow: sin flujo, el gas (85% en la columna del
 # arco) no consume su parte de S_arc — limitación de diseño del test,
-# no un bug (con flujo el presupuesto cierra a 1.0000).
+# no un bug (con flujo el presupuesto cierra a 1.0000). M12 (atenuacion del
+# gas en el camino del MC): 0.486 -> 0.393, misma causa.
 audit_noflow:arc_budget
 # energy_balance SOLO en el cold de 10 pasos: con la carga por masa exacta
 # (2026-09) el transitorio de ignición es más rígido y el error de
