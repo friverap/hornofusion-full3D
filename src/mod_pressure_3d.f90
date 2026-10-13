@@ -65,23 +65,20 @@ module mod_pressure_3d
     ! >50% de su masa instantáneamente => NaN medidos en -n 1/-n 4.
     real(dp), parameter :: COMP_SRC_CAP = 0.2_dp
 
-    ! Término acústico low-Mach: rho(p,T) = rho(T)*(1 + p'/P0) aporta
-    ! d(alpha*rho)/dp' * V/dt = alpha*rho/P0 * V/dt a la DIAGONAL del
-    ! Poisson. AUDITORIA M25: es SEUDO-compresibilidad, no compresion
-    ! fisica. Esta solo en la diagonal de pp, sin la fuente (p^k - p^n): al
-    ! converger el lazo externo pp -> 0 y el termino desaparece; la EOS del
-    ! gas es rho(P0, T) (low-Mach: la presion dinamica no cambia la densidad).
-    ! Actua como relajacion de pp, es decir, solo cuenta mientras el lazo no
-    ! converge. La compresion fisica (rho(P0 + p, T) y la fuente con
-    ! p^k - p^n) cambiaria la formulacion entera y no esta implementada; con
-    ! |p| ~ P0 (water packing del lecho) la hipotesis low-Mach deja de valer.
-    ! Es la pieza que faltaba para que el lazo externo converja a CFL alto:
-    ! sin él, n1/n4 divergían (p -> 2e9 Pa) mientras n8 encontraba el
-    ! cuasi-estado por suerte de barrido. La corrección de densidad
-    ! asociada (~pp/P0 ~ 1%) se DESCARTA tras el paso — aproximación
-    ! documentada, pequeña frente al agujero EOS (~70%) que este acople
-    ! elimina.
-    real(dp), parameter :: P0_THERMO = 101325.0_dp
+    ! COMPRESION FISICA del gas (auditoria M25, oct-2026). La EOS es
+    ! rho(P0 + p, T) (gas_eos, mod_constants) y la continuidad de volumen del
+    ! gas lleva (alpha/rho) d rho/dt con rho^n = rho(P0 + p^n, T^n):
+    !   - FUENTE: (alpha V/dt)(rho(p^k, T^k) - rho(p^n, T^n))/rho(p^k, T^k),
+    !     que contiene el termino (p^k - p^n)/(P0 + p^k) y NO se anula al
+    !     converger (el gas atrapado se comprime de verdad);
+    !   - DIAGONAL: alpha/(P0 + p^k) V/dt, la linealizacion de Newton de esa
+    !     fuente en pp (d rho/dp = rho/(P0 + p) a T fija).
+    ! Antes (hasta M25) la EOS era rho(P0, T) y la diagonal alpha/P0 V/dt era
+    ! SEUDO-compresibilidad: relajacion de pp que desaparecia al converger.
+    ! Esa diagonal es la pieza que deja converger el lazo externo a CFL alto
+    ! (sin ella n1/n4 divergian, p -> 2e9 Pa); ahora es ademas fisica.
+    ! La energia del gas sigue sin trabajo de compresion (p dV): termino de
+    ! orden p/P0 frente al calor sensible.
 
     ! Velocidad del sonido del acero líquido [m/s] (compresibilidad
     ! acústica de celdas líquido-puras en la diagonal del Poisson)
@@ -98,7 +95,7 @@ contains
 
     subroutine solve_pressure_correction(liq, gas, gas_T_old, sh, m, cfg, &
                                           residual)
-        use mod_workspace, only: ensure_workspace, ws_cc, ws_cc_new, aW => ws_aW, &
+        use mod_workspace, only: ensure_workspace, ws_cc, ws_cc_new, ws_p_n, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
@@ -256,8 +253,8 @@ contains
                         if (.not. act_g(i,j,k)) cycle
                         if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
                         src = abs(gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
-                              (gas%rho(i,j,k) - cfg%rho_gas * T_RHO_GAS_REF &
-                               / max(gas_T_old(i,j,k), T_MIN_GAS)) / max(gas%rho(i,j,k), SMALL))
+                              (gas%rho(i,j,k) - gas_eos(cfg%rho_gas, gas_T_old(i,j,k), &
+                               ws_p_n(i,j,k))) / max(gas%rho(i,j,k), SMALL))
                         src = min(src, COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt)
                         if (src <= 0.0_dp) cycle
                         cg = 0.0_dp
@@ -448,8 +445,8 @@ contains
                         if (.not. act_g(i,j,k)) cycle
                         ! Forma de VOLUMEN: (alpha_g/rho_g) (rho(T) - rho(T_old))/dt V
                         src = gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
-                              (gas%rho(i,j,k) - cfg%rho_gas * T_RHO_GAS_REF &
-                               / max(gas_T_old(i,j,k), T_MIN_GAS)) / max(gas%rho(i,j,k), SMALL)
+                              (gas%rho(i,j,k) - gas_eos(cfg%rho_gas, gas_T_old(i,j,k), &
+                               ws_p_n(i,j,k))) / max(gas%rho(i,j,k), SMALL)
                         cap = COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt
                         ! Demanda de volumen del gas [m3/s]: expansion termica
                         ! (-src), A8 advectiva (gadv), M14 fuente de masa de las
@@ -533,9 +530,9 @@ contains
                             ! exceso de volumen que deja lo mueve el derrame,
                             ! auditado. Default 0 = bit-identico.
                             if (act_l(i,j,k)) ag_c = max(ag_c, cfg%alpha_g_comp_min)
-                            ! (volumen: d alpha_g/dp' = alpha_g/P0)
-                            if (ag_c > 0.0_dp) aP(i,j,k) = aP(i,j,k) + ag_c / P0_THERMO * &
-                                m%vol(i,j,k) / cfg%dt
+                            ! (volumen: d alpha_g/dp' = alpha_g/(P0 + p), M25)
+                            if (ag_c > 0.0_dp) aP(i,j,k) = aP(i,j,k) + ag_c &
+                                / max(P0_THERMO + sh%p(i,j,k), P_ABS_MIN) * m%vol(i,j,k) / cfg%dt
                         end block
                         end if
                         ! Compresibilidad acústica del LÍQUIDO (física,

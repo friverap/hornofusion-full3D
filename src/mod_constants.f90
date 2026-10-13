@@ -163,6 +163,13 @@ module mod_constants
     ! rho = rho_gas T_REF/T se referia a cfg%T_ambient, asi que un caso con
     ! T_ambient = 900 K tenia aire de 1.2 kg/m3 a 900 K (3x)
     real(dp), parameter :: T_RHO_GAS_REF = 300.0_dp
+    ! Presion termodinamica de referencia [Pa]: sh%p es MANOMETRICA respecto
+    ! de P0 (cero en la boveda), la absoluta es P0 + p
+    real(dp), parameter :: P0_THERMO = 101325.0_dp
+    ! Piso de la presion ABSOLUTA en la EOS del gas [Pa]: p < -P0 no tiene
+    ! sentido fisico (solo aparece si el acople P-V se rompe y p va a la
+    ! centinela -P_HYDRO_CAP); el piso mantiene rho > 0 en ese caso
+    real(dp), parameter :: P_ABS_MIN = 0.05_dp * P0_THERMO
 
     ! Radio de la primera cara radial [m]. EJE REAL (auditoria M31, oct-2026):
     ! la cara del eje tiene area nula (A_r = r_f dtheta dz = 0) y las celdas
@@ -464,5 +471,19 @@ contains
             ur = ur * f; uth = uth * f; uz = uz * f
         end if
     end subroutine drift_velocity
+
+
+    !---------------------------------------------------------------------------
+    ! EOS UNICA del gas ideal (auditoria M25, oct-2026): rho(P0 + p, T).
+    ! Antes rho(P0, T) (low-Mach puro); con la compresion fisica la presion
+    ! manometrica cambia la densidad: un bolsillo de gas atrapado bajo el
+    ! lecho inundado se comprime como un resorte real (P0 V = cte a T fija).
+    !---------------------------------------------------------------------------
+    pure elemental function gas_eos(rho_ref, T, p) result(rho)
+        real(dp), intent(in) :: rho_ref, T, p
+        real(dp) :: rho
+        rho = rho_ref * T_RHO_GAS_REF / max(T, T_MIN_GAS) &
+            * max(P0_THERMO + p, P_ABS_MIN) / P0_THERMO
+    end function gas_eos
 
 end module mod_constants

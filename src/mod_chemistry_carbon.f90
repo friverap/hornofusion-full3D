@@ -78,12 +78,13 @@ contains
                     ! Presion parcial de O2 = P0 x fraccion MOLAR con la masa
                     ! molar de la mezcla REAL O2/CO/CO2/N2 (auditoria, bajos;
                     ! antes con la del aire, que no vale cuando el CO/CO2
-                    ! desplaza al N2). P0 termodinamica: low-Mach.
+                    ! desplaza al N2). Presion ABSOLUTA P0 + p (M25).
                     mw_inv = sh%Y_O2(i,j,k) / MW_O2 + sh%Y_CO(i,j,k) / MW_CO &
                            + sh%Y_CO2(i,j,k) / MW_CO2 &
                            + max(0.0_dp, 1.0_dp - sh%Y_O2(i,j,k) - sh%Y_CO(i,j,k) &
                                  - sh%Y_CO2(i,j,k)) / MW_N2
-                    P_O2 = 101325.0_dp * (sh%Y_O2(i,j,k) / MW_O2) / max(mw_inv, SMALL)
+                    P_O2 = max(P0_THERMO + sh%p(i,j,k), P_ABS_MIN) &
+                         * (sh%Y_O2(i,j,k) / MW_O2) / max(mw_inv, SMALL)
                     if (P_O2 <= 0.0_dp) cycle
 
                     ! Tasa de suministro local de O2 [kg O2/(m3 s)]

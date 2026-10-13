@@ -92,13 +92,23 @@ Discretizada con FVM implícito, resuelta con SIMPLE.
 
 ### Propiedades del gas
 
-El gas se modela con propiedades de referencia constantes más corrección de densidad ideal:
+Gas ideal con compresión física (auditoría M25, `gas_eos` en `mod_constants`):
 
 ```
-ρ_gas = ρ_ref = 1.2 kg/m³  (referencia 300 K, 1 atm)
+ρ_gas = ρ_ref · (300 K / T) · (P0 + p) / P0     ρ_ref = 1.2 kg/m³, P0 = 101325 Pa
 μ_gas = 5×10⁻⁵ Pa·s
 k_gas = 0.5 W/(m·K)
 ```
+
+`p` es la presión manométrica del código (cero en la bóveda); la absoluta tiene
+un piso de 0.05·P0. La continuidad de volumen del gas en el Poisson lleva
+`(α_g/ρ_g) Dρ_g/Dt`: la parte temporal contra ρ(P0 + pⁿ, Tⁿ) (contiene el
+término `(p^k − pⁿ)/(P0 + p)`, que no se anula al converger), su linealización
+de Newton `α_g/(P0 + p) V/Δt` en la diagonal, y la advectiva upwind de A8. Un
+bolsillo de gas atrapado se comprime como un resorte real. La energía del gas no
+lleva el trabajo de compresión (orden p/P0 frente al calor sensible). El modelo
+de mezcla (opt-in, Plan G) sigue en ρ(P0, T): con la compresión física su baño
+en reposo es inestable (el gas es el complemento de la mezcla, sin masa propia).
 
 ---
 
@@ -473,7 +483,7 @@ g = -9.81 m/s²       (hacia abajo, z negativo)
 | k_solid | 35 | W/(m·K) | Conductividad térmica sólido |
 | k_liquid | 30 | W/(m·K) | Conductividad térmica líquido |
 | μ_liquid | 6×10⁻³ | Pa·s | Viscosidad dinámica acero |
-| ρ_gas | 1.2 | kg/m³ | Densidad del gas a 300 K (EOS ρ = 1.2·300/T) |
+| ρ_gas | 1.2 | kg/m³ | Densidad del gas a 300 K y P0 (EOS ρ = 1.2·(300/T)·(P0 + p)/P0) |
 | cp_gas | 1000 | J/(kg·K) | Calor específico gas |
 | k_gas | 0.5 | W/(m·K) | Conductividad EFECTIVA de la difusión del gas (la interfase usa μc_p/0.7) |
 | μ_gas | 5×10⁻⁵ | Pa·s | Viscosidad dinámica gas |

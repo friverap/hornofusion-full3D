@@ -32,11 +32,12 @@ contains
                     liq%mu(i,j,k)  = cfg%mu_l
                     liq%mu_eff(i,j,k) = cfg%mu_l + sh%mu_t(i,j,k)
 
-                    ! Gas: ideal gas approximation rho = rho_ref * T_ref / T
-                    ! continua en T_MIN_GAS (antes saltaba a rho_gas por
-                    ! debajo) y referida a T_RHO_GAS_REF, no a T_ambient
-                    gas%rho(i,j,k) = cfg%rho_gas * T_RHO_GAS_REF / &
-                                     max(gas%T(i,j,k), T_MIN_GAS)
+                    ! Gas ideal rho(P0 + p, T): EOS unica gas_eos
+                    ! (mod_constants; compresion fisica, auditoria M25).
+                    ! El modelo de MEZCLA (opt-in) sigue low-Mach rho(P0, T):
+                    ! ver la nota en mod_mixture_3d
+                    gas%rho(i,j,k) = gas_eos(cfg%rho_gas, gas%T(i,j,k), &
+                                             merge(0.0_dp, sh%p(i,j,k), cfg%mixture_model))
                     gas%cp(i,j,k)  = cfg%cp_gas
                     gas%kth(i,j,k) = cfg%k_gas
                     gas%mu(i,j,k)  = cfg%mu_gas

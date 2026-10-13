@@ -272,10 +272,14 @@ contains
                     ! integral de alpha*rho(T)*cp dT = alpha*rho_ref*T_amb*
                     ! cp*ln(T/T_amb). El inventario rho(T)*cp*T era CONSTANTE
                     ! en T (el 'agujero' de ~70% del balance).
+                    ! M25: con rho(P0 + p, T) el factor (P0 + p)/P0 entra al
+                    ! inventario (a p fija sigue siendo la integral exacta)
                     s(6) = s(6) + gas%alpha(i,j,k) * cfg%rho_gas * &
                                   T_RHO_GAS_REF * gas%cp(i,j,k) * vol * &
                                   log(max(gas%T(i,j,k), T_MIN_GAS) / &
-                                      T_RHO_GAS_REF)
+                                      T_RHO_GAS_REF) &
+                                  * max(P0_THERMO + merge(0.0_dp, sh%p(i,j,k), &
+                                        cfg%mixture_model), P_ABS_MIN) / P0_THERMO
                     s(7) = s(7) + sol%E_s(i,j,k)
                     s(8) = s(8) + slag%E_sl(i,j,k)
 

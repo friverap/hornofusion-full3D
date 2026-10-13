@@ -24,15 +24,19 @@ RHO_REF = 1.2      # cfg%rho_gas por defecto
 T_REF = 300.0      # T_RHO_GAS_REF del codigo (fija; no T_ambient)
 
 
-def rho_gas(T):
-    # la MISMA EOS que mod_properties_3d: rho_gas*T_RHO_GAS_REF/max(T, 100)
-    return RHO_REF * T_REF / np.maximum(T, 100.0)
+P0 = 101325.0       # P0_THERMO del codigo; la presion del snapshot es manometrica
+
+
+def rho_gas(T, p):
+    # la MISMA EOS que gas_eos (mod_constants, M25): rho(P0 + p, T)
+    return (RHO_REF * T_REF / np.maximum(T, 100.0)
+            * np.maximum(P0 + p, 0.05 * P0) / P0)
 
 
 def elements(path):
     f, mesh, meta = load_snapshot(path)
     vol = cell_volumes(mesh)
-    arho = f["alpha_gas"] * rho_gas(f["T_gas"])
+    arho = f["alpha_gas"] * rho_gas(f["T_gas"], f["pressure"])
     O = float(np.sum(arho * (f["Y_O2"] + f["Y_CO"] * 16 / 28 +
                              f["Y_CO2"] * 32 / 44) * vol))
     C = float(np.sum(arho * (f["Y_CO"] * 12 / 28 + f["Y_CO2"] * 12 / 44) * vol))
@@ -101,8 +105,8 @@ def main():
     # O_consumido = 4/3*C_a_CO + 4/7*CO_a_CO2... chequeo directo:
     # el C en gas debe ser consistente con el O2 desaparecido:
     vol0 = cell_volumes(load_snapshot(files[0])[1])
-    O2_0 = float(np.sum(f0["Y_O2"] * f0["alpha_gas"] * rho_gas(f0["T_gas"]) * vol0))
-    O2_1 = float(np.sum(f1["Y_O2"] * f1["alpha_gas"] * rho_gas(f1["T_gas"]) * vol0))
+    O2_0 = float(np.sum(f0["Y_O2"] * f0["alpha_gas"] * rho_gas(f0["T_gas"], f0["pressure"]) * vol0))
+    O2_1 = float(np.sum(f1["Y_O2"] * f1["alpha_gas"] * rho_gas(f1["T_gas"], f1["pressure"]) * vol0))
     dO2 = O2_0 - O2_1 - dil["m_dil_O2"]   # O2 consumido por las reacciones
     # cota estequiométrica: 4/3 <= O2_consumido/C_gas <= 4/3 + 4/7·(CO2/(CO+CO2))
     ratio = dO2 / dC_gas * (12.0 / 16.0)  # mol O / mol C

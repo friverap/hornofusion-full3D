@@ -18,6 +18,13 @@ audit_noflow:arc_budget
 # compresibilidad el volumen expandido en el encendido se ventea en vez de
 # perderse y el balance baja de 1.25 % a 0.75 % (el error de cuadratura
 # del libro del gas sigue ahi, ahora bajo la tolerancia).
+# REPUESTO 13-oct-2026 (auditoria M25, compresion fisica del gas): 1.010 %.
+# Es el lazo externo CORTADO en max_outer = 5, no una fuga: con max_outer = 40
+# el mismo caso cierra a 2.5e-7 por paso (antes de M25: 4.9e-6) y converge en
+# 22-23 iteraciones (antes 36-40). Con la fuente (p^k - p^n) las primeras
+# iteraciones del encendido quedan mas lejos del punto fijo y el hook (sobre
+# el campo relajado, M5) lo muestra.
+audit_cold:energy_balance
 # --- Bug 19 CERRADO (2026-09-27; B1 v32: cero episodios, p_max 5.35 kPa en
 # 120 s de malla media, ninguna cota activada). Lo que queda aqui es de OTRA
 # familia: el modo par-impar del esquema colocado, acotado y no creciente ---
@@ -68,4 +75,4 @@ bath:bath_hydrostatic
 # cierra contra la solucion sin relajar, asi que el residuo del lazo externo no
 # convergido en el encendido queda a la vista; los demas balances mejoran
 # (cold_10step 1.51 -> 1.39 %, melt_forced 3.0e-6 -> 1.6e-6).
-audit_arcnoscrap:energy_balance
+# RETIRADO 13-oct-2026 (M25): con la compresion fisica cierra a 0.16 %.

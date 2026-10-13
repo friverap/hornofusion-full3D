@@ -58,7 +58,7 @@ module mod_mixture_3d
     use mod_continuity
     use mod_properties_3d
     use mod_fields_3d
-    use mod_pressure_3d, only: P0_THERMO, C_SOUND_LIQ, COMP_SRC_CAP, P_HYDRO_CAP, PP_COMPLIANCE
+    use mod_pressure_3d, only: C_SOUND_LIQ, COMP_SRC_CAP, P_HYDRO_CAP, PP_COMPLIANCE
     use mod_multiphase, only: cap_gas_velocity, cap_liquid_velocity
     use mod_probe, only: probe_current_step
     use mod_audit, only: AUD_IPH_GAS, AUD_IPH_LIQ, AUD_MIX_INIT, audit_add
@@ -930,11 +930,21 @@ contains
                     if (cfg%gas_compressibility) then
                         ! compliancia residual opcional (D2.4, default 0)
                         if (al > 0.0_dp) ag = max(ag, cfg%alpha_g_comp_min)
+                        ! La MEZCLA sigue low-Mach (EOS rho(P0, T), diagonal
+                        ! alpha_g/P0 como seudo-compresibilidad). Auditoria M25,
+                        ! medido: con la compresion fisica (rho(P0 + p, T), su
+                        ! fuente temporal y la advectiva) el baño en reposo de
+                        ! bath_mix crece x10 por paso en la superficie libre y
+                        ! llega a U_GAS_MAX en 5 pasos; con cualquiera de las dos
+                        ! fuentes sola, igual. El gas es el complemento de la
+                        ! mezcla (sin masa propia): el volumen que pierde al
+                        ! comprimirse lo gana el liquido y nada lo devuelve. El
+                        ! acople de dos fluidos (el de B1) si lleva la compresion.
                         aP(i,j,k) = aP(i,j,k) + ag / P0_THERMO * m%vol(i,j,k) / cfg%dt
                         ag = max(gas%alpha(i,j,k), 0.0_dp)
                         src = ag * m%vol(i,j,k) / cfg%dt * &
-                              (gas%rho(i,j,k) - cfg%rho_gas * T_RHO_GAS_REF &
-                               / max(Tg_ref(i,j,k), T_MIN_GAS)) / max(gas%rho(i,j,k), SMALL)
+                              (gas%rho(i,j,k) - gas_eos(cfg%rho_gas, Tg_ref(i,j,k), &
+                               0.0_dp)) / max(gas%rho(i,j,k), SMALL)
                         cap = COMP_SRC_CAP * ag * m%vol(i,j,k) / cfg%dt
                         ! demanda total con un solo tope y acarreo (M26; ver
                         ! mod_pressure_3d)

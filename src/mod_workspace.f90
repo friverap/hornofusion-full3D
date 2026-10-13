@@ -119,6 +119,10 @@ module mod_workspace
     ! el del inicio del paso (estado: va al snapshot de reinicio) y ws_cc_new
     ! el que deja la ultima iteracion externa.
     real(dp), allocatable :: ws_cc(:,:,:), ws_cc_new(:,:,:)
+    ! Presion manometrica al INICIO del paso (auditoria M25): referencia
+    ! p^n de la densidad rho(P0 + p^n, T^n) en la fuente de compresibilidad.
+    ! Se copia de sh%p al empezar cada paso (sh%p va al reinicio).
+    real(dp), allocatable :: ws_p_n(:,:,:)
     ! Plan G (modelo de mezcla, mod_mixture_3d): flujo VOLUMETRICO
     ! conservativo de la mezcla [m3/s] por las caras + de cada celda
     ! (Q = Q* + a (pp_P - pp_N), el que el Poisson acaba de hacer
@@ -193,6 +197,7 @@ contains
         allocate(ws_Fr, ws_Fth, ws_Fz, ws_Mr, ws_Mth, ws_Mz, ws_lim, mold=ws_aW)
         allocate(ws_lim_step, mold=ws_aW); ws_lim_step = 1.0_dp
         allocate(ws_cc, ws_cc_new, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
+        allocate(ws_p_n, mold=ws_aW); ws_p_n = 0.0_dp
         allocate(ws_pc_unl, mold=ws_aW); ws_pc_unl = 0.0_dp
         allocate(ws_liq_cont(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         ws_liq_cont = .true.

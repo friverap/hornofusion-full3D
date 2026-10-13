@@ -407,8 +407,7 @@ contains
                     ! la MISMA EOS que update_properties (antes rho_gas sin
                     ! importar T: un caso sin flujo ni energia nunca la
                     ! recalculaba)
-                    gas%rho(i,j,k)    = cfg%rho_gas * T_RHO_GAS_REF / &
-                                        max(gas%T(i,j,k), T_MIN_GAS)
+                    gas%rho(i,j,k)    = gas_eos(cfg%rho_gas, gas%T(i,j,k), sh%p(i,j,k))
                     gas%cp(i,j,k)     = cfg%cp_gas
                     gas%kth(i,j,k)    = cfg%k_gas
                     gas%mu(i,j,k)     = cfg%mu_gas

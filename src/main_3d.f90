@@ -32,7 +32,7 @@ program eaf_3d_simulator
     use mod_continuity
     use mod_multiphase
     use mod_mixture_3d
-    use mod_workspace, only: ensure_workspace, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new
+    use mod_workspace, only: ensure_workspace, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new, ws_p_n
     use mod_solid_phase
     use mod_melting_3d
     use mod_scrap_collapse
@@ -231,6 +231,8 @@ program eaf_3d_simulator
         ! Presion hidrostatica inicial de la mezcla fluida (remanente en reposo;
         ! Plan C F2): evita el golpe de 50-70 kPa del primer paso
         call initialize_hydrostatic_pressure(liq, gas, sh, mesh, cfg)
+        ! rho del gas con la presion inicial (EOS rho(P0 + p, T), M25)
+        call update_properties(liq, gas, sh, mesh, cfg)
     else
         ! Reinicio: el estado completo (campos, solido, escoria, electrodos,
         ! dt, paso y tiempo) viene del snapshot; la carga, el remanente y la
@@ -297,6 +299,8 @@ program eaf_3d_simulator
         ! densidades del paso anterior (auditoria, bajos: la masa del
         ! transitorio de la mezcla las usa; antes *_old%rho no se copiaba)
         liq_old%rho = liq%rho; gas_old%rho = gas%rho
+        ! p^n de la EOS de referencia de la compresibilidad (M25)
+        ws_p_n = sh%p
         ! Ancla temporal de k-eps (auditoria A13)
         tke_n = sh%tke; eps_n = sh%eps
 

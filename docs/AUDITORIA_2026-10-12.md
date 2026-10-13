@@ -179,7 +179,7 @@ rebaselinean solo cuando cambia la numérica (versión indicada).
 | M23 | f435df7 | v55 | no deslizamiento: conductancia de media celda α μ A/(δ/2) en la diagonal de las componentes tangenciales junto a toda pared (tazón, coraza, piso, techo); el eje sigue como simetría. Solo el modelo de dos fluidos (la mezcla va con M35) |
 | M24 (líquido), M30 (transitorio) | 0f4eb51 | v56 | momento del líquido continuo con los flujos conservativos del transporte de α y transitorio con α^n (forma exacta con la continuidad restada, como la energía); la masa fundida entra con u = 0. Flujos válidos dentro del paso (desde la 2.ª iteración externa): el reinicio sigue bit a bit. Nota: bed_flood p_max 164 → 247 kPa y gas 208 → 249 m/s a lo largo de M6, M9 y M12 (más fundido por la regla de la palanca; 0.53 de 3× ferrostática) |
 | M24 (gas) | — | — | PENDIENTE con causa: el gas no tiene ecuación de masa transportada (EOS + compresibilidad acotada), así que no existe un flujo que cumpla su continuidad exacta para restarla; y cambiar su forma convectiva ya llevó `bath_fill` a `U_GAS_MAX` (F2.24). Requiere exportar flujos de Rhie–Chow del gas y pasar por el juez B1 |
-| M25 | f74a7e9 (documentación) | — | el término acústico es seudo-compresibilidad (relajación de pp que se anula al converger), no compresión física; la EOS es ρ(P0, T). La compresión física (ρ(P0+p, T) y fuente p^k − p^n) cambia la formulación low-Mach: DECISIÓN PENDIENTE (relevante cuando |p| ~ P0 en el lecho inundado) |
+| M25 | (este commit) | v68 | COMPRESIÓN FÍSICA del gas: EOS única `gas_eos` = ρ_ref (T_ref/T)(P0 + p)/P0 (piso 0.05 P0); la fuente de compresibilidad usa ρ(P0 + pⁿ, Tⁿ) (`ws_p_n`, copia de p al inicio del paso) y contiene (p^k − pⁿ); la diagonal α_g/(P0 + p) V/Δt es su linealización de Newton; la advectiva (A8) toma la densidad con presión. P_O₂ con la presión absoluta; inventario del gas del audit con (P0 + p)/P0; `check_chem` con la misma EOS. Medido: el lazo externo converge ANTES (cold_10step 22–23 iteraciones frente a 36–40) y con el lazo convergido el balance cierra a 2.5e-7 por paso (antes 4.9e-6); con max_outer = 5 el encendido queda en 1.01 % (xfail repuesto con esa causa); arc_noscrap 1.4–2.4 % → 0.16 % (xfail retirado); bed_flood p_max 223 → 179 kPa. El modelo de MEZCLA queda low-Mach (con la compresión física su baño en reposo crece ×10 por paso: el gas es el complemento sin masa propia) |
 | M26 | f74a7e9 | v57 | demanda de volumen del gas (térmica + advectiva + reacciones) con UN tope y acarreo del exceso al paso siguiente (`ws_cc`, en el snapshot de reinicio). cold_10step: balance 1.25 % → 0.75 %, sale de xfail |
 | M27 | 1eaab70 | v58 | laplaciano vectorial cilíndrico: −μu_r/r² y −μu_θ/r² implícitos, ∓(2μ/r²)∂u_{θ,r}/∂θ explícitos |
 | M28 | — | — | PENDIENTE con causa: la alternativa local ya existe y se midió (D2.5, `pc_fs_liquid_gradient`: cara de superficie libre unilateral) y se cerró NEGATIVA en el juez B1 (Plan D, 10-oct-2026). Lo que falta es el acople implícito α–p (NEPTUNE_CFD, Liles & Reed), no otra regla local |
@@ -207,10 +207,6 @@ rebaselinean solo cuando cambia la numérica (versión indicada).
   para restarla, y cambiar su forma convectiva ya llevó `bath_fill` a la
   centinela (F2.24). Requiere exportar los flujos de Rhie–Chow del gas y pasar
   por el juez B1.
-- **M25, compresión física.** Decisión de formulación: el término acústico es
-  seudo-compresibilidad (documentado). La compresión física (ρ(P0 + p, T) y
-  fuente p^k − pⁿ) cambia la formulación low-Mach; es relevante cuando |p| ~ P0
-  en el lecho inundado.
 - **M28.** La alternativa local (cara de superficie libre unilateral, D2.5)
   ya se cerró negativa en el juez B1; lo que falta es el acople implícito α–p.
 
