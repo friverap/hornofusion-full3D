@@ -48,7 +48,11 @@ contains
         ! Convergence
         cfg%tol_cont   = 1.0e-4_dp
         cfg%tol_mom    = 1.0e-4_dp
-        cfg%tol_energy = 1.0e-3_dp
+        ! Residual de energia normalizado con |aP T| (T ABSOLUTA, como Fluent):
+        ! 1e-3 dejaba 0.7 K sin aplicar sobre 1550 K y el lazo se cortaba con
+        ! 2.8 % de las fuentes del paso fuera (auditoria 2, N-C5). Fluent usa
+        ! 1e-6 para la energia por la misma razon.
+        cfg%tol_energy = 1.0e-6_dp
         cfg%tol_turb   = 1.0e-4_dp
 
         ! Material - steel (Table 2)

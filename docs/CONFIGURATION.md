@@ -143,7 +143,7 @@ El cubo 2 se carga en `t = t_bucket2_charge = 2100 s`.
 |-----------|------|---------|-------------|
 | `tol_cont` | real | 1.0e-4 | Tolerancia de residual de continuidad |
 | `tol_mom` | real | 1.0e-4 | Tolerancia de residual de momentum |
-| `tol_energy` | real | 1.0e-3 | Tolerancia de residual de energía |
+| `tol_energy` | real | 1.0e-6 | Tolerancia de residual de energía (normalizado con |aP·T|, T absoluta: 1e-3 dejaba ~0.7 K sin aplicar; auditoría 2, N-C5) |
 | `tol_turb` | real | 1.0e-4 | Tolerancia de residual de turbulencia |
 
 Los residuales son normas L2 globales (reducción MPI). El SIMPLE itera hasta que todos los residuales activos caen por debajo de su tolerancia, o hasta `max_outer`.
