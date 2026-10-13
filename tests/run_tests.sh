@@ -150,6 +150,20 @@ quick)
         fi
         # Reinicio desde el snapshot intermedio (paso 5): estado completo
         run_restart_case cold_10step 8 8 5
+        # Baño en reposo en el gate por commit (auditoria 2, N-A6; ~10 s):
+        # fuerza balanceada, intercambio gas-liquido y balance de energia
+        run_case bath_test 4 && {
+            check_invariants "$OUT/bath_test_n4" bath_test
+            check_audit_if_present "$OUT/bath_test_n4"
+            run_script "bath_test" \
+                $PY $INT/check_bath.py "$OUT/bath_test_n4" --config "$CFG/bath_test.dat" \
+                --xfail "$(xfail_ids bath)"
+            if ! $PY $INT/metrics_snapshot.py "$OUT" --mode check \
+                    --only bath_test_n4; then
+                echo ">> FAIL métricas golden (bath_test)"
+                note_fail
+            fi
+        }
     }
     ;;
 
@@ -281,6 +295,7 @@ full | rebaseline)
         more=""
         case $(basename "$d") in
             arc_noscrap_*)   more="--min-liq-arc 0.6" ;;
+            outer_conv_*)    more="--etol 1e-4" ;;   # lazo convergido (N-A6)
         esac
         case $(basename "$d") in
             cold_10step_*)   x=audit_cold ;;

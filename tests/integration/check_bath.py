@@ -5,7 +5,7 @@ Sobre bath_test (charco de liquido puro en reposo):
   bath_hydrostatic : en las celdas puras del ultimo snapshot, la presion
                      media por nivel sigue rho_l g (z_top - z) a 1 % de la
                      ferrostatica total del charco
-  bath_rest        : max |u_l| en celdas puras <= 1e-2 m/s al final
+  bath_rest        : max |u_l| en celdas puras <= 1e-6 m/s al final (medido 4e-9)
   bath_alpha_frozen: max |alpha_l(fin) - alpha_l(0)| en celdas puras <= 1e-9
   bath_mass        : |m_liq(fin) - m_liq(0)| / m_liq(0) <= 1e-10 (audit)
   bath_pv_bounded  : max p_max <= 3x ferrostatica y max u_gas_max < 100 m/s
@@ -93,7 +93,9 @@ def main():
         pm = {k: float(p[k][pure0[k]].mean()) for k in lev}
         kt = max(lev)
         err = max(abs((pm[k] - pm[kt]) - RHO_L * g_eff * (z[kt] - z[k])) for k in lev) / p_ferro
-        chk.report("bath_hydrostatic", err <= 1.0e-2,
+        # (auditoria 2, N-A6) medido 5e-10 con la fuerza balanceada; 1e-2 dejaba
+        # pasar un error de Boussinesq o un modo par-impar parcial
+        chk.report("bath_hydrostatic", err <= 1.0e-6,
                    f"err {err:.3e} de rho g H = {p_ferro:.3e} Pa "
                    f"(p fondo-tope medida {pm[min(lev)] - pm[kt]:.3e}, "
                    f"esperada {RHO_L * g_eff * (z[kt] - z[min(lev)]):.3e}, g_eff/g {g_eff / G:.3f})")
@@ -101,7 +103,7 @@ def main():
         u = np.sqrt(last["velocity_r_liquid"]**2 + last["velocity_th_liquid"]**2
                     + last["velocity_z_liquid"]**2)
         umax = float(u[pure0].max())
-        chk.report("bath_rest", umax <= 1.0e-2, f"max |u_l| en celdas puras = {umax:.3e} m/s")
+        chk.report("bath_rest", umax <= 1.0e-6, f"max |u_l| en celdas puras = {umax:.3e} m/s")
         # --- alpha congelada ---
         da = float(abs(last["alpha_liquid"] - first["alpha_liquid"])[pure0].max())
         chk.report("bath_alpha_frozen", da <= 1.0e-9, f"max |d alpha_l| en celdas puras = {da:.3e}")

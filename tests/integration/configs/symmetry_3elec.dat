@@ -16,7 +16,12 @@ t_final = 0.2
 adaptive_dt = false
 
 solve_flow = true
-solve_energy = false  # el runaway del gas (radiación off aquí) rompería el acople; el test sondea simetría de MÉTRICA y flujo (agitación de Lorentz)
+# (auditoria 2, N-A6) con ENERGIA y BAÑO: antes energia off y sin liquido,
+# Lorentz = 0 y T uniforme -> un fallo de indices en theta en la energia, el
+# liquido o Lorentz pasaba. Medido (escala por familia): <= 4.6e-7.
+solve_energy = true
+heel_mass = 120000.0
+heel_T = 1850.0
 solve_melting = true
 solve_turb = true
 solve_radiation = false  # cuadratura S4 no es 120-invariante (efecto de rayos)

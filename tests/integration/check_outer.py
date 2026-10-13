@@ -30,13 +30,17 @@ def main():
     if not outers:
         sys.exit(f"ERROR: sin líneas [STEP] en {log}")
 
-    last_step, last_outer = outers[-1]
-    ok = last_outer < args.max_outer
+    # TODOS los pasos (auditoria 2, N-A6): 1 < outer < max. outer = 1 es la
+    # firma de la regresion de Bug 20 (residuales con el campo recien
+    # resuelto: el lazo se declara convergido sin iterar)
+    bad = [(s, o) for s, o in outers if not (1 < o < args.max_outer)]
+    ok = not bad
     tag = "PASS " if ok else "FAIL "
     print(f"[outer] {args.rundir}")
-    print(f"  {tag} outer_convergence  paso {last_step}: outer={last_outer} "
-          f"(max_outer={args.max_outer}; se exige convergencia real, "
-          f"outer < max)")
+    lo = min(o for _, o in outers); hi = max(o for _, o in outers)
+    print(f"  {tag} outer_convergence  {len(outers)} pasos, outer en [{lo}, {hi}] "
+          f"(se exige 1 < outer < max_outer = {args.max_outer})"
+          + (f"; fuera: {bad[:5]}" if bad else ""))
     sys.exit(0 if ok else 1)
 
 

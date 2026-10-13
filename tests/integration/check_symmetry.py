@@ -42,10 +42,20 @@ def main():
     print(f"[symmetry] {args.rundir} (step {int(meta['step'])}, "
           f"rotación {shift}/{nth} celdas)")
     worst, worst_field = 0.0, ""
+
+    def family_scale(name):
+        # velocidades: la maxima de las tres componentes de la fase (igual que
+        # compare_decomposition; auditoria 2, N-A6)
+        if name.startswith("velocity_"):
+            ph = name.split("_")[-1]
+            return max(float(np.max(np.abs(fields[f"velocity_{c}_{ph}"])))
+                       for c in ("r", "th", "z") if f"velocity_{c}_{ph}" in fields)
+        return float(np.max(np.abs(fields[name])))
+
     for name in sorted(fields):
         a = fields[name]
         rot = np.roll(a, shift, axis=THETA_AXIS)
-        scale = max(float(np.max(np.abs(a))), args.floor)
+        scale = max(family_scale(name), args.floor)
         err = float(np.max(np.abs(a - rot))) / scale
         flag = "   " if err <= args.rtol else "***"
         print(f"  {flag} {name:22s} err_rel_Linf = {err:.3e}")

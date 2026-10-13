@@ -12,7 +12,7 @@ Sobre una corrida SIN flujo (chem_test): entre el primer y último snapshot,
 Tolerancia holgada (default 5%): rho_gas(T) introduce deriva de inventario
 al calentarse el gas (agujero EOS documentado).
 
-Uso: check_chem.py RUNDIR --config CFG [--rtol 0.05]
+Uso: check_chem.py RUNDIR --config CFG [--rtol 1e-7]
 """
 import argparse, csv, os, sys
 import numpy as np
@@ -47,7 +47,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("rundir")
     ap.add_argument("--config", required=True)
-    ap.add_argument("--rtol", type=float, default=0.05)
+    # medido O 1.2e-12, C 1.7e-10 (auditoria 2, N-A6: antes 5 %)
+    ap.add_argument("--rtol", type=float, default=1e-7)
     args = ap.parse_args()
 
     global RHO_REF
@@ -110,9 +111,12 @@ def main():
     dO2 = O2_0 - O2_1 - dil["m_dil_O2"]   # O2 consumido por las reacciones
     # cota estequiométrica: 4/3 <= O2_consumido/C_gas <= 4/3 + 4/7·(CO2/(CO+CO2))
     ratio = dO2 / dC_gas * (12.0 / 16.0)  # mol O / mol C
-    okr = 0.45 <= ratio <= 1.15  # entre CO puro (0.5) y CO2 puro (1.0) +tol
+    # mol O / mol C: CO puro = 1, CO2 puro = 2 (auditoria 2, N-A6: la ventana
+    # 0.45-1.15 suponia 0.5-1.0 -> aceptaba un deficit de O del 50 % y
+    # rechazaba una corrida correcta con mas de ~15 % de CO2)
+    okr = 1.0 - 1e-3 <= ratio <= 2.0 + 1e-3
     print(f"  {'PASS' if okr else 'FAIL'}  estequiometria  mol O/mol C = "
-          f"{ratio:.3f} (esperado 0.5-1.0; dC_gas={dC_gas:.3e} kg, "
+          f"{ratio:.4f} (esperado 1 (CO) - 2 (CO2); dC_gas={dC_gas:.3e} kg, "
           f"dO2={dO2:.3e} kg)")
     ok = ok and okr
 

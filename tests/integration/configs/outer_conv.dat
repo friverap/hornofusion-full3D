@@ -28,16 +28,12 @@ solve_multiphase = true
 max_outer = 30
 max_inner_mom = 3
 max_inner_pres = 200  # Poisson de dominio completo con el gas (low-Mach)
-tol_energy = 1e-3
-# res_cont tiene un piso fisico: la expansion termica del gas que la
-# aproximacion incompresible no ventila (compresibilidad gated). El test
-# de convergencia del lazo se juzga por momentum+energia.
-tol_cont = 1.0
-# Bug 20 (2026-09-23): con el residual de momento REAL (iterado entrante),
-# alpha_u = 0.3 contrae ~0.9 por outer y bajar a 1e-4 pide ~100 outers.
-# Este test mide la convergencia de la ENERGIA (C3): momento fuera del
-# criterio, como ya lo estaba la continuidad (tol_cont = 1.0).
-tol_mom = 1.0
+# Tolerancias REALES (auditoria 2, N-A6): antes tol_cont = tol_mom = 1.0 y
+# tol_energy 1e-3, asi que el test aprobaba aunque el lazo saliera en 1
+# iteracion (regresion de Bug 20). Medido: converge en 20-23 outers por paso.
+tol_energy = 1e-6
+tol_mom = 1e-3
+tol_cont = 1e-2
 
 output_freq = 10
 monitor_freq = 1
