@@ -62,6 +62,7 @@ fuerza balanceada; volúmenes de `eafutil` con eje real.
 | N-M13 | R | A17 incompleta en el corrector del gas (máscara de acople final ≠ `ws_pv_active` del predictor); el gas atrapado/fuera del acople no se comprime (contradice la doc de M25); posible alternancia F2.31 con la fuente (p^k − pⁿ) | `mod_pressure_3d.f90:363, 690` |
 | N-M14 | R | La hidrostática inicial no es el punto fijo de W_f con dz no uniforme (producción usa stretch 1.5; toda la matriz usa 1.0); la init cuenta el líquido disperso y W_f no | `mod_fields_3d.f90:748-777` |
 | N-M15 | R | La rama de flujo de una sola fase con energía pierde arco/química/radiación del gas (pasa `gas%alpha` como `alpha_other`); latente | `main_3d.f90:495-498` |
+| N-M17 | ✔ | Modelo de mezcla (opt-in): la energía no cierra con la identidad estricta (`bath_fill_mix`: gap ≈ 0.5–0.7 del defecto convectivo del hook por paso, 1.6e7 J en 50 pasos); xfail `audit_fillmix` con causa | `mod_mixture_3d` (energía con Q_l y Q − Q_l) |
 | N-M16 | R | Documentación desactualizada: ARCHITECTURE §6 (orden del paso, Cassie–Mayr), CONFIGURATION (44 claves sin documentar, incluida `liq_balanced_force`; §9-10 al revés), OUTPUT (/restart, /fields) | docs |
 
 ## Bajos

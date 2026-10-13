@@ -2,18 +2,28 @@
 """Balances globales desde audit.csv (generado por mod_audit.f90, C0.2).
 
 Chequeos (ids para xfail, prefijo 'audit:'):
-  energy_balance : |dE_total - E_inyectada| / escala <= tol (default 1 %)
-                   dE_total = (E_liq+E_gas+E_sol+E_slag) final - inicial
-                   E_iny    = sum(E_src_liq_* + E_src_gas_* + E_arc_direct_sol)
-                   (transferencias internas — fusión, interfase, escoria —
-                   cancelan en el total SI la contabilidad es conservativa)
+  energy_balance : |dE_total - E_iny| <= etol * S_ext + htol * S_int
+                   dE_total = (E_liq+E_sol+E_slag) final - inicial + E_gas_abs
+                   E_iny    = fuentes externas (arco, radiacion, quimica,
+                              paredes, ECS, adiciones, escoria, ...) menos lo
+                              que se lleva el recorte de alpha
+                   S_ext    = sum |fuentes externas por paso|
+                   S_int    = sum |transferencias internas|: fusion
+                              (E_melt_from_solid), congelacion (E_resolid),
+                              interfase (E_iph_*), cierre residual
+                   (auditoria 2, N-C3: antes la escala era
+                   max(|dE|, |E_in|, sum|E_melt|) y en casos con fusion el
+                   traspaso, 1e10-1e11 J, dejaba pasar errores de 1e8-1e9 J,
+                   mayores que toda la energia del arco)
+                   Con --config de solve_energy = false: no aplica.
   arc_budget     : E_arc_recibida / sum(P_arc*dt) = 1 ± tol (default 1e-3)
                    Objetivo post-C1.6/C1.7; hoy la sobre-inyección del MC y
                    el doble conteo por fase lo desvían.
   mass_liq       : |dm_liq - (m_melted - m_resolid - m_alpha_clip)| <= 0.5 %
                    (se omite con PASS informativo si no hubo fusión)
 
-Uso: check_audit.py RUNDIR [--xfail a,b] [--etol 0.01] [--arctol 1e-3]
+Uso: check_audit.py RUNDIR [--config CFG] [--xfail a,b] [--etol 0.01]
+                      [--htol 1e-4] [--arctol 1e-3]
 """
 import argparse
 import csv
@@ -21,13 +31,15 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from eafutil import Checker, parse_xfail_arg, safe_float
+from eafutil import Checker, parse_xfail_arg, read_config, safe_float
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("rundir")
     ap.add_argument("--xfail", default="")
+    ap.add_argument("--config", default=None)
+    ap.add_argument("--htol", type=float, default=1e-4)
     ap.add_argument("--etol", type=float, default=0.01)
     ap.add_argument("--arctol", type=float, default=1e-3)
     ap.add_argument("--mtol", type=float, default=0.005)
@@ -63,30 +75,41 @@ def main():
     else:
         dE_gas = last["E_gas"] - first["E_gas"]
     dE = total_E(last) - total_E(first) + dE_gas
-    E_in = sum(r["E_src_liq_arc"] + r["E_src_liq_rad"] + r["E_src_liq_chem"] +
-               r["E_src_gas_arc"] + r["E_src_gas_rad"] + r["E_src_gas_chem"] +
-               r["E_arc_direct_sol"] + r.get("E_slag_intercept", 0.0) +
-               r.get("E_rad_sol", 0.0) + r.get("E_conv_defect", 0.0) -
-               r.get("E_wall_conv", 0.0) + r.get("E_chem_sol", 0.0) +
-               r.get("E_ecs_in", 0.0) + r.get("E_flux_in", 0.0) +
-               r.get("E_charge_in", 0.0) +
-               r.get("E_slag_ox", 0.0) - r.get("E_slag_red", 0.0) +
-               r.get("E_rad_foam", 0.0) + r.get("E_slag_tclip", 0.0) +
-               r.get("E_mix_init", 0.0)
-               for r in steps)
+    EXT_POS = ("E_src_liq_arc", "E_src_liq_rad", "E_src_liq_chem",
+               "E_src_gas_arc", "E_src_gas_rad", "E_src_gas_chem",
+               "E_arc_direct_sol", "E_slag_intercept", "E_rad_sol",
+               "E_conv_defect", "E_chem_sol", "E_ecs_in", "E_flux_in",
+               "E_charge_in", "E_slag_ox", "E_rad_foam", "E_slag_tclip",
+               "E_mix_init")
+    EXT_NEG = ("E_wall_conv", "E_slag_red", "E_alpha_clip")
+    INTERNAL = ("E_melt_from_solid", "E_resolid", "E_iph_sol", "E_iph_gas",
+                "E_iph_liq", "E_resid_closed")
+
+    def ext(r):
+        return (sum(r.get(k, 0.0) for k in EXT_POS)
+                - sum(r.get(k, 0.0) for k in EXT_NEG))
+
+    E_in = sum(ext(r) for r in steps)
     # (E_out_conv es DIAGNÓSTICO: la energía convectada a las celdas
     # outlet queda en su T — el déficit convectivo del hook ya incluye
     # esas caras; restarla doble-contaba: gap medido == E_out_conv.)
-    # Escala del balance: el THROUGHPUT bruto, no el neto (en fusión el
-    # handoff sólido->líquido mueve ~1e10-1e11 J que casi se cancelan en
-    # dE; juzgar el descuadre contra el neto haría fallar un balance al
-    # 0.2% del flujo real). El residuo dominante es (err masa alpha)*C0.
-    E_gross = sum(abs(r.get("E_melt_from_solid", 0.0)) for r in steps)
-    scale = max(abs(dE), abs(E_in), E_gross, 1.0)
-    err = abs(dE - E_in) / scale
-    chk.report("energy_balance", err <= args.etol,
-               f"dE={dE:.4e} J, E_iny={E_in:.4e} J, err rel={err:.3e} "
-               f"(tol {args.etol})")
+    S_ext = sum(abs(r.get(k, 0.0)) for r in steps for k in EXT_POS + EXT_NEG)
+    S_int = sum(abs(r.get(k, 0.0)) for r in steps for k in INTERNAL)
+    gap = dE - E_in
+    allowed = args.etol * S_ext + args.htol * S_int
+    energy_on = True
+    if args.config:
+        v = read_config(args.config).get("solve_energy", True)
+        energy_on = not (str(v).strip().lower() in ("false", ".false.", "f", "0"))
+    if not energy_on:
+        print("  PASS  energy_balance  (solve_energy = false: no aplica)")
+    else:
+        ratio = abs(gap) / max(allowed, 1.0)
+        chk.report("energy_balance", abs(gap) <= max(allowed, 1.0),
+                   f"dE={dE:.4e} J, E_iny={E_in:.4e} J, gap={gap:.3e} J, "
+                   f"permitido={allowed:.3e} J (etol {args.etol} x S_ext "
+                   f"{S_ext:.3e} + htol {args.htol} x S_int {S_int:.3e}), "
+                   f"gap/permitido={ratio:.3e}")
 
     # -- arc_budget ----------------------------------------------------------
     # E_mc_lost: beams que escapan por techo/paredes — pérdida física
@@ -112,7 +135,10 @@ def main():
         print("  [WARN] audit_freq>1 detectado: energy_balance y "
               "arc_budget son INFORMATIVOS (identidades calibradas "
               "a freq=1)")
-    if E_arc_avail > 1.0:
+    if not energy_on:
+        # sin energia nadie consume S_arc: el presupuesto no aplica
+        print("  PASS  arc_budget  (solve_energy = false: no aplica)")
+    elif E_arc_avail > 1.0:
         ratio = E_arc_in / E_arc_avail
         disc = sum(r["E_arc_discarded"] for r in steps)
         chk.report("arc_budget", abs(ratio - 1.0) <= args.arctol,

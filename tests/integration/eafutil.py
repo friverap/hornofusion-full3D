@@ -48,6 +48,10 @@ def read_config(path):
             if "=" not in line:
                 continue
             key, _, val = line.partition("=")
+            # comentario en linea (auditoria 2, N-B25: 'solve_energy = false
+            # # ...' quedaba como cadena, verdadera en Python)
+            for c in ("#", "!"):
+                val = val.split(c, 1)[0]
             key, val = key.strip(), val.strip()
             if not key:
                 continue

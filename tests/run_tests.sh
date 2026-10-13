@@ -123,8 +123,13 @@ check_invariants() {  # <rundir> <config_name>
 check_audit_if_present() {  # <rundir> [prefijo_xfail_extra]
     local extra=""
     [ -n "${2:-}" ] && extra=",$(xfail_ids "$2")"
+    # config del caso (nombre del directorio sin _nN): solve_energy = false
+    # => el balance de energia no aplica (auditoria 2, N-C3)
+    local base cfgarg=""
+    base=$(basename "$1"); base=${base%_n*}
+    [ -f "$CFG/$base.dat" ] && cfgarg="--config $CFG/$base.dat"
     if [ -f "$1/audit.csv" ]; then
-        if ! $PY $INT/check_audit.py "$1" --xfail "$(xfail_ids audit)$extra"; then
+        if ! $PY $INT/check_audit.py "$1" $cfgarg --xfail "$(xfail_ids audit)$extra"; then
             echo ">> FAIL auditoría en $1"
             note_fail
         fi
@@ -189,7 +194,6 @@ full | rebaseline)
 
     for d in "$OUT"/cold_10step_n*; do
         check_invariants "$d" cold_10step
-        check_audit_if_present "$d" audit_cold
     done
     # melt_forced: régimen violento aún inestable (gated en C3.4) ->
     # sus invariantes duros (nan/bounds) llevan xfail PROPIO por corrida
@@ -199,15 +203,7 @@ full | rebaseline)
         echo ">> FAIL invariantes en melt_forced_n8"
         note_fail
     fi
-    check_audit_if_present "$OUT/melt_forced_n8"
     check_invariants "$OUT/noflow_energy_n1" noflow_energy
-    # noflow: xfail propio (arc_budget no aplica sin flujo — el gas no
-    # consume su parte de S_arc por diseño del test)
-    if ! $PY $INT/check_audit.py "$OUT/noflow_energy_n1" \
-            --xfail "$(xfail_ids audit),$(xfail_ids audit_noflow)"; then
-        echo ">> FAIL audit en noflow_energy_n1"
-        note_fail
-    fi
     check_invariants "$OUT/symmetry_3elec_n6" symmetry_3elec
 
     run_script "decomposition_cold_n1" \
@@ -251,12 +247,10 @@ full | rebaseline)
         --xfail "$(xfail_ids bath_fill)"
     # Modelo de MEZCLA (Plan G): baño en reposo y llenado con fusion y arco
     check_invariants "$OUT/bath_mix_n4" bath_mix
-    check_audit_if_present "$OUT/bath_mix_n4"
     run_script "bath_mix" \
         $PY $INT/check_bath.py "$OUT/bath_mix_n4" --config "$CFG/bath_mix.dat" \
         --xfail "$(xfail_ids bath_mix)"
     check_invariants "$OUT/bath_fill_mix_n4" bath_fill_mix
-    check_audit_if_present "$OUT/bath_fill_mix_n4"
     run_script "bath_fill_mix" \
         $PY $INT/check_bath.py "$OUT/bath_fill_mix_n4" --config "$CFG/bath_fill_mix.dat" --fill \
         --xfail "$(xfail_ids bath_fill_mix)"
@@ -266,12 +260,22 @@ full | rebaseline)
         --xfail "$(xfail_ids bath_freeze)"
     check_invariants "$OUT/bed_flood_n4" bed_flood
     check_invariants "$OUT/arc_noscrap_n4" arc_noscrap
-    check_audit_if_present "$OUT/arc_noscrap_n4" audit_arcnoscrap
     check_invariants "$OUT/cold_bucket2_n4" cold_bucket2
-    check_audit_if_present "$OUT/cold_bucket2_n4"
     run_script "bed_flood" \
         $PY $INT/check_bath.py "$OUT/bed_flood_n4" --config "$CFG/bed_flood.dat" --fill \
         --xfail "$(xfail_ids bed_flood)"
+    # Auditoria de energia/masa/arco en TODA corrida de la matriz (auditoria
+    # 2, N-C3: antes 13 de 26 no se auditaban; bath_freeze fallaba con err 1)
+    for d in "$OUT"/*_n*; do
+        case $(basename "$d") in
+            cold_10step_*)   x=audit_cold ;;
+            arc_noscrap_*)   x=audit_arcnoscrap ;;
+            noflow_energy_*) x=audit_noflow ;;
+            bath_fill_mix_*) x=audit_fillmix ;;
+            *)               x="" ;;
+        esac
+        check_audit_if_present "$d" $x
+    done
     run_script "decomposition_bath" \
         $PY $INT/compare_decomposition.py "$OUT/bath_test_n1" "$OUT/bath_test_n4"
     run_script "decomposition_freeze" \

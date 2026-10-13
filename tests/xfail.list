@@ -58,3 +58,12 @@ audit_cold:energy_balance
 # convergido en el encendido queda a la vista; los demas balances mejoran
 # (cold_10step 1.51 -> 1.39 %, melt_forced 3.0e-6 -> 1.6e-6).
 # RETIRADO 13-oct-2026 (M25): con la compresion fisica cierra a 0.16 %.
+# bath_fill_mix (modelo de MEZCLA, opt-in; auditoria 2, N-C3/N-M17): con la
+# identidad estricta (13-oct-2026) la energia no cierra: gap +1.6e7 J en 50
+# pasos frente a 1.0e7 permitidos. El recorte de alpha del paso 1 ya cierra
+# (E_alpha_clip 2.64e8 J); el resto crece con el defecto convectivo que mide
+# el hook (E_conv_defect ~ -1e6 J/paso, mayor que el arco): el gap por paso es
+# ~0.5-0.7 de ese defecto, asi que el hook no mide el mismo enunciado que
+# resuelve la energia de la mezcla (flujos Q_l y Q - Q_l, M36). La mezcla no
+# se usa en B1 (Plan G cerrado negativo).
+audit_fillmix:energy_balance

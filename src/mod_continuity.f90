@@ -28,7 +28,7 @@ module mod_continuity
     use mod_probe, only: probe_active_now, probe_current_step
     use mod_face_flux
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d
-    use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS, AUD_SPILL_MASS, &
+    use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS, AUD_ALPHA_CLIP_E, AUD_SPILL_MASS, &
                          AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
     use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
                              ws_Mr, ws_Mth, ws_Mz, ws_lim, ws_flux_valid, &
@@ -49,6 +49,9 @@ module mod_continuity
     ! Se audita la diferencia respecto a la llamada anterior del mismo paso.
     real(dp), save :: clip_step_prev = 0.0_dp
     integer,  save :: clip_step_id = -huge(1)
+    ! energia de lo recortado (N-B1), misma semantica por paso
+    real(dp), save :: clipE_step_prev = 0.0_dp
+    integer,  save :: clipE_step_id = -huge(1)
     real(dp), save :: spill_step_prev = 0.0_dp
     ! Plan D, D1: desfases alpha-p (ultima iteracion externa del paso)
     real(dp), save :: vd_step_prev = 0.0_dp, vl_step_prev = 0.0_dp, vu_step_prev = 0.0_dp
@@ -84,7 +87,7 @@ contains
         real(dp) :: mv, mv_glob
         integer, parameter :: N_SPILL_MAX = 128   ! >= nz de produccion (84): la cascada avanza una celda por pasada
         integer :: ilim, ipass, n_it_max
-        real(dp) :: inflow, outflow, room, dlim, dlim_glob, clip_call
+        real(dp) :: inflow, outflow, room, dlim, dlim_glob, clip_call, clipE_call
         real(dp) :: dlim_exit, cap, exc, room_up, give, exc_glob, spill_call
         real(dp) :: exc0_glob
         real(dp) :: vol_dalpha, vol_lim, vol_unl
@@ -490,7 +493,7 @@ contains
         call audit_step_delta(AUD_SPILL_MASS, spill_call, spill_step_prev, spill_step_id)
 
         ! Restricciones de acotamiento (el ÚNICO error de masa; auditado)
-        clip_call = 0.0_dp
+        clip_call = 0.0_dp; clipE_call = 0.0_dp
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
@@ -509,6 +512,10 @@ contains
                             liq%alpha(i,j,k)))
                     clip_call = clip_call + &
                         (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k)
+                    clipE_call = clipE_call + &
+                        (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k) &
+                        * (liq%cp(i,j,k) * liq%T(i,j,k) + (cfg%cp_s - cfg%cp_l) &
+                           * cfg%T_liquidus + cfg%h_fusion)
                     gas%alpha(i,j,k) = 1.0_dp - sol%alpha_s(i,j,k) &
                                        - alpha_slag(i,j,k) - liq%alpha(i,j,k)
                     gas%alpha(i,j,k) = max(0.0_dp, gas%alpha(i,j,k))
@@ -518,6 +525,7 @@ contains
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
         call mpi_exchange_halos_3d(gas%alpha, m%topo)
         call audit_step_delta(AUD_ALPHA_CLIP_MASS, clip_call, clip_step_prev, clip_step_id)
+        call audit_step_delta(AUD_ALPHA_CLIP_E, clipE_call, clipE_step_prev, clipE_step_id)
 
         ! Diagnostico del limitador/derrame (rank 0, espaciado): iteraciones
         ! del punto fijo, dlim al salir, exceso maximo antes del derrame,
@@ -1048,12 +1056,12 @@ contains
 
         integer :: i, j, k
         integer :: istart, iend, jstart, jend, kstart, kend
-        real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, vol_dt, a_pre, clip_call
+        real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, vol_dt, a_pre, clip_call, clipE_call
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         call ensure_workspace(m)
         ws_flux_valid = .false.
-        clip_call = 0.0_dp
+        clip_call = 0.0_dp; clipE_call = 0.0_dp
         aW = 0.0_dp; aE = 0.0_dp; aS = 0.0_dp; aN = 0.0_dp
         aB = 0.0_dp; aT = 0.0_dp; aP = 0.0_dp; Su = 0.0_dp
 
@@ -1097,6 +1105,10 @@ contains
                             liq%alpha(i,j,k)))
                     clip_call = clip_call + &
                         (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k)
+                    clipE_call = clipE_call + &
+                        (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k) &
+                        * (liq%cp(i,j,k) * liq%T(i,j,k) + (cfg%cp_s - cfg%cp_l) &
+                           * cfg%T_liquidus + cfg%h_fusion)
                     gas%alpha(i,j,k) = 1.0_dp - sol%alpha_s(i,j,k) &
                                        - alpha_slag(i,j,k) - liq%alpha(i,j,k)
                     gas%alpha(i,j,k) = max(0.0_dp, gas%alpha(i,j,k))
@@ -1106,6 +1118,7 @@ contains
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
         call mpi_exchange_halos_3d(gas%alpha, m%topo)
         call audit_step_delta(AUD_ALPHA_CLIP_MASS, clip_call, clip_step_prev, clip_step_id)
+        call audit_step_delta(AUD_ALPHA_CLIP_E, clipE_call, clipE_step_prev, clipE_step_id)
     end subroutine solve_alpha_bounded_implicit
 
     ! Audita el valor de ESTA llamada de modo que, al cierre del paso, el

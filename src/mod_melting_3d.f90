@@ -32,7 +32,7 @@ module mod_melting_3d
     use mod_types_3d
     use mod_parallel_utils
     use mod_audit, only: audit_add, AUD_MELT_MASS, AUD_RESOLID_MASS, &
-                         AUD_MELT_E_SOLID, AUD_RESID_MASS, AUD_RESID_E
+                         AUD_MELT_E_SOLID, AUD_RESID_MASS, AUD_RESID_E, AUD_RESOLID_E
     implicit none
 
 contains
@@ -246,6 +246,7 @@ contains
                         sol%m_s(i,j,k) = sol%m_s(i,j,k) + dm
                         sol%E_s(i,j,k) = sol%E_s(i,j,k) + dm * e_entry
                         call audit_add(AUD_RESOLID_MASS, dm)
+                        call audit_add(AUD_RESOLID_E, dm * e_entry)
 
                         if (m%vol(i,j,k) > SMALL) then
                             sol%alpha_s(i,j,k) = sol%m_s(i,j,k) / &
