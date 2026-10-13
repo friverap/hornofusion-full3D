@@ -54,7 +54,7 @@ contains
                         y_cell = m%r(i) * sin(m%theta(j))
                         dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
                         if (dist > cfg%R_elec * 2.0_dp) cycle
-                        if (sol%alpha_s(i,j,k_tip) > 0.01_dp) z_scrap = max(z_scrap, m%zf(k_tip))
+                        if (sol%alpha_s(i,j,k_tip) > ALPHA_SCRAP_SURF) z_scrap = max(z_scrap, m%zf(k_tip))
                         if (liq%alpha(i,j,k_tip) >= ALPHA_LIQ_CONT) z_liq = max(z_liq, m%zf(k_tip))
                     end do
                 end do

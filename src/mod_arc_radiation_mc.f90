@@ -200,7 +200,7 @@ contains
                     ! el liquido era un sustituto geometrico z < H_bowl + 0.5
                     ! (rayos absorbidos en gas o chatarra fina bajo esa cota y
                     ! nunca en un baño mas alto).
-                    if (alpha_g(ig, jg, kg) > 0.1_dp .or. &
+                    if (alpha_g(ig, jg, kg) > ALPHA_SCRAP_SURF .or. &
                         alpha_lg(ig, jg, kg) >= ALPHA_LIQ_CONT) then
                         ! Acumular POTENCIA en la celda global; el depósito
                         ! real ocurre tras la reducción

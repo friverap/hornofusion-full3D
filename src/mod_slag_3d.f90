@@ -179,14 +179,19 @@ contains
     ! al final del paso, cuando los fluidos ya habían absorbido el 100% de
     ! S_arc (y éste se regenera al paso siguiente): la escoria creaba energía.
     !---------------------------------------------------------------------------
-    subroutine slag_intercept_arc(slag, sh, m, cfg)
+    subroutine slag_intercept_arc(slag, liq, gas, sh, m, cfg)
         type(slag_t),  intent(inout) :: slag
+        ! fluidos de la celda: el reparto es por ABSORCION (auditoria, bajos;
+        ! F2.30): w = (k_sl a_sl + k_f a_foam)/(... + k_l a_l + k_g a_g), el
+        ! mismo criterio con que la energia reparte S_arc entre liquido y gas.
+        ! Antes: fraccion de VOLUMEN alpha_sl (y sin la espuma)
+        type(phase_t), intent(in)    :: liq, gas
         type(shared_t),intent(inout) :: sh
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
 
         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: dE
+        real(dp) :: dE, ksl, kfl, w
 
         if (m%is_parallel) then
             istart = m%topo%istart; iend = m%topo%iend
@@ -205,11 +210,14 @@ contains
                     if (slag%alpha_sl(i,j,k) < SMALL_SL) cycle
                     if (slag%m_sl(i,j,k)     < SMALL_SL) cycle
 
-                    dE = sh%S_arc(i,j,k) * m%vol(i,j,k) * cfg%dt &
-                         * slag%alpha_sl(i,j,k)
+                    ksl = KAPPA_SLAG_ABS * slag%alpha_sl(i,j,k) &
+                        + KAPPA_FOAM_ABS * slag%alpha_foam(i,j,k)
+                    kfl = KAPPA_LIQ_ABS * max(liq%alpha(i,j,k), 0.0_dp) &
+                        + KAPPA_GAS_ABS * max(gas%alpha(i,j,k), 0.0_dp)
+                    w = ksl / (ksl + kfl + SMALL)
+                    dE = sh%S_arc(i,j,k) * m%vol(i,j,k) * cfg%dt * w
                     slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + dE
-                    sh%S_arc(i,j,k)  = sh%S_arc(i,j,k) &
-                                       * (1.0_dp - slag%alpha_sl(i,j,k))
+                    sh%S_arc(i,j,k)  = sh%S_arc(i,j,k) * (1.0_dp - w)
                     call audit_add(AUD_SLAG_INTERCEPT, dE)
 
                     slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / &

@@ -39,7 +39,7 @@ module mod_ecs_feed
     integer, parameter :: ID_ECS = MAX_LAYERS + 1
 
     ! Umbral de "hay material" para definir la superficie de la columna
-    real(dp), parameter :: ECS_SURF_ALPHA = 0.05_dp
+    real(dp), parameter :: ECS_SURF_ALPHA = ALPHA_SCRAP_SURF
 
     ! Máximo de niveles sobre la superficie a intentar por paso
     integer, parameter :: ECS_MAX_LEVELS = 4

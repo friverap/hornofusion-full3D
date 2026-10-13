@@ -341,7 +341,7 @@ program eaf_3d_simulator
             ! La escoria intercepta su fracción de S_arc AHORA (antes de que
             ! las ecuaciones de energía lo consuman; C1.6b)
             if (cfg%solve_slag) then
-                call slag_intercept_arc(slag, sh, mesh, cfg)
+                call slag_intercept_arc(slag, liq, gas, sh, mesh, cfg)
             end if
         end if
         call timer_stop(T_ARC)

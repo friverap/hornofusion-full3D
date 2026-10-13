@@ -99,6 +99,11 @@ module mod_constants
     ! 0.05 g (eje) a 1.5 g (periferia) por celda — sin significado fisico
     ! como chatarra.
     real(dp), parameter :: ALPHA_SOLID_RESID = 1.0e-4_dp
+    ! Fraccion de chatarra que define la SUPERFICIE del material (auditoria,
+    ! bajos): la usan el regulador de electrodos, la carga ECS y el impacto
+    ! del MC del arco (antes 0.01 / 0.05 / 0.1 para el mismo concepto). El
+    ! umbral hidraulico del lecho (in_bed, 1e-2) es otro concepto.
+    real(dp), parameter :: ALPHA_SCRAP_SURF = 0.05_dp
     ! Cota física de velocidad del ACERO líquido [m/s]. El acero en el
     ! horno se mueve a O(1) m/s (plumas, EBT ~5-7 m/s); 20 m/s es 3x el
     ! máximo físico. Sin la cota, gotas apenas sobre ALPHA_FLOW_CUTOFF
@@ -260,6 +265,11 @@ module mod_constants
     ! radiaba en volumen hacia el tazon. 100 1/m da espesor optico >> 1 en una
     ! celda (la absorcion real es superficial, micrometros).
     real(dp), parameter :: KAPPA_LIQ_ABS   = 100.0_dp  ! 1/m
+    ! Espuma (atributo optico de la escoria, E2.6; calibrable en B6) y
+    ! escoria densa (oxido fundido, opaca como el baño). UNA sola definicion
+    ! de cada kappa (auditoria, bajos: la DO tenia copias propias)
+    real(dp), parameter :: KAPPA_FOAM_ABS  = 30.0_dp   ! 1/m
+    real(dp), parameter :: KAPPA_SLAG_ABS  = 100.0_dp  ! 1/m
 
 
     ! Reparto del presupuesto radiativo del arco (C1.6): fracción de

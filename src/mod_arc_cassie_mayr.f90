@@ -182,7 +182,7 @@ contains
                         y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                         dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
                         if (dist <= sigma_r * 2.0_dp .and. &
-                            alpha_g(ig,jg,kg) > 0.05_dp) then
+                            alpha_g(ig,jg,kg) > ALPHA_SCRAP_SURF) then
                             kg_scrap     = kg
                             found_scrap  = .true.
                             exit kscrap

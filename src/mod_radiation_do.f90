@@ -18,7 +18,7 @@
 ! resuelve con tdma_3d_mpi (acople MPI vía halos, sin costuras de rank).
 !
 ! Emisión de MEZCLA: B = [kf*(wl*B(T_l)+wg*B(T_g)) + ks*B(T_s)]/kappa_mix
-! con kf = KAPPA_GAS*(1-alpha_s), ks = KAPPA_SOLID*alpha_s.
+! con kf = KAPPA_GAS_ABS*(1-alpha_s), ks = KAPPA_SOLID_ABS*alpha_s.
 !
 ! Acople:
 !  - FLUIDOS: sh%kappa_f y sh%G_rad para linearización IMPLÍCITA en energía
@@ -41,17 +41,14 @@ module mod_radiation_do
 
     ! (C4.2: el número de direcciones ahora depende de cfg%do_quadrature;
     !  ver n_quad_dirs. 24 = S4, el default histórico.)
-    real(dp), parameter :: KAPPA_GAS = 0.3_dp    ! 1/m (gas absorption coefficient)
-    real(dp), parameter :: KAPPA_SOLID = 10.0_dp ! 1/m (solid region)
+    ! (kappas: UNA definicion en mod_constants -- KAPPA_GAS_ABS,
+    !  KAPPA_SOLID_ABS, KAPPA_LIQ_ABS, KAPPA_FOAM_ABS)
     ! Barridos TDMA por dirección: ITERATIVOS hasta convergencia. Con un
     ! número fijo (=2) la información radiativa solo cruzaba 2 interfaces
     ! de rank por dirección (interfaces retardadas del TDMA): G_rad difería
     ! hasta 13% entre -n 1 y -n 8 (estructural, no roundoff). El criterio
     ! relativo global hace la intensidad invariante a la descomposición
     ! hasta RTE_SWEEP_TOL.
-    ! Coeficiente de absorción de la espuma [1/m] (calibrable en B6): la
-    ! espuma es ópticamente densa; O(10-100)
-    real(dp), parameter :: KAPPA_FOAM = 30.0_dp
     integer, parameter :: MAX_SWEEPS_RTE = 24
     real(dp), parameter :: RTE_SWEEP_TOL = 1.0e-10_dp
 
@@ -100,12 +97,12 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     ! fluido: gas casi transparente + liquido OPACO (A11)
-                    sh%kappa_f(i,j,k) = KAPPA_GAS * max(gas%alpha(i,j,k), 0.0_dp) &
+                    sh%kappa_f(i,j,k) = KAPPA_GAS_ABS * max(gas%alpha(i,j,k), 0.0_dp) &
                                       + KAPPA_LIQ_ABS * max(liq%alpha(i,j,k), 0.0_dp)
-                    ks_a = KAPPA_SOLID * sol%alpha_s(i,j,k)
+                    ks_a = KAPPA_SOLID_ABS * sol%alpha_s(i,j,k)
                     ! Espuma (E2.6): absorbe/emite con T_sl; su absorción
                     ! se deposita en E_sl (ver abajo)
-                    kf_a = KAPPA_FOAM * slag%alpha_foam(i,j,k)
+                    kf_a = KAPPA_FOAM_ABS * slag%alpha_foam(i,j,k)
                     kmix(i,j,k) = sh%kappa_f(i,j,k) + ks_a + kf_a
 
                     ! Reparto de la emision fluida por fase: por ABSORCION
@@ -260,7 +257,7 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     if (sol%m_s(i,j,k) <= SMALL) cycle
-                    ks_a = KAPPA_SOLID * sol%alpha_s(i,j,k)
+                    ks_a = KAPPA_SOLID_ABS * sol%alpha_s(i,j,k)
                     if (ks_a <= SMALL) cycle
 
                     ! Newton puntual sobre E:  f(E) = E - E0 - dt*V*ks*
@@ -298,7 +295,7 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     if (slag%m_sl(i,j,k) <= 1.0e-6_dp) cycle
-                    kf_a = KAPPA_FOAM * slag%alpha_foam(i,j,k)
+                    kf_a = KAPPA_FOAM_ABS * slag%alpha_foam(i,j,k)
                     if (kf_a <= SMALL) cycle
                     block
                         real(dp) :: E0, E_new, fval, fprime
