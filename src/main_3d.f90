@@ -271,6 +271,12 @@ program eaf_3d_simulator
             time >= cfg%t_bucket2_charge .and. &
             time - cfg%dt < cfg%t_bucket2_charge) then
             call charge_scrap(sol, gas, mesh, cfg, 2)
+            ! Recarga (auditoria A10): los electrodos se retiran al techo y la
+            ! perforacion de la nueva cesta empieza de nuevo
+            do e = 1, N_ELECTRODES
+                elec(e)%z_tip = cfg%H_total - 0.1_dp
+                elec(e)%bore_in_done = .false.
+            end do
             call solid_exchange_halos(sol, mesh)
             call phase_exchange_halos(gas, mesh)
             if (should_print(mesh)) then
