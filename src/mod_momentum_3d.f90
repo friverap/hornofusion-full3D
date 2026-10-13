@@ -314,9 +314,11 @@ contains
                     ! e-folding de 50 ms. Con donor-cell, una vecina sin fase
                     ! no entrega nada: F = 0.
                     ! Solo el LIQUIDO: es la fase cuyas celdas vacias llevan
-                    ! una velocidad de DRIFT grande (-49.7 m/s). El gas
-                    ! conserva la forma simetrica: cambiarsela tambien lleva
-                    ! el gas de bath_fill a U_GAS_MAX (medido).
+                    ! una velocidad de DRIFT grande (-49.7 m/s). El gas usa
+                    ! los flujos conservativos de su Poisson (cons_g, M24):
+                    ! la forma simetrica anterior frenaba con su caudal
+                    ! fantasma el modo par-impar que la fuerza balanceada
+                    ! elimino; sin ella, el conservativo no es estable.
                     if (cons_l) then
                         Fw = ws_Fr(i-1,j,k);  Fe = ws_Fr(i,j,k)
                         Fs = ws_Fth(i,jm,k);  Fn = ws_Fth(i,j,k)
