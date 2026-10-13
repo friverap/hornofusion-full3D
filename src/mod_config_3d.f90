@@ -300,6 +300,7 @@ contains
         case ('tol_cont');   call parse_real(val, key, cfg%tol_cont)
         case ('tol_mom');    call parse_real(val, key, cfg%tol_mom)
         case ('tol_energy'); call parse_real(val, key, cfg%tol_energy)
+        case ('tol_turb');   call parse_real(val, key, cfg%tol_turb)
         ! Material
         case ('rho_steel');  call parse_real(val, key, cfg%rho_steel)
         case ('T_solidus');  call parse_real(val, key, cfg%T_solidus)

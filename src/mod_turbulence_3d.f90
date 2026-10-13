@@ -19,7 +19,7 @@ module mod_turbulence_3d
 
 contains
 
-    subroutine solve_k_epsilon(liq, sh, m, cfg, dt)
+    subroutine solve_k_epsilon(liq, sh, m, cfg, dt, tke_n, eps_n, res_k, res_e)
         use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
             aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
@@ -29,6 +29,14 @@ contains
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
         real(dp), intent(in)         :: dt
+        ! Ancla TEMPORAL (k, eps al inicio del paso; auditoria 12-oct-2026, A13):
+        ! antes el transitorio usaba el iterado de la iteracion externa anterior
+        ! y k-eps avanzaba un dt por iteracion externa (hasta max_outer veces
+        ! mas rapido que la fisica)
+        real(dp), intent(in)         :: tke_n(-1:,-1:,-1:), eps_n(-1:,-1:,-1:)
+        ! Residuales del iterado ENTRANTE (antes nunca se calculaban: tol_turb
+        ! se cumplia siempre)
+        real(dp), intent(out)        :: res_k, res_e
 
         integer :: i, j, k, jm, jp
         integer :: istart, iend, jstart, jend, kstart, kend
@@ -196,7 +204,7 @@ contains
                     aT(i,j,k) = Dt_d + max(-Ft_f,0.0_dp)
 
                     ! Source: G_k + transient - rho*epsilon (linearized)
-                    Su(i,j,k) = rho_vol_dt * tke_old(i,j,k) + Gk(i,j,k) * vol
+                    Su(i,j,k) = rho_vol_dt * tke_n(i,j,k) + Gk(i,j,k) * vol
                     ! Forma ACOTADA de Patankar (sin dF; ver mod_energy)
                     aP(i,j,k) = aW(i,j,k)+aE(i,j,k)+aS(i,j,k)+aN(i,j,k)+aB(i,j,k)+aT(i,j,k) &
                                + rho_vol_dt + rho_f * eps_old(i,j,k) * vol / (tke_old(i,j,k)+SMALL)
@@ -205,7 +213,9 @@ contains
         end do
 
         call apply_scalar_bc(aW, aE, aS, aN, aB, aT, aP, Su, m, 1.0e-4_dp)
+        res_k = compute_residual_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, sh%tke, m)
         call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, sh%tke, m, 3)
+        ! relajacion contra el ITERADO (tke_old = iterado entrante)
         sh%tke = cfg%alpha_k * sh%tke + (1.0_dp - cfg%alpha_k) * tke_old
         sh%tke = max(sh%tke, 1.0e-10_dp)
 
@@ -261,7 +271,7 @@ contains
                     aB(i,j,k) = Db + max(Fb,0.0_dp)
                     aT(i,j,k) = Dt_d + max(-Ft_f,0.0_dp)
 
-                    Su(i,j,k) = rho_vol_dt * eps_old(i,j,k) &
+                    Su(i,j,k) = rho_vol_dt * eps_n(i,j,k) &
                                + C1_EPS * eps_old(i,j,k) / (tke_old(i,j,k)+SMALL) * Gk(i,j,k) * vol
                     aP(i,j,k) = aW(i,j,k)+aE(i,j,k)+aS(i,j,k)+aN(i,j,k)+aB(i,j,k)+aT(i,j,k) &
                                + rho_vol_dt &
@@ -273,6 +283,7 @@ contains
         end do
 
         call apply_scalar_bc(aW, aE, aS, aN, aB, aT, aP, Su, m, 1.0e-3_dp)
+        res_e = compute_residual_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, sh%eps, m)
         call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, sh%eps, m, 3)
         sh%eps = cfg%alpha_eps * sh%eps + (1.0_dp - cfg%alpha_eps) * eps_old
         sh%eps = max(sh%eps, 1.0e-10_dp)

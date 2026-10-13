@@ -64,6 +64,7 @@ program eaf_3d_simulator
     type(shared_t)        :: sh
     type(electrode_t)     :: elec(N_ELECTRODES)
     type(convergence_t)   :: conv
+    real(dp), allocatable :: tke_n(:,:,:), eps_n(:,:,:)   ! ancla temporal de k-eps (A13)
     type(elec_profile_t)  :: elec_prof
     type(rate_profile_t)  :: ecs_prof, cal_prof, cinj_prof
     real(dp) :: mdot_ecs
@@ -136,6 +137,8 @@ program eaf_3d_simulator
     call slag_allocate(slag, mesh)
     call shared_allocate(sh, mesh)
     call ensure_workspace(mesh)   ! ws_Tsrc (auditoria A3) se pasa a la energia en todas las ramas
+    allocate(tke_n, eps_n, mold=sh%tke)
+    tke_n = sh%tke; eps_n = sh%eps
 
     allocate(drag_coef, mold=liq%ur)
     drag_coef = 0.0_dp
@@ -265,6 +268,8 @@ program eaf_3d_simulator
         gas_old%T   = gas%T;   gas_old%ur  = gas%ur
         gas_old%uth = gas%uth; gas_old%uz  = gas%uz
         gas_old%alpha = gas%alpha
+        ! Ancla temporal de k-eps (auditoria A13)
+        tke_n = sh%tke; eps_n = sh%eps
 
         ! Second bucket
         if (cfg%n_layers_b2 > 0 .and. &
@@ -444,7 +449,8 @@ program eaf_3d_simulator
 
             ! Turbulence
             if (cfg%solve_turb) then
-                call solve_k_epsilon(liq, sh, mesh, cfg, cfg%dt)
+                call solve_k_epsilon(liq, sh, mesh, cfg, cfg%dt, tke_n, eps_n, &
+                                     conv%res_tke, conv%res_eps)
             end if
 
             ! Convergence check
