@@ -26,6 +26,7 @@
 module mod_slag_chemistry
     use mod_constants
     use mod_types_3d
+    use mod_slag_3d, only: slag_T_from_E
     use mod_audit, only: audit_add, AUD_FE_YIELD, AUD_FE_RETURN, &
                          AUD_SLAG_OX_E, AUD_SLAG_RED_E
     use mod_melting_3d, only: liquid_datum_offset
@@ -203,11 +204,8 @@ contains
                     end if
 
                     ! T de la escoria consistente tras las reacciones
-                    if (slag%m_sl(i,j,k) > SMALL_SL) then
-                        slag%T_sl(i,j,k) = max(300.0_dp, &
-                            slag%E_sl(i,j,k) / (slag%m_sl(i,j,k) * &
-                            cfg%cp_slag))
-                    end if
+                    if (slag%m_sl(i,j,k) > SMALL_SL) &
+                        call slag_T_from_E(slag, i, j, k, cfg)
 
                     !--------------------------------------------------------
                     ! E2.5: espuma local (atributo óptico): H = xi * j_CO

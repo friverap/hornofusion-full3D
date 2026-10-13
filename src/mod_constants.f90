@@ -43,6 +43,8 @@ module mod_constants
 
     ! k-epsilon
     real(dp), parameter :: C_MU      = 0.09_dp
+    real(dp), parameter :: KAPPA_VK  = 0.41_dp       ! constante de von Karman (funcion de pared)
+    real(dp), parameter :: MUT_RATIO_MAX = 1.0e5_dp  ! tope de mu_t/mu (razon de viscosidad turbulenta)
     real(dp), parameter :: C1_EPS    = 1.44_dp
     real(dp), parameter :: C2_EPS    = 1.92_dp
     real(dp), parameter :: SIGMA_K   = 1.0_dp

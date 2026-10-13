@@ -13,7 +13,7 @@ module mod_slag_3d
     use mod_types_3d
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_allreduce_sum, mpi_exchange_halos_3d
     use mod_parallel_utils, only: gather_global_field, global_to_local
-    use mod_audit, only: audit_add, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT
+    use mod_audit, only: audit_add, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT, AUD_SLAG_TCLIP
     implicit none
 
     real(dp), parameter :: SMALL_SL = 1.0e-6_dp
@@ -23,6 +23,22 @@ contains
     !---------------------------------------------------------------------------
     ! Place initial slag layer just above the scrap surface
     !---------------------------------------------------------------------------
+    ! T de la escoria desde su entalpia con piso de 300 K; si el piso actua,
+    ! E_sl se lleva al valor COHERENTE y la energia inyectada se audita
+    ! (auditoria, bajos: antes se recortaba T sin tocar E_sl)
+    subroutine slag_T_from_E(slag, i, j, k, cfg)
+        type(slag_t), intent(inout) :: slag
+        integer, intent(in)         :: i, j, k
+        type(config_t), intent(in)  :: cfg
+        real(dp) :: E_min
+        E_min = slag%m_sl(i,j,k) * cfg%cp_slag * 300.0_dp
+        if (slag%E_sl(i,j,k) < E_min) then
+            call audit_add(AUD_SLAG_TCLIP, E_min - slag%E_sl(i,j,k))
+            slag%E_sl(i,j,k) = E_min
+        end if
+        slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / (slag%m_sl(i,j,k) * cfg%cp_slag)
+    end subroutine slag_T_from_E
+
     subroutine slag_initialize(slag, sol, liq, gas, m, cfg)
         type(slag_t),  intent(inout) :: slag
         type(solid_t), intent(in)    :: sol
@@ -220,9 +236,7 @@ contains
                     sh%S_arc(i,j,k)  = sh%S_arc(i,j,k) * (1.0_dp - w)
                     call audit_add(AUD_SLAG_INTERCEPT, dE)
 
-                    slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / &
-                                       (slag%m_sl(i,j,k) * cfg%cp_slag)
-                    slag%T_sl(i,j,k) = max(300.0_dp, slag%T_sl(i,j,k))
+                    call slag_T_from_E(slag, i, j, k, cfg)
                 end do
             end do
         end do

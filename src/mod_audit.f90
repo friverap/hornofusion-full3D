@@ -40,7 +40,7 @@ module mod_audit
     public :: AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
     public :: AUD_RESID_MASS, AUD_RESID_E, AUD_SPILL_MASS
     public :: AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
-    public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2, AUD_GAS_VOLFIX
+    public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2, AUD_GAS_VOLFIX, AUD_SLAG_TCLIP
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -89,7 +89,9 @@ module mod_audit
     ! kg de gas que la restriccion de volumen (enforce_volume_constraint) crea
     ! (+) o destruye (-) al recalcular alpha_g = 1 - sum tras fusion/colapso
     integer, parameter :: AUD_GAS_VOLFIX      = 37
-    integer, parameter :: N_AUD = 37
+    ! J que el piso T_sl >= 300 K inyecta en la escoria (E_sl coherente con T)
+    integer, parameter :: AUD_SLAG_TCLIP      = 38
+    integer, parameter :: N_AUD = 38
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -184,7 +186,7 @@ contains
                 'm_resid_closed,E_resid_closed,m_spill,' // &
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
-                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix'
+                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip'
             close(iu)
         end if
         acc = 0.0_dp
@@ -310,7 +312,7 @@ contains
                  action='write', position='append')
             ! ES17.9E3: sin E3 un valor < 1e-99 imprime '6.678-178' (sin la
             ! E) y rompe el CSV (B1 v9, m_alpha_clip subnormal)
-            write(iu, '(I0,A,ES17.9E3,A,ES17.9E3,60(A,ES17.9E3))') &
+            write(iu, '(I0,A,ES17.9E3,A,ES17.9E3,100(A,ES17.9E3))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &
@@ -336,7 +338,7 @@ contains
                 ',', mx_glob(1), ',', mx_glob(2), ',', mx_glob(3), &
                 ',', a(AUD_CHARGE_MASS), ',', a(AUD_CHARGE_E), ',', a(AUD_C_OXID), &
                 ',', a(AUD_DIL_O2), ',', a(AUD_DIL_CO), ',', a(AUD_DIL_CO2), &
-                ',', a(AUD_GAS_VOLFIX)
+                ',', a(AUD_GAS_VOLFIX), ',', a(AUD_SLAG_TCLIP)
             close(iu)
         end if
     end subroutine audit_write_step

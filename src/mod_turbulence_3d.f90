@@ -43,7 +43,7 @@ contains
         real(dp), allocatable :: Gk(:,:,:), tke_old(:,:,:), eps_old(:,:,:)
         real(dp) :: Dw, De, Ds, Dn, Db, Dt_d
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft_f
-        real(dp) :: mu_eff, rho_f, vol, rho_vol_dt
+        real(dp) :: mu_eff, yw, rho_f, vol, rho_vol_dt
         ! Bug 15: el k-eps es un modelo del LIQUIDO CONTINUO. Sin guardia de
         ! fase, la produccion (gradientes de liq%u) y la conveccion
         ! (rho_l u_l, 7500 kg/m3) actuaban en celdas sin liquido; dormia
@@ -282,6 +282,20 @@ contains
                                + C2_EPS * rho_f * eps_old(i,j,k) * vol / (tke_old(i,j,k)+SMALL)
 
                     Dw=0; De=0; Ds=0; Dn=0; Db=0; Dt_d=0
+
+                    ! Funcion de pared de alto Reynolds (Launder & Spalding
+                    ! 1974; auditoria, bajos: antes sin tratamiento de pared):
+                    ! en la celda junto a la pared eps = C_mu^(3/4) k^(3/2)/
+                    ! (kappa y_P), y_P = media celda normal a la pared mas
+                    ! cercana. El eje es simetria, no pared.
+                    yw = wall_dist(i, j, k)
+                    if (yw > 0.0_dp) then
+                        aW(i,j,k) = 0.0_dp; aE(i,j,k) = 0.0_dp; aS(i,j,k) = 0.0_dp
+                        aN(i,j,k) = 0.0_dp; aB(i,j,k) = 0.0_dp; aT(i,j,k) = 0.0_dp
+                        aP(i,j,k) = 1.0_dp
+                        Su(i,j,k) = C_MU**0.75_dp * max(tke_old(i,j,k), 0.0_dp)**1.5_dp &
+                                    / (KAPPA_VK * yw)
+                    end if
                 end do
             end do
         end do
@@ -297,8 +311,10 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (cont(i,j,k)) then
-                        sh%mu_t(i,j,k) = liq%rho(i,j,k) * C_MU * &
-                                          sh%tke(i,j,k)**2 / (sh%eps(i,j,k) + SMALL)
+                        ! tope de la razon de viscosidad (auditoria, bajos)
+                        sh%mu_t(i,j,k) = min(liq%rho(i,j,k) * C_MU * &
+                                          sh%tke(i,j,k)**2 / (sh%eps(i,j,k) + SMALL), &
+                                          MUT_RATIO_MAX * liq%mu(i,j,k))
                     else
                         sh%mu_t(i,j,k) = 0.0_dp
                     end if
@@ -308,6 +324,24 @@ contains
 
         deallocate(Gk, tke_old, eps_old)
         deallocate(cont, um_r, um_th, um_z)
+    contains
+
+        ! Distancia del centro de la celda a la pared mas cercana (media celda
+        ! en la direccion de la cara de pared); 0 si no toca pared
+        function wall_dist(ii, jj, kk) result(y)
+            integer, intent(in) :: ii, jj, kk
+            real(dp) :: y
+            y = huge(1.0_dp)
+            if (m%cell_type(ii-1,jj,kk) == 0 .and. .not. (ii == istart .and. at_rmin)) &
+                y = min(y, 0.5_dp * m%dr(ii))
+            if (m%cell_type(ii+1,jj,kk) == 0) y = min(y, 0.5_dp * m%dr(ii))
+            if (m%cell_type(ii,jj-1,kk) == 0 .or. m%cell_type(ii,jj+1,kk) == 0) &
+                y = min(y, 0.5_dp * m%r(ii) * m%dtheta(jj))
+            if (m%cell_type(ii,jj,kk-1) == 0 .or. m%cell_type(ii,jj,kk+1) == 0) &
+                y = min(y, 0.5_dp * m%dz(kk))
+            if (y == huge(1.0_dp)) y = 0.0_dp
+        end function wall_dist
+
     end subroutine solve_k_epsilon
 
 end module mod_turbulence_3d
