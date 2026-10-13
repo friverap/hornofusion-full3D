@@ -32,7 +32,7 @@ program eaf_3d_simulator
     use mod_continuity
     use mod_multiphase
     use mod_mixture_3d
-    use mod_workspace, only: ensure_workspace, ws_Tsrc
+    use mod_workspace, only: ensure_workspace, ws_Tsrc, ws_flux_valid
     use mod_solid_phase
     use mod_melting_3d
     use mod_scrap_collapse
@@ -436,6 +436,11 @@ program eaf_3d_simulator
         call probe_report('inicio-paso   ', liq, gas, sol, sh, mesh, cfg)
 
         call timer_start(T_SIMPLE)
+        ! Los flujos conservativos del transporte de alpha valen dentro del
+        ! paso (el momento del liquido los usa desde la 2a iteracion externa,
+        ! M24); los del paso anterior no se arrastran: no son estado del
+        ! snapshot y romperian el reinicio bit a bit
+        ws_flux_valid = .false.
         do outer = 1, cfg%max_outer
 
             ! Ergun drag coefficient from solid
@@ -456,7 +461,8 @@ program eaf_3d_simulator
                 prev_uz = liq%uz; prev_T = liq%T
                 call solve_momentum_3d(liq, liq_old, gas, K_zero, sh, mesh, &
                                        cfg, liq%alpha, drag_coef, .false., &
-                                       conv%res_ur, conv%res_uth, conv%res_uz)
+                                       conv%res_ur, conv%res_uth, conv%res_uz, &
+                                       mdot_l=sol%mdot)
                 call relax_field(liq%ur,  prev_ur,  cfg%alpha_u, mesh)
                 call relax_field(liq%uth, prev_uth, cfg%alpha_u, mesh)
                 call relax_field(liq%uz,  prev_uz,  cfg%alpha_u, mesh)

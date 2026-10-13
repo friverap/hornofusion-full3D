@@ -218,7 +218,8 @@ contains
 
         ! Liquid momentum
         call solve_momentum_3d(liq, liq_old, gas, Kexch, sh, m, cfg, liq%alpha, &
-                               drag_coef, .false., res_ur_l, res_uth_l, res_uz_l)
+                               drag_coef, .false., res_ur_l, res_uth_l, res_uz_l, &
+                               mdot_l=sol%mdot)
         allocate(ul_sol_r, ul_sol_th, ul_sol_z, mold=liq%ur)
         ul_sol_r = liq%ur; ul_sol_th = liq%uth; ul_sol_z = liq%uz
         call relax_field(liq%ur,  p_lur, cfg%alpha_u, m)

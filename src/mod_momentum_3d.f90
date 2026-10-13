@@ -31,7 +31,7 @@ contains
     !---------------------------------------------------------------------------
     subroutine solve_momentum_3d(ph, ph_old, ph_other, Kexch, sh, m, cfg, &
                                   alpha_q, drag_coef, is_gas, &
-                                  res_ur, res_uth, res_uz)
+                                  res_ur, res_uth, res_uz, mdot_l)
         type(phase_t), intent(inout) :: ph
         type(phase_t), intent(in)    :: ph_old
         ! Otra fase fluida + coeficiente de intercambio de momentum K [kg/(m3 s)]
@@ -49,19 +49,30 @@ contains
         ! duplicaba — hallazgo 3.13)
         logical, intent(in)          :: is_gas
         real(dp), intent(out)        :: res_ur, res_uth, res_uz
+        ! Fuente de masa del liquido por fusion [kg/s por celda] (M24): la
+        ! masa fundida entra con velocidad nula
+        real(dp), intent(in), optional :: mdot_l(-1:,-1:,-1:)
+        real(dp), allocatable :: md(:,:,:)
+
+        allocate(md, mold=alpha_q); md = 0.0_dp
+        if (present(mdot_l)) md = max(mdot_l, 0.0_dp)
 
         ! Solve each component
         call solve_momentum_component(ph%ur, ph_old%ur, ph_other%ur, Kexch, &
                                        ph, ph_other, sh, m, cfg, &
-                                       alpha_q, drag_coef, is_gas, 'ur', res_ur)
+                                       alpha_q, drag_coef, is_gas, 'ur', res_ur, &
+                                       ph_old%alpha, md)
 
         call solve_momentum_component(ph%uth, ph_old%uth, ph_other%uth, Kexch, &
                                        ph, ph_other, sh, m, cfg, &
-                                       alpha_q, drag_coef, is_gas, 'uth', res_uth)
+                                       alpha_q, drag_coef, is_gas, 'uth', res_uth, &
+                                       ph_old%alpha, md)
 
         call solve_momentum_component(ph%uz, ph_old%uz, ph_other%uz, Kexch, &
                                        ph, ph_other, sh, m, cfg, &
-                                       alpha_q, drag_coef, is_gas, 'uz', res_uz)
+                                       alpha_q, drag_coef, is_gas, 'uz', res_uz, &
+                                       ph_old%alpha, md)
+        deallocate(md)
 
     end subroutine solve_momentum_3d
 
@@ -70,8 +81,10 @@ contains
     !---------------------------------------------------------------------------
     subroutine solve_momentum_component(vel, vel_old, vel_other, Kexch, &
                                          ph, ph_other, sh, m, cfg, &
-                                         alpha_q, drag_coef, is_gas, comp, residual)
+                                         alpha_q, drag_coef, is_gas, comp, residual, &
+                                         alpha_old, mdot_m)
         use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
+            ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, &
             ws_pcorr_g, ws_pcorr_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
@@ -92,6 +105,9 @@ contains
         logical, intent(in)          :: is_gas
         character(len=*), intent(in) :: comp
         real(dp), intent(out)        :: residual
+        real(dp), intent(in)         :: alpha_old(-1:,-1:,-1:)
+        real(dp), intent(in)         :: mdot_m(-1:,-1:,-1:)
+        logical :: cons_l
 
         integer :: i, j, k, jm, jp
         integer :: istart, iend, jstart, jend, kstart, kend
@@ -192,7 +208,23 @@ contains
                         cycle
                     end if
 
-                    rho_vol_dt = alpha_f * ph%rho(i,j,k) * vol / cfg%dt
+                    ! Liquido CONTINUO con los flujos CONSERVATIVOS que
+                    ! transportaron alpha (ws_Fr/Fth/Fz, los de la energia del
+                    ! liquido) y transitorio con alpha^n: la forma exacta con la
+                    ! continuidad discreta restada (auditoria M24/M30). Antes:
+                    ! flujos reconstruidos de velocidades de centro y aP
+                    ! acotado sin dF -> u_P * (desbalance de masa) era una
+                    ! fuente ficticia de momento; y alpha^k en el transitorio
+                    ! hacia figurar la masa recien llegada como si tuviera la
+                    ! velocidad vieja. La masa fundida entra con u = 0
+                    ! (aP += mdot). Flujos del iterado externo anterior.
+                    cons_l = (.not. is_gas) .and. ws_flux_valid
+                    if (cons_l) then
+                        rho_vol_dt = max(alpha_old(i,j,k), ALPHA_PHASE_MIN) &
+                                     * ph%rho(i,j,k) * vol / cfg%dt
+                    else
+                        rho_vol_dt = alpha_f * ph%rho(i,j,k) * vol / cfg%dt
+                    end if
 
                     ! Diffusion coefficients (viscous)
                     ! F2.24 (2026-09-29): la fraccion de fase de la CARA es la
@@ -274,7 +306,11 @@ contains
                     ! una velocidad de DRIFT grande (-49.7 m/s). El gas
                     ! conserva la forma simetrica: cambiarsela tambien lleva
                     ! el gas de bath_fill a U_GAS_MAX (medido).
-                    if (is_gas) then
+                    if (cons_l) then
+                        Fw = ws_Fr(i-1,j,k);  Fe = ws_Fr(i,j,k)
+                        Fs = ws_Fth(i,jm,k);  Fn = ws_Fth(i,j,k)
+                        Fb = ws_Fz(i,j,k-1);  Ft = ws_Fz(i,j,k)
+                    else if (is_gas) then
                         call face_mass_fluxes(alpha_q, ph%rho, ph%ur, ph%uth, &
                             ph%uz, m, i, j, k, Fw, Fe, Fs, Fn, Fb, Ft)
                     else
@@ -393,7 +429,8 @@ contains
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
                                + aB(i,j,k) + aT(i,j,k) + rho_vol_dt &
                                + drag_coef(i,j,k) * vol + aP_extra &
-                               + Kexch(i,j,k) * vol + wall_shear()
+                               + Kexch(i,j,k) * vol + wall_shear() &
+                               + merge(mdot_m(i,j,k), 0.0_dp, cons_l)
 
                     if (probe_here) then
                         if (i == pi_ .and. j == pj_ .and. k == pk_) then
