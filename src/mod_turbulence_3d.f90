@@ -130,14 +130,18 @@ contains
                        + (duz_dth + duth_dz)**2
 
                     ! Producción de flotabilidad (Boussinesq, líquido):
-                    ! G_b = beta*g*(mu_t/Pr_t)*dT/dz; solo la parte
-                    ! desestabilizante (>0) entra como producción (C3.5)
+                    ! G_b = beta g_i (mu_t/Pr_t) dT/dx_i con g = (0,0,-GRAVITY):
+                    ! G_b = -beta*GRAVITY*(mu_t/Pr_t)*dT/dz. Solo la parte
+                    ! desestabilizante (>0: caliente ABAJO) entra como
+                    ! producción (C3.5). Auditoría M8: el signo estaba
+                    ! invertido y la estratificación ESTABLE (baño caliente
+                    ! arriba bajo el arco) generaba turbulencia.
                     dT_dz = 0.0_dp
                     if (interior_z) then
                         dT_dz = (liq%T(i,j,k+1) - liq%T(i,j,k-1)) / &
                                 (m%z(k+1) - m%z(k-1))
                     end if
-                    G_b = max(0.0_dp, cfg%beta_expansion * GRAVITY * &
+                    G_b = max(0.0_dp, -cfg%beta_expansion * GRAVITY * &
                               sh%mu_t(i,j,k) / PR_T * dT_dz)
 
                     ! Limitador de producción estándar (C3.5): sin él, zonas
