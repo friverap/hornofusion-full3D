@@ -73,19 +73,15 @@ contains
                         aT(i,j,k) = 0.0_dp
                     end if
 
-                    ! Neighbor is inactive cell: zero that coefficient
-                    if (i > 1) then
-                        if (m%cell_type(i-1,j,k) == 0) aW(i,j,k) = 0.0_dp
-                    end if
-                    if (i < nr) then
-                        if (m%cell_type(i+1,j,k) == 0) aE(i,j,k) = 0.0_dp
-                    end if
-                    if (k > 1) then
-                        if (m%cell_type(i,j,k-1) == 0) aB(i,j,k) = 0.0_dp
-                    end if
-                    if (k < nz) then
-                        if (m%cell_type(i,j,k+1) == 0) aT(i,j,k) = 0.0_dp
-                    end if
+                    ! Neighbor is inactive cell: zero that coefficient (los
+                    ! halos de cell_type son validos: la frontera de bloque
+                    ! entre ranks NO es frontera fisica; antes el guard i > 1 /
+                    ! i < nr / k > 1 / k < nz saltaba la comprobacion en el
+                    ! borde de cada bloque, dependiente de la descomposicion)
+                    if (m%cell_type(i-1,j,k) == 0) aW(i,j,k) = 0.0_dp
+                    if (m%cell_type(i+1,j,k) == 0) aE(i,j,k) = 0.0_dp
+                    if (m%cell_type(i,j,k-1) == 0) aB(i,j,k) = 0.0_dp
+                    if (m%cell_type(i,j,k+1) == 0) aT(i,j,k) = 0.0_dp
                 end do
             end do
         end do
@@ -157,18 +153,10 @@ contains
                     end if
 
                     ! Neighbor inactive
-                    if (i > 1) then
-                        if (m%cell_type(i-1,j,k) == 0) aW(i,j,k) = 0.0_dp
-                    end if
-                    if (i < nr) then
-                        if (m%cell_type(i+1,j,k) == 0) aE(i,j,k) = 0.0_dp
-                    end if
-                    if (k > 1) then
-                        if (m%cell_type(i,j,k-1) == 0) aB(i,j,k) = 0.0_dp
-                    end if
-                    if (k < nz) then
-                        if (m%cell_type(i,j,k+1) == 0) aT(i,j,k) = 0.0_dp
-                    end if
+                    if (m%cell_type(i-1,j,k) == 0) aW(i,j,k) = 0.0_dp
+                    if (m%cell_type(i+1,j,k) == 0) aE(i,j,k) = 0.0_dp
+                    if (m%cell_type(i,j,k-1) == 0) aB(i,j,k) = 0.0_dp
+                    if (m%cell_type(i,j,k+1) == 0) aT(i,j,k) = 0.0_dp
                 end do
             end do
         end do
@@ -248,18 +236,10 @@ contains
                     end if
 
                     ! Neighbor inactive
-                    if (i > 1) then
-                        if (m%cell_type(i-1,j,k) == 0) aW(i,j,k) = 0.0_dp
-                    end if
-                    if (i < nr) then
-                        if (m%cell_type(i+1,j,k) == 0) aE(i,j,k) = 0.0_dp
-                    end if
-                    if (k > 1) then
-                        if (m%cell_type(i,j,k-1) == 0) aB(i,j,k) = 0.0_dp
-                    end if
-                    if (k < nz) then
-                        if (m%cell_type(i,j,k+1) == 0) aT(i,j,k) = 0.0_dp
-                    end if
+                    if (m%cell_type(i-1,j,k) == 0) aW(i,j,k) = 0.0_dp
+                    if (m%cell_type(i+1,j,k) == 0) aE(i,j,k) = 0.0_dp
+                    if (m%cell_type(i,j,k-1) == 0) aB(i,j,k) = 0.0_dp
+                    if (m%cell_type(i,j,k+1) == 0) aT(i,j,k) = 0.0_dp
 
                     ! Plegado Dirichlet: enlaces hacia celdas de salida a 0
                     ! (pp=0 allí; aP conserva el término -> exacto y simétrico)

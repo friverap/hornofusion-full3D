@@ -1273,8 +1273,8 @@ contains
                     ! continuo (superficie libre) aporta su presion en la cara
                     gr(i,j,k) = pgrad_fs(pfld(i-1,j,k), pfld(i,j,k), pfld(i+1,j,k), &
                                        m%r(i-1), m%r(i), m%r(i+1), &
-                                       i > istart .and. pv_cell(i-1,j,k), &
-                                       i < iend   .and. pv_cell(i+1,j,k), &
+                                       (i > istart .or. .not. at_rmin) .and. pv_cell(i-1,j,k), &
+                                       (i < iend   .or. .not. at_rmax) .and. pv_cell(i+1,j,k), &
                                        fs_cell(i-1,j,k), fs_cell(i+1,j,k), m%rf(i-1), m%rf(i))
 
                     gth(i,j,k) = pgrad_fs(pfld(i,jm,k), pfld(i,j,k), pfld(i,jp,k), &
@@ -1451,7 +1451,8 @@ contains
                             ph%ur(i,j,k) = ph%ur(i,j,k) - d_coeff * &
                                 pgrad(sh%pp(i-1,j,k), sh%pp(i,j,k), sh%pp(i+1,j,k), &
                                       m%r(i-1), m%r(i), m%r(i+1), &
-                                      (i > 1) .and. pv(i-1,j,k), (i < iend) .and. pv(i+1,j,k))
+                                      (i > istart .or. .not. at_rmin) .and. pv(i-1,j,k), &
+                                      (i < iend .or. .not. at_rmax) .and. pv(i+1,j,k))
                         end if
                         if (abs(ph%aP_uth(i,j,k)) > SMALL) then
                             d_coeff = ph%alpha(i,j,k) * m%vol(i,j,k) / ph%aP_uth(i,j,k)
@@ -1494,8 +1495,8 @@ contains
                                     goto 10
                                 end if
                             end if
-                            okm = (i > 1) .and. pv(i-1,j,k)
-                            okp = (i < iend) .and. pv(i+1,j,k)
+                            okm = (i > istart .or. .not. at_rmin) .and. pv(i-1,j,k)
+                            okp = (i < iend .or. .not. at_rmax) .and. pv(i+1,j,k)
                             fsm = wfs .and. fs(i-1,j,k); fsp = wfs .and. fs(i+1,j,k)
                             g = pgrad_fs(sh%pp(i-1,j,k), sh%pp(i,j,k), sh%pp(i+1,j,k), &
                                          m%r(i-1), m%r(i), m%r(i+1), okm, okp, fsm, fsp, &

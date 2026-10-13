@@ -222,6 +222,16 @@ rebaselinean solo cuando cambia la numérica (versión indicada).
 - La fila del audit se partía al pasar de 60 pares de columnas.
 - El lazo temporal daba un paso de más por redondeo (cold_10step corría 11).
 - `monitor.log` tenía un formato roto que nunca se había ejecutado.
+- (13-oct, al investigar el balance de fuerzas) Las fronteras de BLOQUE en r
+  se trataban como frontera física en cinco sitios: gradiente de presión del
+  momento (`i > 1`) y de las celdas del Poisson (`i > istart`), las dos ramas
+  de `correct_velocities`, la producción de k-ε y `apply_*_bc` (que además
+  saltaba la comprobación de vecina inactiva en el borde de cada bloque en r y
+  en z). Solo afecta a descomposiciones que parten r (12 ranks = 2×3×2, la
+  recomendada para producción): cold_10step n1 frente a n12 pasa de 5.3e-2 a
+  1.2e-12. La matriz no lo veía (n4/n8 no parten r); ahora corre cold_10step
+  a 12 ranks y lo compara con n1 (`decomposition_cold_r`). Golden v69 (solo
+  el caso nuevo; el resto bit a bit).
 
 ### Consecuencia para B1
 

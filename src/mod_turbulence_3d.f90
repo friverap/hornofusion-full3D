@@ -101,7 +101,7 @@ contains
                     dur_dth = 0.0_dp; duz_dth = 0.0_dp
                     dur_dz = 0.0_dp; duth_dz = 0.0_dp; duz_dz = 0.0_dp
 
-                    if (i > 1 .and. i < iend) then
+                    if ((i > istart .or. .not. at_rmin) .and. (i < iend .or. .not. at_rmax)) then
                         dur_dr = (um_r(i+1,j,k) - um_r(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
                         duth_dr = (um_th(i+1,j,k) - um_th(i-1,j,k)) / (m%r(i+1) - m%r(i-1))
                         duz_dr = (um_z(i+1,j,k) - um_z(i-1,j,k)) / (m%r(i+1) - m%r(i-1))

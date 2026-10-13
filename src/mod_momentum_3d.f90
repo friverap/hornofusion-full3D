@@ -340,8 +340,8 @@ contains
                     case ('ur')
                         dp_dr = pgrad_fs(pf(i-1,j,k), pf(i,j,k), pf(i+1,j,k), &
                                       m%r(i-1), m%r(i), m%r(i+1), &
-                                      i > 1    .and. pv_ok(i-1,j,k), &
-                                      i < iend .and. pv_ok(i+1,j,k), &
+                                      (i > istart .or. .not. at_rmin) .and. pv_ok(i-1,j,k), &
+                                      (i < iend   .or. .not. at_rmax) .and. pv_ok(i+1,j,k), &
                                       fs_nb(i-1,j,k), fs_nb(i+1,j,k), m%rf(i-1), m%rf(i))
                         ! Centrifugal: +rho*u_th^2/r  +  Lorentz r-stirring
                         src_extra = alpha_f * ph%rho(i,j,k) * ph%uth(i,j,k)**2 / m%r(i)

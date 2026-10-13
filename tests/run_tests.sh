@@ -153,6 +153,9 @@ full | rebaseline)
     run_case cold_10step 1
     run_case cold_10step 4
     run_case cold_10step 8
+    # 12 ranks = 2x3x2: la UNICA corrida de la matriz que parte r (las
+    # fronteras de bloque en r se trataban como pared en 5 sitios, oct-2026)
+    run_case cold_10step 12
     run_case melt_forced 8
     run_case noflow_energy 1
     run_case symmetry_3elec 6
@@ -211,6 +214,8 @@ full | rebaseline)
         $PY $INT/compare_decomposition.py "$OUT/cold_10step_n1" "$OUT/cold_10step_n8"
     run_script "decomposition_cold_n4" \
         $PY $INT/compare_decomposition.py "$OUT/cold_10step_n4" "$OUT/cold_10step_n8"
+    run_script "decomposition_cold_r" \
+        $PY $INT/compare_decomposition.py "$OUT/cold_10step_n1" "$OUT/cold_10step_n12"
     run_script "symmetry" \
         $PY $INT/check_symmetry.py "$OUT/symmetry_3elec_n6"
     run_script "melt" \
