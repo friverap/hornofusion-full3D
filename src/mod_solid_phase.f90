@@ -29,12 +29,11 @@ contains
         type(config_t), intent(in)   :: cfg
         real(dp), intent(in)         :: dt
 
-        call compute_melting(sol, liq, m, cfg, dt)
-        ! T de entrada del fundido ANTES del colapso (auditoria A3): el
-        ! colapso funde en sol%T_s la entalpia de la chatarra que cae y el
-        ! fundido del paso entraba al liquido a esa T mezclada
+        ! T de entrada del fundido la fija la fusion, ANTES del colapso
+        ! (auditoria A3: el colapso mezcla en sol%T_s la entalpia de la
+        ! chatarra que cae; M9: con la regla de la palanca ya no es T_s)
         call ensure_workspace(m)
-        ws_Tsrc = sol%T_s
+        call compute_melting(sol, liq, m, cfg, dt, ws_Tsrc)
         call apply_scrap_collapse(sol, liq, slag, m, cfg)
 
         ! Restricción de volumen (C1.9, hallazgo 3.22b): fusión y colapso

@@ -17,12 +17,15 @@
 ! C0 = (cp_s - cp_l)*T_liq + h_fusion, de modo que e_l(T) = e_s(T) para
 ! T >= T_liq: la transferencia de masa fundida es EXACTAMENTE conservativa.
 !
-! Fusión: el fundido sale a T_s llevando su entalpía completa e_s(T_s); el
-! sólido restante conserva su temperatura. La ecuación de energía del
-! líquido recibe la masa a T_in = T_s (término de fuente de masa en
-! solve_energy_3d). Re-solidificación: el congelado entra al sólido a
-! e_s(T_solidus); el excedente e_l(T_l) - e_s(T_sol) (latente liberado)
-! calienta al líquido — sin él, la congelación se retroalimentaba.
+! Fusión y congelación por la REGLA DE LA PALANCA (auditoría M9, oct-2026):
+! estados, no tasas por paso. Sólido con e > e_sol: la fracción
+! f = (e - e_sol)/(e_lb - e_sol) sale como fundido a e_lb (T_liq) y el resto
+! queda en e_sol; con e >= e_lb la parcela entera es líquida y sale con su
+! entalpía. Líquido bajo el liquidus: dm = M (e_lb - e_l)/(e_lb - e_entry)
+! congela a e_entry = min(e_s(T_sol), e_l) (todo si está bajo el solidus,
+! acotado por RESOLID_LIMITER por positividad del transporte de alpha); el
+! latente e_l - e_entry calienta al líquido. La T de entrada del fundido al
+! líquido la devuelve compute_melting (T_src), ya no es T_s.
 !===============================================================================
 module mod_melting_3d
     use mod_constants
@@ -124,15 +127,24 @@ contains
     ! Celdas vacias con liquido: T_s esclavizada a T_l (diagnostico; la
     ! fase residual no tiene temperatura propia — Herard & Hurisse 2014).
     !---------------------------------------------------------------------------
-    subroutine compute_melting(sol, liq, m, cfg, dt)
+    subroutine compute_melting(sol, liq, m, cfg, dt, T_src)
         type(solid_t), intent(inout) :: sol
         type(phase_t), intent(inout) :: liq
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
         real(dp), intent(in)         :: dt
+        ! T de ENTRADA al liquido de la masa que sale del solido en el paso
+        ! (termino mdot*cp_l*T_src de solve_energy_3d). Auditoria M9: con la
+        ! regla de la palanca el fundido sale a e_lb (T_liq) mientras el
+        ! solido restante queda en el solidus, asi que ya no puede ser T_s.
+        real(dp), intent(inout)      :: T_src(-1:,-1:,-1:)
 
         integer :: i, j, k
-        real(dp) :: T_s, T_l, dm, e_spec, m_min
+        real(dp) :: T_s, T_l, dm, e_spec, m_min, e_sol, e_lb, e_l, e_entry
+        real(dp) :: M_l, f, dm_out, de_out
+
+        e_sol = solid_enthalpy(cfg%T_solidus, cfg)
+        e_lb  = solid_enthalpy(cfg%T_liquidus, cfg)
 
         do k = 1, m%nz
             do j = 1, m%ntheta
@@ -142,6 +154,7 @@ contains
                     sol%mdot(i,j,k) = 0.0_dp
                     T_l = liq%T(i,j,k)
                     m_min = solid_residual_mass(m%vol(i,j,k), cfg)
+                    dm_out = 0.0_dp; de_out = 0.0_dp
 
                     if (sol%m_s(i,j,k) > SMALL) then
                         e_spec = sol%E_s(i,j,k) / sol%m_s(i,j,k)
@@ -157,31 +170,46 @@ contains
                         end if
                     end if
 
-                    ! Melting: solid above liquidus converts to liquid.
-                    ! Tasa fenomenológica (como antes): proporcional al
-                    ! sobrecalentamiento sobre el liquidus.
+                    ! FUSION por la regla de la palanca (auditoria M9). Antes:
+                    ! una fraccion POR PASO cp_l (T_s - T_liq)/(h_f + cp_l dT_mush)
+                    ! con el fundido saliendo a T_s y el solido restante a la
+                    ! MISMA T, asi que el sobrecalentamiento no se consumia:
+                    ! la tasa era f m_s/dt (prop. a 1/dt) y empezaba en T_liq
+                    ! (209 K de histeresis con la congelacion bajo T_sol).
+                    ! Ahora es un estado, no una tasa: la entalpia de la
+                    ! parcela por encima del solidus se reparte entre fundido a
+                    ! e_lb (liquido a T_liq) y solido restante a e_sol:
+                    !   f = (e - e_sol)/(e_lb - e_sol),  dm = f m_s
+                    ! (conservacion: dm e_lb + (m_s - dm) e_sol = m_s e). La
+                    ! fusion por paso es Q/(e_lb - e_sol): la condicion de
+                    ! Stefan con el calor que recibio el solido. Con e >= e_lb
+                    ! la parcela entera es liquida y sale con su entalpia.
                     if (sol%alpha_s(i,j,k) > ALPHA_CUTOFF .and. &
-                        sol%m_s(i,j,k) > SMALL .and. &
-                        T_s >= cfg%T_liquidus) then
+                        sol%m_s(i,j,k) > SMALL .and. e_spec > e_sol) then
 
-                        dm = sol%m_s(i,j,k) * cfg%cp_l * (T_s - cfg%T_liquidus) / &
-                             (cfg%h_fusion + cfg%cp_l * (cfg%T_liquidus - cfg%T_solidus))
-                        dm = max(0.0_dp, min(dm, sol%m_s(i,j,k)))
+                        f = min(1.0_dp, (e_spec - e_sol) / (e_lb - e_sol))
+                        if (f >= 1.0_dp) then
+                            dm = sol%m_s(i,j,k)
+                            e_l = e_spec
+                        else
+                            dm = f * sol%m_s(i,j,k)
+                            e_l = e_lb
+                        end if
                         sol%mdot(i,j,k) = dm / dt
+                        dm_out = dm; de_out = dm * e_l
 
-                        ! El fundido sale a T_s llevando e_s(T_s) por kg: el
-                        ! sólido restante conserva su temperatura y el líquido
-                        ! recibe la masa a T_in = T_s (solve_energy_3d).
-                        ! Conservación EXACTA: e_l(T_s) = e_s(T_s) para T>=T_liq.
                         ! El carbono del inventario acompaña al fundido
-                        ! proporcionalmente (C3.3; se disuelve en el baño y
-                        ! sale del inventario oxidable de superficie)
+                        ! proporcionalmente (C3.3)
                         sol%m_C(i,j,k) = sol%m_C(i,j,k) * &
                             max(0.0_dp, 1.0_dp - dm / sol%m_s(i,j,k))
                         sol%m_s(i,j,k) = sol%m_s(i,j,k) - dm
-                        sol%E_s(i,j,k) = sol%E_s(i,j,k) - dm * e_spec
+                        sol%E_s(i,j,k) = sol%E_s(i,j,k) - dm * e_l
+                        if (sol%m_s(i,j,k) <= 0.0_dp) then
+                            sol%m_s(i,j,k) = 0.0_dp; sol%E_s(i,j,k) = 0.0_dp
+                            sol%m_C(i,j,k) = 0.0_dp
+                        end if
                         call audit_add(AUD_MELT_MASS, dm)
-                        call audit_add(AUD_MELT_E_SOLID, dm * e_spec)
+                        call audit_add(AUD_MELT_E_SOLID, dm * e_l)
 
                         if (m%vol(i,j,k) > SMALL) then
                             sol%alpha_s(i,j,k) = sol%m_s(i,j,k) / &
@@ -190,29 +218,33 @@ contains
                         sol%alpha_s(i,j,k) = max(0.0_dp, min(1.0_dp, sol%alpha_s(i,j,k)))
 
                         if (sol%m_s(i,j,k) > SMALL) then
-                            sol%T_s(i,j,k) = solid_T_from_enthalpy( &
-                                sol%E_s(i,j,k) / sol%m_s(i,j,k), cfg)
+                            e_spec = sol%E_s(i,j,k) / sol%m_s(i,j,k)
+                            sol%T_s(i,j,k) = solid_T_from_enthalpy(e_spec, cfg)
                         end if
 
-                    ! Re-solidification: liquid below solidus deposits mass to solid
-                    else if (liq%alpha(i,j,k) > ALPHA_CUTOFF .and. T_l < cfg%T_solidus) then
-                        dm = liq%alpha(i,j,k) * liq%rho(i,j,k) * m%vol(i,j,k) * &
-                             (cfg%T_solidus - T_l) * cfg%cp_l / cfg%h_fusion
-                        dm = max(dm, 0.0_dp) * RESOLID_LIMITER
+                    ! CONGELACION por la misma regla (auditoria M9): liquido con
+                    ! e_l < e_lb (bajo el liquidus) se reparte entre liquido a
+                    ! e_lb y solido a e_entry = min(e_sol, e_l):
+                    !   dm = M (e_lb - e_l)/(e_lb - e_entry)
+                    ! (todo el liquido si esta bajo el solidus). Los umbrales de
+                    ! fusion (e_sol del solido) y congelacion (e_lb del liquido)
+                    ! no se cruzan: el fundido sale a e_lb y no congela; lo
+                    ! congelado entra a <= e_sol y no funde. RESOLID_LIMITER ya
+                    ! no es la tasa: acota la fraccion del liquido de la celda
+                    ! retirada en un paso (positividad del transporte explicito
+                    ! de alpha, que aplica el sumidero junto con las salidas).
+                    else if (liq%alpha(i,j,k) > ALPHA_CUTOFF .and. T_l < cfg%T_liquidus) then
+                        M_l = liq%alpha(i,j,k) * liq%rho(i,j,k) * m%vol(i,j,k)
+                        e_l = cfg%cp_l * T_l + liquid_datum_offset(cfg)
+                        e_entry = min(e_sol, e_l)
+                        dm = M_l * (e_lb - e_l) / (e_lb - e_entry)
+                        dm = max(0.0_dp, min(dm, RESOLID_LIMITER * M_l))
 
                         sol%mdot(i,j,k) = -dm / dt
-                        ! El congelado entra al sólido con
-                        !   e_entry = min(e_s(T_solidus), e_l(T_l))
-                        ! y el latente liberado e_l(T_l) - e_entry >= 0
-                        ! calienta al líquido (término de masa de
-                        ! solve_energy_3d, mismo e_entry). El min garantiza
-                        ! fuente NO NEGATIVA: entrar siempre a T_solidus
-                        ! producía fuentes negativas para T_l < 1334 K y
-                        ! empujaba T_liquid bajo cero.
+                        ! El latente liberado e_l - e_entry calienta al liquido
+                        ! (termino de masa de solve_energy_3d, mismo e_entry)
                         sol%m_s(i,j,k) = sol%m_s(i,j,k) + dm
-                        sol%E_s(i,j,k) = sol%E_s(i,j,k) + dm * &
-                            min(cfg%cp_s * cfg%T_solidus, &
-                                cfg%cp_l * T_l + liquid_datum_offset(cfg))
+                        sol%E_s(i,j,k) = sol%E_s(i,j,k) + dm * e_entry
                         call audit_add(AUD_RESOLID_MASS, dm)
 
                         if (m%vol(i,j,k) > SMALL) then
@@ -228,6 +260,14 @@ contains
                     end if
 
                     ! --- Cierre del solido residual (fase evanescente) ---
+                    ! Auditoria M10: solo un remanente que YA alcanzo el
+                    ! solidus (e >= e_sol: fundiria igual) o de masa
+                    ! despreciable. Antes se cerraba tambien el remanente FRIO:
+                    ! entraba al liquido subenfriado (300 K -> 587 K) y
+                    ! re-solidificaba (vaiven), y una carga ECS que deposita
+                    ! poco por celda se convertia en "liquido". El remanente
+                    ! frio sigue siendo solido; con el intercambio implicito
+                    ! (M6) su T queda acotada aunque la masa sea pequeña.
                     if (sol%mdot(i,j,k) >= 0.0_dp .and. &
                         sol%m_s(i,j,k) > 0.0_dp .and. &
                         sol%m_s(i,j,k) <= m_min) then
@@ -240,20 +280,32 @@ contains
                             ! mdot*T_src; se contabiliza en el mismo ledger
                             e_spec = 0.0_dp
                         end if
-                        ! Toda la masa que sale de la celda en este paso
-                        ! (fundido + remanente) comparte e_spec: la fusion
-                        ! conserva la entalpia especifica del solido.
-                        sol%mdot(i,j,k) = sol%mdot(i,j,k) + dm / dt
-                        sol%T_s(i,j,k)  = liquid_entry_T(e_spec, cfg)
-                        call audit_add(AUD_MELT_MASS, dm)
-                        call audit_add(AUD_MELT_E_SOLID, dm * e_spec)
-                        call audit_add(AUD_RESID_MASS, dm)
-                        call audit_add(AUD_RESID_E, dm * e_spec)
-                        sol%m_s(i,j,k)     = 0.0_dp
-                        sol%E_s(i,j,k)     = 0.0_dp
-                        sol%m_C(i,j,k)     = 0.0_dp
-                        sol%alpha_s(i,j,k) = 0.0_dp
+                        if (e_spec >= e_sol * (1.0_dp - 1.0e-12_dp) .or. &
+                            dm <= 1.0e-9_dp * m_min) then
+                            sol%mdot(i,j,k) = sol%mdot(i,j,k) + dm / dt
+                            dm_out = dm_out + dm; de_out = de_out + dm * e_spec
+                            call audit_add(AUD_MELT_MASS, dm)
+                            call audit_add(AUD_MELT_E_SOLID, dm * e_spec)
+                            call audit_add(AUD_RESID_MASS, dm)
+                            call audit_add(AUD_RESID_E, dm * e_spec)
+                            sol%m_s(i,j,k)     = 0.0_dp
+                            sol%E_s(i,j,k)     = 0.0_dp
+                            sol%m_C(i,j,k)     = 0.0_dp
+                            sol%alpha_s(i,j,k) = 0.0_dp
+                        end if
                     end if
+
+                    ! T de entrada de TODO lo que salio del solido (fundido a
+                    ! e_lb o con su entalpia, mas el remanente cerrado): la
+                    ! unica que hace exacto mdot*(cp_l T_src + C0) = de_out
+                    if (dm_out > 0.0_dp) then
+                        T_src(i,j,k) = liquid_entry_T(de_out / dm_out, cfg)
+                    else
+                        T_src(i,j,k) = sol%T_s(i,j,k)
+                    end if
+                    ! celda vaciada: T_s diagnostica = la del fundido
+                    if (sol%m_s(i,j,k) <= 0.0_dp .and. dm_out > 0.0_dp) &
+                        sol%T_s(i,j,k) = T_src(i,j,k)
                 end do
             end do
         end do

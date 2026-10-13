@@ -139,8 +139,10 @@ module mod_constants
     ! da CFL~1 => 1-2 sub-pasos; fisicamente u_t(2 mm) ~ 35 m/s
     real(dp), parameter :: U_SETTLE_MAX = 50.0_dp
 
-    ! Re-solidification explicit sub-step limiter (fraction of the full mass
-    ! transfer applied per timestep, CFL-like stabilization)
+    ! Fraccion maxima del liquido de una celda que congela en un paso
+    ! (auditoria M9: ya no es la tasa —la congelacion es la regla de la
+    ! palanca— sino la cota de positividad del transporte explicito de
+    ! alpha, que aplica el sumidero junto con las salidas por caras)
     real(dp), parameter :: RESOLID_LIMITER = 0.1_dp
 
     ! Pressure-reference "big coefficient" penalty (SIMPLE singular fix)

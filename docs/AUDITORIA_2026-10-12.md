@@ -169,4 +169,5 @@ rebaselinean solo cuando cambia la numérica (versión indicada).
 | M1–M4, M34 | 7f46baf | — | reinicios bit a bit; reanudar en el mismo directorio conserva el snapshot de origen y el audit previo (`audit_prev_<paso>.csv`) |
 | M5 | 98e5e9f | — | hook sobre el campo relajado con halos frescos; balances: cold_10step 1.51 → 1.39 %, melt_forced 3.0e-6 → 1.6e-6, arc_noscrap 1.72 → 2.43 % (residuo del lazo externo, ahora visible) |
 | M6, M7 | 88f652d | v49 | paso implícito exacto de tres nodos (gas, líquido, sólido) y área del sólido repartida por fracción de poro; `test_interphase` (sin rebase, conservativo, área no duplicada) |
-| M8 | (este commit) | — | signo G_b = −β g (μ_t/Pr_t) ∂T/∂z. Sin efecto en la matriz: ningún caso combina k-ε con líquido (cobertura pendiente) |
+| M8 | b021255 | — | signo G_b = −β g (μ_t/Pr_t) ∂T/∂z. Sin efecto en la matriz: ningún caso combina k-ε con líquido (cobertura pendiente) |
+| M9, M10 | (este commit) | v50 | regla de la palanca (fusión y congelación como estados); el remanente frío no se cierra; `test_residual_closure` casos 1, 6 y 7; melt_forced: balance 2e-5 → 1.3e-7 |
