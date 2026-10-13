@@ -518,7 +518,7 @@ El acople de momento con el gas es el arrastre físico de la gota, exacto en el 
 - **Superficie libre.** Una celda con α_l ≥ 10⁻² sobre una celda de baño (α_l ≥ 0.3) es película superficial: fase continua, con ecuación de momento y enlazada al Poisson. En caras mixtas (continuo | disperso) el flujo lo fija el dador: el líquido que sale del baño va a la velocidad del baño; las gotas que caen, a su velocidad de drift; convergentes, la media; divergentes, cero.
 - **Presión del gas sobre el baño.** Con una sola presión por celda, el gas de la celda sobre una celda de baño ve `p_g = p + ρ_l g_eff Δz (½ − α_l)`: la línea hidrostática del líquido evaluada en su tope (líquido estratificado en el fondo de la celda). Sin esta corrección el gas leía media carga de líquido en la p de centro y se aceleraba a 50–200 m/s sobre un baño en reposo.
 - **Colapso de chatarra.** Una celda de baño no es hueco: la chatarra descansa sobre el líquido y la consume la fusión.
-- **Limitación conocida (F1b).** El esquema colocado deja velocidades de centro no nulas (≈0.2 m/s) con flujos de cara nulos en un baño en reposo donde p no es lineal (superficie, fondo abombado): fuerza de cuerpo balanceada por caras y corrección de Choi/Majumdar pendientes.
+- **Limitación conocida (F1b).** El esquema colocado deja velocidades de centro no nulas (≈0.2 m/s) con flujos de cara nulos en un baño en reposo donde p no es lineal (superficie, fondo abombado): la corrección de Choi se midió negativa (ARCHITECTURE F1b); falta el balance de fuerzas subcelda de la celda de superficie.
 
 ## Ecuación de presión de volumen y superficie libre (Plan C F2, sep-2026)
 
