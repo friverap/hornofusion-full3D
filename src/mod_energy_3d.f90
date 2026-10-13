@@ -69,7 +69,7 @@ contains
         integer :: istart, iend, jstart, jend, kstart, kend
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: Dw, De, Ds, Dn, Db, Dt
-        real(dp) :: rho_f, k_f, vol, rho_cp_vol_dt, alpha_tr
+        real(dp) :: rho_f, k_f, vol, rho_cp_vol_dt, alpha_tr, ee
         real(dp) :: alpha_f, w_src, w_rad, C0_datum, aP_rad, T_it, aP_wall
 
         ! Get loop bounds
@@ -293,16 +293,21 @@ contains
                                         ph%cp(i,j,k) * T_src(i,j,k)
                             aP(i,j,k) = aP(i,j,k) + mdot(i,j,k) * ph%cp(i,j,k)
                         else if (mdot(i,j,k) < 0.0_dp) then
-                            ! Sumidero: sin término en aP (se cancela con la
-                            ! continuidad restada). Queda el latente liberado
-                            ! e_l(T_old) - e_entry >= 0 entregado al líquido,
-                            ! con el MISMO e_entry que usa compute_melting
-                            ! (min con e_s(T_solidus) garantiza fuente no
-                            ! negativa)
-                            Su(i,j,k) = Su(i,j,k) - mdot(i,j,k) * &
-                                (ph%cp(i,j,k) * T_old(i,j,k) + C0_datum &
-                                 - min(cfg%cp_s * cfg%T_solidus, &
-                                       ph%cp(i,j,k) * T_old(i,j,k) + C0_datum))
+                            ! Sumidero de CONGELACION (auditoria 2, N-C2). Con
+                            ! el transitorio alpha^n la forma exacta es
+                            !   M^n (e' - e^n) = dm (e' - e_entry)
+                            ! (la masa congelada sale del liquido a e' y entra
+                            ! al solido a e_entry, el MISMO de compute_melting;
+                            ! min con e_s(T_solidus) <=> fuente no negativa).
+                            ! En T: aP -= |mdot| cp, Su += |mdot| (C0 - e_entry).
+                            ! Antes el latente se evaluaba con T_old: se perdia
+                            ! dm (e' - e^n) por paso y el liquido no llegaba a
+                            ! e_lb (bath_freeze: -1.8e9 J sin fuente). aP sigue
+                            ! > 0: dm <= RESOLID_LIMITER M^n < M^n.
+                            ee = min(cfg%cp_s * cfg%T_solidus, &
+                                     ph%cp(i,j,k) * T_old(i,j,k) + C0_datum)
+                            aP(i,j,k) = aP(i,j,k) + mdot(i,j,k) * ph%cp(i,j,k)
+                            Su(i,j,k) = Su(i,j,k) - mdot(i,j,k) * (C0_datum - ee)
                         end if
                     end if
 
@@ -507,13 +512,13 @@ contains
                                     ph%cp(ii,jj,kk) * (T_src(ii,jj,kk) - &
                                     Tk(ii,jj,kk)) * cfg%dt
                             else if (mdot(ii,jj,kk) < 0.0_dp) then
-                                ! solo el latente (el sumidero a T_P se
-                                ! cancela en la forma con continuidad restada)
+                                ! latente con la e NUEVA (N-C2; misma forma que
+                                ! el solver): |mdot| (e(Tk) - e_entry)
                                 ee = min(cfg%cp_s * cfg%T_solidus, &
                                      ph%cp(ii,jj,kk) * T_old(ii,jj,kk) + C0_datum)
                                 s_mass = s_mass + cfg%dt * ( &
                                     - mdot(ii,jj,kk) * (ph%cp(ii,jj,kk) * &
-                                      T_old(ii,jj,kk) + C0_datum - ee) )
+                                      Tk(ii,jj,kk) + C0_datum - ee) )
                             end if
                         end if
                     end do

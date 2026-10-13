@@ -86,4 +86,34 @@ contains
         call audit_add(AUD_GAS_VOLFIX, dmg)
     end subroutine enforce_volume_constraint
 
+    !---------------------------------------------------------------------------
+    ! Fuente/sumidero de MASA del liquido cuando no corre el transporte de
+    ! alpha de dos fluidos (ramas de una sola fase y solo energia; auditoria 2,
+    ! N-C4). En el modelo de dos fluidos el mdot de fusion/congelacion lo aplica
+    ! solve_volume_fraction; sin el, el solido ganaba la masa congelada sin que
+    ! el liquido la perdiera (bath_freeze sin flujo: +18 t de acero y +1.4e10 J
+    ! por paso) y el fundido no entraba al liquido. alpha_l^{n+1} = alpha_l^n +
+    ! mdot dt/(rho V); el gas es el complemento (restriccion de volumen). La
+    ! congelacion esta acotada por RESOLID_LIMITER, asi que alpha_l >= 0.
+    !---------------------------------------------------------------------------
+    subroutine apply_mass_source_noflow(liq, gas, sol, slag, m, dt)
+        type(phase_t), intent(inout) :: liq, gas
+        type(solid_t), intent(in)    :: sol
+        type(slag_t),  intent(in)    :: slag
+        type(mesh_t), intent(in)     :: m
+        real(dp), intent(in)         :: dt
+        integer :: i, j, k
+        do k = 1, m%nz
+            do j = 1, m%ntheta
+                do i = 1, m%nr
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (sol%mdot(i,j,k) == 0.0_dp) cycle
+                    liq%alpha(i,j,k) = max(0.0_dp, liq%alpha(i,j,k) + sol%mdot(i,j,k) * dt &
+                                       / (liq%rho(i,j,k) * m%vol(i,j,k)))
+                end do
+            end do
+        end do
+        call enforce_volume_constraint(liq, gas, sol, slag, m)
+    end subroutine apply_mass_source_noflow
+
 end module mod_solid_phase

@@ -442,6 +442,13 @@ program eaf_3d_simulator
         call timer_start(T_SOLID)
         if (cfg%solve_melting) then
             call update_solid_premelt(sol, liq, gas, slag, mesh, cfg, cfg%dt)
+            ! sin transporte de alpha de dos fluidos, el mdot se aplica aqui
+            ! (auditoria 2, N-C4)
+            if (.not. (cfg%solve_flow .and. cfg%solve_multiphase)) then
+                call apply_mass_source_noflow(liq, gas, sol, slag, mesh, cfg%dt)
+                call phase_exchange_halos(liq, mesh)
+                call phase_exchange_halos(gas, mesh)
+            end if
         end if
         call timer_stop(T_SOLID)
 

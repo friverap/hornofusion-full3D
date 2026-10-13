@@ -25,6 +25,13 @@ fuerza balanceada; volúmenes de `eafutil` con eje real.
 | N-C2 | ✔ | **La congelación destruye energía.** Con el transitorio αⁿ el balance exacto es Mⁿ(e′ − eⁿ) = dm(e′ − e_entry); el código usa eⁿ (T_old) en el latente → pierde dm·(e′ − eⁿ) por paso, y el líquido no alcanza e_lb en el paso (la palanca no se cumple en un paso). El hook reproduce el mismo término. **`bath_freeze` pierde 1.83e9 J sin fuentes (err 1.000)** | `mod_energy_3d.f90:292-306, 509-517` |
 | N-C3 | ✔ | **El gate de energía está ciego.** (a) `check_audit` no se corre en 13 de las 26 corridas de la matriz (bath_freeze fallaría hoy con err 1.0; ECS, escoria, química con flujo nunca se gatean); (b) la escala `max(|dE|, |E_in|, Σ|E_melt|)` deja pasar errores de 6e8–4e9 J en casos con fusión cuyo arco total es 4e6–2e8 J | `tests/run_tests.sh`, `check_audit.py:84-86` |
 
+### Hallazgos nuevos durante la resolución
+
+| id | V | Hallazgo | Dónde |
+|---|---|---|---|
+| N-C4 | ✔ | **Sin transporte de α de dos fluidos (ramas de una sola fase y solo energía) el ṁ de fusión/congelación no se aplicaba al líquido**: el sólido ganaba la masa congelada sin que el líquido la perdiera (bath_freeze sin flujo: +18 t de acero y +1.4e10 J por paso). Usan `solve_flow = false` chem_test, slag_chem_test, ecs_test, noflow_energy y dos configs de input | `main_3d.f90`, `mod_solid_phase.f90` |
+| N-C5 | ✔ | **El residual de energía se normaliza con la temperatura ABSOLUTA** (Σ\|aP T\|): un desfase de 0.7 K sobre 1550 K pasa `tol_energy = 1e-3` y el lazo externo se corta con 2.8 % de las fuentes del paso sin aplicar (bath_freeze sin flujo: −7e7 J por paso, igual con max_outer = 60) | `mod_solver_3d.f90:388-401`, `mod_config_3d.f90:51` |
+
 ## Altos
 
 | id | V | Hallazgo | Dónde |
