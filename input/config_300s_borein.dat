@@ -67,6 +67,7 @@ solve_melting = true
 solve_turb = true
 solve_radiation = true
 solve_chemistry = true
+solve_species = true    # requerido por solve_chemistry (auditoria M21)
 solve_arc = true
 solve_multiphase = true
 

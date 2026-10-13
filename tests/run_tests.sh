@@ -170,6 +170,9 @@ full | rebaseline)
     run_case bath_test 4
     run_case bath_fill 4
     run_case bath_freeze 4
+    # Descomposicion del lecho inundado/congelado (auditoria M22: celdas
+    # selladas en la frontera entre ranks; antes 9.7 % en alpha_l n1 vs n4)
+    run_case bath_freeze 1
     # Lecho INUNDADO (Plan D D0): poros llenos bajo chatarra que funde y drena;
     # reproduce el regimen de B1 a ~320 s. Su check bed_flood:bath_pv_bounded
     # lleva xfail con causa.
@@ -249,6 +252,8 @@ full | rebaseline)
         --xfail "$(xfail_ids bed_flood)"
     run_script "decomposition_bath" \
         $PY $INT/compare_decomposition.py "$OUT/bath_test_n1" "$OUT/bath_test_n4"
+    run_script "decomposition_freeze" \
+        $PY $INT/compare_decomposition.py "$OUT/bath_freeze_n1" "$OUT/bath_freeze_n4"
     # Reinicio desde snapshot: mismo numero de ranks y distinto (lectura por
     # hyperslab), y sobre el regimen de fusion (melt_forced, paso 6 de 11)
     run_restart_case cold_10step 8 8 5

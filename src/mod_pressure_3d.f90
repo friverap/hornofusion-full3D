@@ -529,6 +529,10 @@ contains
                 end do
             end do
         end do
+        ! Auditoria M22: la vecina sellada de OTRO rank debe verse sellada en
+        ! el Neumann de F2.29 (acc_nb); sin el intercambio el halo quedaba en
+        ! .false. y el resultado dependia de la descomposicion
+        call exchange_logical_halos_p(sealed)
 
         if (probe_here) then
             su_comp_p = Su(pi_,pj_,pk_) - su_liq_p - su_gas_p

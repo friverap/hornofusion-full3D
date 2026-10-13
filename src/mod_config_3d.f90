@@ -523,6 +523,13 @@ contains
         call require(cfg%do_quadrature == 4 .or. cfg%do_quadrature == 6 &
                      .or. cfg%do_quadrature == 8, &
                      'do_quadrature must be 4, 6 or 8', ok)
+        ! Auditoria M21: sin transporte, Y_O2 nunca se agota (la quimica
+        ! limita por el O2 de la celda y el solver no lo descuenta): O2
+        ! infinito, ~690 MW/m3 de calor de oxidacion
+        if (cfg%solve_chemistry) then
+            call require(cfg%solve_species, &
+                         'solve_chemistry requires solve_species (O2 finito)', ok)
+        end if
         if (cfg%solve_ecs) then
             call require(cfg%ecs_vfrac > 0.0_dp .and. cfg%ecs_vfrac <= 1.0_dp, &
                          'ecs_vfrac must be in (0, 1]', ok)

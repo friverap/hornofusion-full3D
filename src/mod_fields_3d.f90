@@ -453,11 +453,16 @@ contains
         ! dinámica, gas = 1 - alpha_s exactamente).
         block
             real(dp), allocatable :: as_g(:,:,:)
-            real(dp) :: headroom
+            real(dp) :: headroom, vol_heel
             allocate(as_g(m%nr_g, m%nth_g, m%nz_g))
             call gather_global_field(sol%alpha_s, as_g, m)
+            vol_heel = vol_needed
             do kg = 1, m%nz_g
-                if (vol_needed <= 0.0_dp) exit
+                ! residuo de redondeo del nivel anterior (~1e-15 relativo):
+                ! llenaba el nivel siguiente con alpha_l ~ 4e-18 y T = heel_T
+                ! segun el orden de las sumas -> T_liquid de celdas vacias
+                ! dependiente de la descomposicion (bath_freeze n1 vs n4)
+                if (vol_needed <= 1.0e-12_dp * vol_heel) exit
                 vol_level = 0.0_dp
                 do jg = 1, m%nth_g
                     do ig = 1, m%nr_g
