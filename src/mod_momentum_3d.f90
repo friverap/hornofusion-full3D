@@ -85,7 +85,7 @@ contains
                                          alpha_old, rho_old, mdot_m)
         use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, &
-            ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, ws_bed, ws_bed_valid, &
+            ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             aW => ws_aW, &
@@ -463,11 +463,8 @@ contains
                         ! rho(T) de gas ideal (hallazgo 3.13)
                         src_extra = -alpha_f * ph%rho(i,j,k) * GRAVITY &
                                   + sh%S_arc_mom(i,j,k)
-                        ! fuerza balanceada: el peso del gas va en W_f
-                        ! (el gas en el lecho conserva el gradiente reducido sin
-                        ! flotacion relativa, como F2.3: con la forma clasica
-                        ! veia la hidrostatica del liquido del poro y el anillo
-                        ! del eje divergia -bath_freeze n1/n4 0.58-)
+                        ! fuerza balanceada: el peso del gas va en W_f y su
+                        ! flotacion relativa en el lecho en las caras (bed_rel_f)
                         if (is_gas .and. lbf_m) src_extra = sh%S_arc_mom(i,j,k)
                         if (.not. is_gas) then
                             src_extra = src_extra &
@@ -475,10 +472,8 @@ contains
                                     * GRAVITY * (ph%T(i,j,k) - cfg%T_ref_boussinesq) &
                                   + sh%F_lorentz_z(i,j,k)
                             ! fuerza balanceada: el peso del liquido esta en W_f
-                            if (lbf_m) src_extra = sh%S_arc_mom(i,j,k) + sh%F_lorentz_z(i,j,k) &
-                                + bed_buoyancy(ph%rho(i,j,k) * GRAVITY * (1.0_dp &
-                                  - cfg%beta_expansion * (ph%T(i,j,k) - cfg%T_ref_boussinesq)), &
-                                  ok_bot, ok_top)
+                            ! y su flotacion relativa en el lecho en las caras
+                            if (lbf_m) src_extra = sh%S_arc_mom(i,j,k) + sh%F_lorentz_z(i,j,k)
                         end if
                         Su(i,j,k) = rho_vol_dt * vel_old(i,j,k) &
                                    + (-alpha_f * dp_dz + src_extra) * vol
@@ -568,37 +563,69 @@ contains
         ! vecina inactiva: tazon, coraza, piso, techo). Antes la conductancia
         ! hacia la pared se ponia a cero: deslizamiento libre en todas partes
         ! aunque la CC decia no-slip. El eje (r = rmin) es simetria: sin pared.
-        ! FLOTACION RELATIVA del LIQUIDO en el LECHO (auditoria 2, N-C1). Con
-        ! la fuerza balanceada ninguna fase lleva peso de celda: correcto en una
-        ! interfase grande (baño estratificado), pero en el lecho el liquido
-        ! continuo (desde alpha_l 0.01) gotea a contracorriente del gas: sin su
-        ! flotacion quedaba colgado (u_l = u_g = 0 punto fijo de una columna
-        ! uniforme; debia percolar ~0.1 m/s). En el lecho el liquido recupera
-        ! -alpha_l (rho_l g - Wbar): la forma CLASICA -alpha grad p - alpha rho g
-        ! (la del liquido antes de la fuerza balanceada, que drenaba y era
-        ! invariante). El gas conserva el gradiente reducido sin flotacion
-        ! (F2.3). Wbar es el MISMO peso de cara que entra en el gradiente
-        ! reducido (media de las caras que existen), no el de la celda: con W_P
-        ! de la celda la fuerza no era la clasica en el tope del lecho. Como
-        ! fuerza de cuerpo interpolada se cancela en el Rhie-Chow.
-        real(dp) function bed_buoyancy(w_own, okb, okt)
-            real(dp), intent(in) :: w_own
-            logical, intent(in)  :: okb, okt
-            real(dp) :: wbar
-            bed_buoyancy = 0.0_dp
-            if (.not. ws_bed_valid) return
-            if (ws_bed(i,j,k) <= 0.0_dp) return
-            if (okb .and. okt) then
-                wbar = 0.5_dp * (liq_weight_f(i, j, k-1, k) + liq_weight_f(i, j, k, k+1))
-            else if (okt) then
-                wbar = liq_weight_f(i, j, k, k+1)
-            else if (okb) then
-                wbar = liq_weight_f(i, j, k-1, k)
+        ! FLOTACION RELATIVA en el LECHO, POR CARAS (auditoria 2 N-C1;
+        ! auditoria 3 A3-1 + M3-1, oct-2026). Con la fuerza balanceada ninguna
+        ! fase lleva peso de celda: correcto en una interfase grande (bano
+        ! estratificado), pero en el lecho (goteo a contracorriente) cada fase
+        ! debe recuperar la forma CLASICA -alpha grad p - alpha rho_q g. Se
+        ! hace sumando al gradiente reducido de cada cara el termino
+        !     B_f = bed_f (w_q,f - W_f),
+        ! con bed_f la mascara del lecho en la cara (media), w_q,f el peso
+        ! propio de la fase en la cara y W_f el MISMO peso de mezcla del
+        ! gradiente reducido: -alpha (g_f + B_f) = -alpha (dp/dz + w_q)_f.
+        ! Por caras y no como fuerza de celda (bed_buoyancy, hasta A3-1) para
+        ! que el Rhie-Chow lo cancele exactamente (mod_pressure usa la misma
+        ! B_f en la cara y en el gradiente de celda; M3-1).
+        ! El GAS la lleva SOLO donde es fluido del acople (ws_bed_gas: percola
+        ! y alpha_g >= ALPHA_FLOW_CUTOFF): el gas residual de un poro saturado,
+        ! con p = hidrostatica del liquido, recibiria alpha_g (rho_l - rho_g) g
+        ! (bath_freeze n1/n4 0.58 cuando TODO el gas la llevaba). Sin la
+        ! flotacion del gas (hasta A3-1) el gas libre del lecho fijaba
+        ! dp/dz = -W (mezcla) y el empuje de drenaje del liquido quedaba
+        ! multiplicado por alpha_g/eps (0.03 cerca de saturar: colgado otra
+        ! vez) con sobrepresion de poro de int alpha_l drho g/eps dz.
+        ! Para el gas la mascara de CARA es el MINIMO de las dos celdas, no la
+        ! media: la cara entre el gas libre y un poro saturado (gas atrapado)
+        ! o la celda de superficie de un bano con costra (bath_freeze) es una
+        ! SUPERFICIE LIBRE y ahi vale el gradiente reducido de F2.3; con la
+        ! media el gas de encima recibia 1/4 rho_l g (201 m/s en bath_freeze).
+        pure real(dp) function bed_rel_f(ii, jj, ka, kb)
+            integer, intent(in) :: ii, jj, ka, kb
+            real(dp) :: bm
+            bed_rel_f = 0.0_dp
+            if (.not. (lbf_m .and. ws_bed_valid)) return
+            ! sin liquido en la cara no hay flotacion relativa (0 exacto: las
+            ! corridas frias quedan bit a bit)
+            if (is_gas) then
+                if (max(ph_other%alpha(ii,jj,ka), ph_other%alpha(ii,jj,kb)) < ALPHA_CUTOFF) return
+                bm = min(bed_m(ii, jj, ka), bed_m(ii, jj, kb))
             else
-                wbar = 0.0_dp
+                if (max(ph%alpha(ii,jj,ka), ph%alpha(ii,jj,kb)) < ALPHA_CUTOFF) return
+                bm = 0.5_dp * (bed_m(ii, jj, ka) + bed_m(ii, jj, kb))
             end if
-            bed_buoyancy = -alpha_f * (w_own - wbar)
-        end function bed_buoyancy
+            if (bm <= 0.0_dp) return
+            bed_rel_f = bm * (0.5_dp * (own_w(ii, jj, ka) + own_w(ii, jj, kb)) &
+                              - liq_weight_f(ii, jj, ka, kb))
+        end function bed_rel_f
+
+        ! Mascara del lecho de ESTA fase
+        pure real(dp) function bed_m(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            if (is_gas) then
+                bed_m = ws_bed_gas(ii,jj,kk)
+            else
+                bed_m = ws_bed(ii,jj,kk)
+            end if
+        end function bed_m
+
+        ! Peso propio de ESTA fase por unidad de su volumen [N/m3] (Boussinesq
+        ! solo en el liquido; el gas lleva rho(p,T))
+        pure real(dp) function own_w(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            own_w = GRAVITY * ph%rho(ii,jj,kk)
+            if (.not. is_gas) own_w = own_w * (1.0_dp - cfg%beta_expansion &
+                                               * (ph%T(ii,jj,kk) - cfg%T_ref_boussinesq))
+        end function own_w
 
         function wall_shear() result(ap_w)
             real(dp) :: ap_w, am
@@ -726,17 +753,18 @@ contains
             end if
         end function cont_ok
 
-        ! Gradiente vertical que ve el gas: caras con el peso del liquido
-        ! restado (ver arriba); media de las caras existentes
+        ! Gradiente vertical REDUCIDO que ve esta fase: caras con el peso de
+        ! la mezcla sumado y la flotacion relativa del lecho (bed_rel_f);
+        ! media de las caras existentes
         pure function gas_pgrad_z(ii, jj, kk, okm, okp) result(g)
             integer, intent(in) :: ii, jj, kk
             logical, intent(in) :: okm, okp
             real(dp) :: g, gb, gt
             gb = 0.0_dp; gt = 0.0_dp
             if (okm) gb = (pf(ii,jj,kk) - pf(ii,jj,kk-1)) / (m%z(kk) - m%z(kk-1)) &
-                          + liq_weight_f(ii, jj, kk-1, kk)
+                          + liq_weight_f(ii, jj, kk-1, kk) + bed_rel_f(ii, jj, kk-1, kk)
             if (okp) gt = (pf(ii,jj,kk+1) - pf(ii,jj,kk)) / (m%z(kk+1) - m%z(kk)) &
-                          + liq_weight_f(ii, jj, kk, kk+1)
+                          + liq_weight_f(ii, jj, kk, kk+1) + bed_rel_f(ii, jj, kk, kk+1)
             if (okm .and. okp) then
                 g = 0.5_dp * (gb + gt)
             else if (okp) then

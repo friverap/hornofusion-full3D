@@ -127,6 +127,13 @@ module mod_workspace
     ! con la fuerza balanceada, ahi cada fase recupera su flotacion relativa
     ! (goteo a contracorriente; auditoria 2, N-C1). 1 = lecho, 0 = fuera.
     real(dp), allocatable :: ws_bed(:,:,:)
+    ! Lecho para el GAS (auditoria 3, A3-1): ws_bed solo donde el gas es
+    ! fluido del acople P-V (alpha_g >= ALPHA_FLOW_CUTOFF, percola al
+    ! freeboard, ws_pv_active). El gas residual de poro / atrapado NO lleva
+    ! flotacion relativa: en un poro saturado con p = hidrostatica del
+    ! liquido recibiria alpha_g (rho_l - rho_g) g (73 kPa/m) contra Ergun
+    ! (~18 m/s en el poro; bath_freeze n1/n4 0.58 en el intento de N-C1).
+    real(dp), allocatable :: ws_bed_gas(:,:,:)
     logical, save :: ws_bed_valid = .false.
     ! Flujos de MASA conservativos del GAS por las caras + [kg/s] (auditoria
     ! M24, gas): Q = Q* + a (pp_P - pp_N) del Poisson por la densidad del
@@ -212,7 +219,7 @@ contains
         allocate(ws_lim_step, mold=ws_aW); ws_lim_step = 1.0_dp
         allocate(ws_cc, ws_cc_new, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
         allocate(ws_p_n, mold=ws_aW); ws_p_n = 0.0_dp
-        allocate(ws_bed, mold=ws_aW); ws_bed = 0.0_dp
+        allocate(ws_bed, ws_bed_gas, mold=ws_aW); ws_bed = 0.0_dp; ws_bed_gas = 0.0_dp
         allocate(ws_Fg_r, ws_Fg_th, ws_Fg_z, mold=ws_aW)
         ws_Fg_r = 0.0_dp; ws_Fg_th = 0.0_dp; ws_Fg_z = 0.0_dp
         allocate(ws_Fg_lk_r(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))

@@ -23,7 +23,7 @@ module mod_multiphase
     use mod_probe, only: probe_report, probe_current_step
     use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
     use mod_mpi_topology, only: mpi_allreduce_max
-    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_bed, ws_bed_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
+    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_bed, ws_bed_gas, ws_bed_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
                              ws_liq_room, ws_liq_room_valid, &
                              ws_liq_fr, ws_liq_fth, ws_liq_fz, &
                              ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, ws_Tsrc
@@ -153,6 +153,21 @@ contains
                            .and. (m%cell_type /= 0)
         end if
         ws_pv_valid = .true.
+        ! Lecho del GAS (A3-1): flotacion relativa solo para el gas que es
+        ! fluido del acople (percola y esta en ws_pv_active) Y que es la fase
+        ! CONTINUA del poro: peso 0 en el piso residual ALPHA_PORE_GAS (poro
+        ! saturado) y 1 desde 2x el piso, lineal entre ambos (mezcla, no
+        ! interruptor). El gas residual del poro saturado esta por encima de
+        ! ALPHA_FLOW_CUTOFF a proposito (F2.7) y percola: con la forma
+        ! clasica era una BOMBA de alpha_g (rho_l - rho_g) g que quitaba a la
+        ! presion de poro el peso del liquido (bath_freeze: 31 -> 16 kPa en la
+        ! capa saturada, gas de encima a 113 m/s) — la valvula ficticia de
+        ! Plan E con motor. El atrapado conserva el gradiente reducido.
+        ! Halos validos: gas%alpha intercambiado, ws_gas_perc/ws_pv_active
+        ! con halos.
+        ws_bed_gas = ws_bed * merge(1.0_dp, 0.0_dp, &
+            gas%alpha >= ALPHA_FLOW_CUTOFF .and. ws_gas_perc .and. ws_pv_active) &
+            * min(1.0_dp, max(0.0_dp, (gas%alpha - ALPHA_PORE_GAS) / ALPHA_PORE_GAS))
 
         ! Coeficiente de intercambio gas-líquido (ver F2.15 abajo)
         ! (régimen disperso; ver mod_constants::TAU_LG)

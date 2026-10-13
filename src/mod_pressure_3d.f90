@@ -107,7 +107,7 @@ contains
             ws_pc_unl, ws_pc_unl_valid, ws_pc_unl_id, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, &
-            ws_gas_perc, ws_gas_perc_valid
+            ws_bed, ws_bed_gas, ws_bed_valid
         type(phase_t), intent(inout) :: liq, gas
         ! T del gas del paso anterior: término de COMPRESIBILIDAD del gas
         ! ideal, -alpha_g*(rho(T)-rho(T_old))/dt*V. Sin él, el Poisson
@@ -798,6 +798,33 @@ contains
             end if
         end function cell_wp
 
+        ! Flotacion relativa de la fase en el LECHO, en la cara (ka,kb)
+        ! [N/m3]: bed_f (w_q,f - W_f). MISMA definicion que
+        ! mod_momentum_3d::bed_rel_f (cara y gradiente de celda: el
+        ! Rhie-Chow la cancela exactamente; A3-1/M3-1). El gas solo donde es
+        ! fluido del acople (ws_bed_gas).
+        pure real(dp) function bed_rel_fp(isg_, ii, jj, ka, kb)
+            logical, intent(in) :: isg_
+            integer, intent(in) :: ii, jj, ka, kb
+            real(dp) :: bm, w
+            bed_rel_fp = 0.0_dp
+            if (.not. (lbf .and. ws_bed_valid)) return
+            ! sin liquido en la cara, 0 exacto (ver mod_momentum_3d)
+            if (max(liq%alpha(ii,jj,ka), liq%alpha(ii,jj,kb)) < ALPHA_CUTOFF) return
+            if (isg_) then
+                ! minimo de las dos celdas (ver mod_momentum_3d::bed_rel_f)
+                bm = min(ws_bed_gas(ii,jj,ka), ws_bed_gas(ii,jj,kb))
+                w  = 0.5_dp * GRAVITY * (gas%rho(ii,jj,ka) + gas%rho(ii,jj,kb))
+            else
+                bm = 0.5_dp * (ws_bed(ii,jj,ka) + ws_bed(ii,jj,kb))
+                w  = 0.5_dp * GRAVITY * ( &
+                     liq%rho(ii,jj,ka) * (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,ka) - cfg%T_ref_boussinesq)) &
+                   + liq%rho(ii,jj,kb) * (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,kb) - cfg%T_ref_boussinesq)))
+            end if
+            if (bm <= 0.0_dp) return
+            bed_rel_fp = bm * (w - liq_weight_f(ii, jj, ka, kb))
+        end function bed_rel_fp
+
         ! Gradiente vertical de celda que ve el GAS: caras sin el peso del
         ! liquido, media de las existentes (mismo esquema que momentum)
         pure function gas_gz(pfld, ii, jj, kk, okm, okp) result(g)
@@ -807,9 +834,9 @@ contains
             real(dp) :: g, gb, gt
             gb = 0.0_dp; gt = 0.0_dp
             if (okm) gb = (pfld(ii,jj,kk) - pfld(ii,jj,kk-1)) / (m%z(kk) - m%z(kk-1)) &
-                          + liq_weight_f(ii, jj, kk-1, kk)
+                          + liq_weight_f(ii, jj, kk-1, kk) + bed_rel_fp(grad_is_gas, ii, jj, kk-1, kk)
             if (okp) gt = (pfld(ii,jj,kk+1) - pfld(ii,jj,kk)) / (m%z(kk+1) - m%z(kk)) &
-                          + liq_weight_f(ii, jj, kk, kk+1)
+                          + liq_weight_f(ii, jj, kk, kk+1) + bed_rel_fp(grad_is_gas, ii, jj, kk, kk+1)
             if (okm .and. okp) then
                 g = 0.5_dp * (gb + gt)
             else if (okp) then
@@ -1093,7 +1120,8 @@ contains
                             u_f = 0.5_dp * (ph%uz(ii,jj,kk-1) + ph%uz(ii,jj,kk)) &
                                 + d_f * (0.5_dp*(gz(ii,jj,kk-1) + gz(ii,jj,kk)) &
                                          - (pf(ii,jj,kk) - pf(ii,jj,kk-1)) / delta &
-                                         - merge(liq_weight_f(ii,jj,kk-1,kk), 0.0_dp, isg .or. lbf))
+                                         - merge(liq_weight_f(ii,jj,kk-1,kk) &
+                                                 + bed_rel_fp(isg, ii,jj,kk-1,kk), 0.0_dp, isg .or. lbf))
                             fl = face_lim(isg, u_f, ii,jj,kk-1, ii,jj,kk)
                             if (fl > 0.0_dp) then
                             af = af * fl
@@ -1128,7 +1156,8 @@ contains
                             u_f = 0.5_dp * (ph%uz(ii,jj,kk) + ph%uz(ii,jj,kk+1)) &
                                 + d_f * (0.5_dp*(gz(ii,jj,kk) + gz(ii,jj,kk+1)) &
                                          - (pf(ii,jj,kk+1) - pf(ii,jj,kk)) / delta &
-                                         - merge(liq_weight_f(ii,jj,kk,kk+1), 0.0_dp, isg .or. lbf))
+                                         - merge(liq_weight_f(ii,jj,kk,kk+1) &
+                                                 + bed_rel_fp(isg, ii,jj,kk,kk+1), 0.0_dp, isg .or. lbf))
                             fl = face_lim(isg, u_f, ii,jj,kk, ii,jj,kk+1)
                             if (fl > 0.0_dp) then
                             af = af * fl

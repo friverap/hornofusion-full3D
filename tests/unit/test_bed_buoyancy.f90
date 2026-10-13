@@ -1,20 +1,24 @@
 !===============================================================================
 ! test_bed_buoyancy.f90 - Flotacion relativa en el LECHO con la fuerza
-! balanceada (auditoria 2, N-C1, oct-2026).
+! balanceada (auditoria 2 N-C1; auditoria 3 A3-1/M3-1, oct-2026).
 ! Con liq_balanced_force ninguna fase lleva peso de celda (presion reducida con
-! el peso de la mezcla continua en las caras). En el lecho el liquido continuo
-! (desde alpha_l 0.01) gotea a contracorriente del gas; sin flotacion relativa
-! una columna uniforme quedaba en reposo con el liquido colgado.
-!   1. Columna de LECHO uniforme (alpha_s 0.5, alpha_l 0.05, alpha_g 0.45), p
-!      hidrostatica de la mezcla continua: la velocidad vertical del LIQUIDO
-!      tras un solve de momento con la forma balanceada + flotacion del lecho
-!      es IGUAL (1e-10 relativo) a la de la forma clasica -alpha grad p -
-!      alpha rho g (la que usa el camino Plan D) y el liquido gotea respecto
-!      del gas (el gas conserva el gradiente reducido de F2.3: con la forma
-!      clasica veia la hidrostatica del poro y el anillo del eje divergia).
+! el peso de la mezcla continua en las caras). En el lecho cada fase recupera
+! POR CARAS la forma clasica -alpha grad p - alpha rho_q g (bed_rel_f); el gas
+! solo donde es fluido del acople (ws_bed_gas).
+!   1. Columna de LECHO uniforme (alpha_s 0.5, alpha_l 0.05, alpha_g 0.45) con
+!      gas que percola, p hidrostatica de la mezcla continua: la velocidad
+!      vertical de AMBAS fases tras un solve de momento con la forma balanceada
+!      es IGUAL (1e-10 relativo) a la de la forma clasica, y el liquido gotea
+!      respecto del gas.
 !   2. Misma columna SIN chatarra (alpha_l 0.4 continuo, fuera del lecho):
 !      la forma balanceada NO lleva flotacion relativa (interfase grande): el
 !      liquido no se separa del gas por gravedad en un paso.
+!   3. Lecho con gas ATRAPADO (ws_bed_gas = 0): el liquido sigue clasico y el
+!      gas conserva el gradiente reducido (en la hidrostatica de la mezcla no
+!      se mueve). Es el gas residual del poro saturado de bath_freeze.
+!   4. Lecho con gas libre y p = hidrostatica del GAS (estado de lecho de
+!      goteo): ambas fases clasicas; el gas queda en reposo y el liquido
+!      drena con TODO su peso (hasta A3-1 el empuje quedaba x alpha_g/eps).
 !===============================================================================
 program test_bed_buoyancy
     use mod_constants
@@ -26,7 +30,7 @@ program test_bed_buoyancy
     use mod_momentum_3d, only: solve_momentum_3d
     use mod_drag_ergun, only: compute_ergun_drag
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
-                             ws_Fg_valid, ws_bed, ws_bed_valid
+                             ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_valid
     implicit none
 
     type(config_t) :: cfg
@@ -37,7 +41,7 @@ program test_bed_buoyancy
     type(shared_t) :: sh
     real(dp), allocatable :: Kz(:,:,:), dl(:,:,:), dg(:,:,:)
     real(dp), allocatable :: ul_bal(:,:,:), ug_bal(:,:,:), ul_cls(:,:,:), ug_cls(:,:,:)
-    real(dp) :: r1, r2, r3, err_l, sc
+    real(dp) :: r1, r2, r3, err_l, err_g, sc, scg
     integer  :: ic, jc, kc
     logical  :: ok
 
@@ -61,15 +65,10 @@ program test_bed_buoyancy
     liq%T = cfg%T_ref_boussinesq; gas%T = 1500.0_dp
     gas%rho = gas_eos(cfg%rho_gas, gas%T, 0.0_dp)
 
-    ! ---- caso 1: lecho uniforme ----
-    call setup(0.5_dp, 0.05_dp)
+    ! ---- caso 1: lecho uniforme, gas que percola ----
+    call setup(0.5_dp, 0.05_dp, .true., .false.)
     call run_both()
-    sc = maxval(abs(ul_cls(1:6,1:8,2:7)))
-    err_l = maxval(abs(ul_bal(1:6,1:8,2:7) - ul_cls(1:6,1:8,2:7))) / max(sc, SMALL)
-    if (err_l > 1.0e-10_dp) then
-        print '(A,ES11.3)', '   FAIL caso 1: liquido con la forma balanceada /= clasica en el lecho: ', err_l
-        ok = .false.
-    end if
+    call cmp_classic('caso 1')
     if (.not. (ul_bal(ic,jc,kc) < 0.0_dp .and. ul_bal(ic,jc,kc) < ug_bal(ic,jc,kc))) then
         print '(A,2ES11.3)', '   FAIL caso 1: el liquido no gotea respecto del gas: u_l, u_g = ', &
             ul_bal(ic,jc,kc), ug_bal(ic,jc,kc)
@@ -77,11 +76,43 @@ program test_bed_buoyancy
     end if
 
     ! ---- caso 2: sin chatarra (interfase grande): sin flotacion relativa ----
-    call setup(0.0_dp, 0.4_dp)
+    call setup(0.0_dp, 0.4_dp, .false., .false.)
     call run_both()
     if (abs(ul_bal(ic,jc,kc) - ug_bal(ic,jc,kc)) > 1.0e-10_dp * max(abs(ul_cls(ic,jc,kc)), 1.0e-12_dp)) then
         print '(A,2ES11.3)', '   FAIL caso 2: fuera del lecho la forma balanceada separo las fases: ', &
             ul_bal(ic,jc,kc), ug_bal(ic,jc,kc)
+        ok = .false.
+    end if
+
+    ! ---- caso 3: lecho con gas ATRAPADO: liquido clasico, gas sin flotacion ----
+    call setup(0.5_dp, 0.05_dp, .false., .false.)
+    call run_both()
+    sc = maxval(abs(ul_cls(1:6,1:8,2:7)))
+    err_l = maxval(abs(ul_bal(1:6,1:8,2:7) - ul_cls(1:6,1:8,2:7))) / max(sc, SMALL)
+    if (err_l > 1.0e-10_dp) then
+        print '(A,ES11.3)', '   FAIL caso 3: liquido con la forma balanceada /= clasica: ', err_l
+        ok = .false.
+    end if
+    if (maxval(abs(ug_bal(1:6,1:8,2:7))) > 1.0e-10_dp * sc) then
+        print '(A,ES11.3)', '   FAIL caso 3: el gas atrapado recibio flotacion: u_g = ', &
+            maxval(abs(ug_bal(1:6,1:8,2:7)))
+        ok = .false.
+    end if
+
+    ! ---- caso 4: lecho de goteo, p = hidrostatica del GAS ----
+    call setup(0.5_dp, 0.05_dp, .true., .true.)
+    call run_both()
+    call cmp_classic('caso 4')
+    sc = maxval(abs(ul_cls(1:6,1:8,2:7)))
+    if (maxval(abs(ug_bal(1:6,1:8,2:7))) > 1.0e-10_dp * sc) then
+        print '(A,ES11.3)', '   FAIL caso 4: el gas no queda en reposo en su hidrostatica: u_g = ', &
+            maxval(abs(ug_bal(1:6,1:8,2:7)))
+        ok = .false.
+    end if
+    ! el liquido drena con TODO su peso: la columna de caso 1 (p de la
+    ! mezcla) lo frenaba por alpha_g/eps; aqui la velocidad debe ser mayor
+    if (.not. (ul_bal(ic,jc,kc) < 0.0_dp)) then
+        print '(A,ES11.3)', '   FAIL caso 4: el liquido no drena: u_l = ', ul_bal(ic,jc,kc)
         ok = .false.
     end if
 
@@ -95,8 +126,9 @@ program test_bed_buoyancy
 
 contains
 
-    subroutine setup(as, al)
+    subroutine setup(as, al, gas_free, p_gas)
         real(dp), intent(in) :: as, al
+        logical, intent(in)  :: gas_free, p_gas
         integer :: k
         real(dp) :: w
         sol%alpha_s = as; slag%alpha_sl = 0.0_dp; sol%mdot = 0.0_dp
@@ -105,6 +137,7 @@ contains
         gas%ur = 0.0_dp; gas%uth = 0.0_dp; gas%uz = 0.0_dp
         ! p hidrostatica de la mezcla continua por volumen de fluido
         w = GRAVITY * (al * liq%rho(1,1,1) + gas%alpha(1,1,1) * gas%rho(1,1,1)) / (al + gas%alpha(1,1,1))
+        if (p_gas) w = GRAVITY * gas%rho(1,1,1)
         do k = -1, mesh%nz + 2
             sh%p(:,:,k) = w * (mesh%zf(mesh%nz) - mesh%z(k))
         end do
@@ -116,27 +149,50 @@ contains
         ws_Fg_valid = .false.
         ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s); ws_liq_cont_valid = .true.
         ws_bed = merge(1.0_dp, 0.0_dp, sol%alpha_s >= 1.0e-2_dp .and. mesh%cell_type /= 0)
+        ws_bed_gas = merge(ws_bed, 0.0_dp, gas_free)
         ws_bed_valid = .true.
     end subroutine setup
 
+    subroutine cmp_classic(tag)
+        character(len=*), intent(in) :: tag
+        sc  = maxval(abs(ul_cls(1:6,1:8,2:7)))
+        scg = max(maxval(abs(ug_cls(1:6,1:8,2:7))), sc)
+        err_l = maxval(abs(ul_bal(1:6,1:8,2:7) - ul_cls(1:6,1:8,2:7))) / max(sc, SMALL)
+        err_g = maxval(abs(ug_bal(1:6,1:8,2:7) - ug_cls(1:6,1:8,2:7))) / max(scg, SMALL)
+        if (err_l > 1.0e-10_dp) then
+            print '(A,A,A,ES11.3)', '   FAIL ', tag, ': liquido con la forma balanceada /= clasica en el lecho: ', err_l
+            ok = .false.
+        end if
+        if (err_g > 1.0e-10_dp) then
+            print '(A,A,A,ES11.3)', '   FAIL ', tag, ': gas con la forma balanceada /= clasica en el lecho: ', err_g
+            ok = .false.
+        end if
+    end subroutine cmp_classic
+
     subroutine run_both()
-        ! forma balanceada (+ flotacion del lecho)
+        ! forma balanceada (+ flotacion del lecho por caras)
         cfg%liq_balanced_force = .true.; cfg%pc_fs_liquid_gradient = .false.
-        call one(ul_bal, ug_bal)
-        ! forma clasica (la que usa el camino Plan D)
+        call one(ul_bal, ug_bal, .false.)
+        ! forma clasica -alpha grad p - alpha rho_q g para AMBAS fases (la del
+        ! liquido del camino Plan D; el gas sin fuerza balanceada lleva F2.3,
+        ! que resta el peso del liquido continuo: para que sea clasico puro
+        ! se le quita la mascara de liquido continuo solo en su solve)
         cfg%liq_balanced_force = .false.
-        call one(ul_cls, ug_cls)
+        call one(ul_cls, ug_cls, .true.)
         cfg%liq_balanced_force = .true.
     end subroutine run_both
 
-    subroutine one(ul, ug)
+    subroutine one(ul, ug, classic)
         real(dp), intent(out) :: ul(-1:,-1:,-1:), ug(-1:,-1:,-1:)
+        logical, intent(in)   :: classic
         liq%ur = 0.0_dp; liq%uth = 0.0_dp; liq%uz = 0.0_dp
         gas%ur = 0.0_dp; gas%uth = 0.0_dp; gas%uz = 0.0_dp
         call compute_ergun_drag(liq, sol, mesh, cfg, dl)
         call compute_ergun_drag(gas, sol, mesh, cfg, dg)
         call solve_momentum_3d(liq, liq_old, gas, Kz, sh, mesh, cfg, liq%alpha, dl, .false., r1, r2, r3)
+        if (classic) ws_liq_cont = .false.
         call solve_momentum_3d(gas, gas_old, liq, Kz, sh, mesh, cfg, gas%alpha, dg, .true., r1, r2, r3)
+        if (classic) ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s)
         ul = liq%uz; ug = gas%uz
     end subroutine one
 
