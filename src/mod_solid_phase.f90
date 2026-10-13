@@ -35,7 +35,7 @@ contains
         ! fundido del paso entraba al liquido a esa T mezclada
         call ensure_workspace(m)
         ws_Tsrc = sol%T_s
-        call apply_scrap_collapse(sol, liq, m, cfg)
+        call apply_scrap_collapse(sol, liq, slag, m, cfg)
 
         ! Restricción de volumen (C1.9, hallazgo 3.22b): fusión y colapso
         ! cambian alpha_s sin actualizar el gas -> Sum(alpha) quedaba en 0.5

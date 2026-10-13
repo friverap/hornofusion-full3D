@@ -22,8 +22,10 @@ module mod_scrap_collapse
 
 contains
 
-    subroutine apply_scrap_collapse(sol, liq, m, cfg)
+    subroutine apply_scrap_collapse(sol, liq, slag, m, cfg)
         type(solid_t), intent(inout) :: sol
+        ! escoria: ocupa volumen en la restriccion de la celda destino (A4)
+        type(slag_t), intent(in)     :: slag
         ! Liquido (Plan C F1): una celda de BANO (alpha_l >= ALPHA_LIQ_CONT)
         ! no es hueco — la chatarra descansa sobre el bano en vez de caer
         ! dentro en un paso. Antes solo se miraba alpha_s: en bath_fill el
@@ -38,17 +40,17 @@ contains
         integer :: i, j, k, k_below, k_dest
         integer :: il, jl, kl
         logical :: owned
-        real(dp) :: m_falling, E_falling
-        integer  :: lid_falling
+        real(dp) :: m_falling, E_falling, mc_falling, a_src, a_cap, room, take, rem, f
+        integer  :: lid_falling, kk
         real(dp), allocatable :: m_g(:,:,:), E_g(:,:,:), a_g(:,:,:), T_g(:,:,:)
-        real(dp), allocatable :: mc_g(:,:,:), al_g(:,:,:)
+        real(dp), allocatable :: mc_g(:,:,:), al_g(:,:,:), asl_g(:,:,:)
         integer,  allocatable :: lid_g(:,:,:)
 
         allocate(m_g(m%nr_g, m%nth_g, m%nz_g), E_g(m%nr_g, m%nth_g, m%nz_g))
         allocate(a_g(m%nr_g, m%nth_g, m%nz_g), T_g(m%nr_g, m%nth_g, m%nz_g))
         allocate(lid_g(m%nr_g, m%nth_g, m%nz_g))
         allocate(mc_g(m%nr_g, m%nth_g, m%nz_g))
-        allocate(al_g(m%nr_g, m%nth_g, m%nz_g))
+        allocate(al_g(m%nr_g, m%nth_g, m%nz_g), asl_g(m%nr_g, m%nth_g, m%nz_g))
 
         call gather_global_field(sol%m_s, m_g, m)
         call gather_global_field(sol%E_s, E_g, m)
@@ -56,6 +58,7 @@ contains
         call gather_global_field(sol%T_s, T_g, m)
         call gather_global_field(sol%m_C, mc_g, m)
         call gather_global_field(liq%alpha, al_g, m)
+        call gather_global_field(slag%alpha_sl, asl_g, m)
         call gather_global_field_int(sol%layer_id, lid_g, m)
 
         do j = 1, m%nth_g
@@ -82,35 +85,51 @@ contains
                         k_dest = k_dest - 1
                     end do
 
-                    ! Transfer solid mass from k to k_dest
+                    ! Transfer solid mass from k to k_dest, PRESERVANDO el
+                    ! empaquetamiento del trozo (auditoria 12-oct-2026, A4).
+                    ! Antes se conservaba la masa pero no el volumen aparente:
+                    ! a_dest = m/(rho V_dest) con un min(1.0) silencioso. Con la
+                    ! malla estirada en z (dz del fondo 0.6 del central) una capa
+                    ! de 0.55 llegaba a ~0.9 o a 1, muy por encima del
+                    ! empaquetamiento aleatorio (~0.64) y de la receta (0.45-0.55):
+                    ! el lecho del piso de B1 tenia 762 celdas con alpha_s > 0.9
+                    ! (Ergun casi impermeable). Ahora cada celda receptora se llena
+                    ! hasta max(alpha del trozo, alpha que ya tenia), nunca mas alla
+                    ! del hueco libre de liquido y escoria, y lo que no cabe se
+                    ! APILA hacia arriba en la columna (hasta la celda de origen).
                     m_falling   = m_g(i,j,k)
                     E_falling   = E_g(i,j,k)
+                    mc_falling  = mc_g(i,j,k)
                     lid_falling = lid_g(i,j,k)
+                    a_src       = a_g(i,j,k)
 
-                    ! Remove from source
-                    mc_g(i,j,k_dest) = mc_g(i,j,k_dest) + mc_g(i,j,k)
                     mc_g(i,j,k) = 0.0_dp
                     m_g(i,j,k) = 0.0_dp
                     E_g(i,j,k) = 0.0_dp
                     a_g(i,j,k) = 0.0_dp
                     lid_g(i,j,k) = 0
 
-                    ! Add to destination (merge with existing if any)
-                    m_g(i,j,k_dest)   = m_g(i,j,k_dest) + m_falling
-                    E_g(i,j,k_dest)   = E_g(i,j,k_dest) + E_falling
-                    lid_g(i,j,k_dest) = lid_falling
-
-                    ! Recompute alpha_s and T_s
-                    if (m%vol_global(i,j,k_dest) > SMALL) then
-                        a_g(i,j,k_dest) = m_g(i,j,k_dest) / &
-                                          (cfg%rho_steel * m%vol_global(i,j,k_dest))
-                    end if
-                    a_g(i,j,k_dest) = min(1.0_dp, a_g(i,j,k_dest))
-
-                    if (m_g(i,j,k_dest) > SMALL) then
-                        T_g(i,j,k_dest) = solid_T_from_enthalpy( &
-                            E_g(i,j,k_dest) / m_g(i,j,k_dest), cfg)
-                    end if
+                    rem = m_falling
+                    do kk = k_dest, k
+                        if (rem <= 0.0_dp) exit
+                        if (kk == k) then
+                            take = rem        ! lo que queda vuelve a su celda de origen
+                        else
+                            a_cap = min(max(a_src, a_g(i,j,kk)), &
+                                        max(0.0_dp, 1.0_dp - al_g(i,j,kk) - asl_g(i,j,kk)))
+                            room = a_cap * cfg%rho_steel * m%vol_global(i,j,kk) - m_g(i,j,kk)
+                            take = min(rem, max(0.0_dp, room))
+                        end if
+                        if (take <= 0.0_dp) cycle
+                        f = take / m_falling
+                        m_g(i,j,kk)  = m_g(i,j,kk)  + take
+                        E_g(i,j,kk)  = E_g(i,j,kk)  + f * E_falling
+                        mc_g(i,j,kk) = mc_g(i,j,kk) + f * mc_falling
+                        lid_g(i,j,kk) = lid_falling
+                        a_g(i,j,kk) = m_g(i,j,kk) / (cfg%rho_steel * m%vol_global(i,j,kk))
+                        T_g(i,j,kk) = solid_T_from_enthalpy(E_g(i,j,kk) / m_g(i,j,kk), cfg)
+                        rem = rem - take
+                    end do
                 end do
             end do
         end do
@@ -131,7 +150,7 @@ contains
             end do
         end do
 
-        deallocate(m_g, E_g, a_g, T_g, lid_g, mc_g, al_g)
+        deallocate(m_g, E_g, a_g, T_g, lid_g, mc_g, al_g, asl_g)
 
     end subroutine apply_scrap_collapse
 
