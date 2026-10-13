@@ -33,6 +33,7 @@ module mod_radiation_do
     use mod_types_3d
     use mod_parallel_utils
     use mod_solver_3d, only: tdma_3d_mpi
+    use mod_boundary_3d, only: physical_boundary_flags
     use mod_mpi_topology, only: mpi_allreduce_max
     use mod_melting_3d, only: solid_T_from_enthalpy, effective_cp
     use mod_audit, only: audit_add, AUD_RAD_SOL, AUD_RAD_WALL, AUD_RAD_FOAM
@@ -79,8 +80,10 @@ contains
         real(dp) :: ks_a, kf_a, T_s, dE_rate, denom, dE
         real(dp) :: t_sl_c, de_foam
         real(dp) :: w_l, w_g, B_fluid
+        logical  :: at_rmin_do, at_rmax_do, at_zmin_do, at_zmax_do
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        call physical_boundary_flags(m, at_rmin_do, at_rmax_do, at_zmin_do, at_zmax_do)
 
         call ensure_workspace(m)
         allocate(Irad, mold=sh%G_rad); allocate(Bmix, mold=sh%G_rad)
@@ -96,18 +99,19 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
-                    sh%kappa_f(i,j,k) = KAPPA_GAS * &
-                        max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k))
+                    ! fluido: gas casi transparente + liquido OPACO (A11)
+                    sh%kappa_f(i,j,k) = KAPPA_GAS * max(gas%alpha(i,j,k), 0.0_dp) &
+                                      + KAPPA_LIQ_ABS * max(liq%alpha(i,j,k), 0.0_dp)
                     ks_a = KAPPA_SOLID * sol%alpha_s(i,j,k)
                     ! Espuma (E2.6): absorbe/emite con T_sl; su absorción
                     ! se deposita en E_sl (ver abajo)
                     kf_a = KAPPA_FOAM * slag%alpha_foam(i,j,k)
                     kmix(i,j,k) = sh%kappa_f(i,j,k) + ks_a + kf_a
 
-                    ! Reparto de la emisión fluida por fase (mismos pesos que
-                    ! el reparto de fuentes en energía)
-                    w_l = liq%alpha(i,j,k) / &
-                          (liq%alpha(i,j,k) + gas%alpha(i,j,k) + SMALL)
+                    ! Reparto de la emision fluida por fase: por ABSORCION
+                    ! kappa_q alpha_q (mismos pesos que la energia, A11)
+                    w_l = KAPPA_LIQ_ABS * max(liq%alpha(i,j,k), 0.0_dp) / &
+                          max(sh%kappa_f(i,j,k), SMALL)
                     w_g = 1.0_dp - w_l
                     B_fluid = STEFAN_BOLTZMANN / PI * &
                               (w_l * liq%T(i,j,k)**4 + w_g * gas%T(i,j,k)**4)
@@ -158,32 +162,32 @@ contains
                         if (m%cell_type(i-1,j,k) /= 0) then
                             aW(i,j,k) = max(-cw, 0.0_dp)
                         else
-                            Su(i,j,k) = Su(i,j,k) + max(-cw,0.0_dp) * B_wall
+                            Su(i,j,k) = Su(i,j,k) + max(-cw,0.0_dp) * bwall(i-1, j, k, i, j, k)
                         end if
                         if (m%cell_type(i+1,j,k) /= 0) then
                             aE(i,j,k) = max(-ce, 0.0_dp)
                         else
-                            Su(i,j,k) = Su(i,j,k) + max(-ce,0.0_dp) * B_wall
+                            Su(i,j,k) = Su(i,j,k) + max(-ce,0.0_dp) * bwall(i+1, j, k, i, j, k)
                         end if
                         if (m%cell_type(i,j-1,k) /= 0) then
                             aS(i,j,k) = max(-cs, 0.0_dp)
                         else
-                            Su(i,j,k) = Su(i,j,k) + max(-cs,0.0_dp) * B_wall
+                            Su(i,j,k) = Su(i,j,k) + max(-cs,0.0_dp) * bwall(i, j-1, k, i, j, k)
                         end if
                         if (m%cell_type(i,j+1,k) /= 0) then
                             aN(i,j,k) = max(-cn, 0.0_dp)
                         else
-                            Su(i,j,k) = Su(i,j,k) + max(-cn,0.0_dp) * B_wall
+                            Su(i,j,k) = Su(i,j,k) + max(-cn,0.0_dp) * bwall(i, j+1, k, i, j, k)
                         end if
                         if (m%cell_type(i,j,k-1) /= 0) then
                             aB(i,j,k) = max(-cb, 0.0_dp)
                         else
-                            Su(i,j,k) = Su(i,j,k) + max(-cb,0.0_dp) * B_wall
+                            Su(i,j,k) = Su(i,j,k) + max(-cb,0.0_dp) * bwall(i, j, k-1, i, j, k)
                         end if
                         if (m%cell_type(i,j,k+1) /= 0) then
                             aT(i,j,k) = max(-ct, 0.0_dp)
                         else
-                            Su(i,j,k) = Su(i,j,k) + max(-ct,0.0_dp) * B_wall
+                            Su(i,j,k) = Su(i,j,k) + max(-ct,0.0_dp) * bwall(i, j, k+1, i, j, k)
                         end if
                     end do
                 end do
@@ -223,22 +227,22 @@ contains
                         ct =  sz * m%Az(i,j,k)
                         if (m%cell_type(i-1,j,k) == 0) wall_net_step = &
                             wall_net_step + max(cw,0.0_dp)*Irad(i,j,k) &
-                                          - max(-cw,0.0_dp)*B_wall
+                                          - max(-cw,0.0_dp)*bwall(i-1, j, k, i, j, k)
                         if (m%cell_type(i+1,j,k) == 0) wall_net_step = &
                             wall_net_step + max(ce,0.0_dp)*Irad(i,j,k) &
-                                          - max(-ce,0.0_dp)*B_wall
+                                          - max(-ce,0.0_dp)*bwall(i+1, j, k, i, j, k)
                         if (m%cell_type(i,j-1,k) == 0) wall_net_step = &
                             wall_net_step + max(cs,0.0_dp)*Irad(i,j,k) &
-                                          - max(-cs,0.0_dp)*B_wall
+                                          - max(-cs,0.0_dp)*bwall(i, j-1, k, i, j, k)
                         if (m%cell_type(i,j+1,k) == 0) wall_net_step = &
                             wall_net_step + max(cn,0.0_dp)*Irad(i,j,k) &
-                                          - max(-cn,0.0_dp)*B_wall
+                                          - max(-cn,0.0_dp)*bwall(i, j+1, k, i, j, k)
                         if (m%cell_type(i,j,k-1) == 0) wall_net_step = &
                             wall_net_step + max(cb,0.0_dp)*Irad(i,j,k) &
-                                          - max(-cb,0.0_dp)*B_wall
+                                          - max(-cb,0.0_dp)*bwall(i, j, k-1, i, j, k)
                         if (m%cell_type(i,j,k+1) == 0) wall_net_step = &
                             wall_net_step + max(ct,0.0_dp)*Irad(i,j,k) &
-                                          - max(-ct,0.0_dp)*B_wall
+                                          - max(-ct,0.0_dp)*bwall(i, j, k+1, i, j, k)
                     end do
                 end do
             end do
@@ -327,8 +331,8 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
-                    w_l = liq%alpha(i,j,k) / &
-                          (liq%alpha(i,j,k) + gas%alpha(i,j,k) + SMALL)
+                    w_l = KAPPA_LIQ_ABS * max(liq%alpha(i,j,k), 0.0_dp) / &
+                          max(sh%kappa_f(i,j,k), SMALL)
                     w_g = 1.0_dp - w_l
                     sh%S_rad(i,j,k) = sh%kappa_f(i,j,k) * (sh%G_rad(i,j,k) - &
                         4.0_dp * STEFAN_BOLTZMANN * &
@@ -340,6 +344,26 @@ contains
         deallocate(Irad, Bmix, kmix, Iprev)
 
     contains
+
+        ! Intensidad que entra desde una celda INACTIVA vecina (ii,jj,kk) de la
+        ! celda (ip,jp,kp) (auditoria 12-oct-2026, A11): solo la carcasa
+        ! (frontera fisica en r maximo) y la boveda (frontera fisica en z
+        ! maximo) son paneles enfriados por agua a T_wall; el tazon/solera
+        ! refractarios y el eje son RE-RADIANTES (devuelven la emision de la
+        ! celda, intercambio neto ~0). Antes todo era negro a T_wall = 300 K:
+        ! el bano radiaba ~5 MW espurios al refractario.
+        function bwall(ii, jj, kk, ip, jp, kp) result(b)
+            integer, intent(in) :: ii, jj, kk, ip, jp, kp
+            real(dp) :: b
+            logical :: cold
+            cold = (ii > ip .and. ip == iend .and. at_rmax_do) .or. &
+                   (kk > kp .and. kp == kend .and. at_zmax_do)
+            if (cold) then
+                b = B_wall
+            else
+                b = Bmix(ip,jp,kp)
+            end if
+        end function bwall
 
         ! Proyección integrada exacta sobre la cara RADIAL en r_f(ii),
         ! theta en [thetaf(jj-1), thetaf(jj)], z en dz(kk):

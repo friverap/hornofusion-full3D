@@ -70,7 +70,7 @@ contains
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: Dw, De, Ds, Dn, Db, Dt
         real(dp) :: rho_f, k_f, vol, rho_cp_vol_dt, alpha_tr
-        real(dp) :: alpha_f, w_src, C0_datum, aP_rad, T_it, aP_wall
+        real(dp) :: alpha_f, w_src, w_rad, C0_datum, aP_rad, T_it, aP_wall
 
         ! Get loop bounds
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -219,11 +219,15 @@ contains
                     ! T ~ G/(4σT_old^3) astronómica.
                     w_src = alpha_q(i,j,k) / &
                             (alpha_q(i,j,k) + alpha_other(i,j,k) + SMALL)
+                    ! Radiacion: reparto por ABSORCION kappa_q alpha_q (A11; el
+                    ! liquido es opaco en la DO). Arco y quimica siguen por
+                    ! fraccion de volumen.
+                    w_rad = rad_weight(alpha_q(i,j,k), alpha_other(i,j,k))
                     T_it = max(ph%T(i,j,k), 200.0_dp)
                     Su(i,j,k) = rho_cp_vol_dt * T_old(i,j,k) &
                                + (sh%S_arc(i,j,k) + sh%S_chem(i,j,k)) &
                                  * w_src * vol &
-                               + w_src * sh%kappa_f(i,j,k) * vol * &
+                               + w_rad * sh%kappa_f(i,j,k) * vol * &
                                  (sh%G_rad(i,j,k) + 12.0_dp * &
                                   STEFAN_BOLTZMANN * T_it**4)
 
@@ -251,7 +255,7 @@ contains
                     end if
 
                     ! Emisión radiativa implícita (pendiente de Newton a aP)
-                    aP_rad = w_src * sh%kappa_f(i,j,k) * 16.0_dp * &
+                    aP_rad = w_rad * sh%kappa_f(i,j,k) * 16.0_dp * &
                              STEFAN_BOLTZMANN * T_it**3 * vol
 
                     ! Central coefficient — forma ACOTADA de Patankar
@@ -404,7 +408,8 @@ contains
                                 T_old(ii,jj,kk)) * cfg%dt
                         s_arc = s_arc + sh%S_arc(ii,jj,kk) * ww * vv * cfg%dt
                         s_chem = s_chem + sh%S_chem(ii,jj,kk) * ww * vv * cfg%dt
-                        s_rad = s_rad + ww * sh%kappa_f(ii,jj,kk) * vv * &
+                        s_rad = s_rad + rad_weight(alpha_q(ii,jj,kk), alpha_other(ii,jj,kk)) &
+                                * sh%kappa_f(ii,jj,kk) * vv * &
                                 (sh%G_rad(ii,jj,kk) + STEFAN_BOLTZMANN * &
                                  (12.0_dp * Tit**4 - 16.0_dp * Tit**3 * &
                                   ph%T(ii,jj,kk))) * cfg%dt
@@ -451,6 +456,20 @@ contains
             call audit_set_energy(is_gas, s_abs, s_arc, s_rad, s_chem, &
                                   -s_conv, s_wall, s_mass)
         end subroutine energy_audit_hook
+
+        ! Fraccion de la absorcion/emision radiativa del fluido que toca a ESTA
+        ! fase: kappa_q alpha_q / (kappa_l alpha_l + kappa_g alpha_g), los
+        ! mismos coeficientes con que la DO arma kappa_f (A11)
+        pure function rad_weight(aq, ao) result(w)
+            real(dp), intent(in) :: aq, ao
+            real(dp) :: w, kq, ko
+            if (is_gas) then
+                kq = KAPPA_GAS_ABS * max(aq, 0.0_dp); ko = KAPPA_LIQ_ABS * max(ao, 0.0_dp)
+            else
+                kq = KAPPA_LIQ_ABS * max(aq, 0.0_dp); ko = KAPPA_GAS_ABS * max(ao, 0.0_dp)
+            end if
+            w = kq / (kq + ko + SMALL)
+        end function rad_weight
 
     end subroutine solve_energy_3d
 

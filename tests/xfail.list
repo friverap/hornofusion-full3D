@@ -57,6 +57,7 @@ bath:bath_hydrostatic
 # energy_balance falla ~1.4 % por el MISMO error de cuadratura del libro del gas
 # en el encendido frio que audit_cold:energy_balance (gas a 300 K sobre acero
 # a 1850 K, O(dT^2) por paso); no es una fuga del arco.
-# RETIRADO 12-oct-2026 (auditoria A10): con la perforacion que termina al
-# encontrar bano bajo el electrodo, el balance cierra a 0.88 % (tol 1 %; margen
-# pequeno: es el mismo error de cuadratura del encendido frio).
+# (Oscila alrededor de la tolerancia: 1.36 % en C1, 0.88 % en A10, 1.72 % con la
+# DO opaca de A11; los demas balances no cambian -- noflow_energy, dominado por
+# radiacion, sigue en 6.9e-4.)
+audit_arcnoscrap:energy_balance

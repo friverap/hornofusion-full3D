@@ -253,6 +253,11 @@ module mod_constants
     ! En un poro de chatarra (alpha_s 0.985) el gas se lleva 5e-4 del deposito.
     real(dp), parameter :: KAPPA_SOLID_ABS = 10.0_dp   ! 1/m
     real(dp), parameter :: KAPPA_GAS_ABS   = 0.3_dp    ! 1/m
+    ! Acero liquido (y su mezcla con gas) en la DO: OPACO (auditoria 12-oct-2026,
+    ! A11). Con KAPPA_GAS (0.3 1/m) un bano de 0.6 m tenia espesor optico ~0.2 y
+    ! radiaba en volumen hacia el tazon. 100 1/m da espesor optico >> 1 en una
+    ! celda (la absorcion real es superficial, micrometros).
+    real(dp), parameter :: KAPPA_LIQ_ABS   = 100.0_dp  ! 1/m
 
 
     ! Reparto del presupuesto radiativo del arco (C1.6): fracción de
