@@ -173,7 +173,8 @@ program eaf_3d_simulator
         end if
     end block
     call read_charge_recipe(cfg, trim(cfg%charge_recipe_file))
-    call read_electrode_profile(elec_prof, 'input/electrode_profile.dat')
+    call read_electrode_profile(elec_prof, trim(cfg%electrode_profile_file), &
+                                cfg%elec_V_const, cfg%elec_I_const)
     if (cfg%solve_ecs) then
         call read_rate_profile(ecs_prof, cfg%ecs_profile_file, cfg%ecs_rate)
     end if

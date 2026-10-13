@@ -80,6 +80,9 @@ contains
         ! porque bajo el umbral la velocidad era 0 y la gravedad no actuaba.
         cfg%d_droplet  = 2.0e-3_dp
         cfg%charge_recipe_file = 'input/charge_recipe.dat'
+        cfg%electrode_profile_file = 'input/electrode_profile.dat'
+        cfg%elec_V_const = 500.0_dp
+        cfg%elec_I_const = 50000.0_dp
         cfg%pc_limiter_faces = .false.   ! D2.2/D2.2c: perjudicial en el banco (ver dev-history Plan D)
         cfg%pc_liq_sealed_wall = .false.   ! Plan D (cerrado negativo 10-oct-2026): solo el banco bed_flood
         cfg%pc_lim_dead = 0.5_dp
@@ -314,6 +317,9 @@ contains
         case ('d_particle'); call parse_real(val, key, cfg%d_particle)
         case ('d_droplet');  call parse_real(val, key, cfg%d_droplet)
         case ('charge_recipe_file'); cfg%charge_recipe_file = val
+        case ('electrode_profile_file'); cfg%electrode_profile_file = trim(val)
+        case ('elec_V_const'); call parse_real(val, key, cfg%elec_V_const)
+        case ('elec_I_const'); call parse_real(val, key, cfg%elec_I_const)
         case ('pc_limiter_faces'); cfg%pc_limiter_faces = parse_bool(val)
         case ('pc_liq_sealed_wall'); cfg%pc_liq_sealed_wall = parse_bool(val)
         case ('pc_lim_dead'); call parse_real(val, key, cfg%pc_lim_dead)

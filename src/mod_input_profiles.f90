@@ -6,6 +6,7 @@
 !   - Charge recipe (layer masses, solid fractions, HBI content)
 !===============================================================================
 module mod_input_profiles
+    use mpi
     use mod_constants
     use mod_types_3d
     implicit none
@@ -30,23 +31,30 @@ module mod_input_profiles
 
 contains
 
-    subroutine read_electrode_profile(prof, filename)
+    ! Auditoria (bajos, oct-2026): la ruta estaba fija en el codigo y, si el
+    ! archivo faltaba, la corrida seguia en silencio con 500 V / 50 kA
+    ! (impreso por todos los ranks). Ahora es la clave electrode_profile_file
+    ! (default 'input/electrode_profile.dat'); un archivo configurado que no
+    ! abre es ERROR, y '' pide explicitamente el perfil constante
+    ! elec_V_const/elec_I_const.
+    subroutine read_electrode_profile(prof, filename, V_const, I_const)
         type(elec_profile_t), intent(out) :: prof
         character(len=*), intent(in)      :: filename
+        real(dp), intent(in)              :: V_const, I_const
 
         integer :: iu, ios, n
         real(dp) :: t, v, c
         character(len=512) :: line
 
-        open(newunit=iu, file=trim(filename), status='old', iostat=ios)
-        if (ios /= 0) then
-            print '(A,A)', ' [INPUT] Cannot open electrode profile: ', trim(filename)
-            ! Default: constant 500V, 50kA
-            prof%n_points = 2
-            prof%time(1) = 0.0_dp;    prof%voltage(1) = 500.0_dp; prof%current(1) = 50000.0_dp
-            prof%time(2) = 10000.0_dp; prof%voltage(2) = 500.0_dp; prof%current(2) = 50000.0_dp
+        if (len_trim(filename) == 0) then
+            call set_const()
+            if (io_root()) print '(A,F8.1,A,F10.1,A)', &
+                ' [INPUT] Electrodos: perfil CONSTANTE ', V_const, ' V / ', I_const, &
+                ' A (electrode_profile_file vacio)'
             return
         end if
+        open(newunit=iu, file=trim(filename), status='old', iostat=ios)
+        if (ios /= 0) call input_fatal('no se puede abrir electrode_profile_file: ' // trim(filename))
 
         n = 0
         do
@@ -57,8 +65,11 @@ contains
             if (line(1:1) == '#' .or. line(1:1) == '!') cycle
             read(line, *, iostat=ios) t, v, c
             if (ios /= 0) cycle
+            if (n >= MAX_PROFILE_POINTS) then
+                call warn_truncated(filename)
+                exit
+            end if
             n = n + 1
-            if (n > MAX_PROFILE_POINTS) exit
             prof%time(n) = t
             prof%voltage(n) = v
             prof%current(n) = c
@@ -66,13 +77,14 @@ contains
         close(iu)
 
         prof%n_points = n
-        if (n == 0) then
+        if (n == 0) call input_fatal('electrode_profile_file sin puntos validos: ' // trim(filename))
+        if (io_root()) print '(A,I5,A)', ' [INPUT] Loaded electrode profile: ', prof%n_points, ' points'
+    contains
+        subroutine set_const()
             prof%n_points = 2
-            prof%time(1) = 0.0_dp;    prof%voltage(1) = 500.0_dp; prof%current(1) = 50000.0_dp
-            prof%time(2) = 10000.0_dp; prof%voltage(2) = 500.0_dp; prof%current(2) = 50000.0_dp
-        end if
-
-        print '(A,I5,A)', ' [INPUT] Loaded electrode profile: ', prof%n_points, ' points'
+            prof%time(1) = 0.0_dp;     prof%voltage(1) = V_const; prof%current(1) = I_const
+            prof%time(2) = 1.0e30_dp;  prof%voltage(2) = V_const; prof%current(2) = I_const
+        end subroutine set_const
     end subroutine read_electrode_profile
 
     !---------------------------------------------------------------------------
@@ -90,6 +102,9 @@ contains
         prof%n_points = 0
         if (len_trim(filename) > 0) then
             open(newunit=iu, file=trim(filename), status='old', iostat=ios)
+            ! archivo configurado que no abre: ERROR (antes: valor constante
+            ! por defecto en silencio)
+            if (ios /= 0) call input_fatal('no se puede abrir el perfil: ' // trim(filename))
             if (ios == 0) then
                 n = 0
                 do
@@ -100,8 +115,11 @@ contains
                     if (line(1:1) == '#' .or. line(1:1) == '!') cycle
                     read(line, *, iostat=ios) t, v
                     if (ios /= 0) cycle
+                    if (n >= MAX_PROFILE_POINTS) then
+                        call warn_truncated(filename)
+                        exit
+                    end if
                     n = n + 1
-                    if (n > MAX_PROFILE_POINTS) exit
                     prof%time(n) = t
                     prof%value(n) = v
                 end do
@@ -116,7 +134,7 @@ contains
             prof%time(1) = 0.0_dp;   prof%value(1) = default_value
             prof%time(2) = 1.0e30_dp; prof%value(2) = default_value
         else
-            print '(A,I5,A,A)', ' [INPUT] Loaded rate profile: ', &
+            if (io_root()) print '(A,I5,A,A)', ' [INPUT] Loaded rate profile: ', &
                 prof%n_points, ' points from ', trim(filename)
         end if
     end subroutine read_rate_profile
@@ -196,7 +214,7 @@ contains
 
         open(newunit=iu, file=trim(filename), status='old', iostat=ios)
         if (ios /= 0) then
-            print '(A,A)', ' [INPUT] Cannot open charge recipe: ', trim(filename)
+            if (io_root()) print '(A,A)', ' [INPUT] Cannot open charge recipe: ', trim(filename)
             call default_charge_recipe(cfg)
             return
         end if
@@ -213,8 +231,11 @@ contains
             if (line(1:1) == '#' .or. line(1:1) == '!') cycle
             read(line, *, iostat=ios) bucket, mass, vfrac
             if (ios /= 0) cycle
+            if (n >= MAX_LAYERS) then
+                call warn_truncated(filename)
+                exit
+            end if
             n = n + 1
-            if (n > MAX_LAYERS) exit
             cfg%layer_bucket(n) = bucket
             cfg%layer_mass(n) = mass
             cfg%layer_vfrac(n) = vfrac
@@ -224,7 +245,7 @@ contains
         close(iu)
 
         cfg%n_layers_total = n
-        print '(A,I3,A,I3,A,I3)', ' [INPUT] Charge recipe: ', n, ' layers  B1=', &
+        if (io_root()) print '(A,I3,A,I3,A,I3)', ' [INPUT] Charge recipe: ', n, ' layers  B1=', &
               cfg%n_layers_b1, '  B2=', cfg%n_layers_b2
     end subroutine read_charge_recipe
 
@@ -255,8 +276,37 @@ contains
             cfg%layer_vfrac(i) = 0.50_dp
         end do
 
-        print '(A,F8.1,A,F8.1,A)', ' [INPUT] Default charge: B1=', &
+        if (io_root()) print '(A,F8.1,A,F8.1,A)', ' [INPUT] Default charge: B1=', &
               mass_b1*1e-3_dp, 't  B2=', mass_b2*1e-3_dp, 't'
     end subroutine default_charge_recipe
+
+    !---------------------------------------------------------------------------
+    ! Utilidades de E/S: solo rank 0 imprime; error fatal colectivo
+    !---------------------------------------------------------------------------
+    logical function io_root()
+        integer :: rk, ierr
+        logical :: init
+        call MPI_Initialized(init, ierr)
+        io_root = .true.
+        if (.not. init) return
+        call MPI_Comm_rank(MPI_COMM_WORLD, rk, ierr)
+        io_root = (rk == 0)
+    end function io_root
+
+    subroutine input_fatal(msg)
+        character(len=*), intent(in) :: msg
+        integer :: ierr
+        logical :: init
+        if (io_root()) print '(A,A)', ' [INPUT] ERROR: ', trim(msg)
+        call MPI_Initialized(init, ierr)
+        if (init) call MPI_Abort(MPI_COMM_WORLD, 4, ierr)
+        stop 4
+    end subroutine input_fatal
+
+    subroutine warn_truncated(filename)
+        character(len=*), intent(in) :: filename
+        if (io_root()) print '(A,A,A)', ' [INPUT] AVISO: ', trim(filename), &
+            ' supera el maximo de puntos/capas; se trunca (desborde de arreglo evitado)'
+    end subroutine warn_truncated
 
 end module mod_input_profiles

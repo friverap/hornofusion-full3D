@@ -144,6 +144,9 @@ module mod_types_3d
         real(dp) :: carbon_inj_rate        ! kg/s a la escoria (SL_C)
         real(dp) :: slag_eta_feo           ! eficiencia O2_rem->FeO (E2.3)
         real(dp) :: heel_mass              ! kg de remanente liquido inicial
+        character(len=256) :: electrode_profile_file  ! '' = perfil constante (elec_V_const/elec_I_const)
+        real(dp) :: elec_V_const           ! V del perfil constante
+        real(dp) :: elec_I_const           ! A del perfil constante
         real(dp) :: heel_T                 ! K del remanente
         character(len=256) :: carbon_inj_profile_file
         real(dp) :: ecs_rate            ! kg/s (si no hay perfil)
