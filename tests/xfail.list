@@ -60,4 +60,8 @@ bath:bath_hydrostatic
 # (Oscila alrededor de la tolerancia: 1.36 % en C1, 0.88 % en A10, 1.72 % con la
 # DO opaca de A11; los demas balances no cambian -- noflow_energy, dominado por
 # radiacion, sigue en 6.9e-4.)
+# M5 (hook sobre el campo RELAJADO, el que se guarda): 2.43 %. El hook ya no
+# cierra contra la solucion sin relajar, asi que el residuo del lazo externo no
+# convergido en el encendido queda a la vista; los demas balances mejoran
+# (cold_10step 1.51 -> 1.39 %, melt_forced 3.0e-6 -> 1.6e-6).
 audit_arcnoscrap:energy_balance

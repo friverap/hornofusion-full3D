@@ -323,6 +323,12 @@ contains
             Tpre = ph%T
             call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, ph%T, m, &
                              cfg%max_inner_mom)
+            ! Halos de la solucion: el TDMA los intercambia ANTES de cada
+            ! barrido, no despues del ultimo (auditoria M5: el hook leia T
+            ! rancia de las vecinas de otro rank y la convección no
+            ! telescopaba entre ranks -> identidad dependiente de la
+            ! descomposición)
+            call mpi_exchange_halos_3d(ph%T, m%topo)
             call energy_audit_hook(Tpre)
             deallocate(Tpre)
         end block
@@ -386,6 +392,17 @@ contains
             integer  :: ii, jj, kk
             real(dp) :: s_abs, s_arc, s_rad, s_chem, s_conv, s_wall, s_mass
             real(dp) :: ww, Tit, rcv, apw, vv, ee
+            real(dp), allocatable :: Tk(:,:,:)
+
+            ! Campo que QUEDA EN PIE (auditoria M5): todos los llamadores
+            ! relajan contra el iterado de entrada con cfg%alpha_T
+            ! (relax_field). Evaluar los flujos sobre la solucion SIN relajar
+            ! medía un campo que nunca se guarda: con el lazo externo sin
+            ! converger la identidad cerraba contra un estado inexistente.
+            ! (Modelo de mezcla: el intercambio gas-liquido se aplica entre
+            ! el solve y la relajacion; es interno y se cancela entre fases.)
+            allocate(Tk, mold=ph%T)
+            Tk = cfg%alpha_T * ph%T + (1.0_dp - cfg%alpha_T) * Tpre
 
             s_abs=0.0_dp; s_arc=0.0_dp; s_rad=0.0_dp; s_chem=0.0_dp
             s_conv=0.0_dp; s_wall=0.0_dp; s_mass=0.0_dp
@@ -404,7 +421,7 @@ contains
                         ww  = alpha_q(ii,jj,kk) / (alpha_q(ii,jj,kk) + &
                               alpha_other(ii,jj,kk) + SMALL)
                         Tit = max(Tpre(ii,jj,kk), 200.0_dp)
-                        s_abs = s_abs + rcv * (ph%T(ii,jj,kk) - &
+                        s_abs = s_abs + rcv * (Tk(ii,jj,kk) - &
                                 T_old(ii,jj,kk)) * cfg%dt
                         s_arc = s_arc + sh%S_arc(ii,jj,kk) * ww * vv * cfg%dt
                         s_chem = s_chem + sh%S_chem(ii,jj,kk) * ww * vv * cfg%dt
@@ -412,17 +429,17 @@ contains
                                 * sh%kappa_f(ii,jj,kk) * vv * &
                                 (sh%G_rad(ii,jj,kk) + STEFAN_BOLTZMANN * &
                                  (12.0_dp * Tit**4 - 16.0_dp * Tit**3 * &
-                                  ph%T(ii,jj,kk))) * cfg%dt
+                                  Tk(ii,jj,kk))) * cfg%dt
                         ! Convección+difusión del enunciado acotado (la
                         ! difusión telescopa; el residuo es el déficit
                         ! convectivo). Signo: contribución a E_in = -esto.
                         s_conv = s_conv + cfg%dt * ( &
-                              aW(ii,jj,kk)*(ph%T(ii,jj,kk)-ph%T(ii-1,jj,kk)) &
-                            + aE(ii,jj,kk)*(ph%T(ii,jj,kk)-ph%T(ii+1,jj,kk)) &
-                            + aS(ii,jj,kk)*(ph%T(ii,jj,kk)-ph%T(ii,jj-1,kk)) &
-                            + aN(ii,jj,kk)*(ph%T(ii,jj,kk)-ph%T(ii,jj+1,kk)) &
-                            + aB(ii,jj,kk)*(ph%T(ii,jj,kk)-ph%T(ii,jj,kk-1)) &
-                            + aT(ii,jj,kk)*(ph%T(ii,jj,kk)-ph%T(ii,jj,kk+1)) )
+                              aW(ii,jj,kk)*(Tk(ii,jj,kk)-Tk(ii-1,jj,kk)) &
+                            + aE(ii,jj,kk)*(Tk(ii,jj,kk)-Tk(ii+1,jj,kk)) &
+                            + aS(ii,jj,kk)*(Tk(ii,jj,kk)-Tk(ii,jj-1,kk)) &
+                            + aN(ii,jj,kk)*(Tk(ii,jj,kk)-Tk(ii,jj+1,kk)) &
+                            + aB(ii,jj,kk)*(Tk(ii,jj,kk)-Tk(ii,jj,kk-1)) &
+                            + aT(ii,jj,kk)*(Tk(ii,jj,kk)-Tk(ii,jj,kk+1)) )
                         if (cfg%h_wall > 0.0_dp) then
                             apw = 0.0_dp
                             if (m%cell_type(ii-1,jj,kk) == 0) apw = apw + m%Ar(ii-1,jj,kk)
@@ -432,14 +449,14 @@ contains
                             if (m%cell_type(ii,jj,kk-1) == 0) apw = apw + m%Az(ii,jj,kk-1)
                             if (m%cell_type(ii,jj,kk+1) == 0) apw = apw + m%Az(ii,jj,kk)
                             apw = apw * cfg%h_wall * max(alpha_q(ii,jj,kk), SMALL)
-                            s_wall = s_wall + apw * (ph%T(ii,jj,kk) - &
+                            s_wall = s_wall + apw * (Tk(ii,jj,kk) - &
                                      cfg%T_wall) * cfg%dt
                         end if
                         if (.not. is_gas) then
                             if (mdot(ii,jj,kk) > 0.0_dp) then
                                 s_mass = s_mass + mdot(ii,jj,kk) * &
                                     ph%cp(ii,jj,kk) * (T_src(ii,jj,kk) - &
-                                    ph%T(ii,jj,kk)) * cfg%dt
+                                    Tk(ii,jj,kk)) * cfg%dt
                             else if (mdot(ii,jj,kk) < 0.0_dp) then
                                 ! solo el latente (el sumidero a T_P se
                                 ! cancela en la forma con continuidad restada)
@@ -453,6 +470,7 @@ contains
                     end do
                 end do
             end do
+            deallocate(Tk)
             call audit_set_energy(is_gas, s_abs, s_arc, s_rad, s_chem, &
                                   -s_conv, s_wall, s_mass)
         end subroutine energy_audit_hook
