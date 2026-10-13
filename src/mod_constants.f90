@@ -263,7 +263,10 @@ module mod_constants
 
     ! Arc length correlation (Eq. 3 of paper): l_a = (|V| - threshold) / gradient
     real(dp), parameter :: ARC_VOLT_THRESHOLD = 40.0_dp  ! V (anode+cathode drop)
-    real(dp), parameter :: ARC_LENGTH_GRAD    = 11.5_dp  ! V/cm (column field gradient)
+    ! Gradiente de campo de la columna del arco: 11.5 V/cm = 1150 V/m. Estaba
+    ! declarado en V/cm y usado contra metros (auditoria 12-oct-2026, C2): con
+    ! 500 V la longitud salia 40 "m" en vez de 0.40 m.
+    real(dp), parameter :: ARC_LENGTH_GRAD    = 1150.0_dp  ! V/m (column field gradient)
     real(dp), parameter :: ARC_LENGTH_MIN     = 0.01_dp  ! m (minimum arc length)
 
 contains
