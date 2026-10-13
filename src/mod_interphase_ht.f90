@@ -68,13 +68,18 @@ contains
                         Pr_g = gas%mu(i,j,k) * gas%cp(i,j,k) / (gas%kth(i,j,k) + SMALL)
                         Re_gs = gas%rho(i,j,k) * vmag_g * d_s / (gas%mu(i,j,k) + SMALL)
 
-                        if (T_g <= T_TRANSITION) then
-                            h_gs = (gas%kth(i,j,k) / d_s) * &
-                                   (2.0_dp + 1.1_dp * Pr_g**0.333_dp * Re_gs**0.6_dp)
-                        else
-                            h_gs = A_RADIATION * F_OMEGA * vmag_g**0.9_dp * &
-                                   T_g**0.3_dp / (d_s**0.75_dp + SMALL)
-                        end if
+                        ! Wakao (Nu = 2 + 1.1 Pr^1/3 Re^0.6) siempre; sobre
+                        ! T_TRANSITION, el MAYOR de Wakao y la correlacion de alta
+                        ! T (auditoria 12-oct-2026, A12): la de alta T va como
+                        ! |v|^0.9 y se anulaba con gas quieto (sin el piso
+                        ! conductivo Nu = 2), y saltaba x2.4-8.6 en T_TRANSITION.
+                        ! El gas de poro estancado bajo el arco quedaba sin acople
+                        ! termico con la chatarra.
+                        h_gs = (gas%kth(i,j,k) / d_s) * &
+                               (2.0_dp + 1.1_dp * Pr_g**0.333_dp * Re_gs**0.6_dp)
+                        if (T_g > T_TRANSITION) h_gs = max(h_gs, &
+                            A_RADIATION * F_OMEGA * vmag_g**0.9_dp * &
+                            T_g**0.3_dp / (d_s**0.75_dp + SMALL))
 
                         tau_iph_local = min(tau_iph_local, &
                             gas%alpha(i,j,k) * gas%rho(i,j,k) * &
