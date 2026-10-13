@@ -136,7 +136,7 @@ for each timestep:
 | k turbulento | 0.5 | `alpha_k` |
 | ε turbulento | 0.5 | `alpha_eps` |
 | Fracción vol. α | 0.3 | `alpha_alpha` |
-| Especies Y | 0.5 | `alpha_Y_species` |
+| Especies Y | — (sin relajación: una solución por paso) | — |
 
 ### dt adaptativo
 

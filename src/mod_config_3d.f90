@@ -187,7 +187,7 @@ contains
         cfg%ecs_k_power      = 0.0_dp
         cfg%ecs_total_mass   = 0.0_dp
         cfg%Sc_t_species    = 0.7_dp
-        cfg%alpha_Y_species = 0.5_dp
+        cfg%alpha_Y_species = 1.0_dp   ! OBSOLETA (auditoria A2): sin efecto
 
         ! Charge recipe (initialized empty)
         cfg%n_layers_b1    = 0

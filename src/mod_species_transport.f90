@@ -141,8 +141,12 @@ contains
         ! Solve with MPI-aware TDMA
         call tdma_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, Y, m, cfg%max_inner_mom)
 
-        ! Under-relaxation
-        Y = cfg%alpha_Y_species * Y + (1.0_dp - cfg%alpha_Y_species) * Y_old
+        ! (Sin sub-relajacion: las especies se resuelven UNA vez por paso, fuera
+        ! del lazo externo, asi que Y_old es Y^n y relajar contra el es relajar
+        ! contra el paso temporal. Con 0.5 la quimica consumia todo el O2 del
+        ! paso pero el solver aplicaba la mitad del sumidero: se oxidaba ~2x el
+        ! O2 existente (auditoria 12-oct-2026, A2). alpha_Y_species queda sin
+        ! efecto.)
 
         ! Clip to physical bounds [0, 1]
         where (Y < 0.0_dp) Y = 0.0_dp

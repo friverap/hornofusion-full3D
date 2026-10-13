@@ -306,7 +306,7 @@ escalada a exactamente `m_slag_init` kilogramos.
 |-----------|------|---------|-------------|
 | `solve_species` | bool | false | Habilitar transporte CO/CO₂ |
 | `Sc_t_species` | real | 0.7 | Número de Schmidt turbulento (D_eff = μ_eff/(ρ Sc_t)) |
-| `alpha_Y_species` | real | 0.5 | Factor de sub-relajación de la fracción másica Y |
+| `alpha_Y_species` | real | — | OBSOLETA, sin efecto (auditoría 12-oct-2026, A2): las especies se resuelven una vez por paso y relajar contra Yⁿ duplicaba el O₂ quemado. |
 
 Las fracciones másicas `Y_CO` y `Y_CO₂` se inicializan en 0.0 al inicio de la simulación.  
 Las fuentes son generadas por `compute_carbon_oxidation` cuando `solve_chemistry = true`.
@@ -430,7 +430,7 @@ h_contact_sl = 1000.0;  m_slag_init = 3300.0
 # ESPECIES
 # ============================================================
 solve_species = true
-Sc_t_species = 0.7;  alpha_Y_species = 0.5
+Sc_t_species = 0.7
 
 # ============================================================
 # CARGA
