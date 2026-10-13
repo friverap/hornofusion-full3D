@@ -172,6 +172,8 @@ full | rebaseline)
     # reproduce el regimen de B1 a ~320 s. Su check bed_flood:bath_pv_bounded
     # lleva xfail con causa.
     run_case bed_flood 4
+    # Arco sin chatarra (auditoria 12-oct, C1): respaldo de P_rad
+    run_case arc_noscrap 4
 
     for d in "$OUT"/cold_10step_n*; do
         check_invariants "$d" cold_10step
@@ -229,6 +231,8 @@ full | rebaseline)
         $PY $INT/check_bath.py "$OUT/bath_freeze_n4" --config "$CFG/bath_freeze.dat" --fill \
         --xfail "$(xfail_ids bath_freeze)"
     check_invariants "$OUT/bed_flood_n4" bed_flood
+    check_invariants "$OUT/arc_noscrap_n4" arc_noscrap
+    check_audit_if_present "$OUT/arc_noscrap_n4" audit_arcnoscrap
     run_script "bed_flood" \
         $PY $INT/check_bath.py "$OUT/bed_flood_n4" --config "$CFG/bed_flood.dat" --fill \
         --xfail "$(xfail_ids bed_flood)"

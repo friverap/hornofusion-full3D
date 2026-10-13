@@ -51,3 +51,8 @@ bath:bath_hydrostatic
 # de los pasos pero no el nivel del poro. Se retira cuando el acople
 # alpha-p lo acote (ver docs/PLAN_D_acople_implicito_alpha_p.md).
 bed_flood:bath_pv_bounded
+# arc_noscrap (auditoria 12-oct-2026, C1): el gate es arc_budget. El
+# energy_balance falla ~1.4 % por el MISMO error de cuadratura del libro del gas
+# en el encendido frio que audit_cold:energy_balance (gas a 300 K sobre acero
+# a 1850 K, O(dT^2) por paso); no es una fuga del arco.
+audit_arcnoscrap:energy_balance

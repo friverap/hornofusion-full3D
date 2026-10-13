@@ -276,9 +276,31 @@ contains
                         end do
                     end do
                 end do
-            else if (.not. found_scrap .and. total_gw_vol_conv > SMALL) then
-                ! Fallback: no scrap below electrode (pre-charge or empty furnace).
-                ! Deposit P_rad in the arc column (same as P_conv).
+            else
+                ! Respaldo: sin superficie de chatarra que reciba P_rad (baño
+                ! plano, horno vacío, o chatarra presente pero sin ninguna celda
+                ! que pase el umbral de la superficie). P_rad va a la columna del
+                ! arco kg_tip-3..kg_tip+3 con su PROPIO normalizador sobre ese
+                ! mismo rango (auditoría 12-oct-2026, C1): antes se normalizaba
+                ! con la suma de P_conv (kg_scrap..kg_tip, 2 capas) y se
+                ! depositaba en 7 capas, ~3.5x P_rad (energía creada); y con
+                ! chatarra pero total_gw_vol_rad = 0 no entraba en ninguna rama y
+                ! P_rad se perdía.
+                total_vol = 0.0_dp
+                do kg = max(1, kg_tip-3), min(m%nz_g, kg_tip+3)
+                    do jg = 1, m%nth_g
+                        do ig = 1, m%nr_g
+                            if (m%cell_type_global(ig,jg,kg) == 0) cycle
+                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
+                            dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
+                            r2 = dist**2 / (sigma_r**2 + SMALL)
+                            if (r2 < 16.0_dp) total_vol = total_vol + &
+                                exp(-r2) * m%vol_global(ig,jg,kg)
+                        end do
+                    end do
+                end do
+                if (total_vol > SMALL) then
                 do kg = max(1, kg_tip-3), min(m%nz_g, kg_tip+3)
                     do jg = 1, m%nth_g
                         do ig = 1, m%nr_g
@@ -294,10 +316,11 @@ contains
 
                             gw = exp(-r2)
                             sh%S_arc(il,jl,kl) = sh%S_arc(il,jl,kl) + &
-                                P_rad_arc * gw / total_gw_vol_conv
+                                P_rad_arc * gw / total_vol
                         end do
                     end do
                 end do
+                end if
             end if
 
             ! ── P_conv: second pass — deposit over arc column ───────────────
