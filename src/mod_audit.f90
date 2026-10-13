@@ -40,7 +40,7 @@ module mod_audit
     public :: AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
     public :: AUD_RESID_MASS, AUD_RESID_E, AUD_SPILL_MASS
     public :: AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
-    public :: AUD_CHARGE_MASS, AUD_CHARGE_E
+    public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -79,7 +79,14 @@ module mod_audit
     ! al solido (auditoria 12-oct-2026, A5; antes un salto sin termino fuente)
     integer, parameter :: AUD_CHARGE_MASS     = 31 ! kg cargados por cestas tras el arranque
     integer, parameter :: AUD_CHARGE_E        = 32 ! J de entalpia de esa carga
-    integer, parameter :: N_AUD = 32
+    integer, parameter :: AUD_C_OXID          = 33 ! kg de carbono del solido oxidado a CO (sale del acero, M15)
+    ! kg de cada especie desplazados por la dilucion de la masa que entra al
+    ! gas (-Y_k S_gas, M14): con la densidad del gas fijada por la EOS es la
+    ! masa que la fuente expulsa de la celda
+    integer, parameter :: AUD_DIL_O2          = 34
+    integer, parameter :: AUD_DIL_CO          = 35
+    integer, parameter :: AUD_DIL_CO2         = 36
+    integer, parameter :: N_AUD = 36
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -173,7 +180,8 @@ contains
                 'E_iph_sol,E_iph_gas,E_iph_liq,' // &
                 'm_resid_closed,E_resid_closed,m_spill,' // &
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
-                'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in'
+                'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
+                'm_dil_O2,m_dil_CO,m_dil_CO2'
             close(iu)
         end if
         acc = 0.0_dp
@@ -323,7 +331,8 @@ contains
                 ',', a(AUD_RESID_MASS), ',', a(AUD_RESID_E), ',', a(AUD_SPILL_MASS), &
                 ',', a(AUD_VOL_DALPHA), ',', a(AUD_VOL_LIM), ',', a(AUD_VOL_UNLINKED), &
                 ',', mx_glob(1), ',', mx_glob(2), ',', mx_glob(3), &
-                ',', a(AUD_CHARGE_MASS), ',', a(AUD_CHARGE_E)
+                ',', a(AUD_CHARGE_MASS), ',', a(AUD_CHARGE_E), ',', a(AUD_C_OXID), &
+                ',', a(AUD_DIL_O2), ',', a(AUD_DIL_CO), ',', a(AUD_DIL_CO2)
             close(iu)
         end if
     end subroutine audit_write_step

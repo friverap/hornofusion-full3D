@@ -438,6 +438,12 @@ contains
                         Su(i,j,k) = Su(i,j,k) - max(-cap, min(cap, src))
                         ! A8: advectiva (expansion > 0 -> Su sube -> salida)
                         Su(i,j,k) = Su(i,j,k) + max(-cap, min(cap, gadv(i,j,k)))
+                        ! M14: fuente de MASA del gas por las reacciones
+                        ! (C del solido -> CO, O2 -> escoria, ...): volumen
+                        ! S_gas/rho_g, la continuidad del gas con fuente
+                        Su(i,j,k) = Su(i,j,k) + max(-cap, min(cap, &
+                            (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) &
+                            * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL)))
                     end do
                 end do
             end do

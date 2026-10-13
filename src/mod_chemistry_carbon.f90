@@ -31,7 +31,7 @@ module mod_chemistry_carbon
     use mod_types_3d
     use mod_parallel_utils
     use mod_melting_3d, only: solid_T_from_enthalpy
-    use mod_audit, only: audit_add, AUD_CHEM_SOL
+    use mod_audit, only: audit_add, AUD_CHEM_SOL, AUD_C_OXID
     implicit none
 
     real(dp), parameter :: A_MAAHS   = 2.3e5_dp   ! pre-exponential factor [kg/(m^2 s Pa)]
@@ -59,7 +59,7 @@ contains
         integer :: i, j, k
         real(dp) :: T_s, T_g, P_O2, A_surf, vol
         real(dp) :: r_C, r_CO, o2_avail_rate, Q_chem
-        real(dp) :: rho_CO, rho_O2
+        real(dp) :: rho_CO, rho_O2, dmC, e_spec
 
         sh%S_chem    = 0.0_dp
         sh%S_CO_src  = 0.0_dp
@@ -103,8 +103,8 @@ contains
                             r_C = min(r_C, 0.75_dp * o2_avail_rate)
 
                             if (r_C > 0.0_dp) then
-                                sol%m_C(i,j,k) = max(0.0_dp, &
-                                    sol%m_C(i,j,k) - r_C * vol * cfg%dt)
+                                dmC = min(r_C * vol * cfg%dt, sol%m_C(i,j,k))
+                                sol%m_C(i,j,k) = sol%m_C(i,j,k) - dmC
                                 sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + &
                                     r_C * (MW_CO / MW_C)
                                 sh%S_O2_src(i,j,k) = sh%S_O2_src(i,j,k) - &
@@ -112,12 +112,28 @@ contains
                                 o2_avail_rate = o2_avail_rate - &
                                     r_C * (0.5_dp * MW_O2 / MW_C)
 
+                                ! El carbono oxidado SALE del acero (auditoria
+                                ! M15): m_C es parte de m_s, y antes solo se
+                                ! descontaba del inventario m_C (hasta ~650 kg
+                                ! contados dos veces: como CO y como acero).
+                                ! Sale con su entalpia especifica, que pasa
+                                ! al gas con el CO (S_chem; el libro del solido
+                                ! la descuenta de E_chem_sol: neto cero).
+                                e_spec = sol%E_s(i,j,k) / sol%m_s(i,j,k)
+                                sol%m_s(i,j,k) = sol%m_s(i,j,k) - dmC
+                                sol%E_s(i,j,k) = sol%E_s(i,j,k) - dmC * e_spec
+                                sh%S_chem(i,j,k) = sh%S_chem(i,j,k) + &
+                                    dmC * e_spec / (vol * cfg%dt)
+                                sol%alpha_s(i,j,k) = sol%m_s(i,j,k) / &
+                                    (cfg%rho_steel * vol)
+                                call audit_add(AUD_C_OXID, dmC)
+
                                 ! Calor de oxidación primaria AL SÓLIDO
-                                Q_chem = (-DH_REACT / MW_C) * r_C * vol * cfg%dt
+                                Q_chem = (-DH_REACT / MW_C) * dmC
                                 sol%E_s(i,j,k) = sol%E_s(i,j,k) + Q_chem
                                 sol%T_s(i,j,k) = solid_T_from_enthalpy( &
                                     sol%E_s(i,j,k) / sol%m_s(i,j,k), cfg)
-                                call audit_add(AUD_CHEM_SOL, Q_chem)
+                                call audit_add(AUD_CHEM_SOL, Q_chem - dmC * e_spec)
                             end if
                         end if
                     end if

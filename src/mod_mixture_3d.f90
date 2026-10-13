@@ -934,6 +934,10 @@ contains
                         Su(i,j,k) = Su(i,j,k) - max(-cap, min(cap, src))
                         ! A8: termino advectivo (ver gadv_add)
                         Su(i,j,k) = Su(i,j,k) + max(-cap, min(cap, gadv(i,j,k)))
+                        ! M14: fuente de masa del gas por las reacciones
+                        Su(i,j,k) = Su(i,j,k) + max(-cap, min(cap, &
+                            (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) &
+                            * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL)))
                     end if
                     aP(i,j,k) = aP(i,j,k) + al * m%vol(i,j,k) / &
                                 (liq%rho(i,j,k) * C_SOUND_LIQ**2 * cfg%dt)

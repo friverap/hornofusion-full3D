@@ -85,7 +85,7 @@ program eaf_3d_simulator
 
     ! Species transport old-timestep arrays
     real(dp), allocatable :: Y_CO_old(:,:,:), Y_CO2_old(:,:,:), Y_O2_old(:,:,:)
-    real(dp), allocatable :: alpha_sg(:,:,:), alpha_lg(:,:,:)
+    real(dp), allocatable :: alpha_sg(:,:,:), alpha_lg(:,:,:), S_gas_net(:,:,:)
     real(dp) :: res_Y_CO, res_Y_CO2, res_Y_O2
 
     ! Config and input files
@@ -371,9 +371,37 @@ program eaf_3d_simulator
             Y_CO_old  = sh%Y_CO
             Y_CO2_old = sh%Y_CO2
             Y_O2_old  = sh%Y_O2
-            call solve_species_3d(gas, sh%Y_CO,  Y_CO_old,  sh%S_CO_src,  mesh, cfg, res_Y_CO)
-            call solve_species_3d(gas, sh%Y_CO2, Y_CO2_old, sh%S_CO2_src, mesh, cfg, res_Y_CO2)
-            call solve_species_3d(gas, sh%Y_O2,  Y_O2_old,  sh%S_O2_src,  mesh, cfg, res_Y_O2)
+            ! Fuente neta de masa del gas (dilucion, auditoria M14)
+            if (.not. allocated(S_gas_net)) allocate(S_gas_net, mold=sh%S_CO_src)
+            S_gas_net = sh%S_CO_src + sh%S_CO2_src + sh%S_O2_src
+            call solve_species_3d(gas, sh%Y_CO,  Y_CO_old,  sh%S_CO_src,  S_gas_net, mesh, cfg, res_Y_CO)
+            call solve_species_3d(gas, sh%Y_CO2, Y_CO2_old, sh%S_CO2_src, S_gas_net, mesh, cfg, res_Y_CO2)
+            call solve_species_3d(gas, sh%Y_O2,  Y_O2_old,  sh%S_O2_src,  S_gas_net, mesh, cfg, res_Y_O2)
+            ! Masa de cada especie desplazada por la dilucion (M14), con la
+            ! misma discretizacion del solver (implicito si S_gas > 0)
+            block
+                integer :: ia, ja, ka, i0a, i1a, j0a, j1a, k0a, k1a
+                real(dp) :: dl(3), wv
+                call get_loop_bounds(mesh, i0a, i1a, j0a, j1a, k0a, k1a)
+                dl = 0.0_dp
+                do ka = k0a, k1a
+                    do ja = j0a, j1a
+                        do ia = i0a, i1a
+                            if (mesh%cell_type(ia,ja,ka) == 0) cycle
+                            if (gas%alpha(ia,ja,ka) < 1.0e-6_dp) cycle
+                            wv = S_gas_net(ia,ja,ka) * mesh%vol(ia,ja,ka) * cfg%dt
+                            if (S_gas_net(ia,ja,ka) > 0.0_dp) then
+                                dl = dl + wv * [sh%Y_O2(ia,ja,ka), sh%Y_CO(ia,ja,ka), sh%Y_CO2(ia,ja,ka)]
+                            else
+                                dl = dl + wv * [Y_O2_old(ia,ja,ka), Y_CO_old(ia,ja,ka), Y_CO2_old(ia,ja,ka)]
+                            end if
+                        end do
+                    end do
+                end do
+                call audit_add(AUD_DIL_O2, dl(1))
+                call audit_add(AUD_DIL_CO, dl(2))
+                call audit_add(AUD_DIL_CO2, dl(3))
+            end block
             if (mesh%is_parallel) then
                 call mpi_exchange_halos_3d(sh%Y_CO,  mesh%topo)
                 call mpi_exchange_halos_3d(sh%Y_CO2, mesh%topo)
