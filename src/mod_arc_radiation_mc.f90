@@ -22,6 +22,7 @@ module mod_arc_radiation_mc
     use mod_types_3d
     use mod_parallel_utils
     use mod_audit, only: audit_add, AUD_MC_DEPOSIT, AUD_MC_LOST, AUD_ARC_DIRECT
+    use mod_arc_cassie_mayr, only: solid_arc_room
     use mod_melting_3d, only: solid_T_from_enthalpy
     implicit none
 
@@ -58,7 +59,7 @@ contains
         integer, intent(in)             :: step
 
         integer  :: e, beam
-        real(dp) :: w_s, Q_s, Q_lim, Q_fl   ! F2.30: reparto solido/fluido del deposito
+        real(dp) :: w_s, Q_s, Q_fl   ! F2.30: reparto solido/fluido del deposito
         real(dp) :: P_rad_per_beam
         real(dp) :: x0, y0, z0, dx, dy, dz
         real(dp) :: x, y, z_pos, r_pos, theta_pos
@@ -71,7 +72,6 @@ contains
         integer  :: idx, ierr
         real(dp), allocatable :: dep_g(:,:,:)
         integer, parameter :: MAX_TRACE_STEPS = 50000
-        real(dp), parameter :: DT_RAD_MAX_MC = 2.0_dp   ! K por paso al solido (= DT_RAD_MAX del deposito directo)
 
         if (cfg%n_beams <= 0) return   ! MC apagado (n_beams = 0 en config)
 
@@ -204,7 +204,7 @@ contains
                     ! EAF (Chen 2022 / Ugarte 2024, Logar 2012) no le dan
                     ! radiacion del arco al gas en absoluto: en un lecho denso
                     ! ambas formas coinciden (fraccion al gas ~5e-4). La parte
-                    ! del solido va a E_s con la MISMA cota DT_RAD_MAX por paso
+                    ! del solido va a E_s con el tope de estado solid_arc_room
                     ! del deposito directo (mod_arc_cassie_mayr) y el
                     ! excedente a S_arc: conservativo y auditado.
                     w_s = 0.0_dp
@@ -213,13 +213,10 @@ contains
                               (KAPPA_SOLID_ABS * alpha_g(ig, jg, kg) + &
                                KAPPA_GAS_ABS * max(1.0_dp - alpha_g(ig, jg, kg), 0.0_dp) + SMALL)
                     Q_s  = w_s * dep_g(ig, jg, kg) * cfg%dt                 ! J al solido
-                    Q_fl = (1.0_dp - w_s) * dep_g(ig, jg, kg) * cfg%dt      ! J al fluido
+                    ! tope de ESTADO (auditoria M13; antes 2 K por paso)
+                    Q_s  = min(Q_s, solid_arc_room(sol%m_s(il, jl, kl), sol%E_s(il, jl, kl), cfg))
+                    Q_fl = dep_g(ig, jg, kg) * cfg%dt - Q_s                 ! J al fluido
                     if (Q_s > 0.0_dp) then
-                        Q_lim = DT_RAD_MAX_MC * sol%m_s(il, jl, kl) * cfg%cp_s
-                        if (Q_s > Q_lim) then
-                            Q_fl = Q_fl + (Q_s - Q_lim)
-                            Q_s  = Q_lim
-                        end if
                         sol%E_s(il, jl, kl) = sol%E_s(il, jl, kl) + Q_s
                         sol%T_s(il, jl, kl) = solid_T_from_enthalpy( &
                             sol%E_s(il, jl, kl) / sol%m_s(il, jl, kl), cfg)

@@ -13,7 +13,7 @@ module mod_arc_cassie_mayr
     use mod_types_3d
     use mod_parallel_utils
     use mod_audit, only: audit_add, AUD_ARC_DIRECT, AUD_ARC_DISCARD
-    use mod_melting_3d, only: solid_T_from_enthalpy
+    use mod_melting_3d, only: solid_T_from_enthalpy, solid_enthalpy
     implicit none
 
 contains
@@ -127,12 +127,9 @@ contains
         real(dp) :: x_elec, y_elec, x_cell, y_cell, dist
         real(dp) :: r2, sigma_r, gw
         real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol
-        real(dp) :: Q_rad, Q_rad_lim
         logical  :: found_scrap, owned
-        ! Maximum ΔT_solid per timestep from direct arc radiation [K].
-        ! Prevents T_s → NaN/Inf in cells with small m_s (explicit E_s update
-        ! has no implicit solver to absorb large source terms).
-        real(dp), parameter :: DT_RAD_MAX = 2.0_dp
+        ! (El tope de 2 K por paso al solido se sustituyo por el tope de estado
+        ! solid_arc_room: auditoria 12-oct-2026, M13.)
 
         sh%S_arc     = 0.0_dp
         sh%S_arc_mom = 0.0_dp
@@ -252,27 +249,11 @@ contains
                             if (.not. owned) cycle
 
                             gw = exp(-r2)
-                            if (sol%m_s(il,jl,kl) > SMALL) then
-                                ! [W/m^3] * [m^3] * [s] = [J]
-                                Q_rad = P_rad_arc * gw / total_gw_vol_rad * &
-                                        m%vol_global(ig,jg,kg) * cfg%dt
-                                ! Stability guard: limit ΔT_s to DT_RAD_MAX per step.
-                                Q_rad_lim = DT_RAD_MAX * sol%m_s(il,jl,kl) * cfg%cp_s
-                                ! C1.6c: el excedente del cap NO se descarta —
-                                ! va a S_arc de la misma celda (los fluidos lo
-                                ! transportan y llega al sólido vía interfase).
-                                ! AUD_ARC_DISCARD queda como centinela (=0).
-                                if (Q_rad > Q_rad_lim) then
-                                    sh%S_arc(il,jl,kl) = sh%S_arc(il,jl,kl) + &
-                                        (Q_rad - Q_rad_lim) / &
-                                        (m%vol_global(ig,jg,kg) * cfg%dt + SMALL)
-                                    Q_rad = Q_rad_lim
-                                end if
-                                call audit_add(AUD_ARC_DIRECT, Q_rad)
-                                sol%E_s(il,jl,kl) = sol%E_s(il,jl,kl) + Q_rad
-                                sol%T_s(il,jl,kl) = solid_T_from_enthalpy( &
-                                    sol%E_s(il,jl,kl) / sol%m_s(il,jl,kl), cfg)
-                            end if
+                            ! P_rad directo: los fotones del arco calientan la
+                            ! chatarra (fraccion 1 al solido, con el tope de
+                            ! estado; el excedente al fluido de la celda)
+                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), &
+                                m%vol_global(ig,jg,kg), P_rad_arc * gw / total_gw_vol_rad, 1.0_dp)
                         end do
                     end do
                 end do
@@ -315,8 +296,8 @@ contains
                             if (.not. owned) cycle
 
                             gw = exp(-r2)
-                            sh%S_arc(il,jl,kl) = sh%S_arc(il,jl,kl) + &
-                                P_rad_arc * gw / total_vol
+                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), &
+                                m%vol_global(ig,jg,kg), P_rad_arc * gw / total_vol, -1.0_dp)
                         end do
                     end do
                 end do
@@ -339,8 +320,8 @@ contains
                             if (.not. owned) cycle
 
                             gw = exp(-r2)
-                            sh%S_arc(il,jl,kl) = sh%S_arc(il,jl,kl) + &
-                                P_conv * gw / total_gw_vol_conv
+                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), &
+                                m%vol_global(ig,jg,kg), P_conv * gw / total_gw_vol_conv, -1.0_dp)
                         end do
                     end do
                 end do
@@ -375,8 +356,8 @@ contains
                                 call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
                                 if (.not. owned) cycle
 
-                                sh%S_arc(il,jl,kl) = sh%S_arc(il,jl,kl) + &
-                                    P_elec_flow / total_vol
+                                call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), &
+                                    m%vol_global(ig,jg,kg), P_elec_flow / total_vol, -1.0_dp)
                             end do
                         end do
                     end do
@@ -387,5 +368,60 @@ contains
 
 
     end subroutine distribute_arc_heat
+
+    !---------------------------------------------------------------------------
+    ! Energia [J] que el solido de una celda puede recibir del arco en un
+    ! paso: hasta la entalpia de T_liquidus + DT_SH_ARC (la fusion del paso
+    ! siguiente la convierte en liquido). Tope de ESTADO (auditoria 12-oct-2026,
+    ! M13): el anterior era 2 K POR PASO, dependiente de dt, y su excedente
+    ! iba al gas de poro.
+    !---------------------------------------------------------------------------
+    function solid_arc_room(m_s, E_s, cfg) result(q)
+        real(dp), intent(in)       :: m_s, E_s
+        type(config_t), intent(in) :: cfg
+        real(dp) :: q
+        real(dp), parameter :: DT_SH_ARC = 100.0_dp
+        q = 0.0_dp
+        if (m_s <= SMALL) return
+        q = max(0.0_dp, m_s * solid_enthalpy(cfg%T_liquidus + DT_SH_ARC, cfg) - E_s)
+    end function solid_arc_room
+
+    !---------------------------------------------------------------------------
+    ! Deposito de una densidad de potencia del arco Pd [W/m3] en la celda
+    ! propia (il,jl,kl) de volumen vol, repartido por ABSORCION entre el
+    ! solido (KAPPA_SOLID_ABS alpha_s) y el fluido (KAPPA_GAS_ABS (1-alpha_s)),
+    ! como el MC desde F2.30 (auditoria 12-oct-2026, A9): P_conv, P_elec y el
+    ! respaldo de P_rad iban enteros a S_arc y en una celda de chatarra el gas
+    ! de poro se llevaba todo. La parte del solido va a E_s con el tope
+    ! solid_arc_room y el excedente vuelve al fluido. w_s_in < 0: reparto por
+    ! absorcion; si no, fraccion impuesta (P_rad directo: 1).
+    !---------------------------------------------------------------------------
+    subroutine arc_deposit(sol, sh, cfg, il, jl, kl, as_c, vol, Pd, w_s_in)
+        type(solid_t), intent(inout)  :: sol
+        type(shared_t), intent(inout) :: sh
+        type(config_t), intent(in)    :: cfg
+        integer, intent(in)           :: il, jl, kl
+        real(dp), intent(in)          :: as_c, vol, Pd, w_s_in
+        real(dp) :: Q, w_s, Q_s, Q_fl
+        Q = Pd * vol * cfg%dt
+        if (Q <= 0.0_dp) return
+        w_s = 0.0_dp
+        if (sol%m_s(il,jl,kl) > SMALL .and. as_c > 0.0_dp) then
+            if (w_s_in >= 0.0_dp) then
+                w_s = w_s_in
+            else
+                w_s = KAPPA_SOLID_ABS * as_c / (KAPPA_SOLID_ABS * as_c + &
+                      KAPPA_GAS_ABS * max(1.0_dp - as_c, 0.0_dp) + SMALL)
+            end if
+        end if
+        Q_s = min(w_s * Q, solid_arc_room(sol%m_s(il,jl,kl), sol%E_s(il,jl,kl), cfg))
+        Q_fl = Q - Q_s
+        if (Q_s > 0.0_dp) then
+            sol%E_s(il,jl,kl) = sol%E_s(il,jl,kl) + Q_s
+            sol%T_s(il,jl,kl) = solid_T_from_enthalpy(sol%E_s(il,jl,kl) / sol%m_s(il,jl,kl), cfg)
+            call audit_add(AUD_ARC_DIRECT, Q_s)
+        end if
+        sh%S_arc(il,jl,kl) = sh%S_arc(il,jl,kl) + Q_fl / (vol * cfg%dt + SMALL)
+    end subroutine arc_deposit
 
 end module mod_arc_cassie_mayr
