@@ -21,79 +21,27 @@ contains
     !---------------------------------------------------------------------------
     ! Update arc for one electrode at the given time step
     !---------------------------------------------------------------------------
-    subroutine update_arc_resistance(elec, voltage, current, cfg, dt)
+    ! Estado electrico del arco a partir del perfil V/I medido.
+    ! Auditoria (bajos, oct-2026): aqui se integraba la EDO de Cassie-Mayr con
+    ! RK4 sub-pasado, pero su R no se usaba (la potencia es V I del perfil:
+    ! con V e I impuestos el equilibrio de la EDO es INESTABLE y R -> 1e-8) y
+    ! el termino P_rad R no era dimensionalmente coherente. Codigo muerto
+    ! retirado: arc_R es ahora la resistencia eficaz V/I (diagnostico). Las
+    ! claves arc_tau, arc_w, arc_sigma_cond y arc_T_ref quedan sin efecto.
+    subroutine update_arc_resistance(elec, voltage, current)
         type(electrode_t), intent(inout) :: elec
         real(dp), intent(in)             :: voltage, current
-        type(config_t), intent(in)       :: cfg
-        real(dp), intent(in)             :: dt
 
-        integer :: n_sub, s
-        real(dp) :: dt_sub, R, t_local
-        real(dp) :: V, I_amp
-        real(dp) :: k1, k2, k3, k4
-
-        ! Sub-step the ODE (arc time constant ~ 3e-4 s, need dt_sub << tau)
-        n_sub = max(1, int(dt / (0.1_dp * cfg%arc_tau)) + 1)
-        n_sub = min(n_sub, 10000)
-        dt_sub = dt / real(n_sub, dp)
-
-        R = max(elec%arc_R, 1.0e-6_dp)
-        V = voltage
-        I_amp = current
-
-        do s = 1, n_sub
-            t_local = real(s - 1, dp) * dt_sub
-
-            k1 = dt_sub * arc_rhs(R, V, I_amp, elec%arc_length, cfg)
-            k2 = dt_sub * arc_rhs(R + 0.5_dp*k1, V, I_amp, elec%arc_length, cfg)
-            k3 = dt_sub * arc_rhs(R + 0.5_dp*k2, V, I_amp, elec%arc_length, cfg)
-            k4 = dt_sub * arc_rhs(R + k3, V, I_amp, elec%arc_length, cfg)
-
-            R = R + (k1 + 2.0_dp*k2 + 2.0_dp*k3 + k4) / 6.0_dp
-            R = max(R, 1.0e-8_dp)
-        end do
-
-        elec%arc_R = R
-        ! arc_power = V·I directly from the electrode profile.
-        !
-        ! The Cassie-Mayr ODE has an UNSTABLE equilibrium when V and I are
-        ! imposed externally (no circuit feedback).  Starting from any
-        ! R_0 < R_eq = ARC_W*ARC_TAU, the ODE drives R → R_min = 1e-8 Ω,
-        ! giving I²·R ≈ 30 W instead of the intended 27.5 MW.
-        !
-        ! Physical interpretation: V and I in the electrode profile are
-        ! measured furnace quantities, so P_arc = V·I is the correct arc
-        ! power.  The ODE (and the R it produces) is kept only for arc-length
-        ! dynamics and future circuit-coupled extensions.
-        elec%arc_power = abs(V * I_amp)
-        elec%voltage = V
-        elec%current = I_amp
+        elec%arc_R = abs(voltage) / max(abs(current), 1.0_dp)
+        elec%arc_power = abs(voltage * current)
+        elec%voltage = voltage
+        elec%current = current
 
         ! Arc length (Eq. 3)
-        elec%arc_length = max((abs(V) - ARC_VOLT_THRESHOLD) / ARC_LENGTH_GRAD, &
+        elec%arc_length = max((abs(voltage) - ARC_VOLT_THRESHOLD) / ARC_LENGTH_GRAD, &
                               ARC_LENGTH_MIN)
 
     end subroutine update_arc_resistance
-
-    !---------------------------------------------------------------------------
-    ! RHS of Cassie-Mayr ODE (Eq. 2)
-    !---------------------------------------------------------------------------
-    pure function arc_rhs(R, V, I_amp, l_a, cfg) result(dRdt)
-        real(dp), intent(in)         :: R, V, I_amp, l_a
-        type(config_t), intent(in)   :: cfg
-        real(dp) :: dRdt
-
-        real(dp) :: P_arc, P_rad, tau, w
-
-        tau = cfg%arc_tau
-        w   = cfg%arc_w
-
-        P_arc = abs(V * I_amp)
-        P_rad = 2.0_dp * sqrt(PI) * sqrt(cfg%arc_sigma_cond) * &
-                l_a**1.5_dp * STEFAN_BOLTZMANN * cfg%arc_T_ref**4
-
-        dRdt = (R / tau) * (1.0_dp - P_arc / (P_rad * R + SMALL)) - w
-    end function arc_rhs
 
     !---------------------------------------------------------------------------
     ! Distribute arc heat to the mesh

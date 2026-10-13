@@ -317,7 +317,7 @@ program eaf_3d_simulator
         call timer_start(T_ARC)
         if (cfg%solve_arc) then
             do e = 1, N_ELECTRODES
-                call update_arc_resistance(elec(e), V_elec, I_elec, cfg, cfg%dt)
+                call update_arc_resistance(elec(e), V_elec, I_elec)
             end do
             call update_electrodes(elec, sol, liq, mesh, cfg, cfg%dt)
             ! C4.2: un solo gather global de alpha_s por paso, compartido por

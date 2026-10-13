@@ -39,7 +39,7 @@ module mod_chemistry_carbon
     real(dp), parameter :: MW_C      = 0.012_dp    ! kg/mol
     real(dp), parameter :: MW_O2     = 0.032_dp    ! kg/mol
     real(dp), parameter :: MW_CO     = 0.028_dp    ! kg/mol
-    real(dp), parameter :: MW_AIR    = 0.02897_dp  ! kg/mol
+    real(dp), parameter :: MW_N2     = 0.028_dp    ! kg/mol (inerte de la mezcla)
     real(dp), parameter :: DH_REACT  = -110.5e3_dp ! J/mol (exothermic partial oxidation)
     ! Secondary combustion: CO + 1/2 O2 -> CO2
     real(dp), parameter :: A_CO2    = 1.0e4_dp    ! [m3/(kg s)] segundo orden (calibrable)
@@ -59,7 +59,7 @@ contains
         integer :: i, j, k
         real(dp) :: T_s, T_g, P_O2, A_surf, vol
         real(dp) :: r_C, r_CO, o2_avail_rate, Q_chem
-        real(dp) :: rho_CO, rho_O2, dmC, e_spec
+        real(dp) :: rho_CO, rho_O2, dmC, e_spec, mw_inv
 
         sh%S_chem    = 0.0_dp
         sh%S_CO_src  = 0.0_dp
@@ -75,9 +75,15 @@ contains
                     vol = m%vol(i,j,k)
                     T_g = gas%T(i,j,k)
 
-                    ! Presión parcial de O2 desde la fracción másica
-                    ! (aprox. de fracción molar con MW del aire)
-                    P_O2 = 101325.0_dp * sh%Y_O2(i,j,k) * MW_AIR / MW_O2
+                    ! Presion parcial de O2 = P0 x fraccion MOLAR con la masa
+                    ! molar de la mezcla REAL O2/CO/CO2/N2 (auditoria, bajos;
+                    ! antes con la del aire, que no vale cuando el CO/CO2
+                    ! desplaza al N2). P0 termodinamica: low-Mach.
+                    mw_inv = sh%Y_O2(i,j,k) / MW_O2 + sh%Y_CO(i,j,k) / MW_CO &
+                           + sh%Y_CO2(i,j,k) / MW_CO2 &
+                           + max(0.0_dp, 1.0_dp - sh%Y_O2(i,j,k) - sh%Y_CO(i,j,k) &
+                                 - sh%Y_CO2(i,j,k)) / MW_N2
+                    P_O2 = 101325.0_dp * (sh%Y_O2(i,j,k) / MW_O2) / max(mw_inv, SMALL)
                     if (P_O2 <= 0.0_dp) cycle
 
                     ! Tasa de suministro local de O2 [kg O2/(m3 s)]

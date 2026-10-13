@@ -241,8 +241,8 @@ contains
                     w_rad = rad_weight(alpha_q(i,j,k), alpha_other(i,j,k))
                     T_it = max(ph%T(i,j,k), 200.0_dp)
                     Su(i,j,k) = rho_cp_vol_dt * T_old(i,j,k) &
-                               + (sh%S_arc(i,j,k) + sh%S_chem(i,j,k)) &
-                                 * w_src * vol &
+                               + (sh%S_arc(i,j,k) * w_src &
+                                  + sh%S_chem(i,j,k) * w_chem(i,j,k, w_src)) * vol &
                                + w_rad * sh%kappa_f(i,j,k) * vol * &
                                  (sh%G_rad(i,j,k) + 12.0_dp * &
                                   STEFAN_BOLTZMANN * T_it**4)
@@ -354,6 +354,24 @@ contains
 
     contains
 
+        ! Peso de S_chem (auditoria, bajos): es calor de la combustion CO -> CO2
+        ! EN FASE GAS (mas la entalpia del C que sale con el CO, M15): todo al
+        ! gas donde lo hay; al liquido solo sin gas resuelto (rama sin energia
+        ! del gas, alpha_other = 0). Antes se repartia por fraccion de volumen y
+        ! calentaba tambien al liquido.
+        pure function w_chem(ii, jj, kk, wv) result(w)
+            integer, intent(in)  :: ii, jj, kk
+            real(dp), intent(in) :: wv
+            real(dp) :: w
+            if (is_gas) then
+                w = 1.0_dp
+            else if (alpha_other(ii,jj,kk) >= ALPHA_CUTOFF) then
+                w = 0.0_dp
+            else
+                w = wv
+            end if
+        end function w_chem
+
         ! Flujo de masa del gas en una cara de lo -> hi con caudal volumetrico
         ! Qg: rho_g del dador (M36); 0 si alguna celda es pared
         function gflux(Qg, il, jl, kl, ih, jh, kh) result(F)
@@ -455,7 +473,7 @@ contains
                         s_abs = s_abs + rcv * (Tk(ii,jj,kk) - &
                                 T_old(ii,jj,kk)) * cfg%dt
                         s_arc = s_arc + sh%S_arc(ii,jj,kk) * ww * vv * cfg%dt
-                        s_chem = s_chem + sh%S_chem(ii,jj,kk) * ww * vv * cfg%dt
+                        s_chem = s_chem + sh%S_chem(ii,jj,kk) * w_chem(ii,jj,kk, ww) * vv * cfg%dt
                         s_rad = s_rad + rad_weight(alpha_q(ii,jj,kk), alpha_other(ii,jj,kk)) &
                                 * sh%kappa_f(ii,jj,kk) * vv * &
                                 (sh%G_rad(ii,jj,kk) + STEFAN_BOLTZMANN * &

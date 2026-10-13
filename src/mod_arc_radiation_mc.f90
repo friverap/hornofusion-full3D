@@ -20,6 +20,7 @@
 !===============================================================================
 module mod_arc_radiation_mc
     use mpi
+    use, intrinsic :: iso_fortran_env, only: int64
     use mod_constants
     use mod_types_3d
     use mod_parallel_utils
@@ -43,8 +44,12 @@ contains
 
         call random_seed(size=n)
         allocate(seed(n))
+        ! aritmetica de 64 bits modulo 2^31 - 1 (auditoria, bajos): 7919*step
+        ! desbordaba int32 desde el paso ~271 000 (B1 completo: ~2.5e6 pasos).
+        ! Identica a la formula anterior mientras no hay desborde.
         do i = 1, n
-            seed(i) = 104729 + 37 * i + 7919 * step
+            seed(i) = int(mod(104729_int64 + 37_int64 * i + 7919_int64 * int(step, int64), &
+                              2147483647_int64))
         end do
         call random_seed(put=seed)
         deallocate(seed)
@@ -72,7 +77,7 @@ contains
         real(dp) :: step_size, total_P_rad
         integer  :: ig, jg, kg, il, jl, kl
         real(dp) :: rnd1, rnd2, rnd3, rnd4
-        real(dp) :: P_beam, dP_abs, kap, z_att, xe2, ye2
+        real(dp) :: P_beam, dP_abs, kap, z_att, xe2, ye2, rdot
         integer  :: e2
         logical  :: shadow
         integer  :: n_steps
@@ -156,6 +161,17 @@ contains
 
                     ! Check bounds - use .not.(<=) to correctly handle NaN
                     r_pos = sqrt(x**2 + y**2)
+                    ! Pasador del eje (r < rf(0)): la DO lo trata como pared
+                    ! que re-irradia (flujo neto nulo); para un rayo eso es
+                    ! reflexion especular de la componente radial (auditoria,
+                    ! bajos: antes el rayo lo cruzaba como si fuera la celda 1)
+                    if (r_pos < m%rf_global(0) .and. r_pos > 0.0_dp) then
+                        rdot = (dx * x + dy * y) / r_pos
+                        if (rdot < 0.0_dp) then
+                            dx = dx - 2.0_dp * rdot * x / r_pos
+                            dy = dy - 2.0_dp * rdot * y / r_pos
+                        end if
+                    end if
                     if (.not. (r_pos <= cfg%R_shell)) then
                         call audit_add(AUD_MC_LOST, P_beam * cfg%dt)
                         exit trace
