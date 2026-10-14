@@ -266,7 +266,7 @@ este modelo no resuelve.
 | `frac_rad` × `MC_RAD_SHARE` (0.5) | Monte Carlo (§7) |
 | `frac_rad` × (1 − `MC_RAD_SHARE`) | depósito directo en la superficie de la chatarra bajo el electrodo; **sin chatarra, también al MC** (`mc_share` = 1) |
 | `frac_conv` | columna de gas entre la punta y la superficie de chatarra; **sin chatarra, la capa de la superficie del baño** (chorro de plasma que impacta) |
-| `frac_elec` | tras el bore-in, el baño bajo el electrodo (radio 2 R_elec, peso α_l V); antes, con `frac_conv` |
+| `frac_elec` | tras el bore-in, SOLO las celdas de baño (α_l ≥ `ALPHA_LIQ_CONT`) de la capa más alta con baño bajo el electrodo (radio 2 R_elec, peso α_l V; auditoría 3 A3-4: antes una gota con α_l > 1e-6 en la columna recibía todo P_elec); sin baño en la columna, por volumen con reparto por absorción; antes del bore-in, con `frac_conv` |
 
 (Auditoría 2, N-A2: con baño plano el líquido recibía el 6.9 % del arco
 absorbido; ahora 71 %, el resto es la atenuación del gas en el camino del MC.)

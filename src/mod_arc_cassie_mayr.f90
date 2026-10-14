@@ -72,7 +72,7 @@ contains
         ! alpha_l GLOBAL (N-A2): P_elec va al baño bajo el electrodo
         real(dp), intent(in)            :: alpha_lg(:,:,:)
 
-        integer  :: e, ig, jg, kg, il, jl, kl, kg_tip, kg_scrap, kc_lo, kc_hi
+        integer  :: e, ig, jg, kg, il, jl, kl, kg_tip, kg_scrap, kc_lo, kc_hi, kg_bath
         real(dp) :: P_total, P_rad_arc, P_conv, P_elec_flow
         real(dp) :: x_elec, y_elec, x_cell, y_cell, dist
         real(dp) :: r2, sigma_r, gw
@@ -314,23 +314,31 @@ contains
             end if
 
             ! ── P_elec: electron-flow heating to liquid bath (post bore-in) ─
-            ! (N-A2) peso alpha_l V: la columna bajo la punta incluye el gas
-            ! entre el baño y la punta y la chatarra residual (~20 % de P_elec
-            ! iba al gas); sin baño en la columna, por volumen como antes
+            ! (N-A2) peso alpha_l V; (auditoria 3, A3-4) SOLO en celdas de
+            ! BANO (alpha_l >= ALPHA_LIQ_CONT) de la capa mas alta con bano
+            ! bajo la punta (kg_bath): la corriente entra al bano por su
+            ! superficie (mancha anodica) y ahi se deposita el calor de
+            ! condensacion electronica. Antes bastaba una celda con alpha_l >
+            ! 1e-6 en la columna para repartir ~5.5 MW por alpha_l V: una gota
+            ! o una pelicula de goteo recibia TODO P_elec (y lo que el solido
+            ! no absorbia iba al gas de poro: el patron de 54 000 K de F2.30).
+            ! Sin bano en la columna, por volumen (reparto por absorcion).
             if (elec(e)%bore_in_done) then
-                any_liq = .false.
-                do kg = 1, kg_tip
+                any_liq = .false.; kg_bath = 0
+                kbe: do kg = kg_tip, 1, -1
                     do jg = 1, m%nth_g
                         do ig = 1, m%nr_g
                             if (m%cell_type_global(ig,jg,kg) == 0) cycle
                             x_cell = m%r_global(ig) * cos(m%theta_global(jg))
                             y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
-                            if (dist <= cfg%R_elec * 2.0_dp .and. alpha_lg(ig,jg,kg) > ALPHA_CUTOFF) &
-                                any_liq = .true.
+                            if (dist <= cfg%R_elec * 2.0_dp .and. alpha_lg(ig,jg,kg) >= ALPHA_LIQ_CONT) then
+                                any_liq = .true.; kg_bath = kg
+                                exit kbe
+                            end if
                         end do
                     end do
-                end do
+                end do kbe
                 total_vol = 0.0_dp
                 do kg = 1, kg_tip
                     do jg = 1, m%nth_g
@@ -375,7 +383,10 @@ contains
         pure real(dp) function wel(ig, jg, kg)
             integer, intent(in) :: ig, jg, kg
             if (any_liq) then
-                wel = max(alpha_lg(ig,jg,kg), 0.0_dp) * m%vol_global(ig,jg,kg)
+                ! solo el bano de la capa kg_bath (A3-4)
+                wel = 0.0_dp
+                if (kg == kg_bath .and. alpha_lg(ig,jg,kg) >= ALPHA_LIQ_CONT) &
+                    wel = alpha_lg(ig,jg,kg) * m%vol_global(ig,jg,kg)
             else
                 wel = m%vol_global(ig,jg,kg)
             end if
