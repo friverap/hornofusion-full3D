@@ -258,9 +258,20 @@ contains
                         cont_el = liq_continuous(al, as)
                         cont = cont_el
                         if (ws_liq_cont_valid) cont = ws_liq_cont(i,j,k)
-                        xb = A_AIAD * (al - ALPHA_AIAD_LIM)
-                        f_disp = 1.0_dp / (1.0_dp + exp(min(max(xb, -60.0_dp), 60.0_dp)))
-                        if (cont .and. .not. cont_el) f_disp = 0.0_dp
+                        ! (auditoria 4, A4-3) el liquido CONTINUO es interfase
+                        ! resuelta, con cualquier alpha_l: la celda de superficie
+                        ! del bano barre alpha_l de 0 a 1 al subir el nivel y con
+                        ! la logistica en alpha_l entre 0.3 y ~0.45 recibia area
+                        ! de gota (x1200 en 0.3: el gas de la capa salia a T_l
+                        ! en un paso, el sintoma que A3-2 decia cerrar). La
+                        ! logistica queda solo para el liquido DISPERSO (gotas
+                        ! con cola hacia la interfase al acercarse a 0.3).
+                        if (cont) then
+                            f_disp = 0.0_dp
+                        else
+                            xb = A_AIAD * (al - ALPHA_AIAD_LIM)
+                            f_disp = 1.0_dp / (1.0_dp + exp(min(max(xb, -60.0_dp), 60.0_dp)))
+                        end if
                         ! |grad alpha_l| central; vecina inactiva = sin salto
                         gr  = (anb(i+1,j,k, al) - anb(i-1,j,k, al)) / (m%r(i+1) - m%r(i-1) + SMALL)
                         gth = (anb(i,jp,k, al) - anb(i,jm,k, al)) / &

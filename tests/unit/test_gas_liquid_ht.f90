@@ -17,6 +17,10 @@
 !      bano, continua por la regla de superficie libre): interfase resuelta,
 !      no gotas: su intercambio es < 10 % del de las mismas gotas aisladas
 !      (A3-2: con liq_continuous elemental recibia el area de gota, 60-600x).
+!   7. Celda de SUPERFICIE con alpha_l 0.35 (continua por si misma): interfase
+!      resuelta, su intercambio esta a menos de un factor 3 del de la
+!      superficie con 0.5 (caso 1), no x1200 (A4-3: la logistica en alpha_l
+!      daba f_disp = 0.5 en 0.3 y area de gota a la celda de superficie).
 !===============================================================================
 program test_gas_liquid_ht
     use mod_constants
@@ -125,6 +129,24 @@ program test_gas_liquid_ht
     dTg_d = gas%T(I0,J0,K0) - Tg0
     if (.not. (dTg_s > 0.0_dp .and. dTg_s < 0.1_dp * dTg_d)) &
         call fail('caso 6: la celda de superficie intercambia como gotas (dT_s/dT_gotas)', dTg_s / max(dTg_d, SMALL))
+
+    ! --- caso 7: superficie con alpha_l 0.35 (continua por si misma) ---
+    sol%alpha_s = 0.0_dp
+    liq%alpha = 0.0_dp; liq%alpha(:,:,1:K0-1) = 1.0_dp; liq%alpha(:,:,K0) = 0.35_dp
+    gas%alpha = 1.0_dp - liq%alpha
+    gas%T = Tg0; liq%T = Tl0; cfg%dt = 1.0_dp
+    ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s)
+    call caps()
+    call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg)
+    call checks('caso 7')
+    dTg_s = (gas%T(I0,J0,K0) - Tg0) * Cg
+    call setup_fs(); cfg%dt = 1.0_dp
+    ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s)
+    call caps()
+    call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg)
+    dTg_fs = (gas%T(I0,J0,K0) - Tg0) * Cg
+    if (.not. (dTg_s > dTg_fs / 3.0_dp .and. dTg_s < 3.0_dp * dTg_fs)) &
+        call fail('caso 7: superficie con 0.35 /= superficie con 0.5 (ratio de calor)', dTg_s / max(dTg_fs, SMALL))
 
     if (ok) then
         print '(A)', ' PASS test_gas_liquid_ht'
