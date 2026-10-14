@@ -40,7 +40,7 @@ program test_gas_liquid_ht
     type(slag_t)   :: slag
     type(shared_t) :: sh
     integer, parameter :: I0 = 3, J0 = 4, K0 = 5
-    real(dp) :: Cg, Cl, Tg0, Tl0, Tm, dTg_fs, dTg_d, dTg_s
+    real(dp) :: Cg, Cl, Clb, Tg0, Tl0, Tm, dTg_fs, dTg_d, dTg_s
     real(dp) :: dpp, kmol, Re, h, a_i, G, f, q, Tg_hand
     logical  :: ok
 
@@ -68,9 +68,12 @@ program test_gas_liquid_ht
     call setup_fs(); cfg%dt = 1.0e6_dp
     call caps()
     call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg)
-    Tm = (Cg * Tg0 + Cl * Tl0) / (Cg + Cl)
-    if (abs(gas%T(I0,J0,K0) - Tm) > 1.0e-6_dp .or. abs(liq%T(I0,J0,K0) - Tm) > 1.0e-6_dp) &
-        call fail('caso 2: no llega al equilibrio', gas%T(I0,J0,K0) - Tm)
+    ! (M4-10) la superficie intercambia por CARAS: el gas de la celda de
+    ! superficie (K0) se equilibra con el liquido de la celda de abajo (K0-1)
+    ! por la cara inferior, el liquido de K0 con el gas de K0+1 por la superior
+    Tm = (Cg * Tg0 + Clb * Tl0) / (Cg + Clb)
+    if (abs(gas%T(I0,J0,K0) - Tm) > 1.0e-6_dp .or. abs(liq%T(I0,J0,K0-1) - Tm) > 1.0e-6_dp) &
+        call fail('caso 2: no llega al equilibrio (gas K0 - liquido K0-1)', gas%T(I0,J0,K0) - Tm)
 
     ! --- caso 3: gotas dispersas ---
     liq%alpha = 0.0_dp; liq%alpha(I0,J0,K0) = 0.02_dp
@@ -171,15 +174,27 @@ contains
     end subroutine setup_fs
 
     subroutine caps()
+        Clb = liq%alpha(I0,J0,K0-1) * liq%rho(I0,J0,K0-1) * liq%cp(I0,J0,K0-1) * mesh%vol(I0,J0,K0-1)
         Cg = gas%alpha(I0,J0,K0) * gas%rho(I0,J0,K0) * gas%cp(I0,J0,K0) * mesh%vol(I0,J0,K0)
         Cl = liq%alpha(I0,J0,K0) * liq%rho(I0,J0,K0) * liq%cp(I0,J0,K0) * mesh%vol(I0,J0,K0)
     end subroutine caps
 
     subroutine checks(tag)
         character(len=*), intent(in) :: tag
-        real(dp) :: dE
-        dE = Cg * (gas%T(I0,J0,K0) - Tg0) + Cl * (liq%T(I0,J0,K0) - Tl0)
-        if (abs(dE) > 1.0e-10_dp * Cg * (Tl0 - Tg0)) call fail(tag // ': conservacion', dE)
+        real(dp) :: dE, sc
+        integer :: kk
+        ! conservacion GLOBAL de la columna (M4-10: la superficie libre
+        ! intercambia por caras, entre nodos de celdas distintas)
+        dE = 0.0_dp; sc = 0.0_dp
+        do kk = 1, 10
+            dE = dE + sum(gas%alpha(1:6,1:8,kk) * gas%rho(1:6,1:8,kk) * gas%cp(1:6,1:8,kk) * mesh%vol(1:6,1:8,kk) &
+                          * (gas%T(1:6,1:8,kk) - Tg0)) &
+                    + sum(liq%alpha(1:6,1:8,kk) * liq%rho(1:6,1:8,kk) * liq%cp(1:6,1:8,kk) * mesh%vol(1:6,1:8,kk) &
+                          * (liq%T(1:6,1:8,kk) - Tl0))
+            sc = sc + sum(gas%alpha(1:6,1:8,kk) * gas%rho(1:6,1:8,kk) * gas%cp(1:6,1:8,kk) * mesh%vol(1:6,1:8,kk)) &
+                    * abs(Tl0 - Tg0)
+        end do
+        if (abs(dE) > 1.0e-10_dp * max(sc, SMALL)) call fail(tag // ': conservacion (columna)', dE / max(sc, SMALL))
         if (gas%T(I0,J0,K0) > liq%T(I0,J0,K0) + 1.0e-9_dp) &
             call fail(tag // ': el gas cruzo al liquido', gas%T(I0,J0,K0) - liq%T(I0,J0,K0))
         if (gas%T(I0,J0,K0) < Tg0 - 1.0e-9_dp .or. liq%T(I0,J0,K0) > Tl0 + 1.0e-9_dp) &

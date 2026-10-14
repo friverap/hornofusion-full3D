@@ -215,9 +215,9 @@ contains
         type(solid_t), intent(in)    :: sol
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
-        integer  :: i, j, k, jm, jp
+        integer  :: i, j, k, jm, jp, kl, kg
         real(dp) :: al, ag, as, cg, cl, G, f, q, d, dp_, k_mol, urel, xb, f_disp, wet
-        real(dp) :: gr, gth, gz
+        real(dp) :: fbed, G_in, G_out, a_fs
         logical  :: cont_el, cont
         d = cfg%d_droplet
         if (d <= 0.0_dp) d = 2.0e-3_dp
@@ -251,10 +251,17 @@ contains
                     !     resuelta: con liq_continuous elemental recibia el area
                     !     de gota, 60-600x la de la superficie, y el gas de esa
                     !     capa salia a T_l en un paso.
-                    if (as >= 1.0e-2_dp) then
+                    ! (auditoria 4, M4-9) MEZCLA entre la pelicula del lecho y la
+                    ! morfologia de fuera: rampa 0 -> 1 en alpha_s 1e-2 .. 2e-2
+                    ! (un interruptor en 1e-2 saltaba x2500 para gotas que
+                    ! cruzan chatarra rala)
+                    fbed = min(1.0_dp, max(0.0_dp, (as - 1.0e-2_dp) / 1.0e-2_dp))
+                    G_in = 0.0_dp; G_out = 0.0_dp
+                    if (fbed > 0.0_dp) then
                         wet = min(1.0_dp, al / max(1.0_dp - as, SMALL))
-                        G = h_sphere(dp_) * 6.0_dp * as / dp_ * wet
-                    else
+                        G_in = h_sphere(dp_) * 6.0_dp * as / dp_ * wet
+                    end if
+                    if (fbed < 1.0_dp) then
                         cont_el = liq_continuous(al, as)
                         cont = cont_el
                         if (ws_liq_cont_valid) cont = ws_liq_cont(i,j,k)
@@ -272,14 +279,22 @@ contains
                             xb = A_AIAD * (al - ALPHA_AIAD_LIM)
                             f_disp = 1.0_dp / (1.0_dp + exp(min(max(xb, -60.0_dp), 60.0_dp)))
                         end if
-                        ! |grad alpha_l| central; vecina inactiva = sin salto
-                        gr  = (anb(i+1,j,k, al) - anb(i-1,j,k, al)) / (m%r(i+1) - m%r(i-1) + SMALL)
-                        gth = (anb(i,jp,k, al) - anb(i,jm,k, al)) / &
-                              (m%r(i) * (m%theta(jp) - m%theta(jm)) + SMALL)
-                        gz  = (anb(i,j,k+1, al) - anb(i,j,k-1, al)) / (m%z(k+1) - m%z(k-1) + SMALL)
-                        G = f_disp * h_sphere(d) * 6.0_dp * al / d &
-                          + (1.0_dp - f_disp) * h_plate(m%dz(k)) * sqrt(gr**2 + gth**2 + gz**2)
+                        ! (auditoria 4, M4-10) area de la interfase resuelta por
+                        ! CARAS: sum |alpha_P - alpha_N| A_f / (2 V), que para una
+                        ! superficie nitida 1|0.5|0 da A/V en la celda de superficie
+                        ! (el gradiente central daba 0.5 A/V y pulsaba con la
+                        ! posicion del nivel); y placa con la longitud de flujo del
+                        ! horno (R_shell), no la altura de celda (h ~ L^-1/2: con dz
+                        ! salia x8-10 y dependia de la malla)
+                        a_fs = (abs(al - anb(i-1,j,k, al)) * m%Ar(i-1,j,k) + abs(al - anb(i+1,j,k, al)) * m%Ar(i,j,k) &
+                              + abs(al - anb(i,jm,k, al)) * m%Ath(i,j,k) + abs(al - anb(i,jp,k, al)) * m%Ath(i,j,k) &
+                              + abs(al - anb(i,j,k-1, al)) * m%Az(i,j,k-1) + abs(al - anb(i,j,k+1, al)) * m%Az(i,j,k)) &
+                              / (2.0_dp * m%vol(i,j,k))
+                        ! el liquido CONTINUO intercambia por las CARAS (lazo de
+                        ! abajo, M4-10): aqui solo las gotas del disperso
+                        G_out = f_disp * h_sphere(d) * 6.0_dp * al / d
                     end if
+                    G = fbed * G_in + (1.0_dp - fbed) * G_out
                     G = G * m%vol(i,j,k)
                     if (G <= 0.0_dp) cycle
                     f = 1.0_dp - exp(-cfg%dt * G * (1.0_dp / cg + 1.0_dp / cl))
@@ -291,6 +306,55 @@ contains
                 end do
             end do
         end do
+
+        ! ---- Superficie LIBRE por caras verticales (auditoria 4, M4-10) ----
+        ! Una interfase nitida (celda llena | celda vacia) no tiene ninguna
+        ! celda con las dos fases y el intercambio por celda no actuaba
+        ! (bath_test_cold: el gas a 300 K sobre acero a 1850 K no se calentaba).
+        ! En cada cara (k | k+1) el nodo liquido es el de la celda con mas
+        ! liquido continuo y el nodo gas el de la otra, con area A_z |d alpha_l|;
+        ! h = conduccion 2k/dz + placa con la longitud de flujo L. Dos nodos
+        ! implicitos exactos; cada rank aplica solo a sus celdas propias y la
+        ! Q se evalua igual a los dos lados de la frontera de bloque (halos de
+        ! alpha, rho, cp, T validos). Fuera del lecho (celdas de superficie:
+        ! sin chatarra el area de pelicula no aplica).
+        do k = 0, m%nz
+            do j = 1, m%ntheta
+                do i = 1, m%nr
+                    if (m%cell_type(i,j,k) == 0 .or. m%cell_type(i,j,k+1) == 0) cycle
+                    if (sol%alpha_s(i,j,k) >= 2.0e-2_dp .or. sol%alpha_s(i,j,k+1) >= 2.0e-2_dp) cycle
+                    if (liq%alpha(i,j,k) >= liq%alpha(i,j,k+1)) then
+                        kl = k; kg = k + 1
+                    else
+                        kl = k + 1; kg = k
+                    end if
+                    al = liq%alpha(i,j,kl); ag = gas%alpha(i,j,kg)
+                    if (al < ALPHA_LIQ_CONT .or. ag <= 1.0e-6_dp) cycle
+                    a_fs = abs(liq%alpha(i,j,k) - liq%alpha(i,j,k+1)) * m%Az(i,j,k)
+                    if (a_fs <= 0.0_dp) cycle
+                    cl = al * liq%rho(i,j,kl) * liq%cp(i,j,kl) * m%vol(i,j,kl)
+                    cg = ag * gas%rho(i,j,kg) * gas%cp(i,j,kg) * m%vol(i,j,kg)
+                    if (cl <= 0.0_dp .or. cg <= 0.0_dp) cycle
+                    k_mol = gas%mu(i,j,kg) * gas%cp(i,j,kg) / PR_GAS_MOL
+                    urel = sqrt((gas%ur(i,j,kg) - liq%ur(i,j,kl))**2 + &
+                                (gas%uth(i,j,kg) - liq%uth(i,j,kl))**2 + &
+                                (gas%uz(i,j,kg) - liq%uz(i,j,kl))**2)
+                    G = k_mol * (2.0_dp / m%dz(kg) + 0.664_dp * PR_GAS_MOL**(1.0_dp/3.0_dp) * &
+                        sqrt(gas%rho(i,j,kg) * urel * max(cfg%R_shell, m%dz(kg)) / (gas%mu(i,j,kg) + SMALL)) &
+                        / max(cfg%R_shell, m%dz(kg))) * a_fs
+                    f = 1.0_dp - exp(-cfg%dt * G * (1.0_dp / cg + 1.0_dp / cl))
+                    q = cg * cl / (cg + cl) * (gas%T(i,j,kg) - liq%T(i,j,kl)) * f
+                    if (kg >= 1 .and. kg <= m%nz) then
+                        gas%T(i,j,kg) = gas%T(i,j,kg) - q / cg
+                        call audit_add(AUD_IPH_GAS, q)
+                    end if
+                    if (kl >= 1 .and. kl <= m%nz) then
+                        liq%T(i,j,kl) = liq%T(i,j,kl) + q / cl
+                        call audit_add(AUD_IPH_LIQ, -q)
+                    end if
+                end do
+            end do
+        end do
     contains
         ! Ranz-Marshall para esfera de diametro dd [W/m2/K]
         pure real(dp) function h_sphere(dd)
@@ -299,12 +363,16 @@ contains
             Re = gas%rho(i,j,k) * urel * dd / (gas%mu(i,j,k) + SMALL)
             h_sphere = k_mol / dd * (2.0_dp + 0.6_dp * sqrt(Re) * PR_GAS_MOL**(1.0_dp/3.0_dp))
         end function h_sphere
-        ! Placa plana de longitud L (interfase resuelta) [W/m2/K]
+        ! Placa plana (interfase resuelta) [W/m2/K]: conduccion hasta el
+        ! centro de la celda (2 k / dz: gas en reposo sobre el bano) + conveccion
+        ! forzada con la longitud de flujo L (M4-10: con L = dz la parte
+        ! convectiva iba como dz^-1/2; con L = R_shell en la conduccion el gas
+        ! en reposo no intercambiaba nada)
         pure real(dp) function h_plate(L)
             real(dp), intent(in) :: L
             real(dp) :: Re
             Re = gas%rho(i,j,k) * urel * L / (gas%mu(i,j,k) + SMALL)
-            h_plate = k_mol / L * (2.0_dp + 0.664_dp * sqrt(Re) * PR_GAS_MOL**(1.0_dp/3.0_dp))
+            h_plate = k_mol * (2.0_dp / m%dz(k) + 0.664_dp * sqrt(Re) * PR_GAS_MOL**(1.0_dp/3.0_dp) / L)
         end function h_plate
         ! alpha_l de la vecina; inactiva (pared, halo fisico) = la propia
         pure real(dp) function anb(ii, jj, kk, aown)

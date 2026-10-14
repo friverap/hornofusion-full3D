@@ -20,6 +20,10 @@
 !   4. Lecho con gas libre y p = hidrostatica del GAS (estado de lecho de
 !      goteo): ambas fases clasicas; el gas queda en reposo y el liquido
 !      drena con TODO su peso (hasta A3-1 el empuje quedaba x alpha_g/eps).
+!   6. Cara LECHO | FREEBOARD (M4-19): columna de lecho con la mascara de cara
+!      del liquido nula en la cara superior (ws_bedl_f = 0 en k = 7|8): la
+!      celda 7 solo lleva la flotacion de su cara inferior, asi que su empuje
+!      es ~la mitad del interior (ratio u_l(7)/u_l(4) en 0.4..0.65).
 !   5. BURBUJAS (A3-5): columna de bano sin chatarra con alpha_g 0.2 y
 !      ws_bub = 1 en toda la columna: ambas fases clasicas (1e-10), el gas
 !      SUBE y el liquido baja. (Que la celda de superficie no es burbuja lo
@@ -134,6 +138,16 @@ program test_bed_buoyancy
         ok = .false.
     end if
     ws_bub = 0.0_dp; ws_bub_f = 0.0_dp; ws_bedl_f = 0.0_dp
+
+    ! ---- caso 6: cara lecho | freeboard ----
+    call setup(0.5_dp, 0.05_dp, .true., .false.)
+    ws_bedl_f(:,:,7) = 0.0_dp
+    call run_both()
+    if (.not. (ul_bal(ic,jc,7) / ul_bal(ic,jc,4) > 0.4_dp .and. ul_bal(ic,jc,7) / ul_bal(ic,jc,4) < 0.65_dp)) then
+        print '(A,2ES11.3)', '   FAIL caso 6: la celda bajo la cara sin flotacion no lleva ~la mitad: u(7), u(4) = ', &
+            ul_bal(ic,jc,7), ul_bal(ic,jc,4)
+        ok = .false.
+    end if
 
     if (ok) then
         print '(A)', ' PASS test_bed_buoyancy'
