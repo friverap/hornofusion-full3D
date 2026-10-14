@@ -459,7 +459,7 @@ program eaf_3d_simulator
         ! DESPUÉS de los solves de energía (ver notas en mod_solid_phase)
         call timer_start(T_SOLID)
         if (cfg%solve_melting) then
-            call update_solid_premelt(sol, liq, gas, slag, mesh, cfg, cfg%dt)
+            call update_solid_premelt(sol, liq, gas, slag, mesh, cfg, cfg%dt, sh)
             ! sin transporte de alpha de dos fluidos, el mdot se aplica aqui
             ! (auditoria 2, N-C4)
             if (.not. (cfg%solve_flow .and. cfg%solve_multiphase)) then
@@ -603,7 +603,6 @@ program eaf_3d_simulator
             call slag_exchange_halos(slag, mesh)
         end if
         call timer_stop(T_SLAG)
-
         ! Auditoría de balances (antes de adaptar dt: usa el dt del paso).
         ! Las integrales de fuente se acumulan CADA paso; la línea CSV se
         ! escribe cada audit_freq pasos y cubre todo el intervalo.
@@ -616,6 +615,19 @@ program eaf_3d_simulator
             end if
         end if
         call timer_stop(T_IO)
+        ! (auditoria 4, M4-3) propiedades coherentes con la T FINAL del paso,
+        ! DESPUES del audit (su libro del gas usa la rho con la que resolvio la
+        ! energia) y ANTES del snapshot (el reinicio arranca con ellas, bit a
+        ! bit). Con gas%rho rancio (de la ultima iteracion externa) la fuente
+        ! de compresibilidad del paso siguiente valia 0 bit a bit en la primera
+        ! iteracion externa (rho = rho(Tg_end)), F2.31 no excluia nada en el
+        ! outer 1 y si desde el 2 (topologia del acople alternando por outer),
+        ! y con un solo outer se perdia la demanda.
+        if (cfg%solve_flow .and. cfg%solve_multiphase .and. cfg%solve_energy) then
+            call update_properties(liq, gas, sh, mesh, cfg)
+            call phase_exchange_halos(liq, mesh)
+            call phase_exchange_halos(gas, mesh)
+        end if
 
         !---------------------------------------------------------------
         ! FRENO DE NaN: si algun campo o residual dejo de ser finito, la
@@ -687,8 +699,11 @@ program eaf_3d_simulator
         print *, '============================================================'
     end if
 
-    ! dt nominal (no el truncado del ultimo paso) en el snapshot final (M3-12)
-    if (dt_nominal > 0.0_dp .and. .not. cfg%adaptive_dt) cfg%dt = dt_nominal
+    ! dt nominal (no el truncado del ultimo paso) en el snapshot final (M3-12;
+    ! auditoria 4 M4-1: tambien con dt adaptativo, que es el default de
+    ! produccion: adapt_timestep partia del recorte -o de dt_min- y eso iba al
+    ! snapshot; dt_nominal es el dt que el paso iba a usar)
+    if (dt_nominal > 0.0_dp) cfg%dt = dt_nominal
     call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, elec, cfg%dt, &
                              step, time, cfg%output_dir)
 

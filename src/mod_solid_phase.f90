@@ -22,13 +22,16 @@ contains
     ! ESTE paso (antes el líquido recibía el fundido con un paso de
     ! retraso: dm del último paso —el mayor, con fusión en rampa— nunca
     ! estaba en el inventario del snapshot; ratio medido 0.857).
-    subroutine update_solid_premelt(sol, liq, gas, slag, m, cfg, dt)
+    subroutine update_solid_premelt(sol, liq, gas, slag, m, cfg, dt, sh)
         type(solid_t), intent(inout) :: sol
         type(phase_t), intent(inout) :: liq, gas
         type(slag_t),  intent(in)    :: slag
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
         real(dp), intent(in)         :: dt
+        ! (auditoria 4, M4-4) el gas que crea la fusion/colapso tampoco trae
+        ! especies (dilucion de Y en enforce_volume_constraint)
+        type(shared_t), intent(inout), optional :: sh
 
         ! T de entrada del fundido la fija la fusion, ANTES del colapso
         ! (auditoria A3: el colapso mezcla en sol%T_s la entalpia de la
@@ -40,7 +43,8 @@ contains
         ! Restricción de volumen (C1.9, hallazgo 3.22b): fusión y colapso
         ! cambian alpha_s sin actualizar el gas -> Sum(alpha) quedaba en 0.5
         ! en celdas vaciadas. El gas absorbe/cede el volumen sobrante.
-        call enforce_volume_constraint(liq, gas, sol, slag, m)
+        ! (M4-4) con sh: el gas creado no trae especies
+        call enforce_volume_constraint(liq, gas, sol, slag, m, sh)
 
     end subroutine update_solid_premelt
 
