@@ -45,7 +45,13 @@ def main():
     # fraccion minima del arco ABSORBIDO que recibe el liquido (casos de
     # baño plano; auditoria 2, N-A2: con reparto por volumen era 0.069)
     ap.add_argument("--min-liq-arc", type=float, default=None)
-    ap.add_argument("--etol", type=float, default=0.01)
+    # etol SOLO sobre el libro del gas (auditoria 3, A3-6): medido 1.0 % de
+    # S_gas en las corridas frias (lazo externo sin converger; 4e-6 en
+    # outer_conv), 2x de margen. Antes etol x (S_ext + S_gas) permitia
+    # errores del tamano del arco (melt_forced 101 %, cold_bucket2 5.5x).
+    ap.add_argument("--etol", type=float, default=0.02)
+    # fuentes EXTERNAS (arco, radiacion, quimica, carga, ECS): hooks exactos
+    ap.add_argument("--xtol", type=float, default=1e-9)
     ap.add_argument("--arctol", type=float, default=1e-3)
     ap.add_argument("--mtol", type=float, default=0.005)
     args = ap.parse_args()
@@ -73,11 +79,14 @@ def main():
     # (E_gas_abs; la forma T con rho(T) no tiene inventario de estado
     # consistente cuando la masa advecta). Fallback al inventario log si
     # la columna no existe (audits viejos).
-    if "E_gas_abs" in last:
+    if "E_gas_abs" in last and any(r["E_gas_abs"] != 0.0 for r in steps):
         # E_gas_abs es diferencia de estado por paso (T - T_old): ya
         # incluye el retiro de la interfase (poke a gas%T dentro del paso)
         dE_gas = sum(r["E_gas_abs"] for r in steps)
     else:
+        # sin ecuacion de energia del gas (solve_flow = false: noflow_energy)
+        # el gas solo recibe pokes de la interfase: inventario de estado
+        # (auditoria 3, A3-6: el gap era exactamente E_iph_gas)
         dE_gas = last["E_gas"] - first["E_gas"]
     dE = total_E(last) - total_E(first) + dE_gas
     EXT_POS = ("E_src_liq_arc", "E_src_liq_rad", "E_src_liq_chem",
@@ -121,7 +130,7 @@ def main():
     S_int = sum(abs(r.get(k, 0.0)) for r in steps for k in INTERNAL)
     S_gas = sum(abs(r.get(k, 0.0)) for r in steps for k in GAS)
     gap = dE - E_in
-    allowed = args.etol * (S_ext + S_gas) + args.htol * S_int
+    allowed = args.etol * S_gas + args.xtol * S_ext + args.htol * S_int
     energy_on = True
     if args.config:
         v = read_config(args.config).get("solve_energy", True)
@@ -132,9 +141,9 @@ def main():
         ratio = abs(gap) / max(allowed, 1.0)
         chk.report("energy_balance", abs(gap) <= max(allowed, 1.0),
                    f"dE={dE:.4e} J, E_iny={E_in:.4e} J, gap={gap:.3e} J, "
-                   f"permitido={allowed:.3e} J (etol {args.etol} x (S_ext "
-                   f"{S_ext:.3e} + S_gas {S_gas:.3e}) + htol {args.htol} x S_int "
-                   f"{S_int:.3e}), "
+                   f"permitido={allowed:.3e} J (etol {args.etol} x S_gas "
+                   f"{S_gas:.3e} + xtol {args.xtol} x S_ext {S_ext:.3e} + htol "
+                   f"{args.htol} x S_int {S_int:.3e}), "
                    f"gap/permitido={ratio:.3e}")
 
     # -- arc_budget ----------------------------------------------------------
