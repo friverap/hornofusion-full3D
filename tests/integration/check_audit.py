@@ -80,9 +80,9 @@ def main():
     # (M4-16) regimen acotado fuera de los bancos de bano: medido p <= 1.8e5 (bed_flood), gas <= 145 (bed_drain)
     ap.add_argument("--regime-p", type=float, default=5.0e5)
     ap.add_argument("--regime-gas", type=float, default=200.0)
-    # masa: medido 1e-11..2.5e-8 (auditoria 3, M3-6; antes 5e-3 dejaba pasar
-    # ~330 kg en melt_forced)
-    ap.add_argument("--mtol", type=float, default=3e-6)
+    # masa: medido <= 3e-11 en toda la matriz (auditoria 4, B4-20; antes 3e-6,
+    # y 5e-3 antes de M3-6 dejaba pasar ~330 kg en melt_forced)
+    ap.add_argument("--mtol", type=float, default=1e-9)
     # recorte de alpha (M3-5): fraccion maxima del fundido que puede perderse
     # por el clip auditado (medido 0 en dos fluidos; 3.5e-3 en la mezcla, xfail)
     ap.add_argument("--ctol", type=float, default=1e-6)
@@ -114,7 +114,19 @@ def main():
     # (E_gas_abs; la forma T con rho(T) no tiene inventario de estado
     # consistente cuando la masa advecta). Fallback al inventario log si
     # la columna no existe (audits viejos).
-    if "E_gas_abs" in last and any(r["E_gas_abs"] != 0.0 for r in steps):
+    # (auditoria 4, B4-24) el LIBRO del gas (E_gas_abs) existe cuando se
+    # resuelve la energia del gas: solve_energy con flujo de dos fluidos (o
+    # mezcla). Lo decide el config; sin --config, los datos (audits viejos).
+    if args.config:
+        cfgd = read_config(args.config)
+        gas_book = (str(cfgd.get("solve_energy", True)).lower() != "false"
+                    and str(cfgd.get("solve_flow", True)).lower() != "false"
+                    and str(cfgd.get("solve_multiphase", True)).lower() != "false")
+    else:
+        gas_book = "E_gas_abs" in last and any(r["E_gas_abs"] != 0.0 for r in steps)
+    if gas_book and "E_gas_abs" not in last:
+        sys.exit("ERROR: el config resuelve la energia del gas pero el audit no trae E_gas_abs")
+    if gas_book:
         # E_gas_abs es diferencia de estado por paso (T - T_old): ya
         # incluye el retiro de la interfase (poke a gas%T dentro del paso)
         dE_gas = sum(r["E_gas_abs"] for r in steps)
@@ -135,8 +147,7 @@ def main():
     # entra cuando dE_gas es ese inventario (sin libro E_gas_abs). Con el libro
     # (alpha^{n+1}, T - T_old) el gas creado aparece a T_old sin calor absorbido
     # y la columna no pertenece a la identidad.
-    gas_inv = not ("E_gas_abs" in last
-                   and any(r["E_gas_abs"] != 0.0 for r in steps))
+    gas_inv = not gas_book
     if gas_inv:
         EXT_POS = EXT_POS + ("E_gas_volfix",)
     EXT_NEG = ("E_wall_conv", "E_slag_red", "E_alpha_clip")
@@ -315,20 +326,20 @@ def main():
     m_fer = sum(r.get("m_fe_return", 0.0) for r in steps)
     expected = m_melt - m_res - m_clip - m_fey + m_fer
     # (M3-5) el clip no infla la escala
-    denom = max(abs(m_melt) + abs(m_res), abs(dm_l))
-    if denom < 1.0:
-        print("  PASS  mass_liq  (sin fusión: no aplica)")
-    else:
-        err = abs(dm_l - expected) / denom
-        chk.report("mass_liq", err <= args.mtol,
-                   f"dm_liq={dm_l:.4e} vs fundido-resolid-clip="
-                   f"{expected:.4e} kg (fundido={m_melt:.3e}, "
-                   f"resolid={m_res:.3e}, clip={m_clip:.3e}), "
-                   f"err rel={err:.3e}")
-        # -- alpha_clip (M3-5): el recorte auditado tiene cota ----------------
-        chk.report("alpha_clip", abs(m_clip) <= args.ctol * max(abs(m_melt), 1.0),
-                   f"clip auditado {m_clip:.3e} kg sobre fundido {m_melt:.3e} kg "
-                   f"(max {args.ctol} relativo)")
+    # (auditoria 4, B4-22) SIEMPRE: con menos de 1 kg de movimiento la
+    # identidad se mide contra 1 kg (absoluta); antes se saltaba y un
+    # liquido que cambiaba 0.9 kg sin fusion no lo veia nadie
+    denom = max(abs(m_melt) + abs(m_res), abs(dm_l), 1.0)
+    err = abs(dm_l - expected) / denom
+    chk.report("mass_liq", err <= args.mtol,
+               f"dm_liq={dm_l:.4e} vs fundido-resolid-clip="
+               f"{expected:.4e} kg (fundido={m_melt:.3e}, "
+               f"resolid={m_res:.3e}, clip={m_clip:.3e}), "
+               f"err rel={err:.3e}")
+    # -- alpha_clip (M3-5): el recorte auditado tiene cota --------------------
+    chk.report("alpha_clip", abs(m_clip) <= args.ctol * max(abs(m_melt), 1.0),
+               f"clip auditado {m_clip:.3e} kg sobre fundido {m_melt:.3e} kg "
+               f"(max {args.ctol} relativo)")
 
     # -- mass_sol (M3-6): inventario del solido ---------------------------
     # dm_sol = cargas + ECS - fundido + resolid - C oxidado (m_resid_closed es
@@ -340,13 +351,11 @@ def main():
         m_cox = sum(r.get("m_C_oxid", 0.0) for r in steps)
         exp_s = m_chg + m_ecs - m_melt + m_res - m_cox
         den_s = max(abs(m_chg) + abs(m_ecs) + abs(m_melt) + abs(m_res) + abs(m_cox), abs(dm_s))
-        if den_s < 1.0:
-            print("  PASS  mass_sol  (sin cambios del solido: no aplica)")
-        else:
-            err_s = abs(dm_s - exp_s) / den_s
-            chk.report("mass_sol", err_s <= args.mtol,
-                       f"dm_sol={dm_s:.4e} vs cargas+ECS-fundido+resolid-Cox="
-                       f"{exp_s:.4e} kg, err rel={err_s:.3e}")
+        # (B4-22) siempre, absoluta contra 1 kg si no hay movimiento
+        err_s = abs(dm_s - exp_s) / max(den_s, 1.0)
+        chk.report("mass_sol", err_s <= args.mtol,
+                   f"dm_sol={dm_s:.4e} vs cargas+ECS-fundido+resolid-Cox="
+                   f"{exp_s:.4e} kg, err rel={err_s:.3e}")
 
     # -- centinelas (M3-9): nunca se tocan en regimen sano -------------------
     if "p_max" in last and "u_gas_max" in last:

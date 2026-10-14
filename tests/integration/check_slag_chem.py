@@ -50,16 +50,16 @@ def main():
     # Tolerancia 1e-6 relativa al flujo: dm_liq es la RESTA de inventarios
     # ~1e5 kg (cancelacion de redondeo ~1e-6 kg absoluto, 1e-11 relativo
     # al inventario)
-    # Resolucion del CSV: m_liq se escribe con 10 cifras significativas
-    # (ES17.9), asi que la resta de dos inventarios de ~1e5 kg no resuelve
-    # menos de ~1e-4 kg. El umbral es el mayor de 1e-6 del flujo y dos
-    # unidades de esa resolucion (auditoria, bajos: con 10 kg de Fe la
-    # tolerancia de 1e-5 kg estaba por debajo de lo que el archivo representa)
+    # Resolucion del CSV: m_liq se escribe en doble completo (ES24.16E3,
+    # auditoria 3 M3-6), asi que la resta de dos inventarios de ~1e5 kg
+    # resuelve ~1e-11 kg. El umbral es el mayor de 1e-9 del flujo y dos
+    # unidades de esa resolucion. (auditoria 4, B4-17: estaba calibrado a
+    # las 10 cifras de ES17.9, 1e7x mas laxo que lo medido, 2e-11)
     import math
     mref = max(abs(first["m_liq"]), abs(last["m_liq"]), 1.0)
-    res_csv = 2.0 * 10.0 ** (math.floor(math.log10(mref)) - 9)
+    res_csv = 2.0 * 10.0 ** (math.floor(math.log10(mref)) - 16)
     err = abs(dm_liq + (fey - fer)) / max(fey, 1.0)
-    tol_fe = max(1e-6, res_csv / max(fey, 1.0))
+    tol_fe = max(1e-9, res_csv / max(fey, 1.0))
     chk.report("fe_element", err <= tol_fe,
                f"dm_liq={dm_liq:.4f} vs -(yield-return)="
                f"{-(fey-fer):.4f} kg (err {err:.3e})")

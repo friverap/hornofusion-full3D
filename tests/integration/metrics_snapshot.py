@@ -20,6 +20,7 @@ Uso: metrics_snapshot.py OUTDIR --mode check|rebaseline [--rtol 1e-12]
      [--stage v1] [--golden-dir tests/golden]
 """
 import argparse
+import math
 import glob
 import json
 import os
@@ -64,6 +65,10 @@ def golden_files(golden_dir):
 
 
 def rel_diff(a, b):
+    # (auditoria 4, B4-18) NaN/inf en cualquiera de los dos: diferencia
+    # infinita (antes 'nan > worst' era falso y daba PASS)
+    if not (math.isfinite(a) and math.isfinite(b)):
+        return float("inf")
     scale = max(abs(a), abs(b), 1e-300)
     return abs(a - b) / scale if scale > 1e-30 else abs(a - b)
 

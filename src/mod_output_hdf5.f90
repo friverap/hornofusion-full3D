@@ -74,7 +74,7 @@ contains
         end if
         
         ! Write mesh coordinates
-        call write_mesh_group(file_id, m)
+        call write_mesh_group(file_id, m, plist_xfer)
         
         ! Write all field variables
         call write_fields_group(file_id, m, liq, gas, sol, slag, sh, plist_xfer)
@@ -101,8 +101,8 @@ contains
     !---------------------------------------------------------------------------
     ! Write mesh coordinates (1D arrays: r, theta, z)
     !---------------------------------------------------------------------------
-    subroutine write_mesh_group(file_id, m)
-        integer(HID_T), intent(in) :: file_id
+    subroutine write_mesh_group(file_id, m, plist_xfer)
+        integer(HID_T), intent(in) :: file_id, plist_xfer
         type(mesh_t), intent(in) :: m
 
         integer(HID_T) :: group_id, dspace_id, dset_id
@@ -156,6 +156,11 @@ contains
             dims(1) = m%nz
             call write_1d_dataset(group_id, 'z', m%z(1:m%nz), dims)
         end if
+
+        ! (auditoria 4, B4-21) mascara de celdas ACTIVAS (cell_type /= 0):
+        ! check_invariants exige sum alpha = 1 en las activas y 0 en las
+        ! inactivas (antes aceptaba 0 en cualquier celda). Colectiva.
+        call write_3d_field_int(group_id, 'cell_type', m%cell_type, m, plist_xfer)
 
         call h5gclose_f(group_id, error)
 

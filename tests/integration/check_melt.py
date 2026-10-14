@@ -32,7 +32,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("rundir")
     ap.add_argument("--config", required=True)
-    ap.add_argument("--rtol", type=float, default=0.005)
+    # (auditoria 4, B4-20) medido 2e-16 (dm_l = -dm_s a redondeo); antes 5e-3
+    ap.add_argument("--rtol", type=float, default=1e-12)
     args = ap.parse_args()
 
     cfg = read_config(args.config)

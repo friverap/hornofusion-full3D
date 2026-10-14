@@ -64,9 +64,18 @@ def main():
               f"step {step}: min={a_min:.3e} max={a_max:.6f}")
 
         s = sum(alphas)
-        dist = np.minimum(np.abs(s), np.abs(s - 1.0))
-        track("sum_alpha", float(np.nanmax(dist)),
-              f"step {step}: max|sum_alpha - {{0,1}}| = {np.nanmax(dist):.3e}")
+        ct = mesh.get("cell_type")
+        if ct is not None and np.shape(ct) == np.shape(s):
+            # (auditoria 4, B4-21) con la mascara del snapshot: 1 en las
+            # celdas ACTIVAS, 0 en las inactivas (electrodos, fuera del
+            # tazon); antes sum alpha = 0 en una celda activa pasaba
+            dist = np.where(ct != 0, np.abs(s - 1.0), np.abs(s))
+            track("sum_alpha", float(np.nanmax(dist)),
+                  f"step {step}: max|sum_alpha - (1 activa / 0 inactiva)| = {np.nanmax(dist):.3e}")
+        else:
+            dist = np.minimum(np.abs(s), np.abs(s - 1.0))
+            track("sum_alpha", float(np.nanmax(dist)),
+                  f"step {step}: max|sum_alpha - {{0,1}}| = {np.nanmax(dist):.3e} (snapshot sin cell_type)")
 
         for fname, cid, lo, hi in (("T_liquid", "T_liquid_bound", 250., 4000.),
                                    ("T_solid", "T_solid_bound", 250., 4000.)):

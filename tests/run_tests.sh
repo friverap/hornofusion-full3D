@@ -76,8 +76,10 @@ run_case() {
 #   ranks hasta el mismo t_final y compara el snapshot final con la corrida
 #   continua (compare_decomposition): el reinicio debe ser un estado
 #   COMPLETO — BIT A BIT (1e-12) con el mismo nº de ranks; con distinto nº
-#   la tolerancia es la de la invarianza de descomposición (1e-3; medido
-#   4e-9 tras 5 pasos). Vive en tests/out/restart/ (fuera del golden).
+#   la tolerancia es la de la invarianza de descomposición (1e-10; medido
+#   8.5e-13). (auditoria 4, B4-19) ademas invariantes, audit del tramo y
+#   audit.csv BIT A BIT contra la continua (compare_audit). Vive en
+#   tests/out/restart/ (fuera del golden).
 #------------------------------------------------------------------------------
 run_restart_case() {
     local base=$1 npb=$2 np=$3 st=$4
@@ -107,6 +109,48 @@ run_restart_case() {
     [ "$np" = "$npb" ] || rtol=1e-10   # (medido 8.5e-13; antes 1e-3)
     run_script "restart_${base}_n${npb}_to_n${np}" \
         $PY $INT/compare_decomposition.py "$dir" "$src" --rtol $rtol
+    # (auditoria 4, B4-19) el tramo reanudado pasa los mismos gates que una
+    # corrida y su audit.csv coincide con el de la continua
+    check_invariants_case "$dir" "$base"
+    check_audit_case "$dir" "$base"
+    run_script "restart_audit_${base}_n${npb}_to_n${np}" \
+        $PY $INT/compare_audit.py "$dir" "$src" --from-step "$st" --rtol $rtol
+}
+
+# audit_xfail_prefix <base> -> prefijo de xfail del audit propio del caso
+audit_xfail_prefix() {
+    case $1 in
+        cold_10step)   echo audit_cold ;;
+        arc_noscrap)   echo audit_arcnoscrap ;;
+        noflow_energy) echo audit_noflow ;;
+        bed_flood)     echo audit_bedflood ;;
+        bath_fill_mix) echo audit_mix ;;
+        melt_forced)   echo audit_melt ;;
+        *)             echo "" ;;
+    esac
+}
+# audit_extra_args <base> -> argumentos extra de check_audit del caso
+audit_extra_args() {
+    case $1 in
+        arc_noscrap) echo "--min-liq-arc 0.6" ;;
+        outer_conv)  echo "--etol 1e-4" ;;   # lazo convergido (N-A6)
+        *)           echo "" ;;
+    esac
+}
+# check_audit_case <rundir> <base>
+check_audit_case() {
+    check_audit_if_present "$1" "$(audit_xfail_prefix "$2")" "$(audit_extra_args "$2")" "$2"
+}
+# check_invariants_case <rundir> <base>: melt_forced (regimen violento,
+# gated en C3.4) lleva xfail propio por corrida
+check_invariants_case() {
+    local xf
+    xf="$(xfail_ids invariants)"
+    [ "$2" = "melt_forced" ] && xf="$xf,$(xfail_ids invariants_melt)"
+    if ! $PY $INT/check_invariants.py "$1" --config "$CFG/$2.dat" --xfail "$xf"; then
+        echo ">> FAIL invariantes en $1"
+        note_fail
+    fi
 }
 
 #------------------------------------------------------------------------------
@@ -137,19 +181,26 @@ check_invariants() {  # <rundir> <config_name>
     fi
 }
 
-check_audit_if_present() {  # <rundir> [prefijo_xfail_extra] [args extra]
+check_audit_if_present() {  # <rundir> [prefijo_xfail_extra] [args extra] [base]
     local extra="" more="${3:-}"
     [ -n "${2:-}" ] && extra=",$(xfail_ids "$2")"
-    # config del caso (nombre del directorio sin _nN): solve_energy = false
-    # => el balance de energia no aplica (auditoria 2, N-C3)
+    # config del caso (nombre del directorio sin _nN, o <base> explicito):
+    # solve_energy = false => el balance de energia no aplica (auditoria 2,
+    # N-C3)
     local base cfgarg=""
-    base=$(basename "$1"); base=${base%_n*}
+    base=${4:-}
+    if [ -z "$base" ]; then base=$(basename "$1"); base=${base%_n*}; fi
     [ -f "$CFG/$base.dat" ] && cfgarg="--config $CFG/$base.dat"
     if [ -f "$1/audit.csv" ]; then
         if ! $PY $INT/check_audit.py "$1" $cfgarg $more --xfail "$(xfail_ids audit)$extra"; then
             echo ">> FAIL auditoría en $1"
             note_fail
         fi
+    elif ! grep -Eq '^[[:space:]]*audit_freq[[:space:]]*=[[:space:]]*0' "$1/config.dat" 2>/dev/null; then
+        # (auditoria 4, B4-22) sin audit.csv y sin audit_freq = 0 en el
+        # config del caso es un fallo, no un caso 'sin audit'
+        echo ">> FAIL falta audit.csv en $1 (audit_freq /= 0)"
+        note_fail
     fi
 }
 
@@ -260,19 +311,6 @@ full | rebaseline)
     run_case arc_melt 4
     run_case arc_melt 1
 
-    for d in "$OUT"/cold_10step_n*; do
-        check_invariants "$d" cold_10step
-    done
-    # melt_forced: régimen violento aún inestable (gated en C3.4) ->
-    # sus invariantes duros (nan/bounds) llevan xfail PROPIO por corrida
-    if ! $PY $INT/check_invariants.py "$OUT/melt_forced_n8" \
-            --config "$CFG/melt_forced.dat" \
-            --xfail "$(xfail_ids invariants),$(xfail_ids invariants_melt)"; then
-        echo ">> FAIL invariantes en melt_forced_n8"
-        note_fail
-    fi
-    check_invariants "$OUT/noflow_energy_n1" noflow_energy
-    check_invariants "$OUT/symmetry_3elec_n6" symmetry_3elec
 
     run_script "decomposition_cold_n1" \
         $PY $INT/compare_decomposition.py "$OUT/cold_10step_n1" "$OUT/cold_10step_n8" --rtol 1e-10
@@ -289,16 +327,6 @@ full | rebaseline)
     # Invariantes en TODA la matriz (auditoria 3, A3-7: chem_test y
     # slag_chem_test violaban sum_alpha (7.7e-6, 1.04e-4) sin que nadie los
     # mirara: ni chem, ni slag_chem, ni ecs, ni outer_conv, ni melt_forced)
-    check_invariants "$OUT/melt_forced_n8" melt_forced
-    check_invariants "$OUT/outer_conv_n8" outer_conv
-    check_invariants "$OUT/chem_test_n4" chem_test
-    for d in "$OUT"/ecs_test_n1 "$OUT"/ecs_test_n8; do
-        check_invariants "$d" ecs_test
-    done
-    for d in "$OUT"/slag_chem_test_n*; do
-        check_invariants "$d" slag_chem_test
-    done
-    check_invariants "$OUT/slag_chem_flow_n4" slag_chem_flow
     run_script "chem" \
         $PY $INT/check_chem.py "$OUT/chem_test_n4" --config "$CFG/chem_test.dat"
     run_script "ecs" \
@@ -314,11 +342,8 @@ full | rebaseline)
     # la carga no se depositaba (indice radial local tomado como global)
     run_case ecs_test 12 && run_script "decomposition_ecs_r" \
         $PY $INT/compare_decomposition.py "$OUT/ecs_test_n12" "$OUT/ecs_test_n1" --rtol 1e-12
-    check_invariants "$OUT/ecs_test_n12" ecs_test
     run_script "decomposition_slag" \
-        $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n8" --rtol 1e-4
-    check_invariants "$OUT/bath_test_stretch_n4" bath_test_stretch
-    check_invariants "$OUT/bath_test_cold_n4" bath_test_cold
+        $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n8" --rtol 1e-5
     run_script "bath_test_cold" \
         $PY $INT/check_bath.py "$OUT/bath_test_cold_n4" --config "$CFG/bath_test_cold.dat" --fill \
         --xfail "$(xfail_ids bath_test_cold)"
@@ -326,62 +351,41 @@ full | rebaseline)
         $PY $INT/check_bath.py "$OUT/bath_test_stretch_n4" --config "$CFG/bath_test_stretch.dat" \
         --xfail "$(xfail_ids bath)"
     for d in "$OUT"/bath_test_n*; do
-        check_invariants "$d" bath_test
         run_script "bath_test" \
             $PY $INT/check_bath.py "$d" --config "$CFG/bath_test.dat" \
             --xfail "$(xfail_ids bath)"
     done
-    check_invariants "$OUT/bath_fill_n4" bath_fill
     run_script "bath_fill" \
         $PY $INT/check_bath.py "$OUT/bath_fill_n4" --config "$CFG/bath_fill.dat" --fill \
         --xfail "$(xfail_ids bath_fill)"
     # Modelo de MEZCLA (Plan G): baño en reposo y llenado con fusion y arco
-    check_invariants "$OUT/bath_mix_n4" bath_mix
     run_script "bath_mix" \
         $PY $INT/check_bath.py "$OUT/bath_mix_n4" --config "$CFG/bath_mix.dat" \
         --xfail "$(xfail_ids bath_mix)"
-    check_invariants "$OUT/bath_fill_mix_n4" bath_fill_mix
     run_script "bath_fill_mix" \
         $PY $INT/check_bath.py "$OUT/bath_fill_mix_n4" --config "$CFG/bath_fill_mix.dat" --fill \
         --xfail "$(xfail_ids bath_fill_mix)"
-    check_invariants "$OUT/bath_freeze_n4" bath_freeze
     run_script "bath_freeze" \
         $PY $INT/check_bath.py "$OUT/bath_freeze_n4" --config "$CFG/bath_freeze.dat" --fill \
         --xfail "$(xfail_ids bath_freeze)"
-    check_invariants "$OUT/bed_flood_n4" bed_flood
-    check_invariants "$OUT/arc_noscrap_n4" arc_noscrap
-    check_invariants "$OUT/cold_bucket2_n4" cold_bucket2
     run_script "bed_flood" \
         $PY $INT/check_bath.py "$OUT/bed_flood_n4" --config "$CFG/bed_flood.dat" --fill \
         --xfail "$(xfail_ids bed_flood)"
-    check_invariants "$OUT/bed_drain_n4" bed_drain
     run_script "bed_drain" \
         $PY $INT/check_drain.py "$OUT/bed_drain_n4" --xfail "$(xfail_ids bed_drain)"
-    for d in "$OUT"/bed_bath_rest_n* "$OUT"/arc_melt_n*; do
-        check_invariants "$d" "$(basename "$d" | sed 's/_n[0-9]*$//')"
-    done
     run_script "bed_bath_rest" \
         $PY $INT/check_bedbath.py "$OUT/bed_bath_rest_n4" --xfail "$(xfail_ids bed_bath_rest)"
     run_script "arc_melt" \
         $PY $INT/check_arcmelt.py "$OUT/arc_melt_n4" --xfail "$(xfail_ids arc_melt)"
     # Auditoria de energia/masa/arco en TODA corrida de la matriz (auditoria
     # 2, N-C3: antes 13 de 26 no se auditaban; bath_freeze fallaba con err 1)
+    # (auditoria 4, B4-21) invariantes en TODA corrida de la matriz (antes
+    # faltaban los n1/n9 nuevos: bath_freeze n1/n9, bed_drain n1, bath_fill
+    # n1, arc_noscrap n1, melt_forced n1)
     for d in "$OUT"/*_n*; do
-        more=""
-        case $(basename "$d") in
-            arc_noscrap_*)   more="--min-liq-arc 0.6" ;;
-            outer_conv_*)    more="--etol 1e-4" ;;   # lazo convergido (N-A6)
-        esac
-        case $(basename "$d") in
-            cold_10step_*)   x=audit_cold ;;
-            arc_noscrap_*)   x=audit_arcnoscrap ;;
-            noflow_energy_*) x=audit_noflow ;;
-            bed_flood_*)     x=audit_bedflood ;;
-            bath_fill_mix_*) x=audit_mix ;;
-            melt_forced_*)   x=audit_melt ;;
-            *)               x="" ;;
-        esac
-        check_audit_if_present "$d" "$x" "$more"
+        b=$(basename "$d"); b=${b%_n*}
+        check_invariants_case "$d" "$b"
+        check_audit_case "$d" "$b"
     done
     run_script "decomposition_bath" \
         $PY $INT/compare_decomposition.py "$OUT/bath_test_n1" "$OUT/bath_test_n4" --rtol 1e-8
@@ -390,7 +394,7 @@ full | rebaseline)
     run_script "decomposition_freeze_z" \
         $PY $INT/compare_decomposition.py "$OUT/bath_freeze_n1" "$OUT/bath_freeze_n9" --rtol 1e-5
     run_script "decomposition_slag_z" \
-        $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n9" --rtol 1e-4
+        $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n9" --rtol 1e-5
     run_script "decomposition_freeze" \
         $PY $INT/compare_decomposition.py "$OUT/bath_freeze_n1" "$OUT/bath_freeze_n4" --rtol 1e-5
     # (M3-10) tolerancias ~100x lo medido: drenaje 7e-6, llenado 1e-6, arco
@@ -427,8 +431,14 @@ full | rebaseline)
     run_restart_case arc_melt 4 4 100
 
     if [ "$MODE" = "rebaseline" ]; then
-        $PY $INT/metrics_snapshot.py "$OUT" --mode rebaseline \
-            ${STAGE:+--stage "$STAGE"} || note_fail
+        # (auditoria 4, B4-23) el golden solo se regenera con la matriz LIMPIA:
+        # un rebaseline con fallos convertia el fallo en referencia
+        if [ "$FAILURES" -eq 0 ]; then
+            $PY $INT/metrics_snapshot.py "$OUT" --mode rebaseline \
+                ${STAGE:+--stage "$STAGE"} || note_fail
+        else
+            echo ">> golden NO regenerado: $FAILURES fallo(s) en la matriz"
+        fi
     else
         if ! $PY $INT/metrics_snapshot.py "$OUT" --mode check; then
             echo ">> FAIL métricas golden"

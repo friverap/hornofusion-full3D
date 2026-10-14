@@ -61,6 +61,10 @@ def main():
         a, b = fields_a[name], fields_b[name]
         scale = max(family_scale(name), args.floor)
         err = float(np.max(np.abs(a - b))) / scale
+        # (auditoria 4, B4-18) un NaN en cualquiera de las dos corridas es un
+        # FAIL, no un PASS por 'nan > worst' falso
+        if not np.isfinite(err):
+            err = float("inf")
         flag = "   " if err <= args.rtol else "***"
         print(f"  {flag} {name:22s} err_rel_Linf = {err:.3e}")
         if err > worst:
