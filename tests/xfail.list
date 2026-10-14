@@ -87,3 +87,10 @@ audit_bedflood:mass_gas
 audit_melt:mass_gas
 # bath_fill_mix (modelo de mezcla, opt-in negativo): la EOS reescribe el 76 %
 audit_mix:mass_gas
+# (auditoria 4, B4-19) tramo reanudado de slag_chem_flow (pasos 10-20): el
+# audit.csv es BIT A BIT el de la continua y la misma ventana 10-20 de la
+# continua da el MISMO gap (1.21e5 J sobre S_gas 3.3e6, 3.7 %); la corrida
+# completa pasa porque S_gas de los pasos 1-10 (1.3e7) es 4x mayor. Es la
+# imprecision del libro del gas con el lazo externo cortado en 5 (misma causa
+# que audit_cold:energy_balance antes de M25), no una fuga del reinicio.
+audit_restart_slag_chem_flow:energy_balance
