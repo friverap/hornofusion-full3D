@@ -52,6 +52,15 @@ run_case() {
         note_fail
         return 1
     fi
+    # (auditoria 3, M3-8) un CG sin converger o un fallback implicito del
+    # transporte de alpha son fallos del caso, no ruido de stdout:
+    # slag_chem_flow corria con res 2.3e-2 (tol 1e-8) y nadie lo veia
+    if grep -q '\[CG\] AVISO\|\[ALPHA\] AVISO' "$dir/run.log"; then
+        echo "FAIL: aviso del solver en $name -n $np:"
+        grep '\[CG\] AVISO\|\[ALPHA\] AVISO' "$dir/run.log" | head -3
+        note_fail
+        return 1
+    fi
     if ! ls "$dir"/eaf3d_*.h5 > /dev/null 2>&1; then
         echo "FAIL: $name -n $np no produjo snapshots"
         note_fail

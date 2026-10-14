@@ -57,7 +57,7 @@ t_bucket2_charge = 1.0e30
 
 max_outer = 2
 max_inner_mom = 2
-max_inner_pres = 20
+max_inner_pres = 200
 output_freq = 5
 monitor_freq = 10
 audit_freq = 1
