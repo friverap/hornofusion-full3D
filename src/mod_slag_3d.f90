@@ -13,7 +13,8 @@ module mod_slag_3d
     use mod_types_3d
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_allreduce_sum, mpi_exchange_halos_3d
     use mod_parallel_utils, only: gather_global_field, global_to_local
-    use mod_audit, only: audit_add, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT, AUD_SLAG_TCLIP
+    use mod_audit, only: audit_add, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT, AUD_SLAG_TCLIP, &
+                         AUD_SLAG_GAS, AUD_SLAG_LIQ
     implicit none
 
     real(dp), parameter :: SMALL_SL = 1.0e-6_dp
@@ -485,6 +486,7 @@ contains
                         Q = Cs * Cf / (Cs + Cf) * (liq%T(i,j,k) - slag%E_sl(i,j,k) / Cs) * f
                         slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
                         liq%T(i,j,k) = liq%T(i,j,k) - Q / Cf
+                        call audit_add(AUD_SLAG_LIQ, Q)
                     else if (m%cell_type(i,j,k-1) /= 0 .and. liq%alpha(i,j,k-1) > SMALL_SL) then
                         Cf = liq%alpha(i,j,k-1) * liq%rho(i,j,k-1) * liq%cp(i,j,k-1) * m%vol(i,j,k-1)
                         hA = cfg%h_contact_sl * m%Az(i,j,k-1)
@@ -492,6 +494,7 @@ contains
                         Q = Cs * Cf / (Cs + Cf) * (liq%T(i,j,k-1) - slag%E_sl(i,j,k) / Cs) * f
                         slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
                         qdown(i,j,k) = Q        ! se le resta al bano de abajo en la pasada 2
+                        call audit_add(AUD_SLAG_LIQ, Q)
                     end if
                     ! gas de la propia celda
                     if (gas%alpha(i,j,k) > SMALL_SL) then
@@ -501,6 +504,7 @@ contains
                         Q = Cs * Cf / (Cs + Cf) * (gas%T(i,j,k) - slag%E_sl(i,j,k) / Cs) * f
                         slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
                         gas%T(i,j,k) = gas%T(i,j,k) - Q / Cf
+                        call audit_add(AUD_SLAG_GAS, Q)
                     end if
                     slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / Cs
                 end do

@@ -32,7 +32,7 @@ module mod_audit
     public :: audit_set_energy
     public :: AUD_ARC_DIRECT, AUD_ARC_DISCARD, AUD_MC_DEPOSIT
     public :: AUD_ALPHA_CLIP_MASS, AUD_MELT_MASS, AUD_RESOLID_MASS
-    public :: AUD_MELT_E_SOLID, AUD_SLAG_INTERCEPT
+    public :: AUD_MELT_E_SOLID, AUD_SLAG_INTERCEPT, AUD_SLAG_GAS, AUD_SLAG_LIQ
     public :: AUD_RAD_SOL, AUD_RAD_WALL, AUD_CHEM_SOL, AUD_MC_LOST
     public :: AUD_ECS_MASS, AUD_ECS_ENERGY, AUD_FLUX_MASS, AUD_FLUX_E
     public :: AUD_FE_YIELD, AUD_FE_RETURN, AUD_SLAG_OX_E, AUD_SLAG_RED_E
@@ -107,7 +107,12 @@ module mod_audit
     integer, parameter :: AUD_CONV_LIQ        = 42
     integer, parameter :: AUD_CONV_GAS        = 43
     integer, parameter :: AUD_ABS_GAS_HOOK    = 44
-    integer, parameter :: N_AUD = 44
+    ! DIAGNOSTICO (auditoria 3, M3-7): J que la escoria recibe del gas y del
+    ! bano (propia celda + qdown de la de abajo) en slag_energy; traspasos
+    ! entre inventarios de estado, no entran a la identidad
+    integer, parameter :: AUD_SLAG_GAS        = 45
+    integer, parameter :: AUD_SLAG_LIQ        = 46
+    integer, parameter :: N_AUD = 46
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -202,7 +207,7 @@ contains
                 'm_resid_closed,E_resid_closed,m_spill,' // &
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
-                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook'
+                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq'
             close(iu)
         end if
         acc = 0.0_dp
@@ -363,7 +368,8 @@ contains
                 ',', a(AUD_DIL_O2), ',', a(AUD_DIL_CO), ',', a(AUD_DIL_CO2), &
                 ',', a(AUD_GAS_VOLFIX), ',', a(AUD_SLAG_TCLIP), ',', a(AUD_MIX_INIT), &
                 ',', a(AUD_RESOLID_E), ',', a(AUD_ALPHA_CLIP_E), &
-                ',', a(AUD_CONV_LIQ), ',', a(AUD_CONV_GAS), ',', a(AUD_ABS_GAS_HOOK)
+                ',', a(AUD_CONV_LIQ), ',', a(AUD_CONV_GAS), ',', a(AUD_ABS_GAS_HOOK), &
+                ',', a(AUD_SLAG_GAS), ',', a(AUD_SLAG_LIQ)
             close(iu)
         end if
     end subroutine audit_write_step

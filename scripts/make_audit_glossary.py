@@ -118,6 +118,30 @@ DEFS = {
                        "$\\alpha_g\\ge10^{-2}$ [m\\,s$^{-1}$]"),
     "u_liq_max": ("D", "Maximum liquid speed over cells with "
                        "$\\alpha_l\\ge10^{-2}$ [m\\,s$^{-1}$] (cap 20)"),
+    "m_charge_in": ("C", "Scrap mass charged by baskets after start-up [kg]"),
+    "E_charge_in": ("C", "Enthalpy charged with that scrap [J]"),
+    "m_C_oxid": ("C", "Carbon oxidised to CO; leaves the steel inventory [kg]"),
+    "m_dil_O2": ("C", "O$_2$ displaced by the dilution of reaction mass entering "
+                      "the gas ($-Y_k S_{gas}$, EOS-fixed density) [kg]"),
+    "m_dil_CO": ("C", "CO displaced by that dilution [kg]"),
+    "m_dil_CO2": ("C", "CO$_2$ displaced by that dilution [kg]"),
+    "m_gas_volfix": ("C", "Gas mass created (+) or destroyed (-) when "
+                          "$\\alpha_g=1-\\sum\\alpha$ is re-imposed without the "
+                          "two-fluid $\\alpha$ transport [kg]"),
+    "E_slag_tclip": ("C", "Enthalpy injected by the slag floor $T_{sl}\\ge300$ K [J]"),
+    "E_mix_init": ("C", "Heat the liquid receives from the gas in the start-up "
+                        "equilibration of the mixture model [J]"),
+    "E_resolid": ("C", "Enthalpy handed to the solid by freezing ($dm\\,e_{entry}$) [J]"),
+    "E_alpha_clip": ("C", "Enthalpy removed with the audited $\\alpha$ clip [J]"),
+    "E_conv_liq": ("D", "Convective defect of the bounded liquid energy statement [J]"),
+    "E_conv_gas": ("D", "Convective defect of the bounded gas energy statement [J]; "
+                        "the only one that enters the identity"),
+    "E_abs_gas_hook": ("D", "Heat absorbed by the gas equation according to its own "
+                            "hook [J] (diagnostic against E\\_gas\\_abs)"),
+    "E_slag_gas": ("C", "Heat the slag receives from the gas of its cell [J] "
+                        "(transfer between state inventories; diagnostic)"),
+    "E_slag_liq": ("C", "Heat the slag receives from the bath (own cell or the "
+                        "one below) [J] (diagnostic)"),
 }
 
 src = open(SRC).read()
