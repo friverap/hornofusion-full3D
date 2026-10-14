@@ -384,10 +384,20 @@ program eaf_3d_simulator
             ! Química de escoria (E2.3/E2.4): tras el carbono (usa su O2
             ! remanente) y antes del transporte de especies
             if (cfg%solve_slag) then
-                call compute_slag_chemistry(slag, liq, liq_old, gas, sh, mesh, cfg)
+                call compute_slag_chemistry(slag, liq, liq_old, gas, sol, sh, mesh, cfg)
                 call slag_exchange_halos(slag, mesh)
                 call phase_exchange_halos(liq, mesh)
                 call phase_exchange_halos(liq_old, mesh)
+            end if
+            ! Sin transporte de alpha de dos fluidos nadie repone el gas que
+            ! la quimica desplaza (oxidacion del C baja alpha_s, Fe de la
+            ! escoria mueve alpha_l): alpha_g es el complemento (auditoria 3,
+            ! A3-7; chem_test sum_alpha 7.7e-6). Con dos fluidos lo hace la
+            ! continuidad del SIMPLE. Masa de gas auditada (m_gas_volfix).
+            if (.not. (cfg%solve_flow .and. cfg%solve_multiphase)) then
+                call enforce_volume_constraint(liq, gas, sol, slag, mesh, sh)
+                call phase_exchange_halos(gas, mesh)
+                call shared_exchange_halos(sh, mesh)
             end if
         end if
 
@@ -447,7 +457,7 @@ program eaf_3d_simulator
             ! sin transporte de alpha de dos fluidos, el mdot se aplica aqui
             ! (auditoria 2, N-C4)
             if (.not. (cfg%solve_flow .and. cfg%solve_multiphase)) then
-                call apply_mass_source_noflow(liq, gas, sol, slag, mesh, cfg%dt)
+                call apply_mass_source_noflow(liq, gas, sol, slag, mesh, cfg%dt, sh)
                 call phase_exchange_halos(liq, mesh)
                 call phase_exchange_halos(gas, mesh)
             end if

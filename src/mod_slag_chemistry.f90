@@ -53,7 +53,7 @@ module mod_slag_chemistry
 
 contains
 
-    subroutine compute_slag_chemistry(slag, liq, liq_old, gas, sh, m, cfg)
+    subroutine compute_slag_chemistry(slag, liq, liq_old, gas, sol, sh, m, cfg)
         type(slag_t),  intent(inout) :: slag
         type(phase_t), intent(inout) :: liq, gas
         ! Ancla temporal del liquido (auditoria 12-oct-2026, A1): el transporte
@@ -62,13 +62,14 @@ contains
         ! (con liq_old%T consistente); antes se descartaba (Fe creado en la
         ! oxidacion, destruido en la reduccion, el audit decia otra cosa)
         type(phase_t), intent(inout) :: liq_old
+        type(solid_t), intent(in)    :: sol
         type(shared_t), intent(inout) :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
 
         integer  :: i, j, k
         integer  :: istart, iend, jstart, jend, kstart, kend
-        real(dp) :: o2_rem, r_feo, dm_feo, dm_fe, dm_o2
+        real(dp) :: o2_rem, r_feo, dm_feo, dm_fe, dm_o2, dm_b
         real(dp) :: vol, vol_b, q_rx, q_lim, e_fe, c0
         real(dp) :: r_red, dm_red, dm_c, dm_co
         real(dp) :: b2, x_feo, j_co, h_foam, rho_co, dm_co_cell
@@ -186,13 +187,24 @@ contains
                             e_fe = dm_fe * (cfg%cp_l * slag%T_sl(i,j,k) + c0)
                             ! Fe al bano de ABAJO (pasada 2) o, sobre pared, a
                             ! la propia celda (antes se perdia)
+                            ! (auditoria 3, A3-7) el bano de abajo recibe
+                            ! solo lo que CABE en su hueco (1 - alpha_s -
+                            ! alpha_sl - alpha_l; alpha de la vecina con halo
+                            ! valido); el resto entra a la propia celda de
+                            ! escoria, que es la superficie del bano y tiene
+                            ! gas. Antes todo iba a la celda llena de abajo:
+                            ! alpha_l = 1.000104 (slag_chem_test, sum_alpha).
                             below = (m%cell_type(i,j,k-1) /= 0)
-                            if (below) then
-                                fe_in(i,j,k) = fe_in(i,j,k) + dm_fe
+                            dm_b = 0.0_dp
+                            if (below) dm_b = min(dm_fe, max(0.0_dp, 1.0_dp &
+                                - sol%alpha_s(i,j,k-1) - slag%alpha_sl(i,j,k-1) &
+                                - liq%alpha(i,j,k-1)) * liq%rho(i,j,k-1) * m%vol(i,j,k-1))
+                            if (dm_b > 0.0_dp) then
+                                fe_in(i,j,k) = fe_in(i,j,k) + dm_b
                                 t_in(i,j,k) = slag%T_sl(i,j,k)
-                            else
-                                call add_fe(i, j, k, dm_fe, slag%T_sl(i,j,k))
                             end if
+                            if (dm_fe - dm_b > 0.0_dp) &
+                                call add_fe(i, j, k, dm_fe - dm_b, slag%T_sl(i,j,k))
                             slag%E_sl(i,j,k) = slag%E_sl(i,j,k) - e_fe - q_rx
                             ! CO al gas (fuente de especies) y a la espuma
                             sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + &

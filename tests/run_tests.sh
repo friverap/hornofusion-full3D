@@ -240,6 +240,19 @@ full | rebaseline)
         $PY $INT/check_melt.py "$OUT/melt_forced_n8" --config "$CFG/melt_forced.dat"
     run_script "outer_convergence" \
         $PY $INT/check_outer.py "$OUT/outer_conv_n8" --max-outer 30
+    # Invariantes en TODA la matriz (auditoria 3, A3-7: chem_test y
+    # slag_chem_test violaban sum_alpha (7.7e-6, 1.04e-4) sin que nadie los
+    # mirara: ni chem, ni slag_chem, ni ecs, ni outer_conv, ni melt_forced)
+    check_invariants "$OUT/melt_forced_n8" melt_forced
+    check_invariants "$OUT/outer_conv_n8" outer_conv
+    check_invariants "$OUT/chem_test_n4" chem_test
+    for d in "$OUT"/ecs_test_n1 "$OUT"/ecs_test_n8; do
+        check_invariants "$d" ecs_test
+    done
+    for d in "$OUT"/slag_chem_test_n*; do
+        check_invariants "$d" slag_chem_test
+    done
+    check_invariants "$OUT/slag_chem_flow_n4" slag_chem_flow
     run_script "chem" \
         $PY $INT/check_chem.py "$OUT/chem_test_n4" --config "$CFG/chem_test.dat"
     run_script "ecs" \
@@ -255,6 +268,7 @@ full | rebaseline)
     # la carga no se depositaba (indice radial local tomado como global)
     run_case ecs_test 12 && run_script "decomposition_ecs_r" \
         $PY $INT/compare_decomposition.py "$OUT/ecs_test_n12" "$OUT/ecs_test_n1" --rtol 1e-12
+    check_invariants "$OUT/ecs_test_n12" ecs_test
     run_script "decomposition_slag" \
         $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n8" --rtol 1e-4
     for d in "$OUT"/bath_test_n*; do

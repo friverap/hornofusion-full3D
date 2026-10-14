@@ -59,14 +59,21 @@ contains
     end subroutine update_solid_postenergy
 
     !---------------------------------------------------------------------------
-    subroutine enforce_volume_constraint(liq, gas, sol, slag, m)
+    subroutine enforce_volume_constraint(liq, gas, sol, slag, m, sh)
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
         type(slag_t),  intent(in)    :: slag
         type(mesh_t), intent(in)     :: m
+        ! Especies (auditoria 3, A3-7): el gas que CREA el complemento no
+        ! trae O2/CO/CO2 (la masa de cada especie se conserva: Y se diluye
+        ! por alpha_old/alpha_new, como la dilucion M14); si no, el relleno
+        ! del poro que deja el carbono oxidado creaba O y C de la nada
+        ! (check_chem 9e-7 / 1.4e-7 con rtol 1e-7). Al destruir gas la especie
+        ! se va con el (queda en m_gas_volfix).
+        type(shared_t), intent(inout), optional :: sh
 
         integer :: i, j, k
-        real(dp) :: a_new, dmg
+        real(dp) :: a_new, dmg, fdil
 
         dmg = 0.0_dp
         do k = 1, m%nz
@@ -79,6 +86,12 @@ contains
                     ! masa de gas creada/destruida (auditoria, bajos: antes
                     ! sin columna; la masa del gas la fija la EOS)
                     dmg = dmg + (a_new - gas%alpha(i,j,k)) * gas%rho(i,j,k) * m%vol(i,j,k)
+                    if (present(sh) .and. a_new > gas%alpha(i,j,k) .and. a_new > 0.0_dp) then
+                        fdil = max(gas%alpha(i,j,k), 0.0_dp) / a_new
+                        sh%Y_O2(i,j,k)  = sh%Y_O2(i,j,k)  * fdil
+                        sh%Y_CO(i,j,k)  = sh%Y_CO(i,j,k)  * fdil
+                        sh%Y_CO2(i,j,k) = sh%Y_CO2(i,j,k) * fdil
+                    end if
                     gas%alpha(i,j,k) = a_new
                 end do
             end do
@@ -96,12 +109,13 @@ contains
     ! mdot dt/(rho V); el gas es el complemento (restriccion de volumen). La
     ! congelacion esta acotada por RESOLID_LIMITER, asi que alpha_l >= 0.
     !---------------------------------------------------------------------------
-    subroutine apply_mass_source_noflow(liq, gas, sol, slag, m, dt)
+    subroutine apply_mass_source_noflow(liq, gas, sol, slag, m, dt, sh)
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
         type(slag_t),  intent(in)    :: slag
         type(mesh_t), intent(in)     :: m
         real(dp), intent(in)         :: dt
+        type(shared_t), intent(inout), optional :: sh
         integer :: i, j, k
         do k = 1, m%nz
             do j = 1, m%ntheta
@@ -113,7 +127,7 @@ contains
                 end do
             end do
         end do
-        call enforce_volume_constraint(liq, gas, sol, slag, m)
+        call enforce_volume_constraint(liq, gas, sol, slag, m, sh)
     end subroutine apply_mass_source_noflow
 
 end module mod_solid_phase
