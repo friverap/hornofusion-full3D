@@ -272,10 +272,7 @@ contains
                         ! no plantea (sin esto salia de act_g y F2.29 sellaba la
                         ! fila: E1b -cerrar la valvula, NEGATIVO en B1- por la
                         ! puerta de atras)
-                        if (ws_liq_room_valid .and. ws_bed_valid) then
-                            if (ws_bed(i,j,k) > 0.0_dp) src = src * &
-                                min(1.0_dp, max(0.0_dp, ws_liq_room(i,j,k) / ALPHA_PORE_GAS))
-                        end if
+                        src = src * fsat_cell(i, j, k)
                         src = min(src, COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt)
                         if (src <= 0.0_dp) cycle
                         cg = 0.0_dp
@@ -480,11 +477,7 @@ contains
                         ! 1e-4 saltaba a distinto paso segun el redondeo
                         ! (n1/n4 1.7e-4). Las fuentes de masa de las reacciones
                         ! no se pesan: esa masa tiene que ventear.
-                        fsat = 1.0_dp
-                        if (ws_liq_room_valid .and. ws_bed_valid) then
-                            if (ws_bed(i,j,k) > 0.0_dp) &
-                                fsat = min(1.0_dp, max(0.0_dp, ws_liq_room(i,j,k) / ALPHA_PORE_GAS))
-                        end if
+                        fsat = fsat_cell(i, j, k)
                         ! Forma de VOLUMEN: (alpha_g/rho_g) (rho(T) - rho(T_old))/dt V
                         src = gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
                               (gas%rho(i,j,k) - gas_eos(cfg%rho_gas, gas_T_old(i,j,k), &
@@ -497,10 +490,12 @@ contains
                         ! total; el exceso se ACARREA (antes se perdia: el
                         ! comentario decia que la demanda se re-emitia, pero la
                         ! referencia del paso siguiente ya es la T nueva)
-                        dvol = fsat * (-src + gadv(i,j,k)) &
+                        ! (auditoria 4, B4-9) el acarreo lleva el MISMO peso que
+                        ! la demanda que lo origino: el gas de piso de un poro
+                        ! que se saturo no plantea tampoco la demanda arrastrada
+                        dvol = fsat * (-src + gadv(i,j,k) + ws_cc(i,j,k) / cfg%dt) &
                              + (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) &
-                               * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL) &
-                             + ws_cc(i,j,k) / cfg%dt
+                               * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL)
                         dcl = max(-cap, min(cap, dvol))
                         Su(i,j,k) = Su(i,j,k) + dcl
                         ws_cc_new(i,j,k) = sign(min(abs(dvol - dcl) * cfg%dt, &
@@ -771,6 +766,26 @@ contains
         if (allocated(p_g)) deallocate(p_g, gpr_g, gpth_g, gpz_g)
 
     contains
+
+        ! (auditoria 4, A4-2; B4-9/B4-12) Peso de la demanda de volumen del
+        ! gas de una celda del lecho: 1 con hueco de poro >= ALPHA_PORE_GAS, 0
+        ! en el poro SATURADO (el gas de piso es un canal hidraulico, F2.7, no
+        ! un inventario). UNA definicion para la fuente y el test de venteo
+        ! de F2.31. La saturacion exige LIQUIDO (rampa alpha_l 0 -> APG): un
+        ! lecho seco compactado con poco hueco no esta saturado y su gas
+        ! demanda entero. Sin piso de poro (pc_gas_spring, mixture_model:
+        ! pore_floor_on = .false.) no hay canal y el peso es 1 (antes salia
+        ! alpha_g/APG, incoherente con el resorte de Plan F).
+        pure real(dp) function fsat_cell(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            real(dp) :: sat
+            fsat_cell = 1.0_dp
+            if (.not. (pore_floor_on .and. ws_liq_room_valid .and. ws_bed_valid)) return
+            if (ws_bed(ii,jj,kk) <= 0.0_dp) return
+            sat = 1.0_dp - min(1.0_dp, max(0.0_dp, ws_liq_room(ii,jj,kk) / ALPHA_PORE_GAS))
+            sat = sat * min(1.0_dp, max(0.0_dp, liq%alpha(ii,jj,kk) / ALPHA_PORE_GAS))
+            fsat_cell = 1.0_dp - sat
+        end function fsat_cell
 
         ! Flujo de masa del gas por una cara: volumetrico q (orientado de P a N)
         ! por la densidad del dador (M24, gas)

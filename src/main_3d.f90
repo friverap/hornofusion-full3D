@@ -32,7 +32,8 @@ program eaf_3d_simulator
     use mod_continuity
     use mod_multiphase
     use mod_mixture_3d
-    use mod_workspace, only: ensure_workspace, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new, ws_p_n, ws_Fg_valid
+    use mod_workspace, only: ensure_workspace, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new, ws_p_n, ws_Fg_valid, &
+                             ws_liq_cont, ws_liq_cont_valid
     use mod_solid_phase
     use mod_melting_3d
     use mod_scrap_collapse
@@ -525,8 +526,12 @@ program eaf_3d_simulator
                 call phase_exchange_halos(liq, mesh)
                 call solve_pressure_correction(liq, gas, gas%T, sh, mesh, cfg, conv%res_cont)
                 if (cfg%solve_energy) then
+                    ! (auditoria 4, B4-8) alpha_other = 0 tambien aqui: en la
+                    ! rama de una fase el gas no tiene energia y el liquido es
+                    ! el unico consumidor de las fuentes (como en la rama sin
+                    ! flujo, N-M15)
                     call solve_energy_3d(liq, liq_old%T, sh, mesh, cfg, liq%alpha, &
-                                         gas%alpha, liq_old%alpha, sol%mdot, ws_Tsrc, &
+                                         K_zero, liq_old%alpha, sol%mdot, ws_Tsrc, &
                                          .false., conv%res_energy)
                     call relax_field(liq%T, prev_T, cfg%alpha_T, mesh)
                 end if
@@ -571,8 +576,11 @@ program eaf_3d_simulator
         ! T del gas al final del SIMPLE: referencia de la fuente de
         ! compresibilidad del paso siguiente (A3-3; la mezcla fija la suya).
         ! Estado del reinicio (/restart Tg_end).
-        if (cfg%solve_flow .and. cfg%solve_multiphase .and. .not. cfg%mixture_model) &
-            sh%Tg_end = gas%T
+        ! (auditoria 4, B4-9) en TODAS las ramas salvo la mezcla (que fija la
+        ! suya): sin flujo el gas no cambia de T y la referencia es la misma;
+        ! antes la rama sin flujo arrastraba el Tg_end del snapshot de origen
+        ! y un tercer reinicio con dos fluidos partia de una referencia rancia
+        if (.not. cfg%mixture_model) sh%Tg_end = gas%T
 
         call probe_report('fin-SIMPLE    ', liq, gas, sol, sh, mesh, cfg)
 
@@ -588,6 +596,11 @@ program eaf_3d_simulator
         ! lleva el suyo, y sin energia del gas su T no evoluciona)
         if (cfg%solve_flow .and. cfg%solve_multiphase .and. cfg%solve_energy &
             .and. .not. cfg%mixture_model) then
+            ! (auditoria 4, B4-7) mascara de liquido continuo con la alpha FINAL
+            ! del paso: la de ws_liq_cont era la del inicio de la ultima
+            ! iteracion externa (halos de alpha ya intercambiados)
+            call liquid_continuity_mask(liq, sol, mesh, ws_liq_cont)
+            ws_liq_cont_valid = .true.
             call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg)
             call phase_exchange_halos(liq, mesh)
             call phase_exchange_halos(gas, mesh)
