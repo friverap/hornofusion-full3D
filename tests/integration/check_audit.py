@@ -53,7 +53,15 @@ def main():
     # fuentes EXTERNAS (arco, radiacion, quimica, carga, ECS): hooks exactos
     ap.add_argument("--xtol", type=float, default=1e-9)
     ap.add_argument("--arctol", type=float, default=1e-3)
-    ap.add_argument("--mtol", type=float, default=0.005)
+    # masa: medido 1e-11..2.5e-8 (auditoria 3, M3-6; antes 5e-3 dejaba pasar
+    # ~330 kg en melt_forced)
+    ap.add_argument("--mtol", type=float, default=3e-6)
+    # recorte de alpha (M3-5): fraccion maxima del fundido que puede perderse
+    # por el clip auditado (medido 0 en dos fluidos; 3.5e-3 en la mezcla, xfail)
+    ap.add_argument("--ctol", type=float, default=1e-6)
+    # centinelas (M3-9): P_HYDRO_CAP y U_GAS_MAX nunca se tocan en regimen sano
+    ap.add_argument("--p-cap", type=float, default=2.0e6)
+    ap.add_argument("--u-gas-cap", type=float, default=300.0)
     args = ap.parse_args()
 
     path = os.path.join(args.rundir, "audit.csv")
@@ -199,7 +207,8 @@ def main():
     m_fey = sum(r.get("m_fe_yield", 0.0) for r in steps)
     m_fer = sum(r.get("m_fe_return", 0.0) for r in steps)
     expected = m_melt - m_res - m_clip - m_fey + m_fer
-    denom = max(abs(m_melt) + abs(m_res) + abs(m_clip), abs(dm_l))
+    # (M3-5) el clip no infla la escala
+    denom = max(abs(m_melt) + abs(m_res), abs(dm_l))
     if denom < 1.0:
         print("  PASS  mass_liq  (sin fusión: no aplica)")
     else:
@@ -209,6 +218,37 @@ def main():
                    f"{expected:.4e} kg (fundido={m_melt:.3e}, "
                    f"resolid={m_res:.3e}, clip={m_clip:.3e}), "
                    f"err rel={err:.3e}")
+        # -- alpha_clip (M3-5): el recorte auditado tiene cota ----------------
+        chk.report("alpha_clip", abs(m_clip) <= args.ctol * max(abs(m_melt), 1.0),
+                   f"clip auditado {m_clip:.3e} kg sobre fundido {m_melt:.3e} kg "
+                   f"(max {args.ctol} relativo)")
+
+    # -- mass_sol (M3-6): inventario del solido ---------------------------
+    # dm_sol = cargas + ECS - fundido + resolid - C oxidado (m_resid_closed es
+    # subconjunto de m_melted)
+    if "m_sol" in last:
+        dm_s = last["m_sol"] - first["m_sol"]
+        m_chg = sum(r.get("m_charge_in", 0.0) for r in steps)
+        m_ecs = sum(r.get("m_ecs_in", 0.0) for r in steps)
+        m_cox = sum(r.get("m_C_oxid", 0.0) for r in steps)
+        exp_s = m_chg + m_ecs - m_melt + m_res - m_cox
+        den_s = max(abs(m_chg) + abs(m_ecs) + abs(m_melt) + abs(m_res) + abs(m_cox), abs(dm_s))
+        if den_s < 1.0:
+            print("  PASS  mass_sol  (sin cambios del solido: no aplica)")
+        else:
+            err_s = abs(dm_s - exp_s) / den_s
+            chk.report("mass_sol", err_s <= args.mtol,
+                       f"dm_sol={dm_s:.4e} vs cargas+ECS-fundido+resolid-Cox="
+                       f"{exp_s:.4e} kg, err rel={err_s:.3e}")
+
+    # -- centinelas (M3-9): nunca se tocan en regimen sano -------------------
+    if "p_max" in last and "u_gas_max" in last:
+        pm = max(r["p_max"] for r in steps)
+        um = max(r["u_gas_max"] for r in steps)
+        chk.report("sentinel_p", pm < 0.99 * args.p_cap,
+                   f"p_max {pm:.3e} Pa (P_HYDRO_CAP {args.p_cap:.1e})")
+        chk.report("sentinel_gas", um < 0.999 * args.u_gas_cap,
+                   f"u_gas_max {um:.1f} m/s (U_GAS_MAX {args.u_gas_cap:.0f})")
 
     chk.exit()
 

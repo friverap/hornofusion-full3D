@@ -222,6 +222,13 @@ full | rebaseline)
     run_case cold_bucket2 4
     # Drenaje del lecho con la fuerza balanceada (auditoria 2, N-C1)
     run_case bed_drain 4
+    # (auditoria 3, M3-10) descomposicion de las rutas que no la tenian: el
+    # drenaje del lecho (B_f por caras), el llenado del bano, el arco con bano
+    # (kbath / P_elec / Lorentz) y la fusion forzada
+    run_case bed_drain 1
+    run_case bath_fill 1
+    run_case arc_noscrap 1
+    run_case melt_forced 1
 
     for d in "$OUT"/cold_10step_n*; do
         check_invariants "$d" cold_10step
@@ -324,6 +331,8 @@ full | rebaseline)
             cold_10step_*)   x=audit_cold ;;
             arc_noscrap_*)   x=audit_arcnoscrap ;;
             noflow_energy_*) x=audit_noflow ;;
+            bed_flood_*)     x=audit_bedflood ;;
+            bath_fill_mix_*) x=audit_mix ;;
             *)               x="" ;;
         esac
         check_audit_if_present "$d" "$x" "$more"
@@ -338,6 +347,16 @@ full | rebaseline)
         $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n9" --rtol 1e-4
     run_script "decomposition_freeze" \
         $PY $INT/compare_decomposition.py "$OUT/bath_freeze_n1" "$OUT/bath_freeze_n4" --rtol 1e-5
+    # (M3-10) tolerancias ~100x lo medido: drenaje 7e-6, llenado 1e-6, arco
+    # con bano 4e-14, fusion forzada 1e-10
+    run_script "decomposition_drain" \
+        $PY $INT/compare_decomposition.py "$OUT/bed_drain_n1" "$OUT/bed_drain_n4" --rtol 5e-4
+    run_script "decomposition_fill" \
+        $PY $INT/compare_decomposition.py "$OUT/bath_fill_n1" "$OUT/bath_fill_n4" --rtol 1e-4
+    run_script "decomposition_arc_bath" \
+        $PY $INT/compare_decomposition.py "$OUT/arc_noscrap_n1" "$OUT/arc_noscrap_n4" --rtol 1e-11
+    run_script "decomposition_melt" \
+        $PY $INT/compare_decomposition.py "$OUT/melt_forced_n1" "$OUT/melt_forced_n8" --rtol 1e-8
     # Reinicio desde snapshot: mismo numero de ranks y distinto (lectura por
     # hyperslab), y sobre el regimen de fusion (melt_forced, paso 6 de 11)
     run_restart_case cold_10step 8 8 5
@@ -349,6 +368,10 @@ full | rebaseline)
     run_restart_case bed_drain 4 4 150
     run_restart_case bath_freeze 4 4 50
     run_restart_case cold_10step 12 12 5
+    # (M3-10) reinicios de ECS, escoria con flujo+quimica+especies, y n8 -> n12
+    run_restart_case ecs_test 8 8 10
+    run_restart_case slag_chem_flow 4 4 10
+    run_restart_case cold_10step 8 12 5
 
     if [ "$MODE" = "rebaseline" ]; then
         $PY $INT/metrics_snapshot.py "$OUT" --mode rebaseline \

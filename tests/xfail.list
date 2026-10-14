@@ -77,3 +77,9 @@ audit_noflow:arc_budget
 # > 200 m/s). Diagnosticado (auditoria 3, A3-3; docs/AUDITORIA_3); el banco
 # no predice B1: el juez es B1 desde t = 0.
 bed_flood:bath_pv_bounded
+# bed_flood toca U_GAS_MAX (ver bed_flood:bath_pv_bounded); misma causa
+audit_bedflood:sentinel_gas
+# bath_fill_mix (Plan G, modelo de mezcla opt-in, juez B1 NEGATIVO): recorta
+# 232 kg de alpha (3.5e-3 del fundido) por el limitador de la mezcla. Es el
+# banco del modelo cerrado negativo, no el camino de produccion.
+audit_mix:alpha_clip

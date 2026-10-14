@@ -330,9 +330,12 @@ contains
         if (is_writer(m)) then
             open(newunit=iu, file=trim(audit_path), status='old', &
                  action='write', position='append')
-            ! ES17.9E3: sin E3 un valor < 1e-99 imprime '6.678-178' (sin la
+            ! ES24.16E3 (doble completo; auditoria 3, M3-6: con 10 cifras un
+            ! inventario de 1e5 kg se escribia a 1e-5 kg y la identidad del
+            ! solido no resolvia 1 kg de C oxidado). Sin E3 un valor < 1e-99
+            ! imprime '6.678-178' (sin la
             ! E) y rompe el CSV (B1 v9, m_alpha_clip subnormal)
-            write(iu, '(I0,A,ES17.9E3,A,ES17.9E3,100(A,ES17.9E3))') &
+            write(iu, '(I0,A,ES24.16E3,A,ES24.16E3,100(A,ES24.16E3))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &
