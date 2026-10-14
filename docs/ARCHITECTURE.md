@@ -380,9 +380,11 @@ time_loop: do while (time < t_final)
     distribute_arc_heat   (P_rad directo al sólido con tope de estado; P_conv a la
                            columna o a la capa del baño; P_elec al baño, A3-4;
                            la superficie se busca de arriba abajo, M3-3)
-    distribute_arc_radiation_mc (beams round-robin; depósito por absorción F2.30)
-    slag_intercept_arc (si solve_slag) → compute_arc_impingement (S_arc_mom)
-    compute_lorentz_force
+    distribute_arc_radiation_mc (beams round-robin; depósito por absorción F2.30;
+                           S_arc_mom del impacto del chorro va dentro de
+                           distribute_arc_heat)
+    compute_lorentz_force → slag_intercept_arc (si solve_slag; la escoria
+                           intercepta S_arc ya depositado)
 
     ! --- RADIACIÓN DO (S4/S6/S8) ---
     ! --- QUÍMICA ---  compute_carbon_oxidation → compute_slag_chemistry (Fe
@@ -409,10 +411,14 @@ time_loop: do while (time < t_final)
     !     (N-M10); compute_gas_liquid_heat (morfología de F2.22, A3-2) + halos
     ! --- ESCORIA ---    slag_additions → flotación → slag_energy (columnas
     !     E_slag_gas/E_slag_liq, M3-7)
-    ! --- AUDIT ---      audit_write (identidades por paso; audit_freq)
+    ! --- AUDIT ---      audit_write (identidades por paso; cada audit_freq
+    !     pasos, en todo snapshot y en el último paso, B4-4) → update_properties
+    !     con la T final (M4-3)
+    ! --- NaN ---        nan_guard_triggered (todos los ranks salen juntos:
+    !     audit + snapshot del estado corrupto y stop 3)
     ! --- DT ---         adapt_timestep (CFL, tau_iph)
-    ! --- SALIDA ---     write_hdf5_parallel (fields + restart + metadata),
-    !     monitor; nan_guard_triggered (todos los ranks salen juntos)
+    ! --- SALIDA ---     monitor (monitor_freq); write_hdf5_parallel (fields +
+    !     restart + metadata; output_freq)
 end do time_loop
 ```
 

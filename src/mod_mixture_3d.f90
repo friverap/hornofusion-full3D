@@ -484,7 +484,7 @@ contains
 
     pure logical function in_bed(as)
         real(dp), intent(in) :: as
-        in_bed = (as >= 1.0e-2_dp)
+        in_bed = (as >= ALPHA_BED)
     end function in_bed
 
     !---------------------------------------------------------------------------

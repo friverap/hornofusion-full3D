@@ -652,7 +652,7 @@ contains
             eL = fluid_eps(iL,jL,kL); eH = fluid_eps(iH,jH,kH)
             if (eL <= EPS_MIX .or. eH <= EPS_MIX) return
             ef = 2.0_dp * eL * eH / (eL + eH)
-            if (sol%alpha_s(iH,jH,kH) >= 1.0e-2_dp .and. ws_mKl(iH,jH,kH) > 0.0_dp &
+            if (sol%alpha_s(iH,jH,kH) >= ALPHA_BED .and. ws_mKl(iH,jH,kH) > 0.0_dp &
                 .and. ws_mKg(iH,jH,kH) > 0.0_dp) then
                 ! LECHO arriba (auditoria M37): flujo de GODUNOV de Buckley-
                 ! Leverett con la funcion de flujo de Darcy bifasico de la
@@ -804,7 +804,7 @@ contains
                     ! jet (20 m/s): rafagas de 25-84 kPa en B1 v30.
                     as_eff = max(sol%alpha_s(i,j,k), sol%alpha_s(i,j,k-1))
                     if (sol%alpha_s(i,j,k) > ALPHA_SOLID_RESID .or. &
-                        sol%alpha_s(i,j,k-1) >= 1.0e-2_dp) then
+                        sol%alpha_s(i,j,k-1) >= ALPHA_BED) then
                         ! percolacion al balance de Ergun (el estado
                         ! estacionario de SU PROPIA ecuacion de momento);
                         ! relajacion instantanea (tau = alpha_l rho_l /

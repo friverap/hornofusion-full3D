@@ -562,7 +562,7 @@ contains
         ! In parallel: need global z_top
         z_top = 0.0_dp
         do k = kend, kstart, -1
-            if (any(sol%alpha_s(istart:iend,jstart:jend,k) > 0.01_dp)) then
+            if (any(sol%alpha_s(istart:iend,jstart:jend,k) > ALPHA_BED)) then
                 z_top = m%zf(k)
                 exit
             end if

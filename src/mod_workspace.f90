@@ -248,6 +248,23 @@ module mod_workspace
 
 contains
 
+    !---------------------------------------------------------------------------
+    ! (auditoria 4, B4-10) Peso propio de UNA fase en una cara vertical: media
+    ! de las dos celdas PONDERADA por la alpha de esa fase. La rho y la T de
+    ! una celda SIN la fase son rancias (liquido a 300 K en una celda vacia:
+    ! Boussinesq x1.18 en los bordes del lecho seco; gas de poro frente a gas
+    ! libre). UNA definicion para momento (bed_rel_f) y Poisson (bed_rel_fp):
+    ! la cancelacion del Rhie-Chow exige la misma expresion en los dos.
+    !---------------------------------------------------------------------------
+    pure real(dp) function own_weight_face(wa, wb, aa, ab)
+        real(dp), intent(in) :: wa, wb, aa, ab
+        if (aa + ab > 0.0_dp) then
+            own_weight_face = (aa * wa + ab * wb) / (aa + ab)
+        else
+            own_weight_face = 0.5_dp * (wa + wb)
+        end if
+    end function own_weight_face
+
     subroutine ensure_workspace(m)
         type(mesh_t), intent(in) :: m
 

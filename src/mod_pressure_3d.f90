@@ -93,9 +93,9 @@ module mod_pressure_3d
 
 contains
 
-    subroutine solve_pressure_correction(liq, gas, gas_T_old, sh, m, cfg, &
+    subroutine solve_pressure_correction(liq, gas, gas_T_ref, sh, m, cfg, &
                                           residual)
-        use mod_workspace, only: ensure_workspace, ws_cc, ws_cc_new, ws_p_n, aW => ws_aW, &
+        use mod_workspace, only: ensure_workspace, own_weight_face, ws_cc, ws_cc_new, ws_p_n, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
@@ -114,7 +114,7 @@ contains
         ! forzaba div=0 sobre un gas que DEBE expandirse al calentarse
         ! (rho ~ 1/T cae ~80x bajo el arco) -> presiones ficticias
         ! crecientes -> divergencia (medido p -> 1e18).
-        real(dp), intent(in)         :: gas_T_old(-1:,-1:,-1:)
+        real(dp), intent(in)         :: gas_T_ref(-1:,-1:,-1:)
         type(shared_t), intent(inout) :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
@@ -264,7 +264,7 @@ contains
                         if (.not. act_g(i,j,k)) cycle
                         if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
                         src = abs(gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
-                              (gas%rho(i,j,k) - gas_eos(cfg%rho_gas, gas_T_old(i,j,k), &
+                              (gas%rho(i,j,k) - gas_eos(cfg%rho_gas, gas_T_ref(i,j,k), &
                                ws_p_n(i,j,k))) / max(gas%rho(i,j,k), SMALL))
                         ! (auditoria 4, A4-2) la MISMA ponderacion fsat de la
                         ! fuente: el gas de piso de un poro saturado no pide
@@ -480,7 +480,7 @@ contains
                         fsat = fsat_cell(i, j, k)
                         ! Forma de VOLUMEN: (alpha_g/rho_g) (rho(T) - rho(T_old))/dt V
                         src = gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
-                              (gas%rho(i,j,k) - gas_eos(cfg%rho_gas, gas_T_old(i,j,k), &
+                              (gas%rho(i,j,k) - gas_eos(cfg%rho_gas, gas_T_ref(i,j,k), &
                                ws_p_n(i,j,k))) / max(gas%rho(i,j,k), SMALL)
                         cap = COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt
                         ! Demanda de volumen del gas [m3/s]: expansion termica
@@ -860,15 +860,19 @@ contains
             if (max(liq%alpha(ii,jj,ka), liq%alpha(ii,jj,kb)) < ALPHA_CUTOFF) return
             ! misma mascara de cara para ambas fases (A4-1; ver
             ! mod_momentum_3d::bed_rel_f)
+            ! (B4-10) peso propio de cara ponderado por la alpha de la fase
+            ! (own_weight_face: la MISMA expresion que mod_momentum_3d)
             if (isg_) then
                 bm = max(min(ws_bed_gas(ii,jj,ka), ws_bed_gas(ii,jj,kb)), &
                          ws_bub_f(ii, jj, min(ka, kb)))
-                w  = 0.5_dp * GRAVITY * (gas%rho(ii,jj,ka) + gas%rho(ii,jj,kb))
+                w  = own_weight_face(GRAVITY * gas%rho(ii,jj,ka), GRAVITY * gas%rho(ii,jj,kb), &
+                                     gas%alpha(ii,jj,ka), gas%alpha(ii,jj,kb))
             else
                 bm = ws_bedl_f(ii, jj, min(ka, kb))
-                w  = 0.5_dp * GRAVITY * ( &
-                     liq%rho(ii,jj,ka) * (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,ka) - cfg%T_ref_boussinesq)) &
-                   + liq%rho(ii,jj,kb) * (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,kb) - cfg%T_ref_boussinesq)))
+                w  = own_weight_face( &
+                     GRAVITY * liq%rho(ii,jj,ka) * (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,ka) - cfg%T_ref_boussinesq)), &
+                     GRAVITY * liq%rho(ii,jj,kb) * (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,kb) - cfg%T_ref_boussinesq)), &
+                     liq%alpha(ii,jj,ka), liq%alpha(ii,jj,kb))
             end if
             if (bm <= 0.0_dp) return
             bed_rel_fp = bm * (w - liq_weight_f(ii, jj, ka, kb))

@@ -525,6 +525,11 @@ contains
         call require(abs(cfg%frac_rad + cfg%frac_conv + cfg%frac_elec - 1.0_dp) &
                      < 1.0e-6_dp, &
                      'frac_rad + frac_conv + frac_elec must equal 1.0', ok)
+        ! (auditoria 4, B4-15) una fraccion negativa compensada por otra > 1
+        ! pasaba la suma: es una fuente de energia negativa
+        call require(cfg%frac_rad >= 0.0_dp .and. cfg%frac_conv >= 0.0_dp &
+                     .and. cfg%frac_elec >= 0.0_dp, &
+                     'frac_rad, frac_conv, frac_elec must be >= 0', ok)
         call require(cfg%output_freq >= 1 .and. cfg%monitor_freq >= 1, &
                      'output_freq and monitor_freq must be >= 1', ok)
         call require(cfg%rho_steel > 0.0_dp .and. cfg%cp_s > 0.0_dp &

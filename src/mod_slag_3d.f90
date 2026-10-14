@@ -75,7 +75,7 @@ contains
         ! horno sin cestas quedaba V_slag = 0)
         k_top_local = 0
         do k = kend, kstart, -1
-            if (any(sol%alpha_s(istart:iend, jstart:jend, k) > 0.01_dp) &
+            if (any(sol%alpha_s(istart:iend, jstart:jend, k) > ALPHA_BED) &
                 .or. any(liq%alpha(istart:iend, jstart:jend, k) > 0.01_dp)) then
                 if (m%is_parallel) then
                     k_top_local = k + m%topo%kglobal_start - 1
@@ -393,7 +393,7 @@ contains
                 ks = -1
                 do k = m%nz_g, 1, -1
                     if (m%cell_type_global(i,j,k) == 0) cycle
-                    if (al_g(i,j,k) >= ALPHA_LIQ_CONT .or. as_g(i,j,k) >= 1.0e-2_dp) then
+                    if (al_g(i,j,k) >= ALPHA_LIQ_CONT .or. as_g(i,j,k) >= ALPHA_BED) then
                         ks = k; exit
                     end if
                 end do

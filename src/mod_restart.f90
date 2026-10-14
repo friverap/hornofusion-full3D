@@ -346,7 +346,7 @@ contains
                         y_c = m%r(i) * sin(m%theta(j))
                         dist = sqrt((x_c - x_e)**2 + (y_c - y_e)**2)
                         if (dist <= cfg%R_elec * 2.0_dp .and. &
-                            sol%alpha_s(i,j,k) > 0.01_dp) z_top = max(z_top, m%zf(k))
+                            sol%alpha_s(i,j,k) > ALPHA_BED) z_top = max(z_top, m%zf(k))
                     end do
                 end do
             end do

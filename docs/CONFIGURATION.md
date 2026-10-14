@@ -367,7 +367,7 @@ Defaults de `config_set_defaults` (`mod_config_3d.f90`), que es la verdad.
 
 | Clave | Default | Significado |
 |---|---|---|
-| `audit_freq` | 1 | cada cuántos pasos se escribe `audit.csv` (los gates exigen 1: a freq > 1 la cuadratura de P_arc mete ~4 %) |
+| `audit_freq` | 1 | cada cuántos pasos se escribe `audit.csv`; 0 apaga el audit (sin `audit.csv`, los checkers no corren). Con freq > 1 cada snapshot y el último paso escriben además su línea (el intervalo nunca queda a medias, B4-4); los gates exigen 1 (a freq > 1 la cuadratura de P_arc mete ~4 %) |
 | `cfl_max` | 2.0 | CFL máximo del dt adaptativo (azimutal con `dth_len = max(r dθ, dr)`) |
 | `iph_dt_safety` | 0.5 | dt ≤ safety · τ_iph (acople interfase; evita el equilibrio espurio T_gas = T_sol) |
 | `liq_balanced_force` | true | fuerza vertical balanceada por caras (presión reducida de la mezcla; CLAUDE.md) |
@@ -375,7 +375,7 @@ Defaults de `config_set_defaults` (`mod_config_3d.f90`), que es la verdad.
 | `gas_compressibility` | true | fuente de compresibilidad ρ(p, T) contra `Tg_end` (M25/A3-3) |
 | `do_quadrature` | 4 | cuadratura S_N de la DO: 4 (24 dir), 6 (48), 8 (80) |
 | `n_beams` | 1000 | beams del MC del arco por paso (0 = sin MC: toda la radiación directa/respaldo) |
-| `emissivity` | `EMISSIVITY` | emisividad de las paredes (DO) |
+| `emissivity` | `EMISSIVITY` | SIN EFECTO (la DO usa `EMISSIVITY` de `mod_constants`; la clave avisa `sin efecto`) |
 | `T_wall` | 300 | temperatura de pared para `h_wall` |
 | `h_wall` | 0 | coeficiente de pérdida a pared [W/m²K] (0 = adiabática) |
 | `d_particle` | `D_PARTICLE` | diámetro de partícula de la chatarra (Ergun, área interfase, película gas–líquido) |
@@ -386,7 +386,7 @@ Defaults de `config_set_defaults` (`mod_config_3d.f90`), que es la verdad.
 | `electrode_profile_file` | `input/electrode_profile.dat` | perfil V/I(t); si no existe, `elec_V_const`/`elec_I_const` |
 | `elec_V_const` / `elec_I_const` | 500 V / 50 000 A | V e I constantes sin perfil |
 | `solve_ecs` | false | alimentación continua (E1) |
-| `ecs_mode` | `table` | `table` (perfil/tasa) o `power` (`ecs_k_power` · P_arc / Δh_ref, `ecs_total_mass`) |
+| `ecs_mode` | `table` | solo `table` (perfil/tasa) está implementado y validado; `power` (`ecs_k_power` · P_arc / Δh_ref, `ecs_total_mass`) es un diseño reservado y la validación lo rechaza |
 | `ecs_rate` | 0 | tasa [kg/s] sin perfil |
 | `ecs_profile_file` | '' | perfil de tasa(t) |
 | `ecs_theta_center` / `ecs_theta_width` | π / π/6 | banda azimutal de entrada |

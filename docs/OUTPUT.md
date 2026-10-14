@@ -212,7 +212,7 @@ Contenido de `/restart` (oct-2026; la verdad es `write_restart_group` en
 `liq_cont_prev` (máscara continuo/disperso del paso anterior) y los atributos
 `dt` (nominal, no el truncado del último paso: M3-12), `m_ecs_pending`,
 `elec_z_tip`, `elec_arc_length`, `elec_arc_R`, `elec_arc_power`,
-`bore_in_done`. Todo estado nuevo que persista entre pasos entra aquí en el
+`elec_bore_in_done`. Todo estado nuevo que persista entre pasos entra aquí en el
 mismo commit (el test `restart_*` lo delata).
 
 Snapshots anteriores a 2026-09-25 (sin `/restart`) se aceptan con

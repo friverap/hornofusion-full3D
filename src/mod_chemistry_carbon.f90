@@ -94,7 +94,7 @@ contains
                     !------------------------------------------------------
                     ! Primaria: C + 1/2 O2 -> CO (Maahs en la superficie)
                     !------------------------------------------------------
-                    if (sol%alpha_s(i,j,k) >= 0.01_dp .and. &
+                    if (sol%alpha_s(i,j,k) >= ALPHA_BED .and. &
                         sol%m_C(i,j,k) > SMALL .and. &
                         sol%m_s(i,j,k) > SMALL) then
                         T_s = sol%T_s(i,j,k)

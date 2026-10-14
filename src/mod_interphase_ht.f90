@@ -255,7 +255,7 @@ contains
                     ! morfologia de fuera: rampa 0 -> 1 en alpha_s 1e-2 .. 2e-2
                     ! (un interruptor en 1e-2 saltaba x2500 para gotas que
                     ! cruzan chatarra rala)
-                    fbed = min(1.0_dp, max(0.0_dp, (as - 1.0e-2_dp) / 1.0e-2_dp))
+                    fbed = min(1.0_dp, max(0.0_dp, (as - ALPHA_BED) / ALPHA_BED))
                     G_in = 0.0_dp; G_out = 0.0_dp
                     if (fbed > 0.0_dp) then
                         wet = min(1.0_dp, al / max(1.0_dp - as, SMALL))

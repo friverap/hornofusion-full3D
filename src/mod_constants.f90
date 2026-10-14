@@ -66,6 +66,13 @@ module mod_constants
     ! de velocidad de ~1e4 m/s que divergían a 1e14. La masa fundida sigue
     ! acumulándose vía la ecuación de alpha hasta cruzar el umbral.
     real(dp), parameter :: ALPHA_FLOW_CUTOFF = 1.0e-2_dp
+    ! Umbral de LECHO (auditoria 4, B4-26): una celda con alpha_s >= ALPHA_BED
+    ! tiene chatarra que gobierna (Ergun, pelicula, poro con gas residual,
+    ! liquido continuo con ALPHA_FLOW_CUTOFF). Mismo valor numerico que
+    ! ALPHA_FLOW_CUTOFF a proposito (M3-2: ws_bed es un interruptor que
+    ! acompana a la pertenencia del liquido al Poisson). UNA definicion:
+    ! antes era el literal 1e-2 en una docena de sitios.
+    real(dp), parameter :: ALPHA_BED = 1.0e-2_dp
     ! Gas RESIDUAL de poro (Plan C F2.7): en una celda del LECHO (alpha_s >=
     ! 1e-2) el liquido no puede ocupar todo el hueco; queda al menos
     ! ALPHA_PORE_GAS de gas (> ALPHA_FLOW_CUTOFF, asi el gas sigue activo en
@@ -309,7 +316,7 @@ contains
     !---------------------------------------------------------------------------
     pure elemental logical function liq_continuous(al, as)
         real(dp), intent(in) :: al, as
-        if (as >= 1.0e-2_dp) then
+        if (as >= ALPHA_BED) then
             liq_continuous = (al >= ALPHA_FLOW_CUTOFF)
         else
             liq_continuous = (al >= ALPHA_LIQ_CONT)
@@ -322,7 +329,7 @@ contains
         real(dp), intent(in) :: as, asl
         real(dp) :: c
         c = 1.0_dp - as - asl
-        if (as >= 1.0e-2_dp .and. pore_floor_on) c = c - ALPHA_PORE_GAS
+        if (as >= ALPHA_BED .and. pore_floor_on) c = c - ALPHA_PORE_GAS
         c = max(c, 0.0_dp)
     end function liq_cap
 

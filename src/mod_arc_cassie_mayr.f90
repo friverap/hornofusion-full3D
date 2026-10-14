@@ -78,6 +78,7 @@ contains
         real(dp) :: r2, sigma_r, gw
         real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol, wsc, wba, wvo, wexp
         logical  :: found_scrap, owned, any_liq, found_bath
+        integer  :: kg_bath_any   ! capa del bano bajo la punta aunque la superficie sea chatarra (B4-14)
         ! (El tope de 2 K por paso al solido se sustituyo por el tope de estado
         ! solid_arc_room: auditoria 12-oct-2026, M13.)
 
@@ -170,9 +171,12 @@ contains
             ! Sin chatarra, el chorro de plasma pega en el baño: P_conv va a la
             ! capa de la superficie del baño (antes a la columna de gas bajo la
             ! punta, que no podia cederlo al baño: N-A1)
-            kc_lo = kg_scrap; kc_hi = kg_tip; found_bath = .false.
-            if (.not. found_scrap) then
-                kbath: do kg = kg_tip, 1, -1
+            kc_lo = kg_scrap; kc_hi = kg_tip; found_bath = .false.; kg_bath_any = 0
+            ! (auditoria 4, B4-14) la capa del bano se busca SIEMPRE
+            ! (kg_bath_any): el respaldo de P_rad sin MC con chatarra sin
+            ! receptoras la necesita; found_bath (P_conv/P_elec al bano) sigue
+            ! exigiendo que la superficie no sea chatarra
+            kbath: do kg = kg_tip, 1, -1
                     do jg = 1, m%nth_g
                         do ig = 1, m%nr_g
                             if (m%cell_type_global(ig,jg,kg) == 0) cycle
@@ -181,13 +185,15 @@ contains
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
                             if (dist <= sigma_r * 2.0_dp .and. &
                                 alpha_lg(ig,jg,kg) >= ALPHA_LIQ_CONT) then
-                                kc_lo = kg; kc_hi = kg; found_bath = .true.
+                                kg_bath_any = kg
+                                if (.not. found_scrap) then
+                                    kc_lo = kg; kc_hi = kg; found_bath = .true.
+                                end if
                                 exit kbath
                             end if
                         end do
                     end do
                 end do kbath
-            end if
 
             ! ── P_rad: first pass — Gaussian weight sum at scrap surface ───
             total_gw_vol_rad = 0.0_dp
@@ -210,7 +216,7 @@ contains
                             ! (arc_melt: 27.8 -> 8.4 kg fundidos cuando la celda
                             ! central con alpha_l >= 0.4 salia del reparto y el
                             ! arco calentaba la periferia).
-                            if (alpha_g(ig,jg,kg) < 0.01_dp .and. alpha_lg(ig,jg,kg) < ALPHA_LIQ_CONT) cycle
+                            if (alpha_g(ig,jg,kg) < ALPHA_BED .and. alpha_lg(ig,jg,kg) < ALPHA_LIQ_CONT) cycle
                             x_cell = m%r_global(ig) * cos(m%theta_global(jg))
                             y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
@@ -272,14 +278,14 @@ contains
                     do jg = 1, m%nth_g
                         do ig = 1, m%nr_g
                             if (m%cell_type_global(ig,jg,kg) == 0) cycle
-                            if (alpha_g(ig,jg,kg) < 0.01_dp .and. alpha_lg(ig,jg,kg) < ALPHA_LIQ_CONT) cycle
+                            if (alpha_g(ig,jg,kg) < ALPHA_BED .and. alpha_lg(ig,jg,kg) < ALPHA_LIQ_CONT) cycle
                             ! fraccion de chatarra EXPUESTA (M4-7): 1 sin bano, 0 con
                             ! alpha_l >= 0.4, rampa suave entre 0.2 y 0.4 (un corte
                             ! en 0.3 dependia del redondeo y rompia la simetria);
                             ! 0 sin chatarra. El resto de la celda lo absorbe su
                             ! fluido (charco por kappa_l alpha_l, M4-6).
                             wexp = 1.0_dp - min(1.0_dp, max(0.0_dp, (alpha_lg(ig,jg,kg) - 0.2_dp) / 0.2_dp))
-                            if (alpha_g(ig,jg,kg) < 0.01_dp) wexp = 0.0_dp
+                            if (alpha_g(ig,jg,kg) < ALPHA_BED) wexp = 0.0_dp
                             x_cell = m%r_global(ig) * cos(m%theta_global(jg))
                             y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
@@ -314,6 +320,11 @@ contains
                 kr_lo = max(1, kg_tip-3); kr_hi = min(m%nz_g, kg_tip+3)
                 if (.not. found_scrap .and. found_bath) then   ! (B3-5; bandera explicita, M4-A4)
                     kr_lo = kc_lo; kr_hi = kc_hi
+                else if (kg_bath_any > 0) then
+                    ! (B4-14) chatarra como superficie pero sin receptoras del
+                    ! P_rad directo (total_gw_vol_rad = 0) y bano bajo la punta:
+                    ! a la capa del bano, no a la columna de gas
+                    kr_lo = kg_bath_any; kr_hi = kg_bath_any
                 end if
                 total_vol = 0.0_dp
                 if (P_rad_arc > 0.0_dp) then

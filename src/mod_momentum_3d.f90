@@ -83,7 +83,7 @@ contains
                                          ph, ph_other, sh, m, cfg, &
                                          alpha_q, drag_coef, is_gas, comp, residual, &
                                          alpha_old, rho_old, mdot_m)
-        use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
+        use mod_workspace, only: ensure_workspace, own_weight_face, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, &
             ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bed_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
@@ -621,7 +621,9 @@ contains
                 bm = ws_bedl_f(ii, jj, min(ka, kb))
             end if
             if (bm <= 0.0_dp) return
-            bed_rel_f = bm * (0.5_dp * (own_w(ii, jj, ka) + own_w(ii, jj, kb)) &
+            ! (B4-10) peso propio de cara ponderado por la alpha de la fase
+            bed_rel_f = bm * (own_weight_face(own_w(ii, jj, ka), own_w(ii, jj, kb), &
+                                              ph%alpha(ii,jj,ka), ph%alpha(ii,jj,kb)) &
                               - liq_weight_f(ii, jj, ka, kb))
         end function bed_rel_f
 

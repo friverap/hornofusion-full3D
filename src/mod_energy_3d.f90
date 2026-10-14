@@ -563,10 +563,15 @@ contains
         pure function rad_weight(aq, ao) result(w)
             real(dp), intent(in) :: aq, ao
             real(dp) :: w, kq, ko
+            ! (auditoria 4, B4-13) una fase bajo ALPHA_CUTOFF no resuelve su
+            ! energia (guardia de fase minima) y no absorbe: fuera del
+            ! denominador, si no su parte se perdia (<= 1.5e-6 del arco)
             if (is_gas) then
-                kq = KAPPA_GAS_ABS * max(aq, 0.0_dp); ko = KAPPA_LIQ_ABS * max(ao, 0.0_dp)
+                kq = KAPPA_GAS_ABS * merge(aq, 0.0_dp, aq >= ALPHA_CUTOFF)
+                ko = KAPPA_LIQ_ABS * merge(ao, 0.0_dp, ao >= ALPHA_CUTOFF)
             else
-                kq = KAPPA_LIQ_ABS * max(aq, 0.0_dp); ko = KAPPA_GAS_ABS * max(ao, 0.0_dp)
+                kq = KAPPA_LIQ_ABS * merge(aq, 0.0_dp, aq >= ALPHA_CUTOFF)
+                ko = KAPPA_GAS_ABS * merge(ao, 0.0_dp, ao >= ALPHA_CUTOFF)
             end if
             w = kq / (kq + ko + SMALL)
         end function rad_weight

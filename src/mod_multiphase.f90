@@ -96,13 +96,13 @@ contains
         ! mascara del lecho (N-C1): misma regla que liq_continuous, halos
         ! incluidos (sol%alpha_s ya intercambiado; los halos fisicos tienen
         ! cell_type = 0)
-        ws_bed = merge(1.0_dp, 0.0_dp, sol%alpha_s >= 1.0e-2_dp .and. m%cell_type /= 0)
+        ws_bed = merge(1.0_dp, 0.0_dp, sol%alpha_s >= ALPHA_BED .and. m%cell_type /= 0)
         ws_bed_valid = .true.
         ws_liq_cont_valid = .true.
         ! (la mascara de presion de fluido, ws_pv_active, se fija mas abajo:
         !  necesita el arrastre de Ergun del gas para la percolacion, F2.16)
         ! Hueco de poro del liquido en el lecho (F2.8; ver ws_liq_room)
-        where (sol%alpha_s >= 1.0e-2_dp)
+        where (sol%alpha_s >= ALPHA_BED)
             ws_liq_room = liq_cap(sol%alpha_s, slag%alpha_sl) - liq%alpha
         elsewhere
             ws_liq_room = 1.0_dp
@@ -439,6 +439,15 @@ contains
             call phase_exchange_halos(liq, m)
             call phase_exchange_halos(gas, m)
             if (cfg%n_pc_max > 1) then
+                ! (auditoria 4, B4-11) el hueco de poro que ve la pasada
+                ! siguiente (fsat, limitador de F2.8, F2.29) es el de la alpha
+                ! recien transportada; las mascaras de CARA (ws_bedl_f) siguen
+                ! fijas por iteracion externa a proposito (A4-1)
+                where (sol%alpha_s >= ALPHA_BED)
+                    ws_liq_room = liq_cap(sol%alpha_s, slag%alpha_sl) - liq%alpha
+                elsewhere
+                    ws_liq_room = 1.0_dp
+                end where
                 dalpha_loc = maxval(abs(liq%alpha(istart:iend,jstart:jend,kstart:kend) &
                                       - a_prev(istart:iend,jstart:jend,kstart:kend)))
                 if (m%is_parallel) then
@@ -772,7 +781,7 @@ contains
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
-                    if (sol%alpha_s(i,j,k) < 1.0e-2_dp) free_loc(i,j,k) = 1
+                    if (sol%alpha_s(i,j,k) < ALPHA_BED) free_loc(i,j,k) = 1
                 end do
             end do
         end do

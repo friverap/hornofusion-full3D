@@ -72,7 +72,7 @@ contains
 
                     ! Find lowest empty cell below this one
                     if (m%cell_type_global(i,j,k_below) == 0) cycle
-                    if (a_g(i,j,k_below) > 0.01_dp) cycle
+                    if (a_g(i,j,k_below) > ALPHA_BED) cycle
                     if (al_g(i,j,k_below) >= ALPHA_LIQ_CONT) cycle   ! bano debajo
 
                     ! Solid has void below -- it falls
@@ -80,7 +80,7 @@ contains
                     k_dest = k_below
                     do while (k_dest > 1)
                         if (m%cell_type_global(i,j,k_dest-1) == 0) exit
-                        if (a_g(i,j,k_dest-1) > 0.01_dp) exit
+                        if (a_g(i,j,k_dest-1) > ALPHA_BED) exit
                         if (al_g(i,j,k_dest-1) >= ALPHA_LIQ_CONT) exit
                         k_dest = k_dest - 1
                     end do

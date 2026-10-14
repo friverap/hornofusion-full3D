@@ -69,7 +69,7 @@ contains
 
                     alpha_s = sol%alpha_s(i,j,k)
                     fade = 1.0_dp
-                    if (use_below .and. alpha_s < 1.0e-2_dp) then
+                    if (use_below .and. alpha_s < ALPHA_BED) then
                         if (m%cell_type(i,j,k-1) /= 0) then
                             alpha_s = max(alpha_s, sol%alpha_s(i,j,k-1))
                             ! F2.28 (1-oct-2026): el Ergun EFECTIVO del lecho de
