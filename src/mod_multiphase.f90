@@ -300,6 +300,14 @@ contains
                     else
                         K_disp = 0.0_dp
                     end if
+                    ! (auditoria 4, B4-25) en las celdas de burbuja el cierre
+                    ! de interfase resuelta cede al arrastre de burbuja
+                    ! (U_BUBBLE; ws_bub es 0 en la celda de superficie, que
+                    ! conserva TAU_LG)
+                    if (ws_bub(i,j,k) > 0.0_dp) then
+                        K_int = (1.0_dp - ws_bub(i,j,k)) * K_int + ws_bub(i,j,k) * &
+                                ag_c * max(liq%rho(i,j,k) - gas%rho(i,j,k), 0.0_dp) * GRAVITY / U_BUBBLE
+                    end if
                     Kexch(i,j,k) = f_bed * fs_shear(i, j, k) &
                         + (1.0_dp - f_bed) * ((1.0_dp - f_disp) * K_int &
                                               + f_disp * K_disp)

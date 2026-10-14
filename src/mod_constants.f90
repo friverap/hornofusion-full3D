@@ -205,6 +205,16 @@ module mod_constants
     ! TAU_LG es un tiempo de relajación de régimen disperso (placeholder
     ! de una correlación de arrastre de gotas).
     real(dp), parameter :: TAU_LG = 0.01_dp   ! s
+    ! Velocidad terminal de BURBUJA en acero liquido (auditoria 4, B4-25):
+    ! burbujas elipsoidales de 3-10 mm en liquidos de baja viscosidad suben a
+    ! ~0.2-0.3 m/s (Clift, Grace & Weber 1978, cap. 7; en acero medido
+    ! 0.2-0.25 m/s). El cierre de interfase resuelta (TAU_LG) fijaba el
+    ! deslizamiento de una burbuja en el bano en g tau ~ 0.1 m/s, sin
+    ! dependencia de nada: en las celdas de BURBUJA (ws_bub: bano con gas que
+    ! puede deslizar y bano encima) el arrastre es el fisico,
+    ! K = alpha_g (rho_l - rho_g) g / U_BUBBLE (estado estacionario del
+    ! momento de la fase dispersa, Bug 17), mezclado con el peso de ws_bub.
+    real(dp), parameter :: U_BUBBLE = 0.23_dp   ! m/s
 
     ! Cizalla interfacial de SUPERFICIE LIBRE (AIAD; Hoehne-Egorov, HZDR;
     ! ANSYS AIAD): donde el liquido NO es niebla suspendida en gas — charco,
