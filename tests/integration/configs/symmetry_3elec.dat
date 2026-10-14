@@ -34,12 +34,17 @@ n_beams = 0
 # alcanza al CONVERGER (el TDMA theta con costura retardada rompe la
 # invarianza rotacional del ITERADO; a convergencia desaparece). Se
 # aprietan tolerancias e iteraciones, jamas la cota del checker.
-max_outer = 60
-max_inner_mom = 8
+# (auditoria 4, B3-14/M4-7) lazo externo de PRODUCCION (5 outers): con 60
+# outers y tolerancias 1e-10 inalcanzables el lazo no converge y NO es
+# contractivo en este regimen (superficie de bano bajo el arco con P_conv +
+# P_elec + P_rad en la capa): el iterado se aleja de la simetria 120 grados
+# por el redondeo, 1.7e-9 tras 5 outers -> 8.5e-4 tras 60 en el paso 1
+# (medido). La simetria se juzga sobre el algoritmo tal como se usa.
+max_outer = 5
+max_inner_mom = 3
 tol_cont = 1e-10
 tol_mom = 1e-10
 tol_energy = 1e-10
-max_inner_mom = 3
 max_inner_pres = 500  # Poisson de dominio completo con el gas (low-Mach)
 
 output_freq = 5

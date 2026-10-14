@@ -76,8 +76,8 @@ contains
         real(dp) :: P_total, P_rad_arc, P_conv, P_elec_flow
         real(dp) :: x_elec, y_elec, x_cell, y_cell, dist
         real(dp) :: r2, sigma_r, gw
-        real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol
-        logical  :: found_scrap, owned, any_liq, bath_here
+        real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol, wsc, wba, wvo, wexp
+        logical  :: found_scrap, owned, any_liq, found_bath
         ! (El tope de 2 K por paso al solido se sustituyo por el tope de estado
         ! solid_arc_room: auditoria 12-oct-2026, M13.)
 
@@ -132,31 +132,45 @@ contains
             ! recibe P_rad directo ni P_conv a traves del bano (antes ganaba
             ! la chatarra, aunque estuviera bajo el bano; incoherente con el
             ! regulador, que sigue al bano).
+            ! (auditoria 4, M4-7) la capa se decide por su CONTENIDO ponderado
+            ! con la gaussiana del arco (sum w alpha_s V frente a sum w alpha_l
+            ! V), no por una celda cualquiera a < 2 sigma: una celda de pared
+            ! del crater en el anillo 2-3 R con chatarra hacia que un bano bajo
+            ! la punta contara como superficie de chatarra (y el P_rad directo
+            ! iba a la chatarra SUMERGIDA de k-1). Primera capa con material
+            ! (> 5 % del volumen ponderado): chatarra si pesa mas que el bano.
             kscrap: do kg = kg_tip, 1, -1
-                bath_here = .false.
+                wsc = 0.0_dp; wba = 0.0_dp; wvo = 0.0_dp
                 do jg = 1, m%nth_g
                     do ig = 1, m%nr_g
                         if (m%cell_type_global(ig,jg,kg) == 0) cycle
                         x_cell = m%r_global(ig) * cos(m%theta_global(jg))
                         y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                         dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
-                        if (dist > sigma_r * 2.0_dp) cycle
-                        if (alpha_g(ig,jg,kg) > ALPHA_SCRAP_SURF) then
-                            kg_scrap     = kg
-                            found_scrap  = .true.
-                            exit kscrap
-                        end if
-                        if (alpha_lg(ig,jg,kg) >= ALPHA_LIQ_CONT) bath_here = .true.
+                        ! gaussiana hasta 4 sigma (cola 1e-7): un corte duro a
+                        ! 2 sigma dejaba la pertenencia de las celdas del borde
+                        ! al redondeo y rompia la simetria 120 grados (2e-3)
+                        r2 = dist**2 / (sigma_r**2 + SMALL)
+                        if (r2 >= 16.0_dp) cycle
+                        gw = exp(-r2) * m%vol_global(ig,jg,kg)
+                        wvo = wvo + gw
+                        if (alpha_g(ig,jg,kg) > ALPHA_SCRAP_SURF) wsc = wsc + gw * alpha_g(ig,jg,kg)
+                        if (alpha_lg(ig,jg,kg) >= ALPHA_LIQ_CONT) wba = wba + gw * alpha_lg(ig,jg,kg)
                     end do
                 end do
-                if (bath_here) exit kscrap
+                if (wvo <= SMALL) cycle
+                if (wsc + wba < 0.05_dp * wvo) cycle
+                if (wsc >= wba) then
+                    kg_scrap = kg; found_scrap = .true.
+                end if
+                exit kscrap
             end do kscrap
 
             ! ── Superficie del BAÑO bajo el electrodo (auditoria 2, N-A2) ───
             ! Sin chatarra, el chorro de plasma pega en el baño: P_conv va a la
             ! capa de la superficie del baño (antes a la columna de gas bajo la
             ! punta, que no podia cederlo al baño: N-A1)
-            kc_lo = kg_scrap; kc_hi = kg_tip
+            kc_lo = kg_scrap; kc_hi = kg_tip; found_bath = .false.
             if (.not. found_scrap) then
                 kbath: do kg = kg_tip, 1, -1
                     do jg = 1, m%nth_g
@@ -167,7 +181,7 @@ contains
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
                             if (dist <= sigma_r * 2.0_dp .and. &
                                 alpha_lg(ig,jg,kg) >= ALPHA_LIQ_CONT) then
-                                kc_lo = kg; kc_hi = kg
+                                kc_lo = kg; kc_hi = kg; found_bath = .true.
                                 exit kbath
                             end if
                         end do
@@ -183,13 +197,18 @@ contains
                         do ig = 1, m%nr_g
                             if (m%cell_type_global(ig,jg,kg) == 0) cycle
                             if (alpha_g(ig,jg,kg) < 0.01_dp) cycle
+                            ! peso de chatarra EXPUESTA (M4-7): 1 sin bano, 0 con
+                            ! alpha_l >= 0.4, rampa suave entre 0.2 y 0.4 (un corte
+                            ! en 0.3 dependia del redondeo y rompia la simetria)
+                            wexp = 1.0_dp - min(1.0_dp, max(0.0_dp, (alpha_lg(ig,jg,kg) - 0.2_dp) / 0.2_dp))
+                            if (wexp <= 0.0_dp) cycle
                             x_cell = m%r_global(ig) * cos(m%theta_global(jg))
                             y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
                             r2 = dist**2 / (sigma_r**2 + SMALL)
                             if (r2 < 16.0_dp) then
                                 total_gw_vol_rad = total_gw_vol_rad + &
-                                    exp(-r2) * m%vol_global(ig,jg,kg)
+                                    exp(-r2) * wexp * m%vol_global(ig,jg,kg)
                             end if
                         end do
                     end do
@@ -214,6 +233,18 @@ contains
                 end do
             end do
 
+            ! (auditoria 4, M4-8) P_elec sigue a la MISMA superficie que P_conv y
+            ! P_rad: solo cuando la superficie bajo la punta es BANO (kbath,
+            ! mismo radio 2 sigma) va a esa capa; con chatarra como superficie
+            ! (bore-in terminado por altura, lecho inundado) o sin bano se
+            ! deposita con P_conv. Antes buscaba bano en 2 R_elec desde la
+            ! punta hacia abajo saltando la chatarra: 0.2 P_arc a una capa
+            ! enterrada (el piso del lecho, la zona del muro de ~320 s).
+            if (P_elec_flow > 0.0_dp .and. .not. (found_bath .and. .not. found_scrap)) then
+                P_conv      = P_conv + P_elec_flow
+                P_elec_flow = 0.0_dp
+            end if
+
             ! Sin superficie de chatarra que reciba P_rad directo y con MC:
             ! TODA la radiacion del arco la traza el MC (auditoria 2, N-A2:
             ! antes iba a la columna de gas kg_tip +- 3 -incluso dentro del
@@ -233,6 +264,11 @@ contains
                         do ig = 1, m%nr_g
                             if (m%cell_type_global(ig,jg,kg) == 0) cycle
                             if (alpha_g(ig,jg,kg) < 0.01_dp) cycle
+                            ! peso de chatarra EXPUESTA (M4-7): 1 sin bano, 0 con
+                            ! alpha_l >= 0.4, rampa suave entre 0.2 y 0.4 (un corte
+                            ! en 0.3 dependia del redondeo y rompia la simetria)
+                            wexp = 1.0_dp - min(1.0_dp, max(0.0_dp, (alpha_lg(ig,jg,kg) - 0.2_dp) / 0.2_dp))
+                            if (wexp <= 0.0_dp) cycle
                             x_cell = m%r_global(ig) * cos(m%theta_global(jg))
                             y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
@@ -242,7 +278,7 @@ contains
                             call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
                             if (.not. owned) cycle
 
-                            gw = exp(-r2)
+                            gw = exp(-r2) * wexp
                             ! P_rad directo: los fotones del arco calientan la
                             ! chatarra (fraccion 1 al solido, con el tope de
                             ! estado; el excedente al fluido de la celda)
@@ -265,7 +301,7 @@ contains
                 ! chatarra, el respaldo de P_rad va a la capa del bano, no a
                 ! la columna de gas
                 kr_lo = max(1, kg_tip-3); kr_hi = min(m%nz_g, kg_tip+3)
-                if (.not. found_scrap .and. kc_lo == kc_hi .and. kc_hi < kg_tip) then
+                if (.not. found_scrap .and. found_bath) then   ! (B3-5; bandera explicita, M4-A4)
                     kr_lo = kc_lo; kr_hi = kc_hi
                 end if
                 total_vol = 0.0_dp
@@ -330,66 +366,69 @@ contains
                 end do
             end if
 
-            ! ── P_elec: electron-flow heating to liquid bath (post bore-in) ─
-            ! (N-A2) peso alpha_l V; (auditoria 3, A3-4) SOLO en celdas de
-            ! BANO (alpha_l >= ALPHA_LIQ_CONT) de la capa mas alta con bano
-            ! bajo la punta (kg_bath): la corriente entra al bano por su
-            ! superficie (mancha anodica) y ahi se deposita el calor de
-            ! condensacion electronica. Antes bastaba una celda con alpha_l >
-            ! 1e-6 en la columna para repartir ~5.5 MW por alpha_l V: una gota
-            ! o una pelicula de goteo recibia TODO P_elec (y lo que el solido
-            ! no absorbia iba al gas de poro: el patron de 54 000 K de F2.30).
-            ! Sin bano en la columna, por volumen (reparto por absorcion).
-            if (elec(e)%bore_in_done) then
-                any_liq = .false.; kg_bath = 0
-                kbe: do kg = kg_tip, 1, -1
-                    do jg = 1, m%nth_g
-                        do ig = 1, m%nr_g
-                            if (m%cell_type_global(ig,jg,kg) == 0) cycle
-                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
-                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
-                            dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
-                            if (dist <= cfg%R_elec * 2.0_dp .and. alpha_lg(ig,jg,kg) >= ALPHA_LIQ_CONT) then
-                                any_liq = .true.; kg_bath = kg
-                                exit kbe
-                            end if
-                        end do
-                    end do
-                end do kbe
+            ! ── P_elec: a la capa de la superficie del BANO (kc_lo = kc_hi), peso
+            ! alpha_l V sobre las celdas de bano a < 2 sigma (A3-4, M4-8)
+            if (P_elec_flow > 0.0_dp) then
+                any_liq = .true.; kg_bath = kc_lo
                 total_vol = 0.0_dp
-                do kg = 1, kg_tip
-                    do jg = 1, m%nth_g
-                        do ig = 1, m%nr_g
-                            if (m%cell_type_global(ig,jg,kg) == 0) cycle
-                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
-                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
-                            dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
-                            if (dist <= cfg%R_elec * 2.0_dp) then
-                                total_vol = total_vol + wel(ig, jg, kg)
-                            end if
-                        end do
+                do jg = 1, m%nth_g
+                    do ig = 1, m%nr_g
+                        if (m%cell_type_global(ig,jg,kg_bath) == 0) cycle
+                        x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                        y_cell = m%r_global(ig) * sin(m%theta_global(jg))
+                        dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
+                        r2 = dist**2 / (sigma_r**2 + SMALL)
+                        if (r2 < 16.0_dp) total_vol = total_vol + exp(-r2) * wel(ig, jg, kg_bath)
                     end do
                 end do
                 if (total_vol > SMALL) then
-                    do kg = 1, kg_tip
-                        do jg = 1, m%nth_g
-                            do ig = 1, m%nr_g
-                                if (m%cell_type_global(ig,jg,kg) == 0) cycle
-                                x_cell = m%r_global(ig) * cos(m%theta_global(jg))
-                                y_cell = m%r_global(ig) * sin(m%theta_global(jg))
-                                dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
-                                if (dist > cfg%R_elec * 2.0_dp) cycle
-
-                                call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
-                                if (.not. owned) cycle
-
-                                if (wel(ig, jg, kg) <= 0.0_dp) cycle
-                                call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), alpha_lg(ig,jg,kg), &
-                                    m%vol_global(ig,jg,kg), P_elec_flow * wel(ig, jg, kg) &
-                                    / (total_vol * m%vol_global(ig,jg,kg)), -1.0_dp)
-                            end do
+                    do jg = 1, m%nth_g
+                        do ig = 1, m%nr_g
+                            if (m%cell_type_global(ig,jg,kg_bath) == 0) cycle
+                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
+                            dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
+                            r2 = dist**2 / (sigma_r**2 + SMALL)
+                            if (r2 >= 16.0_dp) cycle
+                            call global_to_local(m, ig, jg, kg_bath, il, jl, kl, owned)
+                            if (.not. owned) cycle
+                            if (wel(ig, jg, kg_bath) <= 0.0_dp) cycle
+                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg_bath), alpha_lg(ig,jg,kg_bath), &
+                                m%vol_global(ig,jg,kg_bath), P_elec_flow * exp(-r2) * wel(ig, jg, kg_bath) &
+                                / (total_vol * m%vol_global(ig,jg,kg_bath)), -1.0_dp)
                         end do
                     end do
+                else
+                    ! respaldo (no deberia ocurrir: kbath encontro bano en esa
+                    ! capa): por volumen en la capa, nada se pierde
+                    any_liq = .false.
+                    do jg = 1, m%nth_g
+                        do ig = 1, m%nr_g
+                            if (m%cell_type_global(ig,jg,kg_bath) == 0) cycle
+                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
+                            dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
+                            r2 = dist**2 / (sigma_r**2 + SMALL)
+                        if (r2 < 16.0_dp) total_vol = total_vol + exp(-r2) * wel(ig, jg, kg_bath)
+                        end do
+                    end do
+                    if (total_vol > SMALL) then
+                    do jg = 1, m%nth_g
+                        do ig = 1, m%nr_g
+                            if (m%cell_type_global(ig,jg,kg_bath) == 0) cycle
+                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
+                            dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
+                            r2 = dist**2 / (sigma_r**2 + SMALL)
+                            if (r2 >= 16.0_dp) cycle
+                            call global_to_local(m, ig, jg, kg_bath, il, jl, kl, owned)
+                            if (.not. owned) cycle
+                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg_bath), alpha_lg(ig,jg,kg_bath), &
+                                m%vol_global(ig,jg,kg_bath), P_elec_flow * exp(-r2) * wel(ig, jg, kg_bath) &
+                                / (total_vol * m%vol_global(ig,jg,kg_bath)), -1.0_dp)
+                        end do
+                    end do
+                    end if
                 end if
             end if
 
