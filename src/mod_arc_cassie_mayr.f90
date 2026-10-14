@@ -77,7 +77,7 @@ contains
         real(dp) :: x_elec, y_elec, x_cell, y_cell, dist
         real(dp) :: r2, sigma_r, gw
         real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol
-        logical  :: found_scrap, owned, any_liq
+        logical  :: found_scrap, owned, any_liq, bath_here
         ! (El tope de 2 K por paso al solido se sustituyo por el tope de estado
         ! solid_arc_room: auditoria 12-oct-2026, M13.)
 
@@ -125,21 +125,31 @@ contains
             ! ── Scrap surface below electrode (global search) ───────────────
             kg_scrap = max(1, kg_tip - 1)
             found_scrap = .false.
+            ! (auditoria 3, M3-3) barrido de ARRIBA hacia abajo: la primera
+            ! capa con material bajo la punta es la superficie. Si en esa
+            ! capa hay bano (alpha_l >= ALPHA_LIQ_CONT) y ninguna celda de
+            ! chatarra, la superficie es el bano y la chatarra SUMERGIDA no
+            ! recibe P_rad directo ni P_conv a traves del bano (antes ganaba
+            ! la chatarra, aunque estuviera bajo el bano; incoherente con el
+            ! regulador, que sigue al bano).
             kscrap: do kg = kg_tip, 1, -1
+                bath_here = .false.
                 do jg = 1, m%nth_g
                     do ig = 1, m%nr_g
                         if (m%cell_type_global(ig,jg,kg) == 0) cycle
                         x_cell = m%r_global(ig) * cos(m%theta_global(jg))
                         y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                         dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
-                        if (dist <= sigma_r * 2.0_dp .and. &
-                            alpha_g(ig,jg,kg) > ALPHA_SCRAP_SURF) then
+                        if (dist > sigma_r * 2.0_dp) cycle
+                        if (alpha_g(ig,jg,kg) > ALPHA_SCRAP_SURF) then
                             kg_scrap     = kg
                             found_scrap  = .true.
                             exit kscrap
                         end if
+                        if (alpha_lg(ig,jg,kg) >= ALPHA_LIQ_CONT) bath_here = .true.
                     end do
                 end do
+                if (bath_here) exit kscrap
             end do kscrap
 
             ! ── Superficie del BAÑO bajo el electrodo (auditoria 2, N-A2) ───
