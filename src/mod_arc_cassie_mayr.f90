@@ -246,7 +246,7 @@ contains
                             ! P_rad directo: los fotones del arco calientan la
                             ! chatarra (fraccion 1 al solido, con el tope de
                             ! estado; el excedente al fluido de la celda)
-                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), &
+                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), alpha_lg(ig,jg,kg), &
                                 m%vol_global(ig,jg,kg), P_rad_arc * gw / total_gw_vol_rad, 1.0_dp)
                         end do
                     end do
@@ -299,7 +299,7 @@ contains
                             if (.not. owned) cycle
 
                             gw = exp(-r2)
-                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), &
+                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), alpha_lg(ig,jg,kg), &
                                 m%vol_global(ig,jg,kg), P_rad_arc * gw / total_vol, -1.0_dp)
                         end do
                     end do
@@ -323,7 +323,7 @@ contains
                             if (.not. owned) cycle
 
                             gw = exp(-r2)
-                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), &
+                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), alpha_lg(ig,jg,kg), &
                                 m%vol_global(ig,jg,kg), P_conv * gw / total_gw_vol_conv, -1.0_dp)
                         end do
                     end do
@@ -384,7 +384,7 @@ contains
                                 if (.not. owned) cycle
 
                                 if (wel(ig, jg, kg) <= 0.0_dp) cycle
-                                call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), &
+                                call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), alpha_lg(ig,jg,kg), &
                                     m%vol_global(ig,jg,kg), P_elec_flow * wel(ig, jg, kg) &
                                     / (total_vol * m%vol_global(ig,jg,kg)), -1.0_dp)
                             end do
@@ -438,12 +438,16 @@ contains
     ! solid_arc_room y el excedente vuelve al fluido. w_s_in < 0: reparto por
     ! absorcion; si no, fraccion impuesta (P_rad directo: 1).
     !---------------------------------------------------------------------------
-    subroutine arc_deposit(sol, sh, cfg, il, jl, kl, as_c, vol, Pd, w_s_in)
+    subroutine arc_deposit(sol, sh, cfg, il, jl, kl, as_c, al_c, vol, Pd, w_s_in)
         type(solid_t), intent(inout)  :: sol
         type(shared_t), intent(inout) :: sh
         type(config_t), intent(in)    :: cfg
         integer, intent(in)           :: il, jl, kl
-        real(dp), intent(in)          :: as_c, vol, Pd, w_s_in
+        ! (auditoria 4, M4-6) alpha_l de la celda: el fluido absorbe con
+        ! kappa_l alpha_l + kappa_g alpha_g (los mismos pesos que la DO, A11);
+        ! con kappa_g (1 - alpha_s) un bano con chatarra (alpha_l 0.5, alpha_s
+        ! 0.5) daba el 97 % al solido (debe ser ~9 %): anulaba A3-4
+        real(dp), intent(in)          :: as_c, al_c, vol, Pd, w_s_in
         real(dp) :: Q, w_s, Q_s, Q_fl
         Q = Pd * vol * cfg%dt
         if (Q <= 0.0_dp) return
@@ -453,7 +457,8 @@ contains
                 w_s = w_s_in
             else
                 w_s = KAPPA_SOLID_ABS * as_c / (KAPPA_SOLID_ABS * as_c + &
-                      KAPPA_GAS_ABS * max(1.0_dp - as_c, 0.0_dp) + SMALL)
+                      KAPPA_LIQ_ABS * max(al_c, 0.0_dp) + &
+                      KAPPA_GAS_ABS * max(1.0_dp - as_c - max(al_c, 0.0_dp), 0.0_dp) + SMALL)
             end if
         end if
         Q_s = min(w_s * Q, solid_arc_room(sol%m_s(il,jl,kl), sol%E_s(il,jl,kl), cfg))

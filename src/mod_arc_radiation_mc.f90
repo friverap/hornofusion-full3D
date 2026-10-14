@@ -257,9 +257,12 @@ contains
                     ! excedente a S_arc: conservativo y auditado.
                     w_s = 0.0_dp
                     if (sol%m_s(il, jl, kl) > SMALL .and. alpha_g(ig, jg, kg) > 0.0_dp) &
+                        ! (auditoria 4, M4-6) el fluido absorbe con kappa_l alpha_l
+                        ! + kappa_g alpha_g (pesos de la DO)
                         w_s = KAPPA_SOLID_ABS * alpha_g(ig, jg, kg) / &
                               (KAPPA_SOLID_ABS * alpha_g(ig, jg, kg) + &
-                               KAPPA_GAS_ABS * max(1.0_dp - alpha_g(ig, jg, kg), 0.0_dp) + SMALL)
+                               KAPPA_LIQ_ABS * max(alpha_lg(ig, jg, kg), 0.0_dp) + &
+                               KAPPA_GAS_ABS * max(1.0_dp - alpha_g(ig, jg, kg) - max(alpha_lg(ig, jg, kg), 0.0_dp), 0.0_dp) + SMALL)
                     Q_s  = w_s * dep_g(ig, jg, kg) * cfg%dt                 ! J al solido
                     ! tope de ESTADO (auditoria M13; antes 2 K por paso)
                     Q_s  = min(Q_s, solid_arc_room(sol%m_s(il, jl, kl), sol%E_s(il, jl, kl), cfg))
