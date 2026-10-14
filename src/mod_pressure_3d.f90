@@ -266,6 +266,16 @@ contains
                         src = abs(gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
                               (gas%rho(i,j,k) - gas_eos(cfg%rho_gas, gas_T_old(i,j,k), &
                                ws_p_n(i,j,k))) / max(gas%rho(i,j,k), SMALL))
+                        ! (auditoria 4, A4-2) la MISMA ponderacion fsat de la
+                        ! fuente: el gas de piso de un poro saturado no pide
+                        ! volumen, asi que no se le juzga con una demanda que
+                        ! no plantea (sin esto salia de act_g y F2.29 sellaba la
+                        ! fila: E1b -cerrar la valvula, NEGATIVO en B1- por la
+                        ! puerta de atras)
+                        if (ws_liq_room_valid .and. ws_bed_valid) then
+                            if (ws_bed(i,j,k) > 0.0_dp) src = src * &
+                                min(1.0_dp, max(0.0_dp, ws_liq_room(i,j,k) / ALPHA_PORE_GAS))
+                        end if
                         src = min(src, COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt)
                         if (src <= 0.0_dp) cycle
                         cg = 0.0_dp
