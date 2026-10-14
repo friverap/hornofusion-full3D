@@ -430,21 +430,40 @@ resuelven una vez por paso; A2). `solve_chemistry` exige `solve_species`.
 Pseudo-fase sin momento propio. Flotación por **columna global** (gather +
 mismo barrido en todos los ranks): la escoria asciende hasta el tope del baño
 o desciende cuando el material de abajo desaparece, nunca entra a celdas
-llenas de chatarra, y `α_sl = m_sl/(ρ_sl V)` (A14). Intercambio escoria–fluido
-exacto de dos nodos (exponencial), en dos pasadas. Química FeO/C con
-conservación elemental (E2). Piso T_sl ≥ 300 K con E_sl coherente y la
-energía inyectada auditada (`E_slag_tclip`).
+llenas de chatarra, y `α_sl = m_sl/(ρ_sl V)` (A14); el gas que crea o destruye al reescribir
+α_g se audita en masa y energía de inventario (`m_gas_volfix`,
+`E_gas_volfix`; auditoría 4, M4-13). Intercambio escoria–fluido exacto de dos
+nodos (exponencial), en dos pasadas. **Con el gas, consistente con su
+inventario logarítmico** (M4-13): la energía del gas ideal a p fija es
+C_g ln(T/T_ref) con C_g = α ρ_ref T_ref c_p V (P0 + p)/P0 (la masa la fija la
+EOS, ρ ∝ 1/T), así que el equilibrio se resuelve en la forma no lineal
+C_s (T_s − T_eq) = C_g ln(T_eq/T_g), el gas avanza la fracción f hacia T_eq en
+ln T y la escoria recibe exactamente lo que perdió el inventario del gas. El
+"poke" lineal T −= Q/(αρc_pV) perdía el 30 % de Q con gas a 300 K contra
+escoria a 1800 K. Química FeO/C con conservación elemental (E2). Piso
+T_sl ≥ 300 K con E_sl coherente y la energía inyectada auditada
+(`E_slag_tclip`).
 
 ---
 
 ## 15. Transferencia de calor interfase
 
-**Gas–líquido en dos fluidos (auditoría 2, N-A1)**: `compute_gas_liquid_heat`,
-implícito exacto de dos nodos tras el SIMPLE. Área: superficie libre resuelta
-|∇α_l| en el líquido continuo (AIAD), 6 α_l/d_gota en el disperso. h del lado
-del gas con k molecular: Nu = 2 + 0.664 Re^½ Pr^⅓ (superficie, longitud dz) y
-Nu = 2 + 0.6 Re^½ Pr^⅓ (gotas), con la velocidad relativa. Antes no existía: el
-gas a 300 K sobre el baño a 1850 K quedaba a 300 K.
+**Gas–líquido en dos fluidos (auditoría 2, N-A1; auditoría 4, M4-9/M4-10)**:
+`compute_gas_liquid_heat`, implícito exacto de dos nodos tras el SIMPLE. Tres
+contribuciones: (i) **película del lecho** (α_s ≥ 1e-2, rampa `fbed` entre 1e-2
+y 2e-2 hacia el régimen libre; se apaga al saturar el poro con `fsat`),
+a_i = 6α_s/d_p · min(1, α_l/(1−α_s)), h de Ranz–Marshall; (ii) **gotas** en el
+gas continuo, 6 α_l/d_gota con f_disp (logística AIAD; 0 en líquido continuo),
+Nu = 2 + 0.6 Re^½ Pr^⅓; (iii) **superficie libre resuelta por CARAS
+verticales**: en cada cara k|k+1 el nodo líquido es la celda con más α_l y el
+gas la otra, área |Δα_l|·A_z, h = k(2/dz + 0.664 Re_L^½ Pr^⅓/L) con
+L = max(R_shell, dz) — la conducción 2k/dz deja intercambiar a un gas en
+reposo y L largo quita la dependencia h ∝ dz^-½ de la placa de longitud dz;
+se omite si alguna de las dos celdas tiene chatarra (α_s ≥ 2e-2). Con
+interfase nítida ninguna celda tiene las dos fases, por eso el acople es de
+cara y no de celda (antes: |∇α_l| central, que pulsaba con la posición del
+nivel). Antes de N-A1 no existía: el gas a 300 K sobre el baño a 1850 K
+quedaba a 300 K. Banco: `bath_test_cold`.
 
 ```
 gas–sólido:      h_gs = (k_mol/d)(2 + 1.1 Pr^⅓ Re^0.6) [Wakao], k_mol = μ c_p / 0.7;
