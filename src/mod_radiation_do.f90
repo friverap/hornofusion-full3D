@@ -271,20 +271,23 @@ contains
                     if (ks_a <= SMALL) cycle
 
                     ! Newton puntual sobre E:  f(E) = E - E0 - dt*V*ks*
-                    ! (G - 4σT(E)^4) = 0.  3 iteraciones bastan (f' > 1).
+                    ! (G - 4σT0^4 - 16σT0^3 (T(E) - T0)) = 0: la emision es la
+                    ! que transporto la DO (a T0, auditoria 4 A4-5) y la
+                    ! pendiente de Newton la estabiliza. 3 iteraciones (f' > 1).
                     block
-                        real(dp) :: E0, E_new, fval, fprime
+                        real(dp) :: E0, E_new, fval, fprime, T0
                         integer  :: it
                         E0 = sol%E_s(i,j,k)
                         E_new = E0
+                        T0 = solid_T_from_enthalpy(E0 / sol%m_s(i,j,k), cfg)
                         do it = 1, 3
                             T_s = solid_T_from_enthalpy( &
                                   E_new / sol%m_s(i,j,k), cfg)
                             fval = E_new - E0 - cfg%dt * ks_a * m%vol(i,j,k) * &
-                                   (sh%G_rad(i,j,k) - &
-                                    4.0_dp * STEFAN_BOLTZMANN * T_s**4)
+                                   (sh%G_rad(i,j,k) - 4.0_dp * STEFAN_BOLTZMANN * T0**4 &
+                                    - 16.0_dp * STEFAN_BOLTZMANN * T0**3 * (T_s - T0))
                             fprime = 1.0_dp + cfg%dt * ks_a * m%vol(i,j,k) * &
-                                     16.0_dp * STEFAN_BOLTZMANN * T_s**3 / &
+                                     16.0_dp * STEFAN_BOLTZMANN * T0**3 / &
                                      (sol%m_s(i,j,k) * effective_cp(T_s, cfg))
                             E_new = E_new - fval / fprime
                         end do

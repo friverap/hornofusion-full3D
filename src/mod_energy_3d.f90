@@ -256,12 +256,23 @@ contains
                     ! quimica va al gas (w_chem).
                     w_rad = rad_weight(alpha_q(i,j,k), alpha_other(i,j,k))
                     T_it = max(ph%T(i,j,k), 200.0_dp)
+                    ! (auditoria 4, A4-5) la EMISION que resta esta ecuacion es
+                    ! la MISMA que transporto la DO (a T_old, la T con la que se
+                    ! llamo): kappa (G - 4 sigma T_old^4). La pendiente de
+                    ! Newton 16 sigma T_it^3 sigue implicita (aP) y su termino
+                    ! fuente 16 sigma T_it^3 T_it hace que se ANULE al converger
+                    ! (T = T_it): asi la radiacion cierra (sum fases + solido +
+                    ! pared = 0 hasta la convergencia de la DO). Antes el nivel
+                    ! era 12 sigma T_it^4, es decir emision a T_it al converger:
+                    ! 4 kappa sigma (T_it^4 - T_old^4) de energia creada o
+                    ! destruida por paso (1.2-2.5 % del arco; 41 % de lo
+                    ! radiado en cold_10step).
                     Su(i,j,k) = rho_cp_vol_dt * T_old(i,j,k) &
                                + (sh%S_arc(i,j,k) * w_rad &
                                   + sh%S_chem(i,j,k) * w_chem(i,j,k, w_src)) * vol &
                                + w_rad * sh%kappa_f(i,j,k) * vol * &
-                                 (sh%G_rad(i,j,k) + 12.0_dp * &
-                                  STEFAN_BOLTZMANN * T_it**4)
+                                 (sh%G_rad(i,j,k) + STEFAN_BOLTZMANN * &
+                                  (16.0_dp * T_it**4 - 4.0_dp * max(T_old(i,j,k), 200.0_dp)**4))
 
                     ! Pérdidas de pared Robin (C3.1): en cada cara contra
                     ! celda inactiva (pared física o refractario del tazón):
@@ -499,8 +510,8 @@ contains
                         s_rad = s_rad + rad_weight(alpha_q(ii,jj,kk), alpha_other(ii,jj,kk)) &
                                 * sh%kappa_f(ii,jj,kk) * vv * &
                                 (sh%G_rad(ii,jj,kk) + STEFAN_BOLTZMANN * &
-                                 (12.0_dp * Tit**4 - 16.0_dp * Tit**3 * &
-                                  Tk(ii,jj,kk))) * cfg%dt
+                                 (16.0_dp * Tit**4 - 4.0_dp * max(T_old(ii,jj,kk), 200.0_dp)**4 &
+                                  - 16.0_dp * Tit**3 * Tk(ii,jj,kk))) * cfg%dt
                         ! Convección+difusión del enunciado acotado (la
                         ! difusión telescopa; el residuo es el déficit
                         ! convectivo). Signo: contribución a E_in = -esto.
