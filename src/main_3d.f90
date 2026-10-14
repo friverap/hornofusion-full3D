@@ -74,6 +74,7 @@ program eaf_3d_simulator
     real(dp) :: time, V_elec, I_elec
     real(dp) :: dt_nominal = 0.0_dp
     integer  :: step, outer, e
+    integer  :: step_start   ! paso del estado inicial (0 o el del snapshot; B4-5)
 
     ! Coeficiente de drag de Ergun (implícito en aP; C1.4)
     real(dp), allocatable :: drag_coef(:,:,:)
@@ -258,6 +259,8 @@ program eaf_3d_simulator
             call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, elec, cfg%dt, &
                                      step, time, cfg%output_dir)
     end block
+
+    step_start = step
 
     ! Auditoría de balances: encabezado + línea del estado inicial
     if (cfg%audit_freq > 0) then
@@ -611,9 +614,15 @@ program eaf_3d_simulator
         ! Las integrales de fuente se acumulan CADA paso; la línea CSV se
         ! escribe cada audit_freq pasos y cubre todo el intervalo.
         call timer_start(T_IO)
+        ! (auditoria 4, B4-4) todo SNAPSHOT (output_freq y el final de la
+        ! corrida) cierra ademas el intervalo del audit: con audit_freq > 1 el
+        ! tramo acumulado desde la ultima linea no se escribia en ninguna
+        ! parte y un reinicio desde ese snapshot (que arranca su audit de
+        ! cero) lo perdia. Con audit_freq = 1 no cambia nada.
         if (cfg%audit_freq > 0) then
             call audit_accumulate(liq, gas, gas_old%T, sh, mesh, cfg, ag_heat)
-            if (mod(step, cfg%audit_freq) == 0) then
+            if (mod(step, cfg%audit_freq) == 0 .or. mod(step, cfg%output_freq) == 0 &
+                .or. cfg%t_final - time <= 1.0e-6_dp * cfg%dt) then
                 call audit_write_step(liq, gas, sol, slag, sh, elec, mesh, &
                                       cfg, step, time)
             end if
@@ -708,8 +717,12 @@ program eaf_3d_simulator
     ! produccion: adapt_timestep partia del recorte -o de dt_min- y eso iba al
     ! snapshot; dt_nominal es el dt que el paso iba a usar)
     if (dt_nominal > 0.0_dp) cfg%dt = dt_nominal
-    call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, elec, cfg%dt, &
-                             step, time, cfg%output_dir)
+    ! (auditoria 4, B4-5) sin ningun paso dado (t_final <= time al reanudar)
+    ! el estado inicial ya quedo escrito -o protegido- arriba: reescribirlo
+    ! truncaba el snapshot de origen con las fuentes S_* en cero
+    if (step > step_start) &
+        call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, elec, cfg%dt, &
+                                 step, time, cfg%output_dir)
 
     ! Cleanup
     call phase_destroy(liq)

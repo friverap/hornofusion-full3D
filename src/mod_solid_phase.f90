@@ -12,7 +12,7 @@ module mod_solid_phase
     use mod_scrap_collapse
     use mod_interphase_ht
     use mod_workspace, only: ensure_workspace, ws_Tsrc
-    use mod_audit, only: audit_add, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, AUD_ALPHA_CLIP_MASS, &
+    use mod_audit, only: audit_add, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, AUD_ALPHA_CLIP_MASS, AUD_ALPHA_CLIP_E, &
                          gas_inventory_cell
     implicit none
 
@@ -133,7 +133,7 @@ contains
         real(dp), intent(in)         :: dt
         type(shared_t), intent(inout), optional :: sh
         integer :: i, j, k
-        real(dp) :: a_new
+        real(dp) :: a_new, dmc
         do k = 1, m%nz
             do j = 1, m%ntheta
                 do i = 1, m%nr
@@ -141,8 +141,15 @@ contains
                     if (sol%mdot(i,j,k) == 0.0_dp) cycle
                     a_new = liq%alpha(i,j,k) + sol%mdot(i,j,k) * dt / (liq%rho(i,j,k) * m%vol(i,j,k))
                     ! (auditoria 3, B3-10) lo que el max(0, .) recorta queda en
-                    ! el clip auditado (nunca un recorte silencioso)
-                    if (a_new < 0.0_dp) call audit_add(AUD_ALPHA_CLIP_MASS, -a_new * liq%rho(i,j,k) * m%vol(i,j,k))
+                    ! el clip auditado (nunca un recorte silencioso); (auditoria
+                    ! 4, B4-3) tambien su ENERGIA, con la misma entalpia
+                    ! especifica del liquido que usa el clip del transporte
+                    if (a_new < 0.0_dp) then
+                        dmc = -a_new * liq%rho(i,j,k) * m%vol(i,j,k)
+                        call audit_add(AUD_ALPHA_CLIP_MASS, dmc)
+                        call audit_add(AUD_ALPHA_CLIP_E, dmc * (liq%cp(i,j,k) * liq%T(i,j,k) &
+                             + (cfg%cp_s - cfg%cp_l) * cfg%T_liquidus + cfg%h_fusion))
+                    end if
                     liq%alpha(i,j,k) = max(0.0_dp, a_new)
                 end do
             end do
