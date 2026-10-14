@@ -19,8 +19,14 @@ adaptive_dt = false
 charge_bucket1 = false
 heel_mass = 274000.0
 heel_T = 1850.0
-# (T_initial solo fija liquido/solido/escoria; el gas arranca en T_ambient
-# y sin arco ni radiacion no se calienta: el banco es isotermo de hecho.)
+# (T_initial solo fija liquido/solido/escoria; el gas arranca en T_ambient.)
+# Gas (y paredes) en EQUILIBRIO termico con el bano (auditoria 3, A3-2/A3-3):
+# el gas arrancaba a 300 K sobre acero a 1850 K y el intercambio gas-liquido
+# lo calienta; desde A3-3 esa expansion entra al Poisson (10 m/s sobre la
+# superficie, 2.5e-4 m/s en el bano), asi que un gas frio sobre un bano
+# caliente NO es un estado de reposo. El punto fijo que vigila este banco es
+# el mecanico (ferrostatica, u_l, alpha): se parte en equilibrio termico.
+T_ambient = 1850.0
 T_initial = 1850.0
 
 solve_flow = true

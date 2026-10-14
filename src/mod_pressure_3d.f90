@@ -448,13 +448,33 @@ contains
         ! alpha por fusión/colapso es de segundo orden aquí).
         if (cfg%gas_compressibility .and. cfg%solve_multiphase) then
         block
-            real(dp) :: src, cap, dvol, dcl
+            real(dp) :: src, cap, dvol, dcl, fsat
             ws_cc_new = 0.0_dp
             do k = kstart, kend
                 do j = jstart, jend
                     do i = istart, iend
                         if (m%cell_type(i,j,k) == 0) cycle
                         if (.not. act_g(i,j,k)) cycle
+                        ! El gas RESIDUAL de un poro SATURADO (alpha_g en el
+                        ! piso ALPHA_PORE_GAS, liquido en el cap) es un canal
+                        ! hidraulico (F2.7), no un inventario termodinamico: su
+                        ! expansion al calentarse no pide volumen (auditoria 3,
+                        ! A3-3: con la referencia Tg_end y el area de pelicula
+                        ! de A3-2 el piso se calentaba 5x en un paso y bombeaba
+                        ! el 7.5 % del volumen de cada poro de bath_freeze a
+                        ! traves del bano: 138 kPa, freeboard a 20 m/s y
+                        ! caotico, n1/n4 3e-8 -> 0.14). La fila sigue activa
+                        ! (la valvula de Plan E no se cierra); solo no bombea.
+                        ! Peso CONTINUO en el hueco del poro (0 saturado, 1 con
+                        ! hueco >= ALPHA_PORE_GAS): un interruptor en room <=
+                        ! 1e-4 saltaba a distinto paso segun el redondeo
+                        ! (n1/n4 1.7e-4). Las fuentes de masa de las reacciones
+                        ! no se pesan: esa masa tiene que ventear.
+                        fsat = 1.0_dp
+                        if (ws_liq_room_valid .and. ws_bed_valid) then
+                            if (ws_bed(i,j,k) > 0.0_dp) &
+                                fsat = min(1.0_dp, max(0.0_dp, ws_liq_room(i,j,k) / ALPHA_PORE_GAS))
+                        end if
                         ! Forma de VOLUMEN: (alpha_g/rho_g) (rho(T) - rho(T_old))/dt V
                         src = gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
                               (gas%rho(i,j,k) - gas_eos(cfg%rho_gas, gas_T_old(i,j,k), &
@@ -467,7 +487,7 @@ contains
                         ! total; el exceso se ACARREA (antes se perdia: el
                         ! comentario decia que la demanda se re-emitia, pero la
                         ! referencia del paso siguiente ya es la T nueva)
-                        dvol = -src + gadv(i,j,k) &
+                        dvol = fsat * (-src + gadv(i,j,k)) &
                              + (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) &
                                * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL) &
                              + ws_cc(i,j,k) / cfg%dt

@@ -47,11 +47,14 @@ def main():
     worst, worst_field = 0.0, ""
 
     def family_scale(name):
-        # velocidades: la maxima de las tres componentes de la misma fase
+        # velocidades: la maxima de las tres componentes de la misma fase,
+        # con piso FISICO de 1 mm/s (auditoria 3): una fase en reposo (gas de
+        # bath_test en equilibrio termico, 5e-6 m/s) no define escala, y
+        # 4e-13 m/s de redondeo entre descomposiciones no es una diferencia
         if name.startswith("velocity_"):
             phase = name.split("_")[-1]
             comps = [f"velocity_{c}_{phase}" for c in ("r", "th", "z")]
-            return max(float(np.max(np.abs(fields_b[c]))) for c in comps if c in fields_b)
+            return max(1.0e-3, max(float(np.max(np.abs(fields_b[c]))) for c in comps if c in fields_b))
         return float(np.max(np.abs(fields_b[name])))
 
     for name in sorted(fields_a):

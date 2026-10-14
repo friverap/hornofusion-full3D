@@ -17,6 +17,7 @@ module mod_interphase_ht
     use mod_mpi_topology, only: mpi_allreduce_min
     use mod_types_3d
     use mod_melting_3d, only: solid_T_from_enthalpy
+    use mod_workspace, only: ws_liq_cont, ws_liq_cont_valid
     implicit none
 
     ! Escala temporal mínima del acople interfase del último paso
@@ -215,16 +216,18 @@ contains
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
         integer  :: i, j, k, jm, jp
-        real(dp) :: al, ag, cg, cl, G, f, q, d, k_mol, urel, Re, h, a_i
-        real(dp) :: gr, gth, gz, L
+        real(dp) :: al, ag, as, cg, cl, G, f, q, d, dp_, k_mol, urel, xb, f_disp, wet
+        real(dp) :: gr, gth, gz
+        logical  :: cont_el, cont
         d = cfg%d_droplet
         if (d <= 0.0_dp) d = 2.0e-3_dp
+        dp_ = max(cfg%d_particle, 1.0e-3_dp)
         do k = 1, m%nz
             do j = 1, m%ntheta
                 jm = j - 1; jp = j + 1
                 do i = 1, m%nr
                     if (m%cell_type(i,j,k) == 0) cycle
-                    al = liq%alpha(i,j,k); ag = gas%alpha(i,j,k)
+                    al = liq%alpha(i,j,k); ag = gas%alpha(i,j,k); as = sol%alpha_s(i,j,k)
                     if (al <= 1.0e-6_dp .or. ag <= 1.0e-6_dp) cycle
                     cg = ag * gas%rho(i,j,k) * gas%cp(i,j,k) * m%vol(i,j,k)
                     cl = al * liq%rho(i,j,k) * liq%cp(i,j,k) * m%vol(i,j,k)
@@ -232,22 +235,41 @@ contains
                     urel = sqrt((gas%ur(i,j,k) - liq%ur(i,j,k))**2 + &
                                 (gas%uth(i,j,k) - liq%uth(i,j,k))**2 + &
                                 (gas%uz(i,j,k) - liq%uz(i,j,k))**2)
-                    if (liq_continuous(al, sol%alpha_s(i,j,k))) then
+                    ! MORFOLOGIA (auditoria 3, A3-2): mezcla, nunca interruptor
+                    ! (F2.22), y la misma regla de continuidad que el resto del
+                    ! codigo (ws_liq_cont, con la superficie libre):
+                    !   LECHO (alpha_s >= 1e-2): pelicula sobre la chatarra;
+                    !     area de las particulas 6 alpha_s/d_p por la fraccion
+                    !     mojada alpha_l/(1 - alpha_s), Ranz-Marshall con d_p.
+                    !     Antes una pelicula uniforme (|grad alpha| = 0) no
+                    !     intercambiaba nada.
+                    !   FUERA DEL LECHO: logistica AIAD en alpha_l entre GOTAS
+                    !     (6 alpha_l/d, Ranz-Marshall con d) e INTERFASE
+                    !     RESUELTA (|grad alpha_l|, placa con L = dz). La celda
+                    !     de SUPERFICIE del bano (continua por la regla de
+                    !     superficie libre aunque alpha_l < 0.3) es interfase
+                    !     resuelta: con liq_continuous elemental recibia el area
+                    !     de gota, 60-600x la de la superficie, y el gas de esa
+                    !     capa salia a T_l en un paso.
+                    if (as >= 1.0e-2_dp) then
+                        wet = min(1.0_dp, al / max(1.0_dp - as, SMALL))
+                        G = h_sphere(dp_) * 6.0_dp * as / dp_ * wet
+                    else
+                        cont_el = liq_continuous(al, as)
+                        cont = cont_el
+                        if (ws_liq_cont_valid) cont = ws_liq_cont(i,j,k)
+                        xb = A_AIAD * (al - ALPHA_AIAD_LIM)
+                        f_disp = 1.0_dp / (1.0_dp + exp(min(max(xb, -60.0_dp), 60.0_dp)))
+                        if (cont .and. .not. cont_el) f_disp = 0.0_dp
                         ! |grad alpha_l| central; vecina inactiva = sin salto
                         gr  = (anb(i+1,j,k, al) - anb(i-1,j,k, al)) / (m%r(i+1) - m%r(i-1) + SMALL)
                         gth = (anb(i,jp,k, al) - anb(i,jm,k, al)) / &
                               (m%r(i) * (m%theta(jp) - m%theta(jm)) + SMALL)
                         gz  = (anb(i,j,k+1, al) - anb(i,j,k-1, al)) / (m%z(k+1) - m%z(k-1) + SMALL)
-                        a_i = sqrt(gr**2 + gth**2 + gz**2)
-                        L = m%dz(k)
-                        Re = gas%rho(i,j,k) * urel * L / (gas%mu(i,j,k) + SMALL)
-                        h = k_mol / L * (2.0_dp + 0.664_dp * sqrt(Re) * PR_GAS_MOL**(1.0_dp/3.0_dp))
-                    else
-                        a_i = 6.0_dp * al / d
-                        Re = gas%rho(i,j,k) * urel * d / (gas%mu(i,j,k) + SMALL)
-                        h = k_mol / d * (2.0_dp + 0.6_dp * sqrt(Re) * PR_GAS_MOL**(1.0_dp/3.0_dp))
+                        G = f_disp * h_sphere(d) * 6.0_dp * al / d &
+                          + (1.0_dp - f_disp) * h_plate(m%dz(k)) * sqrt(gr**2 + gth**2 + gz**2)
                     end if
-                    G = h * a_i * m%vol(i,j,k)
+                    G = G * m%vol(i,j,k)
                     if (G <= 0.0_dp) cycle
                     f = 1.0_dp - exp(-cfg%dt * G * (1.0_dp / cg + 1.0_dp / cl))
                     q = cg * cl / (cg + cl) * (gas%T(i,j,k) - liq%T(i,j,k)) * f
@@ -259,6 +281,20 @@ contains
             end do
         end do
     contains
+        ! Ranz-Marshall para esfera de diametro dd [W/m2/K]
+        pure real(dp) function h_sphere(dd)
+            real(dp), intent(in) :: dd
+            real(dp) :: Re
+            Re = gas%rho(i,j,k) * urel * dd / (gas%mu(i,j,k) + SMALL)
+            h_sphere = k_mol / dd * (2.0_dp + 0.6_dp * sqrt(Re) * PR_GAS_MOL**(1.0_dp/3.0_dp))
+        end function h_sphere
+        ! Placa plana de longitud L (interfase resuelta) [W/m2/K]
+        pure real(dp) function h_plate(L)
+            real(dp), intent(in) :: L
+            real(dp) :: Re
+            Re = gas%rho(i,j,k) * urel * L / (gas%mu(i,j,k) + SMALL)
+            h_plate = k_mol / L * (2.0_dp + 0.664_dp * sqrt(Re) * PR_GAS_MOL**(1.0_dp/3.0_dp))
+        end function h_plate
         ! alpha_l de la vecina; inactiva (pared, halo fisico) = la propia
         pure real(dp) function anb(ii, jj, kk, aown)
             integer, intent(in)  :: ii, jj, kk

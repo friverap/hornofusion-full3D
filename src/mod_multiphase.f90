@@ -62,6 +62,8 @@ contains
         real(dp), allocatable, save :: p_lur(:,:,:), p_lth(:,:,:), p_luz(:,:,:)
         real(dp), allocatable, save :: p_gur(:,:,:), p_gth(:,:,:), p_guz(:,:,:)
         real(dp), allocatable, save :: p_lT(:,:,:), p_gT(:,:,:)
+        ! Referencia de T del gas para la fuente de compresibilidad (A3-3)
+        real(dp), allocatable, save :: Tg_ref(:,:,:)
         ! Coeficiente de intercambio de momentum gas-líquido (C2.4)
         real(dp), allocatable, save :: Kexch(:,:,:)
         real(dp), allocatable, save :: drag_gas(:,:,:)
@@ -328,7 +330,22 @@ contains
         do ic = 1, max(1, cfg%n_pc_max)
         ! Pressure correction de MEZCLA: ambas fases contribuyen y ambas
         ! se corrigen (C2.4)
-        call solve_pressure_correction(liq, gas, gas_old%T, sh, m, cfg, res_ic)
+        ! Referencia de la fuente de compresibilidad (auditoria 3, A3-3): la T
+        ! del gas al FINAL del SIMPLE anterior (sh%Tg_end), no gas_old%T. Entre
+        ! ambas estan la interfase gas-solido (update_solid_postenergy) y el
+        ! intercambio gas-liquido, que calientan el gas DESPUES del Poisson:
+        ! medida contra gas_old%T esa expansion no pasaba por ningun Poisson
+        ! (la EOS reescribia la masa del gas sin fuente de volumen; es el
+        ! mecanismo de F2.13 y lo que Plan G ya corregia con Tg_end). Sin
+        ! Tg_end (arranque, reinicio de un snapshot viejo, solve_flow off) se
+        ! usa gas_old%T.
+        if (.not. allocated(Tg_ref)) allocate(Tg_ref, mold=gas%T)
+        where (sh%Tg_end > 0.0_dp)
+            Tg_ref = sh%Tg_end
+        elsewhere
+            Tg_ref = gas_old%T
+        end where
+        call solve_pressure_correction(liq, gas, Tg_ref, sh, m, cfg, res_ic)
         ! el residual del lazo externo es el del iterado ENTRANTE (Bug 20)
         if (ic == 1) res_cont = res_ic
 

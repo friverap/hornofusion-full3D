@@ -545,6 +545,11 @@ program eaf_3d_simulator
         ! Acarreo del exceso de compresibilidad: el de la ultima iteracion
         ! externa pasa al paso siguiente (M26)
         ws_cc = ws_cc_new
+        ! T del gas al final del SIMPLE: referencia de la fuente de
+        ! compresibilidad del paso siguiente (A3-3; la mezcla fija la suya).
+        ! Estado del reinicio (/restart Tg_end).
+        if (cfg%solve_flow .and. cfg%solve_multiphase .and. .not. cfg%mixture_model) &
+            sh%Tg_end = gas%T
 
         call probe_report('fin-SIMPLE    ', liq, gas, sol, sh, mesh, cfg)
 

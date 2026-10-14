@@ -69,3 +69,11 @@ audit_noflow:arc_budget
 # identidad usa solo el del gas (E_conv_gas). El banco corre con max_outer 10
 # (produccion): con 5, la fusion instantanea del paso 1 (1.8e11 J) quedaba sin
 # converger (-3.4e7 J).
+# bed_flood (banco de water packing, Plan D): p > 100 kPa el 99 % de los pasos
+# ya en la base. Con A3-3 (la expansion del gas calentado DESPUES del SIMPLE
+# entra al Poisson) el gas sobre la superficie del bano en el anillo del eje
+# lee el salto de presion interno del bano (37 -> 8 kPa en una celda: el
+# chorro de F2.3) y toca U_GAS_MAX 4 pasos a 1.17 s (3.9 % de los pasos
+# > 200 m/s). Diagnosticado (auditoria 3, A3-3; docs/AUDITORIA_3); el banco
+# no predice B1: el juez es B1 desde t = 0.
+bed_flood:bath_pv_bounded

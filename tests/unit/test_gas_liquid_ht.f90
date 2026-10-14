@@ -9,6 +9,14 @@
 !   3. Gotas dispersas (alpha_l 0.02, sin chatarra): conservacion y cotas, y
 !      el intercambio es mayor que en la superficie a igual dt (area 6 alpha/d).
 !   4. Sin liquido o sin gas: nada cambia.
+!   5. LECHO (alpha_s 0.5, alpha_l 0.05): pelicula sobre la chatarra; G a MANO
+!      (Ranz-Marshall con d_p, area 6 alpha_s/d_p por la fraccion mojada) y la
+!      solucion exacta de dos nodos reproducen la T del gas a 1e-12 (A3-2:
+!      antes una pelicula uniforme no intercambiaba nada).
+!   6. Celda de SUPERFICIE con poco liquido (alpha_l 0.05 sobre una celda de
+!      bano, continua por la regla de superficie libre): interfase resuelta,
+!      no gotas: su intercambio es < 10 % del de las mismas gotas aisladas
+!      (A3-2: con liq_continuous elemental recibia el area de gota, 60-600x).
 !===============================================================================
 program test_gas_liquid_ht
     use mod_constants
@@ -17,7 +25,8 @@ program test_gas_liquid_ht
     use mod_config_3d, only: config_set_defaults
     use mod_mesh_3d, only: mesh_generate_parallel
     use mod_fields_3d
-    use mod_interphase_ht, only: compute_gas_liquid_heat
+    use mod_interphase_ht, only: compute_gas_liquid_heat, PR_GAS_MOL
+    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid
     implicit none
 
     type(config_t) :: cfg
@@ -27,7 +36,8 @@ program test_gas_liquid_ht
     type(slag_t)   :: slag
     type(shared_t) :: sh
     integer, parameter :: I0 = 3, J0 = 4, K0 = 5
-    real(dp) :: Cg, Cl, Tg0, Tl0, Tm, dTg_fs, dTg_d
+    real(dp) :: Cg, Cl, Tg0, Tl0, Tm, dTg_fs, dTg_d, dTg_s
+    real(dp) :: dpp, kmol, Re, h, a_i, G, f, q, Tg_hand
     logical  :: ok
 
     call config_set_defaults(cfg)
@@ -72,6 +82,49 @@ program test_gas_liquid_ht
     liq%alpha = 0.0_dp; gas%alpha = 1.0_dp; gas%T = Tg0; liq%T = Tl0
     call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg)
     if (maxval(abs(gas%T(1:6,1:8,1:10) - Tg0)) > 0.0_dp) call fail('caso 4: cambio sin liquido', 1.0_dp)
+
+    ! --- caso 5: lecho, pelicula sobre la chatarra; G a mano ---
+    call ensure_workspace(mesh)
+    liq%alpha = 0.0_dp; liq%alpha(I0,J0,K0) = 0.05_dp
+    sol%alpha_s = 0.0_dp; sol%alpha_s(I0,J0,K0) = 0.5_dp
+    gas%alpha = 1.0_dp - liq%alpha - sol%alpha_s
+    gas%T = Tg0; liq%T = Tl0; cfg%dt = 1.0_dp
+    ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s); ws_liq_cont_valid = .true.
+    call caps()
+    dpp  = max(cfg%d_particle, 1.0e-3_dp)
+    kmol = gas%mu(I0,J0,K0) * gas%cp(I0,J0,K0) / PR_GAS_MOL
+    Re   = gas%rho(I0,J0,K0) * 1.0_dp * dpp / (gas%mu(I0,J0,K0) + SMALL)
+    h    = kmol / dpp * (2.0_dp + 0.6_dp * sqrt(Re) * PR_GAS_MOL**(1.0_dp/3.0_dp))
+    a_i  = 6.0_dp * 0.5_dp / dpp * min(1.0_dp, 0.05_dp / 0.5_dp)
+    G    = h * a_i * mesh%vol(I0,J0,K0)
+    f    = 1.0_dp - exp(-cfg%dt * G * (1.0_dp / Cg + 1.0_dp / Cl))
+    q    = Cg * Cl / (Cg + Cl) * (Tg0 - Tl0) * f
+    Tg_hand = Tg0 - q / Cg
+    call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg)
+    call checks('caso 5')
+    if (abs(gas%T(I0,J0,K0) - Tg_hand) > 1.0e-12_dp * (Tl0 - Tg0)) &
+        call fail('caso 5: T del gas /= G a mano (pelicula del lecho)', gas%T(I0,J0,K0) - Tg_hand)
+    if (.not. (gas%T(I0,J0,K0) - Tg0 > 1.0_dp)) call fail('caso 5: la pelicula del lecho no intercambia', gas%T(I0,J0,K0) - Tg0)
+
+    ! --- caso 6: superficie con poco liquido frente a las mismas gotas ---
+    sol%alpha_s = 0.0_dp
+    liq%alpha = 0.0_dp; liq%alpha(:,:,1:K0-1) = 1.0_dp; liq%alpha(I0,J0,K0) = 0.05_dp
+    gas%alpha = 1.0_dp - liq%alpha
+    gas%T = Tg0; liq%T = Tl0; cfg%dt = 1.0_dp
+    ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s)
+    ws_liq_cont(I0,J0,K0) = .true.    ! regla de superficie libre: sobre el bano
+    call caps()
+    call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg)
+    call checks('caso 6')
+    dTg_s = gas%T(I0,J0,K0) - Tg0
+    liq%alpha = 0.0_dp; liq%alpha(I0,J0,K0) = 0.05_dp
+    gas%alpha = 1.0_dp - liq%alpha
+    gas%T = Tg0; liq%T = Tl0
+    ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s)
+    call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg)
+    dTg_d = gas%T(I0,J0,K0) - Tg0
+    if (.not. (dTg_s > 0.0_dp .and. dTg_s < 0.1_dp * dTg_d)) &
+        call fail('caso 6: la celda de superficie intercambia como gotas (dT_s/dT_gotas)', dTg_s / max(dTg_d, SMALL))
 
     if (ok) then
         print '(A)', ' PASS test_gas_liquid_ht'
