@@ -313,6 +313,10 @@ contains
         call h5acreate_f(group_id, 'm_ecs_pending', H5T_NATIVE_DOUBLE, aspace_id, attr_id, error)
         call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, m_ecs_pending, adims, error)
         call h5aclose_f(attr_id, error)
+        ! modelo que escribe el snapshot (M4-2): 1 = mezcla, 0 = dos fluidos
+        call h5acreate_f(group_id, 'model_mixture', H5T_NATIVE_DOUBLE, aspace_id, attr_id, error)
+        call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, merge(1.0_dp, 0.0_dp, sh%model_mixture), adims, error)
+        call h5aclose_f(attr_id, error)
         call h5sclose_f(aspace_id, error)
 
         ne = size(elec)

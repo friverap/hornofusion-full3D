@@ -103,6 +103,7 @@ module mod_mixture_3d
     ! final del lazo SIMPLE del paso anterior), congelada durante el paso
     real(dp), allocatable, save :: Tg_ref(:,:,:)
     integer, save :: tgref_id = -huge(1)
+    logical, save :: mix_inited = .false.   ! (M4-2) equilibrado de arranque hecho
 
 contains
 
@@ -158,8 +159,12 @@ contains
             ! Decision GLOBAL sobre celdas propias (auditoria, bajos): el
             ! all() local incluia halos y dos ranks podian discrepar -> unos
             ! entraban a los intercambios de halos colectivos y otros no
+            ! (auditoria 4, M4-2) se equilibra en el PRIMER paso de la sesion
+            ! salvo que reanude un snapshot escrito por la propia mezcla
+            ! (atributo model_mixture); desde A3-3 todo snapshot trae Tg_end
+            ! >= 0 y la deteccion por Tg_end ya no distinguia los modelos
             fl_loc = 1.0_dp
-            if (any(sh%Tg_end(istart:iend, jstart:jend, kstart:kend) >= 0.0_dp)) fl_loc = 0.0_dp
+            if (mix_inited .or. sh%restart_mixture) fl_loc = 0.0_dp
             if (m%is_parallel) then
                 call mpi_allreduce_min(fl_loc, fl_glob, m%topo)
             else
@@ -180,6 +185,7 @@ contains
                 gas_old%rho = gas%rho; liq_old%rho = liq%rho
                 sh%Tg_end = gas%T
             end if
+            mix_inited = .true.
             where (sh%Tg_end > 0.0_dp)
                 Tg_ref = sh%Tg_end
             elsewhere

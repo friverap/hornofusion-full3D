@@ -145,6 +145,7 @@ program eaf_3d_simulator
     call solid_allocate(sol, mesh)
     call slag_allocate(slag, mesh)
     call shared_allocate(sh, mesh)
+    sh%model_mixture = cfg%mixture_model
     call ensure_workspace(mesh)   ! ws_Tsrc (auditoria A3) se pasa a la energia en todas las ramas
     allocate(tke_n, eps_n, mold=sh%tke)
     tke_n = sh%tke; eps_n = sh%eps

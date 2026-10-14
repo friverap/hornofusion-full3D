@@ -298,6 +298,14 @@ module mod_types_3d
         ! solido). Referencia de la fuente de compresibilidad del paso
         ! siguiente; persiste en el reinicio. -1 = sin valor (se usa T_old).
         real(dp), allocatable :: Tg_end(:,:,:)
+        ! (auditoria 4, M4-2) que modelo escribio el snapshot (atributo
+        ! /restart model_mixture) y con cual corre esta sesion: la mezcla solo
+        ! se salta su equilibrado de arranque si reanuda un snapshot SUYO
+        ! (desde A3-3 todo snapshot trae Tg_end >= 0 y la deteccion antigua
+        ! fallaba: el juez de Plan G reanudado desde dos fluidos perdia la
+        ! guardia de la succion de -1.6 MPa)
+        logical :: model_mixture = .false.
+        logical :: restart_mixture = .false.
 
         ! Arc sources
         real(dp), allocatable :: S_arc(:,:,:)      ! Arc heat source [W/m^3]

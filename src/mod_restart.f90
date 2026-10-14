@@ -65,6 +65,7 @@ contains
         type(shared_t), intent(inout)    :: sh
         type(electrode_t), intent(inout) :: elec(:)
         integer, intent(out)             :: step
+        real(dp) :: rmodel   ! (M4-2) atributo model_mixture
         real(dp), intent(out)            :: time
 
         integer(HID_T) :: file_id, plist_id, plist_xfer, gid, rid
@@ -186,6 +187,13 @@ contains
             call read_attr_real(rid, 'dt', cfg%dt, adims)
             call h5aexists_f(rid, 'm_ecs_pending', ex, error)
             if (ex) call read_attr_real(rid, 'm_ecs_pending', m_ecs_pending, adims)
+            ! (M4-2) modelo que escribio el snapshot
+            sh%restart_mixture = .false.
+            call h5aexists_f(rid, 'model_mixture', ex, error)
+            if (ex) then
+                call read_attr_real(rid, 'model_mixture', rmodel, adims)
+                sh%restart_mixture = (rmodel > 0.5_dp)
+            end if
             ne = size(elec)
             allocate(rv(ne), iv(ne))
             adims(1) = ne
