@@ -22,8 +22,8 @@ module mod_multiphase
     use mod_fields_3d
     use mod_probe, only: probe_report, probe_current_step
     use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
-    use mod_mpi_topology, only: mpi_allreduce_max
-    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_bed, ws_bed_gas, ws_bed_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
+    use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d
+    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_bed, ws_bed_gas, ws_bub, ws_bed_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
                              ws_liq_room, ws_liq_room_valid, &
                              ws_liq_fr, ws_liq_fth, ws_liq_fz, &
                              ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, ws_Tsrc
@@ -170,6 +170,25 @@ contains
         ws_bed_gas = ws_bed * merge(1.0_dp, 0.0_dp, &
             gas%alpha >= ALPHA_FLOW_CUTOFF .and. ws_gas_perc .and. ws_pv_active) &
             * min(1.0_dp, max(0.0_dp, (gas%alpha - ALPHA_PORE_GAS) / ALPHA_PORE_GAS))
+        ! Burbujas en el bano (A3-5): liquido continuo sin lecho, gas del
+        ! acople, y bano continuo sin lecho ENCIMA (la celda de superficie y la
+        ! que esta bajo un lecho que gotea no son burbujas). Se evalua en
+        ! celdas propias; el halo se intercambia (la cara lee ambas celdas).
+        ws_bub = 0.0_dp
+        do k = 1, m%nz
+            do j = 1, m%ntheta
+                do i = 1, m%nr
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (.not. ws_liq_cont(i,j,k) .or. ws_bed(i,j,k) > 0.0_dp) cycle
+                    if (.not. (gas%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF .and. &
+                               ws_gas_perc(i,j,k) .and. ws_pv_active(i,j,k))) cycle
+                    if (m%cell_type(i,j,k+1) == 0) cycle
+                    if (.not. ws_liq_cont(i,j,k+1) .or. ws_bed(i,j,k+1) > 0.0_dp) cycle
+                    ws_bub(i,j,k) = min(1.0_dp, (gas%alpha(i,j,k) - ALPHA_FLOW_CUTOFF) / ALPHA_FLOW_CUTOFF)
+                end do
+            end do
+        end do
+        call mpi_exchange_halos_3d(ws_bub, m%topo)
 
         ! Coeficiente de intercambio gas-líquido (ver F2.15 abajo)
         ! (régimen disperso; ver mod_constants::TAU_LG)

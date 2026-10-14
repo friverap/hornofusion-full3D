@@ -134,6 +134,16 @@ module mod_workspace
     ! liquido recibiria alpha_g (rho_l - rho_g) g (73 kPa/m) contra Ergun
     ! (~18 m/s en el poro; bath_freeze n1/n4 0.58 en el intento de N-C1).
     real(dp), allocatable :: ws_bed_gas(:,:,:)
+    ! BURBUJAS en el bano (auditoria 3, A3-5): celda de liquido continuo FUERA
+    ! del lecho con gas del acople (alpha_g >= ALPHA_FLOW_CUTOFF, percola) y
+    ! con bano continuo (sin lecho) ENCIMA: no es superficie libre, el gas es
+    ! fase dispersa dentro del liquido y ambas fases recuperan la forma
+    ! clasica (el gas sube, el liquido baja; la mezcla no cambia). Peso 0 -> 1
+    ! entre 1x y 2x ALPHA_FLOW_CUTOFF. Mascara de cara = MINIMO de las dos
+    ! celdas para AMBAS fases: la cara de la superficie libre (celda de bano
+    ! bajo celda de superficie con alpha_g < cutoff, o bajo el freeboard) no
+    ! la lleva, y el bano en reposo sigue siendo punto fijo exacto.
+    real(dp), allocatable :: ws_bub(:,:,:)
     logical, save :: ws_bed_valid = .false.
     ! Flujos de MASA conservativos del GAS por las caras + [kg/s] (auditoria
     ! M24, gas): Q = Q* + a (pp_P - pp_N) del Poisson por la densidad del
@@ -219,7 +229,7 @@ contains
         allocate(ws_lim_step, mold=ws_aW); ws_lim_step = 1.0_dp
         allocate(ws_cc, ws_cc_new, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
         allocate(ws_p_n, mold=ws_aW); ws_p_n = 0.0_dp
-        allocate(ws_bed, ws_bed_gas, mold=ws_aW); ws_bed = 0.0_dp; ws_bed_gas = 0.0_dp
+        allocate(ws_bed, ws_bed_gas, ws_bub, mold=ws_aW); ws_bed = 0.0_dp; ws_bed_gas = 0.0_dp; ws_bub = 0.0_dp
         allocate(ws_Fg_r, ws_Fg_th, ws_Fg_z, mold=ws_aW)
         ws_Fg_r = 0.0_dp; ws_Fg_th = 0.0_dp; ws_Fg_z = 0.0_dp
         allocate(ws_Fg_lk_r(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))

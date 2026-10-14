@@ -19,6 +19,10 @@
 !   4. Lecho con gas libre y p = hidrostatica del GAS (estado de lecho de
 !      goteo): ambas fases clasicas; el gas queda en reposo y el liquido
 !      drena con TODO su peso (hasta A3-1 el empuje quedaba x alpha_g/eps).
+!   5. BURBUJAS (A3-5): columna de bano sin chatarra con alpha_g 0.2 y
+!      ws_bub = 1 en toda la columna: ambas fases clasicas (1e-10), el gas
+!      SUBE y el liquido baja. (Que la celda de superficie no es burbuja lo
+!      fija la mascara de mod_multiphase y lo vigila bath_test: punto fijo.)
 !===============================================================================
 program test_bed_buoyancy
     use mod_constants
@@ -30,7 +34,7 @@ program test_bed_buoyancy
     use mod_momentum_3d, only: solve_momentum_3d
     use mod_drag_ergun, only: compute_ergun_drag
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
-                             ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_valid
+                             ws_Fg_valid, ws_bed, ws_bed_gas, ws_bub, ws_bed_valid
     implicit none
 
     type(config_t) :: cfg
@@ -116,6 +120,19 @@ program test_bed_buoyancy
         ok = .false.
     end if
 
+    ! ---- caso 5: burbujas en el bano ----
+    call setup(0.0_dp, 0.8_dp, .false., .false.)
+    ws_bub = 0.0_dp
+    ws_bub(1:6,1:8,1:8) = 1.0_dp
+    call run_both()
+    call cmp_classic_k('caso 5', 2, 7)
+    if (.not. (ug_bal(ic,jc,kc) > 0.0_dp .and. ul_bal(ic,jc,kc) < ug_bal(ic,jc,kc))) then
+        print '(A,2ES11.3)', '   FAIL caso 5: las burbujas no suben respecto del liquido: u_l, u_g = ', &
+            ul_bal(ic,jc,kc), ug_bal(ic,jc,kc)
+        ok = .false.
+    end if
+    ws_bub = 0.0_dp
+
     if (ok) then
         print '(A)', ' PASS test_bed_buoyancy'
     else
@@ -152,6 +169,23 @@ contains
         ws_bed_gas = merge(ws_bed, 0.0_dp, gas_free)
         ws_bed_valid = .true.
     end subroutine setup
+
+    subroutine cmp_classic_k(tag, k1, k2)
+        character(len=*), intent(in) :: tag
+        integer, intent(in) :: k1, k2
+        sc  = maxval(abs(ul_cls(1:6,1:8,k1:k2)))
+        scg = max(maxval(abs(ug_cls(1:6,1:8,k1:k2))), sc)
+        err_l = maxval(abs(ul_bal(1:6,1:8,k1:k2) - ul_cls(1:6,1:8,k1:k2))) / max(sc, SMALL)
+        err_g = maxval(abs(ug_bal(1:6,1:8,k1:k2) - ug_cls(1:6,1:8,k1:k2))) / max(scg, SMALL)
+        if (err_l > 1.0e-10_dp) then
+            print '(A,A,A,ES11.3)', '   FAIL ', tag, ': liquido con la forma balanceada /= clasica (burbujas): ', err_l
+            ok = .false.
+        end if
+        if (err_g > 1.0e-10_dp) then
+            print '(A,A,A,ES11.3)', '   FAIL ', tag, ': gas con la forma balanceada /= clasica (burbujas): ', err_g
+            ok = .false.
+        end if
+    end subroutine cmp_classic_k
 
     subroutine cmp_classic(tag)
         character(len=*), intent(in) :: tag

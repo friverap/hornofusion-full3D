@@ -107,7 +107,7 @@ contains
             ws_pc_unl, ws_pc_unl_valid, ws_pc_unl_id, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, &
-            ws_bed, ws_bed_gas, ws_bed_valid
+            ws_bed, ws_bed_gas, ws_bub, ws_bed_valid
         type(phase_t), intent(inout) :: liq, gas
         ! T del gas del paso anterior: término de COMPRESIBILIDAD del gas
         ! ideal, -alpha_g*(rho(T)-rho(T_old))/dt*V. Sin él, el Poisson
@@ -833,10 +833,12 @@ contains
             if (max(liq%alpha(ii,jj,ka), liq%alpha(ii,jj,kb)) < ALPHA_CUTOFF) return
             if (isg_) then
                 ! minimo de las dos celdas (ver mod_momentum_3d::bed_rel_f)
-                bm = min(ws_bed_gas(ii,jj,ka), ws_bed_gas(ii,jj,kb))
+                bm = min(max(ws_bed_gas(ii,jj,ka), ws_bub(ii,jj,ka)), &
+                         max(ws_bed_gas(ii,jj,kb), ws_bub(ii,jj,kb)))
                 w  = 0.5_dp * GRAVITY * (gas%rho(ii,jj,ka) + gas%rho(ii,jj,kb))
             else
-                bm = 0.5_dp * (ws_bed(ii,jj,ka) + ws_bed(ii,jj,kb))
+                bm = min(1.0_dp, 0.5_dp * (ws_bed(ii,jj,ka) + ws_bed(ii,jj,kb)) &
+                                 + min(ws_bub(ii,jj,ka), ws_bub(ii,jj,kb)))
                 w  = 0.5_dp * GRAVITY * ( &
                      liq%rho(ii,jj,ka) * (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,ka) - cfg%T_ref_boussinesq)) &
                    + liq%rho(ii,jj,kb) * (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,kb) - cfg%T_ref_boussinesq)))
