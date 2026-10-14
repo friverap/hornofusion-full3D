@@ -1,0 +1,31 @@
+# Banco arc_melt (auditoria 4, A4-7): FUSION PROGRESIVA bajo arco. Chatarra a
+# 1550 K (bajo el solidus, 1600 K) con arco: la palanca funde a lo largo de
+# ~110 de 200 pasos (28 kg a 2 s), en vez del 100 % en el paso 1 de
+# melt_forced / bath_fill / bed_flood. Ejerce la palanca M9 bajo arco, el
+# traspaso de entalpia y el balance de energia fuera del paso 1 (A4-4), con
+# descomposicion n1/n4 y reinicio a mitad de la fusion. Criterios en
+# check_arcmelt.py + check_audit + invariantes.
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+dt = 0.01
+t_final = 2.0
+adaptive_dt = false
+T_initial = 1550.0
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = false
+solve_radiation = true
+solve_chemistry = false
+solve_arc = true
+solve_multiphase = true
+alpha_p = 0.3
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 200
+audit_freq = 1
+output_freq = 25
+monitor_freq = 50

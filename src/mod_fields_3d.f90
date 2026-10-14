@@ -470,9 +470,12 @@ contains
                 vol_level = 0.0_dp
                 do jg = 1, m%nth_g
                     do ig = 1, m%nr_g
+                        ! hueco del poro con el piso de gas (liq_cap, F2.7):
+                        ! antes 1 - alpha_s, y el banco de bano bajo lecho
+                        ! arrancaba con el poro sobrelleno (auditoria 4, A4-7)
                         if (m%cell_type_global(ig,jg,kg) /= 0) &
-                            vol_level = vol_level + (1.0_dp - &
-                                as_g(ig,jg,kg)) * m%vol_global(ig,jg,kg)
+                            vol_level = vol_level + liq_cap(as_g(ig,jg,kg), 0.0_dp) &
+                                * m%vol_global(ig,jg,kg)
                     end do
                 end do
                 if (vol_level <= SMALL) cycle
@@ -482,7 +485,7 @@ contains
                         if (m%cell_type_global(ig,jg,kg) == 0) cycle
                         call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
                         if (.not. owned) cycle
-                        headroom = 1.0_dp - as_g(ig,jg,kg)
+                        headroom = liq_cap(as_g(ig,jg,kg), 0.0_dp)
                         liq%alpha(il,jl,kl) = liq%alpha(il,jl,kl) + &
                                               a_fill * headroom
                         liq%T(il,jl,kl)     = cfg%heel_T

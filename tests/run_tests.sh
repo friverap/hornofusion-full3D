@@ -230,6 +230,12 @@ full | rebaseline)
     run_case bath_fill 1
     run_case arc_noscrap 1
     run_case melt_forced 1
+    # (auditoria 4, A4-7) bano bajo lecho en reposo y fusion progresiva bajo
+    # arco: los dos regimenes de B1 que la matriz no ejercia
+    run_case bed_bath_rest 4
+    run_case bed_bath_rest 1
+    run_case arc_melt 4
+    run_case arc_melt 1
 
     for d in "$OUT"/cold_10step_n*; do
         check_invariants "$d" cold_10step
@@ -324,6 +330,13 @@ full | rebaseline)
     check_invariants "$OUT/bed_drain_n4" bed_drain
     run_script "bed_drain" \
         $PY $INT/check_drain.py "$OUT/bed_drain_n4" --xfail "$(xfail_ids bed_drain)"
+    for d in "$OUT"/bed_bath_rest_n* "$OUT"/arc_melt_n*; do
+        check_invariants "$d" "$(basename "$d" | sed 's/_n[0-9]*$//')"
+    done
+    run_script "bed_bath_rest" \
+        $PY $INT/check_bedbath.py "$OUT/bed_bath_rest_n4" --xfail "$(xfail_ids bed_bath_rest)"
+    run_script "arc_melt" \
+        $PY $INT/check_arcmelt.py "$OUT/arc_melt_n4" --xfail "$(xfail_ids arc_melt)"
     # Auditoria de energia/masa/arco en TODA corrida de la matriz (auditoria
     # 2, N-C3: antes 13 de 26 no se auditaban; bath_freeze fallaba con err 1)
     for d in "$OUT"/*_n*; do
@@ -362,6 +375,11 @@ full | rebaseline)
         $PY $INT/compare_decomposition.py "$OUT/arc_noscrap_n1" "$OUT/arc_noscrap_n4" --rtol 1e-11
     run_script "decomposition_melt" \
         $PY $INT/compare_decomposition.py "$OUT/melt_forced_n1" "$OUT/melt_forced_n8" --rtol 1e-8
+    # (A4-7) medido 2e-9 y 1.4e-13
+    run_script "decomposition_bedbath" \
+        $PY $INT/compare_decomposition.py "$OUT/bed_bath_rest_n1" "$OUT/bed_bath_rest_n4" --rtol 1e-7
+    run_script "decomposition_arcmelt" \
+        $PY $INT/compare_decomposition.py "$OUT/arc_melt_n1" "$OUT/arc_melt_n4" --rtol 1e-11
     # Reinicio desde snapshot: mismo numero de ranks y distinto (lectura por
     # hyperslab), y sobre el regimen de fusion (melt_forced, paso 6 de 11)
     run_restart_case cold_10step 8 8 5
@@ -377,6 +395,8 @@ full | rebaseline)
     run_restart_case ecs_test 8 8 10
     run_restart_case slag_chem_flow 4 4 10
     run_restart_case cold_10step 8 12 5
+    # (A4-7) reinicio a MITAD de la fusion progresiva (paso 100 de 200)
+    run_restart_case arc_melt 4 4 100
 
     if [ "$MODE" = "rebaseline" ]; then
         $PY $INT/metrics_snapshot.py "$OUT" --mode rebaseline \
