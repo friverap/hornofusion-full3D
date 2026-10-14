@@ -12,7 +12,8 @@ module mod_solid_phase
     use mod_scrap_collapse
     use mod_interphase_ht
     use mod_workspace, only: ensure_workspace, ws_Tsrc
-    use mod_audit, only: audit_add, AUD_GAS_VOLFIX, AUD_ALPHA_CLIP_MASS
+    use mod_audit, only: audit_add, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, AUD_ALPHA_CLIP_MASS, &
+                         gas_inventory_cell
     implicit none
 
 contains
@@ -44,7 +45,7 @@ contains
         ! cambian alpha_s sin actualizar el gas -> Sum(alpha) quedaba en 0.5
         ! en celdas vaciadas. El gas absorbe/cede el volumen sobrante.
         ! (M4-4) con sh: el gas creado no trae especies
-        call enforce_volume_constraint(liq, gas, sol, slag, m, sh)
+        call enforce_volume_constraint(liq, gas, sol, slag, m, cfg, sh)
 
     end subroutine update_solid_premelt
 
@@ -63,11 +64,12 @@ contains
     end subroutine update_solid_postenergy
 
     !---------------------------------------------------------------------------
-    subroutine enforce_volume_constraint(liq, gas, sol, slag, m, sh)
+    subroutine enforce_volume_constraint(liq, gas, sol, slag, m, cfg, sh)
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
         type(slag_t),  intent(in)    :: slag
         type(mesh_t), intent(in)     :: m
+        type(config_t), intent(in)   :: cfg
         ! Especies (auditoria 3, A3-7): el gas que CREA el complemento no
         ! trae O2/CO/CO2 (la masa de cada especie se conserva: Y se diluye
         ! por alpha_old/alpha_new, como la dilucion M14); si no, el relleno
@@ -77,9 +79,9 @@ contains
         type(shared_t), intent(inout), optional :: sh
 
         integer :: i, j, k
-        real(dp) :: a_new, dmg, fdil
+        real(dp) :: a_new, dmg, fdil, deg, pc
 
-        dmg = 0.0_dp
+        dmg = 0.0_dp; deg = 0.0_dp
         do k = 1, m%nz
             do j = 1, m%ntheta
                 do i = 1, m%nr
@@ -90,6 +92,14 @@ contains
                     ! masa de gas creada/destruida (auditoria, bajos: antes
                     ! sin columna; la masa del gas la fija la EOS)
                     dmg = dmg + (a_new - gas%alpha(i,j,k)) * gas%rho(i,j,k) * m%vol(i,j,k)
+                    ! energia del gas creado/destruido en la forma del
+                    ! INVENTARIO del audit (M4-13): a T fija, inv(nueva)-inv(vieja)
+                    pc = 0.0_dp
+                    if (present(sh)) pc = sh%p(i,j,k)
+                    deg = deg + gas_inventory_cell(a_new, gas%T(i,j,k), pc, gas%cp(i,j,k), &
+                                                   m%vol(i,j,k), cfg) &
+                              - gas_inventory_cell(gas%alpha(i,j,k), gas%T(i,j,k), pc, &
+                                                   gas%cp(i,j,k), m%vol(i,j,k), cfg)
                     if (present(sh) .and. a_new > gas%alpha(i,j,k) .and. a_new > 0.0_dp) then
                         fdil = max(gas%alpha(i,j,k), 0.0_dp) / a_new
                         sh%Y_O2(i,j,k)  = sh%Y_O2(i,j,k)  * fdil
@@ -101,6 +111,7 @@ contains
             end do
         end do
         call audit_add(AUD_GAS_VOLFIX, dmg)
+        call audit_add(AUD_GAS_VOLFIX_E, deg)
     end subroutine enforce_volume_constraint
 
     !---------------------------------------------------------------------------
@@ -113,11 +124,12 @@ contains
     ! mdot dt/(rho V); el gas es el complemento (restriccion de volumen). La
     ! congelacion esta acotada por RESOLID_LIMITER, asi que alpha_l >= 0.
     !---------------------------------------------------------------------------
-    subroutine apply_mass_source_noflow(liq, gas, sol, slag, m, dt, sh)
+    subroutine apply_mass_source_noflow(liq, gas, sol, slag, m, cfg, dt, sh)
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
         type(slag_t),  intent(in)    :: slag
         type(mesh_t), intent(in)     :: m
+        type(config_t), intent(in)   :: cfg
         real(dp), intent(in)         :: dt
         type(shared_t), intent(inout), optional :: sh
         integer :: i, j, k
@@ -135,7 +147,7 @@ contains
                 end do
             end do
         end do
-        call enforce_volume_constraint(liq, gas, sol, slag, m, sh)
+        call enforce_volume_constraint(liq, gas, sol, slag, m, cfg, sh)
     end subroutine apply_mass_source_noflow
 
 end module mod_solid_phase

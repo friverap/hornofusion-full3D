@@ -402,7 +402,7 @@ program eaf_3d_simulator
             ! A3-7; chem_test sum_alpha 7.7e-6). Con dos fluidos lo hace la
             ! continuidad del SIMPLE. Masa de gas auditada (m_gas_volfix).
             if (.not. (cfg%solve_flow .and. cfg%solve_multiphase)) then
-                call enforce_volume_constraint(liq, gas, sol, slag, mesh, sh)
+                call enforce_volume_constraint(liq, gas, sol, slag, mesh, cfg, sh)
                 call phase_exchange_halos(gas, mesh)
                 call shared_exchange_halos(sh, mesh)
             end if
@@ -464,7 +464,7 @@ program eaf_3d_simulator
             ! sin transporte de alpha de dos fluidos, el mdot se aplica aqui
             ! (auditoria 2, N-C4)
             if (.not. (cfg%solve_flow .and. cfg%solve_multiphase)) then
-                call apply_mass_source_noflow(liq, gas, sol, slag, mesh, cfg%dt, sh)
+                call apply_mass_source_noflow(liq, gas, sol, slag, mesh, cfg, cfg%dt, sh)
                 call phase_exchange_halos(liq, mesh)
                 call phase_exchange_halos(gas, mesh)
             end if
@@ -598,7 +598,7 @@ program eaf_3d_simulator
             call slag_additions(slag, mesh, cfg, &
                 interpolate_rate(cal_prof, time), &
                 interpolate_rate(cinj_prof, time), cfg%dt)
-            call update_slag(slag, liq, gas, sol, mesh, cfg, cfg%dt)
+            call update_slag(slag, liq, gas, sol, mesh, cfg, cfg%dt, sh)
             call phase_exchange_halos(liq, mesh)
             call phase_exchange_halos(gas, mesh)
             call slag_exchange_halos(slag, mesh)

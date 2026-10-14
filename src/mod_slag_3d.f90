@@ -14,7 +14,8 @@ module mod_slag_3d
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_allreduce_sum, mpi_exchange_halos_3d
     use mod_parallel_utils, only: gather_global_field, global_to_local
     use mod_audit, only: audit_add, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT, AUD_SLAG_TCLIP, &
-                         AUD_SLAG_GAS, AUD_SLAG_LIQ
+                         AUD_SLAG_GAS, AUD_SLAG_LIQ, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
+                         gas_inventory_cell, gas_heat_capacity_ref
     implicit none
 
     real(dp), parameter :: SMALL_SL = 1.0e-6_dp
@@ -316,16 +317,17 @@ contains
         end do
     end subroutine slag_additions
 
-    subroutine update_slag(slag, liq, gas, sol, m, cfg, dt)
+    subroutine update_slag(slag, liq, gas, sol, m, cfg, dt, sh)
         type(slag_t),  intent(inout) :: slag
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
         real(dp),      intent(in)    :: dt
+        type(shared_t), intent(in), optional :: sh   ! p para el inventario del gas (M4-13)
 
-        call slag_buoyancy(slag, liq, gas, sol, m, cfg)
-        call slag_energy(slag, liq, gas, m, cfg, dt)
+        call slag_buoyancy(slag, liq, gas, sol, m, cfg, sh)
+        call slag_energy(slag, liq, gas, m, cfg, dt, sh)
     end subroutine update_slag
 
     !---------------------------------------------------------------------------
@@ -341,16 +343,18 @@ contains
     ! seguia a m_sl en las adiciones y la quimica. Patron invariante: gather
     ! global + mismo barrido en todos los ranks + escritura de celdas propias.
     !---------------------------------------------------------------------------
-    subroutine slag_buoyancy(slag, liq, gas, sol, m, cfg)
+    subroutine slag_buoyancy(slag, liq, gas, sol, m, cfg, sh)
         type(slag_t),  intent(inout) :: slag
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
+        type(shared_t), intent(in), optional :: sh
 
         integer  :: i, j, k, c, ks, kk, il, jl, kl
         logical  :: owned
         real(dp) :: Mcol, Ecol, Xcol(N_SLAG_COMP), vneed, room, dv, f
+        real(dp) :: ag_new, dmg, deg, pc
         real(dp), allocatable :: ms_g(:,:,:), es_g(:,:,:), as_g(:,:,:), al_g(:,:,:)
         real(dp), allocatable :: x_g(:,:,:,:), ms_n(:,:,:), es_n(:,:,:), x_n(:,:,:,:)
         real(dp), allocatable :: tmp(:,:,:)
@@ -360,6 +364,7 @@ contains
         allocate(ms_n(m%nr_g, m%nth_g, m%nz_g), es_n(m%nr_g, m%nth_g, m%nz_g))
         allocate(x_g(m%nr_g, m%nth_g, m%nz_g, N_SLAG_COMP), x_n(m%nr_g, m%nth_g, m%nz_g, N_SLAG_COMP))
         allocate(tmp, mold=slag%m_sl)
+        dmg = 0.0_dp; deg = 0.0_dp
         call gather_global_field(slag%m_sl, ms_g, m)
         call gather_global_field(slag%E_sl, es_g, m)
         call gather_global_field(liq%alpha, al_g, m)
@@ -433,11 +438,25 @@ contains
                         slag%T_sl(il,jl,kl) = 0.0_dp
                         slag%alpha_foam(il,jl,kl) = 0.0_dp
                     end if
-                    gas%alpha(il,jl,kl) = max(0.0_dp, 1.0_dp - as_g(i,j,k) - liq%alpha(il,jl,kl) &
+                    ! El gas es el complemento: la escoria que se mueve crea y
+                    ! destruye gas (la EOS fija su masa). Masa y energia de
+                    ! inventario auditadas como el volfix (M4-13): sin esto el
+                    ! paso 1 de slag_chem_test dejaba 1e6 J sin columna.
+                    ag_new = max(0.0_dp, 1.0_dp - as_g(i,j,k) - liq%alpha(il,jl,kl) &
                                           - slag%alpha_sl(il,jl,kl))
+                    pc = 0.0_dp
+                    if (present(sh)) pc = sh%p(il,jl,kl)
+                    dmg = dmg + (ag_new - gas%alpha(il,jl,kl)) * gas%rho(il,jl,kl) * m%vol(il,jl,kl)
+                    deg = deg + gas_inventory_cell(ag_new, gas%T(il,jl,kl), pc, gas%cp(il,jl,kl), &
+                                                   m%vol(il,jl,kl), cfg) &
+                              - gas_inventory_cell(gas%alpha(il,jl,kl), gas%T(il,jl,kl), pc, &
+                                                   gas%cp(il,jl,kl), m%vol(il,jl,kl), cfg)
+                    gas%alpha(il,jl,kl) = ag_new
                 end do
             end do
         end do
+        call audit_add(AUD_GAS_VOLFIX, dmg)
+        call audit_add(AUD_GAS_VOLFIX_E, deg)
         deallocate(ms_g, es_g, as_g, al_g, ms_n, es_n, x_g, x_n, tmp)
     end subroutine slag_buoyancy
 
@@ -450,15 +469,16 @@ contains
     ! dos pasadas con halos, auditoria A14). La T de la escoria es E/(m cp)
     ! sin recorte (el recorte a 300 K desacoplaba T de E).
     !---------------------------------------------------------------------------
-    subroutine slag_energy(slag, liq, gas, m, cfg, dt)
+    subroutine slag_energy(slag, liq, gas, m, cfg, dt, sh)
         type(slag_t),  intent(inout) :: slag
         type(phase_t), intent(inout) :: liq, gas
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
         real(dp),      intent(in)    :: dt
+        type(shared_t), intent(in), optional :: sh
 
-        integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: Cs, Cf, hA, f, Q
+        integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend, it
+        real(dp) :: Cs, Cf, hA, f, Q, Cg, Tg, Ts, Teq, Tlo, Thi, Fn, dFn, pc
         real(dp), allocatable :: qdown(:,:,:)
 
         if (m%is_parallel) then
@@ -497,13 +517,48 @@ contains
                         call audit_add(AUD_SLAG_LIQ, Q)
                     end if
                     ! gas de la propia celda
+                    ! Gas de la propia celda, CONSISTENTE con el inventario del
+                    ! gas (M4-13): su energia es C_g ln(T/T_ref) (la masa la fija
+                    ! la EOS, rho ~ 1/T), asi que la capacidad lineal C_g/T solo
+                    ! vale a primer orden. El poke T -= Q/Cf dejaba sin contar el
+                    ! 30 % de Q cuando el gas frio (300 K) tocaba la escoria a
+                    ! 1800 K (slag_chem_test, paso 1: 1.0e6 J; paso 2: 50 % de
+                    ! 8e3 J). Equilibrio exacto Cs (Ts - Teq) = C_g ln(Teq/Tg)
+                    ! (Newton acotado). El GAS avanza la fraccion f hacia Teq en
+                    ! ln T (T = Tg (Teq/Tg)^f, acotada entre Tg y Teq) y la
+                    ! escoria recibe EXACTAMENTE lo que perdio el inventario del
+                    ! gas, Q = C_g ln(Tg/T): conservacion por construccion, la
+                    ! precision del Newton solo afecta a la tasa. (Despejar T de
+                    ! Q con exp(-Q/C_g) y Q de Cs (Teq - Ts) dejaba el gas a 3 K
+                    ! cuando C_g << Cs: el residuo del Newton, escalado con Cs,
+                    ! era enorme frente a C_g.)
                     if (gas%alpha(i,j,k) > SMALL_SL) then
-                        Cf = gas%alpha(i,j,k) * gas%rho(i,j,k) * gas%cp(i,j,k) * m%vol(i,j,k)
+                        pc = 0.0_dp
+                        if (present(sh)) pc = sh%p(i,j,k)
+                        Cg = gas_heat_capacity_ref(gas%alpha(i,j,k), pc, gas%cp(i,j,k), &
+                                                   m%vol(i,j,k), cfg)
+                        Tg = max(gas%T(i,j,k), T_MIN_GAS)
+                        Ts = slag%E_sl(i,j,k) / Cs
+                        Cf = Cg / Tg                             ! capacidad lineal en Tg
                         hA = cfg%h_contact_sl * m%Az(i,j,k)
                         f = 1.0_dp - exp(-dt * hA * (1.0_dp / Cs + 1.0_dp / Cf))
-                        Q = Cs * Cf / (Cs + Cf) * (gas%T(i,j,k) - slag%E_sl(i,j,k) / Cs) * f
+                        Tlo = min(Tg, Ts); Thi = max(Tg, Ts)
+                        Teq = (Cs * Ts + Cf * Tg) / (Cs + Cf)
+                        do it = 1, 30
+                            Fn  = Cs * (Ts - Teq) - Cg * log(Teq / Tg)
+                            dFn = -Cs - Cg / Teq
+                            if (Fn > 0.0_dp) then
+                                Tlo = Teq
+                            else
+                                Thi = Teq
+                            end if
+                            Teq = Teq - Fn / dFn
+                            if (Teq <= Tlo .or. Teq >= Thi) Teq = 0.5_dp * (Tlo + Thi)
+                            if (abs(Fn) <= 1.0e-13_dp * (Cs * Thi + Cg) .or. Thi - Tlo <= 1.0e-10_dp * Thi) exit
+                        end do
+                        gas%T(i,j,k) = Tg * (Teq / Tg)**f
+                        Q = Cg * log(Tg / gas%T(i,j,k))          ! hacia la escoria
                         slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
-                        gas%T(i,j,k) = gas%T(i,j,k) - Q / Cf
                         call audit_add(AUD_SLAG_GAS, Q)
                     end if
                     slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / Cs

@@ -30,10 +30,10 @@ module mod_audit
     private
 
     public :: audit_init, audit_write_step, audit_add, audit_accumulate
-    public :: audit_set_energy
+    public :: audit_set_energy, gas_inventory_cell, gas_heat_capacity_ref
     public :: AUD_ARC_DIRECT, AUD_ARC_DISCARD, AUD_MC_DEPOSIT
     public :: AUD_ALPHA_CLIP_MASS, AUD_MELT_MASS, AUD_RESOLID_MASS
-    public :: AUD_MELT_E_SOLID, AUD_SLAG_INTERCEPT, AUD_SLAG_GAS, AUD_SLAG_LIQ, AUD_GAS_OUT, AUD_GAS_RXN
+    public :: AUD_MELT_E_SOLID, AUD_SLAG_INTERCEPT, AUD_SLAG_GAS, AUD_SLAG_LIQ, AUD_GAS_OUT, AUD_GAS_RXN, AUD_GAS_VOLFIX_E
     public :: AUD_RAD_SOL, AUD_RAD_WALL, AUD_CHEM_SOL, AUD_MC_LOST
     public :: AUD_ECS_MASS, AUD_ECS_ENERGY, AUD_FLUX_MASS, AUD_FLUX_E
     public :: AUD_FE_YIELD, AUD_FE_RETURN, AUD_SLAG_OX_E, AUD_SLAG_RED_E
@@ -119,7 +119,11 @@ module mod_audit
     ! m_gas_volfix, el residuo de d m_gas es la masa que la EOS reescribe
     integer, parameter :: AUD_GAS_OUT         = 47
     integer, parameter :: AUD_GAS_RXN         = 48
-    integer, parameter :: N_AUD = 48
+    ! (auditoria 4, M4-13) J que entran/salen con la masa de gas que crea o
+    ! destruye la restriccion de volumen (m_gas_volfix x cp T): fuente externa
+    ! exacta de la identidad (slag_chem_test sin energia: 1e6 J en el paso 1)
+    integer, parameter :: AUD_GAS_VOLFIX_E    = 49
+    integer, parameter :: N_AUD = 49
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -140,6 +144,37 @@ module mod_audit
     character(len=320), save :: audit_path = ''
 
 contains
+
+    !---------------------------------------------------------------------------
+    ! Inventario de energia del gas ideal de UNA celda (M4-13): la unica
+    ! definicion. La usan el inventario E_gas del audit y las columnas que
+    ! crean/destruyen gas por reescritura de alpha_g (enforce_volume_constraint,
+    ! slag_buoyancy): E_gas_volfix = inv(alpha_nueva) - inv(alpha_vieja) a T
+    ! fija, de modo que la identidad por inventarios (solve_energy = false)
+    ! cierra a maquina. Forma log porque rho = rho_ref*T_ref/T hace la
+    ! capacidad alpha*rho(T)*cp y la energia absorbida int alpha*rho*cp dT =
+    ! alpha*rho_ref*T_ref*cp*ln(T/T_ref); M25: factor (P0 + p)/P0 (el modelo
+    ! de mezcla es low-Mach: p no entra).
+    !---------------------------------------------------------------------------
+    pure function gas_inventory_cell(alpha, T, p, cp, vol, cfg) result(e)
+        real(dp),       intent(in) :: alpha, T, p, cp, vol
+        type(config_t), intent(in) :: cfg
+        real(dp) :: e
+        e = gas_heat_capacity_ref(alpha, p, cp, vol, cfg) * &
+            log(max(T, T_MIN_GAS) / T_RHO_GAS_REF)
+    end function gas_inventory_cell
+
+    ! Capacidad de REFERENCIA C_g = alpha*rho_ref*T_ref*cp*V*(P0 + p)/P0 [J]:
+    ! inv = C_g ln(T/T_ref) y dinv/dT = C_g/T = alpha*rho(T)*cp*V (la
+    ! capacidad lineal de los 'pokes'). Un calor Q entregado al gas a alpha
+    ! fija sube T a T*exp(Q/C_g) (slag_energy, M4-13).
+    pure function gas_heat_capacity_ref(alpha, p, cp, vol, cfg) result(c)
+        real(dp),       intent(in) :: alpha, p, cp, vol
+        type(config_t), intent(in) :: cfg
+        real(dp) :: c
+        c = alpha * cfg%rho_gas * T_RHO_GAS_REF * cp * vol * &
+            max(P0_THERMO + merge(0.0_dp, p, cfg%mixture_model), P_ABS_MIN) / P0_THERMO
+    end function gas_heat_capacity_ref
 
     !---------------------------------------------------------------------------
     subroutine audit_set_energy(is_gas, absorbed, e_arc, e_rad, e_chem, &
@@ -214,7 +249,7 @@ contains
                 'm_resid_closed,E_resid_closed,m_spill,' // &
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
-                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq,m_gas_out,m_gas_rxn'
+                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq,m_gas_out,m_gas_rxn,E_gas_volfix'
             close(iu)
         end if
         acc = 0.0_dp
@@ -298,12 +333,8 @@ contains
                     ! en T (el 'agujero' de ~70% del balance).
                     ! M25: con rho(P0 + p, T) el factor (P0 + p)/P0 entra al
                     ! inventario (a p fija sigue siendo la integral exacta)
-                    s(6) = s(6) + gas%alpha(i,j,k) * cfg%rho_gas * &
-                                  T_RHO_GAS_REF * gas%cp(i,j,k) * vol * &
-                                  log(max(gas%T(i,j,k), T_MIN_GAS) / &
-                                      T_RHO_GAS_REF) &
-                                  * max(P0_THERMO + merge(0.0_dp, sh%p(i,j,k), &
-                                        cfg%mixture_model), P_ABS_MIN) / P0_THERMO
+                    s(6) = s(6) + gas_inventory_cell(gas%alpha(i,j,k), gas%T(i,j,k), &
+                                  sh%p(i,j,k), gas%cp(i,j,k), vol, cfg)
                     s(7) = s(7) + sol%E_s(i,j,k)
                     s(8) = s(8) + slag%E_sl(i,j,k)
 
@@ -377,7 +408,7 @@ contains
                 ',', a(AUD_RESOLID_E), ',', a(AUD_ALPHA_CLIP_E), &
                 ',', a(AUD_CONV_LIQ), ',', a(AUD_CONV_GAS), ',', a(AUD_ABS_GAS_HOOK), &
                 ',', a(AUD_SLAG_GAS), ',', a(AUD_SLAG_LIQ), &
-                ',', a(AUD_GAS_OUT), ',', a(AUD_GAS_RXN)
+                ',', a(AUD_GAS_OUT), ',', a(AUD_GAS_RXN), ',', a(AUD_GAS_VOLFIX_E)
             close(iu)
         end if
     end subroutine audit_write_step

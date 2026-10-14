@@ -146,6 +146,8 @@ DEFS = {
                        "with the conservative gas fluxes [kg]: the export"),
     "m_gas_rxn": ("C", "Gas mass created by the reactions ($S_{CO}+S_{CO_2}+S_{O_2}$) "
                        "[kg]"),
+    "E_gas_volfix": ("C", "Enthalpy carried by the gas mass the volume constraint creates "
+                          "or destroys ($m_{gas,volfix}\\,c_p T$) [J]; exact external term"),
 }
 
 src = open(SRC).read()

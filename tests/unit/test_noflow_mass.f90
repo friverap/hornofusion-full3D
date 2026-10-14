@@ -55,7 +55,7 @@ program test_noflow_mass
     call totals(M0, E0)
     a_old = liq%alpha
     call compute_melting(sol, liq, mesh, cfg, cfg%dt, Tsrc)
-    call apply_mass_source_noflow(liq, gas, sol, slag, mesh, cfg%dt)
+    call apply_mass_source_noflow(liq, gas, sol, slag, mesh, cfg, cfg%dt)
     call solve_energy_3d(liq, T_old, sh, mesh, cfg, liq%alpha, zero3, a_old, &
                          sol%mdot, Tsrc, .false., res)
     call totals(M1, E1)
@@ -84,7 +84,7 @@ program test_noflow_mass
     call totals(M0, E0)
     a_old = liq%alpha
     call compute_melting(sol, liq, mesh, cfg, cfg%dt, Tsrc)
-    call apply_mass_source_noflow(liq, gas, sol, slag, mesh, cfg%dt)
+    call apply_mass_source_noflow(liq, gas, sol, slag, mesh, cfg, cfg%dt)
     call solve_energy_3d(liq, T_old, sh, mesh, cfg, liq%alpha, zero3, a_old, &
                          sol%mdot, Tsrc, .false., res)
     call totals(M1, E1)

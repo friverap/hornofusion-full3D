@@ -73,7 +73,13 @@ def main():
     ap.add_argument("--etol", type=float, default=0.02)
     # fuentes EXTERNAS (arco, radiacion, quimica, carga, ECS): hooks exactos
     ap.add_argument("--xtol", type=float, default=1e-9)
-    ap.add_argument("--arctol", type=float, default=1e-3)
+    # (M4-14) medido <= 1.5e-6 (1e-15 en frio)
+    ap.add_argument("--arctol", type=float, default=1e-5)
+    # (M4-14) E_mc_lost (beams que escapan) <= esta fraccion del arco: medido 0.12-0.25
+    ap.add_argument("--mc-lost-max", type=float, default=0.4)
+    # (M4-16) regimen acotado fuera de los bancos de bano: medido p <= 1.8e5 (bed_flood), gas <= 145 (bed_drain)
+    ap.add_argument("--regime-p", type=float, default=5.0e5)
+    ap.add_argument("--regime-gas", type=float, default=200.0)
     # masa: medido 1e-11..2.5e-8 (auditoria 3, M3-6; antes 5e-3 dejaba pasar
     # ~330 kg en melt_forced)
     ap.add_argument("--mtol", type=float, default=3e-6)
@@ -124,6 +130,15 @@ def main():
                "E_conv_defect", "E_chem_sol", "E_ecs_in", "E_flux_in",
                "E_charge_in", "E_slag_ox", "E_rad_foam", "E_slag_tclip",
                "E_mix_init")
+    # (M4-13) E_gas_volfix = inv(alpha_nueva) - inv(alpha_vieja) del INVENTARIO
+    # log del gas al reescribir alpha_g (volfix, flotacion de escoria): solo
+    # entra cuando dE_gas es ese inventario (sin libro E_gas_abs). Con el libro
+    # (alpha^{n+1}, T - T_old) el gas creado aparece a T_old sin calor absorbido
+    # y la columna no pertenece a la identidad.
+    gas_inv = not ("E_gas_abs" in last
+                   and any(r["E_gas_abs"] != 0.0 for r in steps))
+    if gas_inv:
+        EXT_POS = EXT_POS + ("E_gas_volfix",)
     EXT_NEG = ("E_wall_conv", "E_slag_red", "E_alpha_clip")
     # traspasos entre fases CONDENSADAS (inventarios de estado exactos): htol
     # (A4-4) sin E_iph_liq: es -E_iph_sol (misma transferencia contada dos
@@ -133,7 +148,9 @@ def main():
     # terminos del GAS: su libro (E_gas_abs, forma T con rho(p,T)) tiene error
     # de cuadratura O(dT^2) conocido (~1 % en encendidos) -> etol, como las
     # fuentes externas (auditoria 2, N-A1: el intercambio gas-liquido nuevo)
-    GAS = ("E_iph_gas", "E_gas_abs")
+    # E_slag_gas: poke a gas%T con capacidad alpha*rho(T)*cp (forma T) frente
+    # al inventario log: error de cuadratura O(dT^2) tambien (M4-13)
+    GAS = ("E_iph_gas", "E_gas_abs", "E_slag_gas")
 
     # Defecto convectivo: solo el del GAS si hay columnas por fase (auditoria
     # 2, N-A7). La energia del LIQUIDO usa los flujos exactos del transporte
@@ -166,9 +183,11 @@ def main():
     if args.config:
         v = read_config(args.config).get("solve_energy", True)
         energy_on = not (str(v).strip().lower() in ("false", ".false.", "f", "0"))
-    if not energy_on:
-        print("  PASS  energy_balance  (solve_energy = false: no aplica)")
+    if not energy_on and S_ext + S_int < 1.0:
+        print("  PASS  energy_balance  (solve_energy = false y sin fuentes: no aplica)")
     else:
+        # (M4-13) con solve_energy = false pero fuentes (quimica, escoria) la
+        # identidad sigue valiendo sobre los INVENTARIOS de estado
         # -- identidad por paso desde el paso 2 (A4-4) --------------------
         worst, wk = 0.0, 0
         for k in range(1, len(steps)):
@@ -270,8 +289,11 @@ def main():
         ratio = E_arc_in / E_arc_avail
         disc = sum(r["E_arc_discarded"] for r in steps)
         chk.report("arc_budget", abs(ratio - 1.0) <= args.arctol,
-                   f"recibida/P_arc·dt = {ratio:.4f} (descartada "
+                   f"recibida/P_arc·dt = {ratio:.7f} (descartada "
                    f"{disc:.3e} J, tol {args.arctol})")
+        lost = sum(r.get("E_mc_lost", 0.0) for r in steps)
+        chk.report("mc_lost_bound", lost <= args.mc_lost_max * E_arc_avail,
+                   f"E_mc_lost {lost:.3e} J = {lost / E_arc_avail:.3f} del arco (max {args.mc_lost_max})")
     else:
         print("  PASS  arc_budget  (sin potencia de arco: no aplica)")
 
@@ -334,6 +356,9 @@ def main():
                    f"p_max {pm:.3e} Pa (P_HYDRO_CAP {args.p_cap:.1e})")
         chk.report("sentinel_gas", um < 0.999 * args.u_gas_cap,
                    f"u_gas_max {um:.1f} m/s (U_GAS_MAX {args.u_gas_cap:.0f})")
+        # (M4-16) regimen acotado: mucho antes de las centinelas
+        chk.report("regime_p", pm <= args.regime_p, f"p_max {pm:.3e} Pa (max {args.regime_p:.1e})")
+        chk.report("regime_gas", um <= args.regime_gas, f"u_gas_max {um:.1f} m/s (max {args.regime_gas:.0f})")
 
     chk.exit()
 
