@@ -388,6 +388,10 @@ program eaf_3d_simulator
         call timer_start(T_CHEM)
         if (cfg%solve_chemistry) then
             call compute_carbon_oxidation(sol, gas, sh, mesh, cfg)
+            ! (auditoria 4, B4-2) la oxidacion del C reescribe m_s/E_s/alpha_s:
+            ! halos del solido coherentes antes de que nadie lea alpha_s de una
+            ! vecina (el hueco de A3-7 dependia de la descomposicion en z)
+            call solid_exchange_halos(sol, mesh)
             ! Química de escoria (E2.3/E2.4): tras el carbono (usa su O2
             ! remanente) y antes del transporte de especies
             if (cfg%solve_slag) then
@@ -444,11 +448,9 @@ program eaf_3d_simulator
                 call audit_add(AUD_DIL_CO, dl(2))
                 call audit_add(AUD_DIL_CO2, dl(3))
             end block
-            if (mesh%is_parallel) then
-                call mpi_exchange_halos_3d(sh%Y_CO,  mesh%topo)
-                call mpi_exchange_halos_3d(sh%Y_CO2, mesh%topo)
-                call mpi_exchange_halos_3d(sh%Y_O2,  mesh%topo)
-            end if
+            ! (auditoria 4, B4-1) tambien en serie: el relleno periodico en
+            ! theta lo hace la misma rutina
+            call species_exchange_halos(sh, mesh)
         end if
         call timer_stop(T_CHEM)
 
@@ -467,6 +469,7 @@ program eaf_3d_simulator
                 call apply_mass_source_noflow(liq, gas, sol, slag, mesh, cfg, cfg%dt, sh)
                 call phase_exchange_halos(liq, mesh)
                 call phase_exchange_halos(gas, mesh)
+                call species_exchange_halos(sh, mesh)   ! (B4-1) Y diluidas por el volfix
             end if
         end if
         call timer_stop(T_SOLID)

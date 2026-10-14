@@ -316,8 +316,23 @@ contains
             call fill_periodic_theta(sh%mu_t,  nth)
             call fill_periodic_theta(sh%Y_CO,  nth)
             call fill_periodic_theta(sh%Y_CO2, nth)
+            call fill_periodic_theta(sh%Y_O2,  nth)   ! (auditoria 4, B4-1)
         end if
     end subroutine shared_exchange_halos
+
+    !---------------------------------------------------------------------------
+    ! Halos de las ESPECIES solas (auditoria 4, B4-1): mpi_exchange_halos_3d
+    ! ya cubre el caso serie (relleno periodico en theta), asi que la llamada
+    ! vale en las dos ramas. Antes main solo intercambiaba las Y en paralelo:
+    ! en serie los halos azimutales quedaban rancios tras el transporte.
+    !---------------------------------------------------------------------------
+    subroutine species_exchange_halos(sh, m)
+        type(shared_t), intent(inout) :: sh
+        type(mesh_t), intent(in) :: m
+        call mpi_exchange_halos_3d(sh%Y_CO,  m%topo)
+        call mpi_exchange_halos_3d(sh%Y_CO2, m%topo)
+        call mpi_exchange_halos_3d(sh%Y_O2,  m%topo)
+    end subroutine species_exchange_halos
 
     subroutine shared_destroy(sh)
         type(shared_t), intent(inout) :: sh
