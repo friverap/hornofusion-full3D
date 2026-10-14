@@ -69,7 +69,7 @@ contains
 
         integer  :: i, j, k
         integer  :: istart, iend, jstart, jend, kstart, kend
-        real(dp) :: o2_rem, r_feo, dm_feo, dm_fe, dm_o2, dm_b
+        real(dp) :: o2_rem, r_feo, dm_feo, dm_fe, dm_o2, dm_b, cap_b, cap_o, fcap
         real(dp) :: vol, vol_b, q_rx, q_lim, e_fe, c0
         real(dp) :: r_red, dm_red, dm_c, dm_co
         real(dp) :: b2, x_feo, j_co, h_foam, rho_co, dm_co_cell
@@ -176,6 +176,26 @@ contains
                             dm_c  = dm_red * MW_C_S / MW_FEO
                             dm_fe = dm_red * MW_FE / MW_FEO
                             dm_co = dm_red * MW_CO_S / MW_FEO
+                            ! (auditoria 4, M4-5) la reduccion se LIMITA a lo
+                            ! que cabe: hueco del bano de abajo (liq_cap, con el
+                            ! piso de poro) + hueco de la propia celda. Con una
+                            ! capa de escoria de varias celdas la inferior esta
+                            ! llena y el resto iba a la propia celda sin cota
+                            ! (sum alpha > 1). Si no cabe, el FeO queda sin
+                            ! reducir (conservativo: nada se crea ni se pierde).
+                            below = (m%cell_type(i,j,k-1) /= 0)
+                            cap_b = 0.0_dp
+                            if (below) cap_b = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k-1), &
+                                slag%alpha_sl(i,j,k-1)) - liq%alpha(i,j,k-1)) &
+                                * liq%rho(i,j,k-1) * m%vol(i,j,k-1)
+                            cap_o = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k), slag%alpha_sl(i,j,k)) &
+                                - liq%alpha(i,j,k)) * liq%rho(i,j,k) * vol
+                            if (dm_fe > cap_b + cap_o) then
+                                fcap = (cap_b + cap_o) / dm_fe
+                                dm_red = dm_red * fcap; dm_c = dm_c * fcap
+                                dm_fe = dm_fe * fcap;   dm_co = dm_co * fcap
+                                q_rx = q_rx * fcap
+                            end if
                             slag%m_X(i,j,k,SL_FEO) = &
                                 slag%m_X(i,j,k,SL_FEO) - dm_red
                             slag%m_X(i,j,k,SL_C) = &
@@ -194,11 +214,7 @@ contains
                             ! escoria, que es la superficie del bano y tiene
                             ! gas. Antes todo iba a la celda llena de abajo:
                             ! alpha_l = 1.000104 (slag_chem_test, sum_alpha).
-                            below = (m%cell_type(i,j,k-1) /= 0)
-                            dm_b = 0.0_dp
-                            if (below) dm_b = min(dm_fe, max(0.0_dp, 1.0_dp &
-                                - sol%alpha_s(i,j,k-1) - slag%alpha_sl(i,j,k-1) &
-                                - liq%alpha(i,j,k-1)) * liq%rho(i,j,k-1) * m%vol(i,j,k-1))
+                            dm_b = min(dm_fe, cap_b)
                             if (dm_b > 0.0_dp) then
                                 fe_in(i,j,k) = fe_in(i,j,k) + dm_b
                                 t_in(i,j,k) = slag%T_sl(i,j,k)
