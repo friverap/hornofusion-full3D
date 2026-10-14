@@ -53,10 +53,11 @@ contains
         real(dp), intent(in)         :: alpha_old(-1:,-1:,-1:)
         ! Fuente de masa por fusión/solidificación (C1.8, solo líquido):
         ! mdot>0 la masa fundida entra a T_src (temperatura del sólido);
-        ! mdot<0: en la forma con continuidad restada el sumidero a T_P se
-        ! CANCELA exactamente (la masa se va a la T de la celda); solo queda
-        ! la liberación del latente al líquido. El antiguo aP += |mdot|*cp
-        ! era un enfriamiento espurio que realimentaba la congelación.
+        ! mdot<0: sumidero de congelacion (auditoria 2, N-C2): con el
+        ! transitorio alpha^n la forma exacta es M^n (e' - e^n) = dm (e' -
+        ! e_entry) -> aP -= |mdot| cp, Su += |mdot| (C0 - e_entry) (ver el
+        ! ensamblado). La forma "el sumidero se cancela" (hasta oct-2026)
+        ! evaluaba el latente con T_old y perdia dm (e' - e^n) por paso.
         real(dp), intent(in)         :: mdot(-1:,-1:,-1:)
         real(dp), intent(in)         :: T_src(-1:,-1:,-1:)
         ! Identidad de fase: el LÍQUIDO difunde con k_eff = k + cp*mu_t/Pr_t
