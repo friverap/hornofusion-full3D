@@ -13,9 +13,10 @@
 !   2. Misma columna SIN chatarra (alpha_l 0.4 continuo, fuera del lecho):
 !      la forma balanceada NO lleva flotacion relativa (interfase grande): el
 !      liquido no se separa del gas por gravedad en un paso.
-!   3. Lecho con gas ATRAPADO (ws_bed_gas = 0): el liquido sigue clasico y el
-!      gas conserva el gradiente reducido (en la hidrostatica de la mezcla no
-!      se mueve). Es el gas residual del poro saturado de bath_freeze.
+!   3. Lecho con gas ATRAPADO (ws_bed_gas = 0): NINGUNA fase lleva flotacion
+!      relativa (A4-1: misma mascara de cara para ambas); en la hidrostatica
+!      de la mezcla ninguna se mueve. Es el poro saturado de bath_freeze y de
+!      bed_bath_rest (antes el liquido seguia clasico: 0.29 m/s en reposo).
 !   4. Lecho con gas libre y p = hidrostatica del GAS (estado de lecho de
 !      goteo): ambas fases clasicas; el gas queda en reposo y el liquido
 !      drena con TODO su peso (hasta A3-1 el empuje quedaba x alpha_g/eps).
@@ -34,7 +35,7 @@ program test_bed_buoyancy
     use mod_momentum_3d, only: solve_momentum_3d
     use mod_drag_ergun, only: compute_ergun_drag
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
-                             ws_Fg_valid, ws_bed, ws_bed_gas, ws_bub, ws_bed_valid
+                             ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bed_valid
     implicit none
 
     type(config_t) :: cfg
@@ -92,9 +93,9 @@ program test_bed_buoyancy
     call setup(0.5_dp, 0.05_dp, .false., .false.)
     call run_both()
     sc = maxval(abs(ul_cls(1:6,1:8,2:7)))
-    err_l = maxval(abs(ul_bal(1:6,1:8,2:7) - ul_cls(1:6,1:8,2:7))) / max(sc, SMALL)
-    if (err_l > 1.0e-10_dp) then
-        print '(A,ES11.3)', '   FAIL caso 3: liquido con la forma balanceada /= clasica: ', err_l
+    if (maxval(abs(ul_bal(1:6,1:8,2:7))) > 1.0e-10_dp * sc) then
+        print '(A,ES11.3)', '   FAIL caso 3: el liquido del poro saturado recibio flotacion: u_l = ', &
+            maxval(abs(ul_bal(1:6,1:8,2:7)))
         ok = .false.
     end if
     if (maxval(abs(ug_bal(1:6,1:8,2:7))) > 1.0e-10_dp * sc) then
@@ -124,6 +125,7 @@ program test_bed_buoyancy
     call setup(0.0_dp, 0.8_dp, .false., .false.)
     ws_bub = 0.0_dp
     ws_bub(1:6,1:8,1:8) = 1.0_dp
+    ws_bedl_f = 1.0_dp
     call run_both()
     call cmp_classic_k('caso 5', 2, 7)
     if (.not. (ug_bal(ic,jc,kc) > 0.0_dp .and. ul_bal(ic,jc,kc) < ug_bal(ic,jc,kc))) then
@@ -131,7 +133,7 @@ program test_bed_buoyancy
             ul_bal(ic,jc,kc), ug_bal(ic,jc,kc)
         ok = .false.
     end if
-    ws_bub = 0.0_dp
+    ws_bub = 0.0_dp; ws_bedl_f = 0.0_dp
 
     if (ok) then
         print '(A)', ' PASS test_bed_buoyancy'
@@ -166,7 +168,11 @@ contains
         ws_Fg_valid = .false.
         ws_liq_cont = liq_continuous(liq%alpha, sol%alpha_s); ws_liq_cont_valid = .true.
         ws_bed = merge(1.0_dp, 0.0_dp, sol%alpha_s >= 1.0e-2_dp .and. mesh%cell_type /= 0)
-        ws_bed_gas = merge(ws_bed, 0.0_dp, gas_free)
+        ! gas_free = poro no saturado con gas del acople; si no, poro
+        ! SATURADO (rampa 0 para ambas fases, A4-1)
+        ws_bed_liq = merge(ws_bed, 0.0_dp, gas_free)
+        ws_bed_gas = ws_bed_liq
+        ws_bedl_f = ws_bed_liq      ! columna uniforme en reposo: minimo = rampa
         ws_bed_valid = .true.
     end subroutine setup
 
@@ -188,6 +194,9 @@ contains
     end subroutine cmp_classic_k
 
     subroutine cmp_classic(tag)
+        ! (nota A4-1: 'gas_free' en setup = poro no saturado; el caso con gas
+        ! ATRAPADO pero poro no saturado -ws_bed_liq 1, ws_bed_gas 0- lo
+        ! cubre bed_drain, donde el liquido drena clasico bajo gas atrapado)
         character(len=*), intent(in) :: tag
         sc  = maxval(abs(ul_cls(1:6,1:8,2:7)))
         scg = max(maxval(abs(ug_cls(1:6,1:8,2:7))), sc)

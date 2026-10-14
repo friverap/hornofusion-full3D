@@ -134,6 +134,28 @@ module mod_workspace
     ! liquido recibiria alpha_g (rho_l - rho_g) g (73 kPa/m) contra Ergun
     ! (~18 m/s en el poro; bath_freeze n1/n4 0.58 en el intento de N-C1).
     real(dp), allocatable :: ws_bed_gas(:,:,:)
+    ! Lecho para el LIQUIDO (auditoria 4, A4-1): ws_bed por la rampa de
+    ! SATURACION del poro (0 con el gas en el piso ALPHA_PORE_GAS, 1 desde
+    ! 2x), SIN la condicion de percolacion del gas: donde el gas esta atrapado
+    ! (fuera del acople) el liquido sigue drenando clasico (bed_drain: con la
+    ! mascara del gas el liquido bajo la capa densa volvia a colgar, uz -0.09
+    ! frente a -0.37 m/s). ws_bed_gas = ws_bed_liq x (gas del acople), asi
+    ! que donde el gas es fluido del acople ambas mascaras coinciden y
+    ! sum alpha_q B_q = 0 en toda cara.
+    real(dp), allocatable :: ws_bed_liq(:,:,:)
+    ! Mascara de CARA vertical (k | k+1, guardada en k) de la flotacion
+    ! relativa del LIQUIDO (A4-1): la rampa de saturacion de la celda
+    ! RECEPTORA segun el signo de u_f del liquido al inicio de la iteracion
+    ! externa (con u_f ~ 0, el minimo de las dos), o las burbujas (minimo).
+    ! El liquido es clasico en una cara solo si la celda a la que va tiene
+    ! hueco (gas continuo): asi drena de un poro saturado hacia un lecho
+    ! seco (bed_drain) y no empuja contra una columna sellada (bed_bath_rest).
+    ! Con la rampa de la celda de ORIGEN o el minimo, la cara
+    ! saturado|seco quedaba como superficie libre (el colchon de presion de
+    ! la forma reducida sostiene la columna) y el liquido no drenaba por Darcy
+    ! (bed_drain 0.52 -> 0.42 m/s). Fija por iteracion externa: momento y
+    ! Poisson leen la MISMA (cancelacion exacta del Rhie-Chow).
+    real(dp), allocatable :: ws_bedl_f(:,:,:)
     ! BURBUJAS en el bano (auditoria 3, A3-5): celda de liquido continuo FUERA
     ! del lecho con gas del acople (alpha_g >= ALPHA_FLOW_CUTOFF, percola) y
     ! con bano continuo (sin lecho) ENCIMA: no es superficie libre, el gas es
@@ -229,7 +251,8 @@ contains
         allocate(ws_lim_step, mold=ws_aW); ws_lim_step = 1.0_dp
         allocate(ws_cc, ws_cc_new, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
         allocate(ws_p_n, mold=ws_aW); ws_p_n = 0.0_dp
-        allocate(ws_bed, ws_bed_gas, ws_bub, mold=ws_aW); ws_bed = 0.0_dp; ws_bed_gas = 0.0_dp; ws_bub = 0.0_dp
+        allocate(ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, mold=ws_aW)
+        ws_bed = 0.0_dp; ws_bed_gas = 0.0_dp; ws_bed_liq = 0.0_dp; ws_bedl_f = 0.0_dp; ws_bub = 0.0_dp
         allocate(ws_Fg_r, ws_Fg_th, ws_Fg_z, mold=ws_aW)
         ws_Fg_r = 0.0_dp; ws_Fg_th = 0.0_dp; ws_Fg_z = 0.0_dp
         allocate(ws_Fg_lk_r(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))

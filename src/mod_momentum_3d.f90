@@ -85,7 +85,7 @@ contains
                                          alpha_old, rho_old, mdot_m)
         use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, &
-            ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, ws_bed, ws_bed_gas, ws_bub, ws_bed_valid, &
+            ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bed_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             aW => ws_aW, &
@@ -596,30 +596,35 @@ contains
             if (.not. (lbf_m .and. ws_bed_valid)) return
             ! sin liquido en la cara no hay flotacion relativa (0 exacto: las
             ! corridas frias quedan bit a bit)
+            ! (auditoria 4, A4-1) la MISMA mascara de cara para las dos fases:
+            ! minimo de las dos celdas de max(ws_bed_gas, ws_bub). Con el gas
+            ! al minimo de ws_bed_gas y el liquido a la media de ws_bed, en el
+            ! poro saturado (gas en el piso, peso 0) el liquido seguia clasico
+            ! y el gas reducido: condiciones de reposo incompatibles, fuerza
+            ! neta sobre la mezcla alpha_l alpha_g drho g/eps (~1-2 kN/m3, la
+            ! bomba de A3-1 con el motor en el liquido) y gas de piso subiendo
+            ! ~30x la velocidad del liquido (bed_bath_rest: 0.29 m/s en un
+            ! lecho inundado en reposo; bath_freeze: 840 celdas saturadas con
+            ! u_l mediana -0.24 m/s). Con mascaras iguales sum alpha_q B_q = 0
+            ! en TODA cara: en el poro saturado ambas fases ven la hidrostatica
+            ! de la mezcla (el liquido se mueve ahi por Darcy, grad p, no por
+            ! flotacion relativa: no hay gas con el que intercambiar) y donde el
+            ! gas es la fase continua del poro ambas son clasicas (N-C1).
             if (is_gas) then
                 if (max(ph_other%alpha(ii,jj,ka), ph_other%alpha(ii,jj,kb)) < ALPHA_CUTOFF) return
-                bm = min(max(bed_m(ii, jj, ka), ws_bub(ii,jj,ka)), &
-                         max(bed_m(ii, jj, kb), ws_bub(ii,jj,kb)))
+                bm = min(max(ws_bed_gas(ii,jj,ka), ws_bub(ii,jj,ka)), &
+                         max(ws_bed_gas(ii,jj,kb), ws_bub(ii,jj,kb)))
             else
                 if (max(ph%alpha(ii,jj,ka), ph%alpha(ii,jj,kb)) < ALPHA_CUTOFF) return
-                ! lecho: media (N-C1); burbujas (A3-5): minimo
-                bm = min(1.0_dp, 0.5_dp * (bed_m(ii, jj, ka) + bed_m(ii, jj, kb)) &
-                                 + min(ws_bub(ii,jj,ka), ws_bub(ii,jj,kb)))
+                ! mascara de CARA del liquido fijada por iteracion externa
+                ! (ws_bedl_f: rampa de la celda receptora; ver mod_workspace)
+                bm = ws_bedl_f(ii, jj, min(ka, kb))
             end if
             if (bm <= 0.0_dp) return
             bed_rel_f = bm * (0.5_dp * (own_w(ii, jj, ka) + own_w(ii, jj, kb)) &
                               - liq_weight_f(ii, jj, ka, kb))
         end function bed_rel_f
 
-        ! Mascara del lecho de ESTA fase
-        pure real(dp) function bed_m(ii, jj, kk)
-            integer, intent(in) :: ii, jj, kk
-            if (is_gas) then
-                bed_m = ws_bed_gas(ii,jj,kk)
-            else
-                bed_m = ws_bed(ii,jj,kk)
-            end if
-        end function bed_m
 
         ! Peso propio de ESTA fase por unidad de su volumen [N/m3] (Boussinesq
         ! solo en el liquido; el gas lleva rho(p,T))

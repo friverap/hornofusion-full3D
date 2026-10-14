@@ -23,7 +23,7 @@ module mod_multiphase
     use mod_probe, only: probe_report, probe_current_step
     use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d
-    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_bed, ws_bed_gas, ws_bub, ws_bed_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
+    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bed_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
                              ws_liq_room, ws_liq_room_valid, &
                              ws_liq_fr, ws_liq_fth, ws_liq_fz, &
                              ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, ws_Tsrc
@@ -68,6 +68,8 @@ contains
         real(dp), allocatable, save :: Kexch(:,:,:)
         real(dp), allocatable, save :: drag_gas(:,:,:)
         integer :: i, j, k
+        real(dp) :: uf, bm, rlo, rhi, sdir
+        real(dp), parameter :: U_BEDL = 1.0e-3_dp
 
         if (.not. allocated(Kexch)) then
             allocate(Kexch, mold=liq%ur); Kexch = 0.0_dp
@@ -167,9 +169,11 @@ contains
         ! Plan E con motor. El atrapado conserva el gradiente reducido.
         ! Halos validos: gas%alpha intercambiado, ws_gas_perc/ws_pv_active
         ! con halos.
-        ws_bed_gas = ws_bed * merge(1.0_dp, 0.0_dp, &
-            gas%alpha >= ALPHA_FLOW_CUTOFF .and. ws_gas_perc .and. ws_pv_active) &
-            * min(1.0_dp, max(0.0_dp, (gas%alpha - ALPHA_PORE_GAS) / ALPHA_PORE_GAS))
+        ! (A4-1) rampa de saturacion comun; el gas ademas solo como fluido del
+        ! acople (ver mod_workspace)
+        ws_bed_liq = ws_bed * min(1.0_dp, max(0.0_dp, (gas%alpha - ALPHA_PORE_GAS) / ALPHA_PORE_GAS))
+        ws_bed_gas = ws_bed_liq * merge(1.0_dp, 0.0_dp, &
+            gas%alpha >= ALPHA_FLOW_CUTOFF .and. ws_gas_perc .and. ws_pv_active)
         ! Burbujas en el bano (A3-5): liquido continuo sin lecho, gas del
         ! acople, y bano continuo sin lecho ENCIMA (la celda de superficie y la
         ! que esta bajo un lecho que gotea no son burbujas). Se evalua en
@@ -189,6 +193,31 @@ contains
             end do
         end do
         call mpi_exchange_halos_3d(ws_bub, m%topo)
+        ! Mascara de cara del liquido (A4-1; ver mod_workspace): caras
+        ! (k|k+1) con k = 0..nz (la cara inferior de la celda 1 usa el halo)
+        ws_bedl_f = 0.0_dp
+        do k = 0, m%nz
+            do j = 1, m%ntheta
+                do i = 1, m%nr
+                    if (m%cell_type(i,j,k) == 0 .or. m%cell_type(i,j,k+1) == 0) cycle
+                    ! SUAVE en u_f (un interruptor en el signo rompia la
+                    ! simetria 120 grados por el redondeo: T_gas 3.7e-5): del
+                    ! minimo de las dos rampas en reposo al valor de la celda
+                    ! receptora cuando |u_f| >> U_BEDL (1 mm/s)
+                    uf = 0.5_dp * (liq%uz(i,j,k) + liq%uz(i,j,k+1))
+                    rlo = min(ws_bed_liq(i,j,k), ws_bed_liq(i,j,k+1))
+                    rhi = max(ws_bed_liq(i,j,k), ws_bed_liq(i,j,k+1))
+                    if (ws_bed_liq(i,j,k+1) >= ws_bed_liq(i,j,k)) then
+                        sdir = uf          ! la receptora de mayor rampa esta arriba
+                    else
+                        sdir = -uf
+                    end if
+                    bm = rlo + (rhi - rlo) * tanh(max(0.0_dp, sdir) / U_BEDL)
+                    ws_bedl_f(i,j,k) = max(bm, min(ws_bub(i,j,k), ws_bub(i,j,k+1)))
+                end do
+            end do
+        end do
+        call mpi_exchange_halos_3d(ws_bedl_f, m%topo)
 
         ! Coeficiente de intercambio gas-líquido (ver F2.15 abajo)
         ! (régimen disperso; ver mod_constants::TAU_LG)

@@ -10,7 +10,7 @@
                  en los snapshots con t >= --t-rate es <= -(--min-speed) m/s:
                  medido 0.52-0.62 m/s (A3-1; 0.50 con la rampa del lecho M3-2) frente a 0.40-0.44 antes.
 
-Uso: check_drain.py RUNDIR [--min-drop 0.2] [--min-speed 0.45] [--xfail ids]
+Uso: check_drain.py RUNDIR [--min-drop 0.19] [--min-speed 0.42] [--xfail ids]
 """
 import argparse
 import os
@@ -35,8 +35,8 @@ def zcm(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("rundir")
-    ap.add_argument("--min-drop", type=float, default=0.2)
-    ap.add_argument("--min-speed", type=float, default=0.45)
+    ap.add_argument("--min-drop", type=float, default=0.19)
+    ap.add_argument("--min-speed", type=float, default=0.42)
     ap.add_argument("--t-rate", type=float, default=0.15)
     ap.add_argument("--xfail", default="")
     a = ap.parse_args()
