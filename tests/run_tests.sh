@@ -351,6 +351,7 @@ full | rebaseline)
             noflow_energy_*) x=audit_noflow ;;
             bed_flood_*)     x=audit_bedflood ;;
             bath_fill_mix_*) x=audit_mix ;;
+            melt_forced_*)   x=audit_melt ;;
             *)               x="" ;;
         esac
         check_audit_if_present "$d" "$x" "$more"

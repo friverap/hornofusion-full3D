@@ -83,3 +83,14 @@ audit_bedflood:sentinel_gas
 # 232 kg de alpha (3.5e-3 del fundido) por el limitador de la mezcla. Es el
 # banco del modelo cerrado negativo, no el camino de produccion.
 audit_mix:alpha_clip
+# bed_flood: la EOS reescribe el 79 % del presupuesto de masa del gas (lecho
+# inundado con el gas de poro fuera del acople por F2.13/F2.31/fsat y p > 100
+# kPa el 99 % de los pasos): mismo regimen patologico que sus otros xfail
+audit_bedflood:mass_gas
+# melt_forced: fusion INSTANTANEA del 100 % (65 t) en el paso 1: el gas
+# desplazado en un paso no lo entrega el Poisson (venteo 7 kg) y la EOS
+# reescribe 14 kg (132 % del presupuesto de masa del gas). Banco del regimen
+# extremo; el progresivo (arc_melt, 14 %) pasa.
+audit_melt:mass_gas
+# bath_fill_mix (modelo de mezcla, opt-in negativo): la EOS reescribe el 76 %
+audit_mix:mass_gas

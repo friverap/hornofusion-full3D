@@ -23,6 +23,7 @@ module mod_audit
     use mod_types_3d
     use mod_mpi_topology, only: mpi_allreduce_sum, mpi_allreduce_max
     use mod_parallel_utils, only: get_loop_bounds
+    use mod_workspace, only: ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_lk_r, ws_Fg_lk_th, ws_Fg_lk_z, ws_Fg_valid
     use mod_face_flux, only: face_mass_fluxes
     use mod_boundary_3d, only: physical_boundary_flags
     implicit none
@@ -32,7 +33,7 @@ module mod_audit
     public :: audit_set_energy
     public :: AUD_ARC_DIRECT, AUD_ARC_DISCARD, AUD_MC_DEPOSIT
     public :: AUD_ALPHA_CLIP_MASS, AUD_MELT_MASS, AUD_RESOLID_MASS
-    public :: AUD_MELT_E_SOLID, AUD_SLAG_INTERCEPT, AUD_SLAG_GAS, AUD_SLAG_LIQ
+    public :: AUD_MELT_E_SOLID, AUD_SLAG_INTERCEPT, AUD_SLAG_GAS, AUD_SLAG_LIQ, AUD_GAS_OUT, AUD_GAS_RXN
     public :: AUD_RAD_SOL, AUD_RAD_WALL, AUD_CHEM_SOL, AUD_MC_LOST
     public :: AUD_ECS_MASS, AUD_ECS_ENERGY, AUD_FLUX_MASS, AUD_FLUX_E
     public :: AUD_FE_YIELD, AUD_FE_RETURN, AUD_SLAG_OX_E, AUD_SLAG_RED_E
@@ -112,7 +113,13 @@ module mod_audit
     ! entre inventarios de estado, no entran a la identidad
     integer, parameter :: AUD_SLAG_GAS        = 45
     integer, parameter :: AUD_SLAG_LIQ        = 46
-    integer, parameter :: N_AUD = 46
+    ! (auditoria 4, A4-6) kg de gas venteados por las salidas del techo (masa
+    ! neta que entra a las celdas outlet con los flujos conservativos ws_Fg) y
+    ! kg que las reacciones aportan al gas (S_CO + S_CO2 + S_O2): con ellos y
+    ! m_gas_volfix, el residuo de d m_gas es la masa que la EOS reescribe
+    integer, parameter :: AUD_GAS_OUT         = 47
+    integer, parameter :: AUD_GAS_RXN         = 48
+    integer, parameter :: N_AUD = 48
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -207,7 +214,7 @@ contains
                 'm_resid_closed,E_resid_closed,m_spill,' // &
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
-                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq'
+                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq,m_gas_out,m_gas_rxn'
             close(iu)
         end if
         acc = 0.0_dp
@@ -369,7 +376,8 @@ contains
                 ',', a(AUD_GAS_VOLFIX), ',', a(AUD_SLAG_TCLIP), ',', a(AUD_MIX_INIT), &
                 ',', a(AUD_RESOLID_E), ',', a(AUD_ALPHA_CLIP_E), &
                 ',', a(AUD_CONV_LIQ), ',', a(AUD_CONV_GAS), ',', a(AUD_ABS_GAS_HOOK), &
-                ',', a(AUD_SLAG_GAS), ',', a(AUD_SLAG_LIQ)
+                ',', a(AUD_SLAG_GAS), ',', a(AUD_SLAG_LIQ), &
+                ',', a(AUD_GAS_OUT), ',', a(AUD_GAS_RXN)
             close(iu)
         end if
     end subroutine audit_write_step
@@ -445,6 +453,9 @@ contains
                         end if
                     end if
 
+                    ! masa que las reacciones aportan al gas (A4-6)
+                    acc(AUD_GAS_RXN) = acc(AUD_GAS_RXN) + (sh%S_CO_src(i,j,k) + &
+                        sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) * vol * cfg%dt
                     ! Entalpía del gas venteado por las salidas del techo.
                     ! Las celdas outlet tienen fila IDENTIDAD en el Poisson
                     ! (Dirichlet pp=0): su divergencia no está controlada y
@@ -462,9 +473,23 @@ contains
                                 if (m%is_electrode(i,j,k,e)) is_out = .true.
                             end do
                             if (is_out) then
+                                ! (auditoria 4, A4-6) los MISMOS flujos de masa
+                                ! conservativos que usa la energia del gas
+                                ! (ws_Fg, M24); con face_mass_fluxes el venteo
+                                ! medido no era el de la ecuacion y la cota al
+                                ! defecto convectivo no podia cerrarse
+                                if (ws_Fg_valid) then
+                                    Fw = ws_Fg_r(i-1,j,k) * ws_Fg_lk_r(i-1,j,k)
+                                    Fe = ws_Fg_r(i,j,k)   * ws_Fg_lk_r(i,j,k)
+                                    Fs = ws_Fg_th(i,j-1,k) * ws_Fg_lk_th(i,j-1,k)
+                                    Fn = ws_Fg_th(i,j,k)   * ws_Fg_lk_th(i,j,k)
+                                    Fb = ws_Fg_z(i,j,k-1) * ws_Fg_lk_z(i,j,k-1)
+                                    Ft = ws_Fg_z(i,j,k)   * ws_Fg_lk_z(i,j,k)
+                                else
                                 call face_mass_fluxes(gas%alpha, gas%rho, &
                                     gas%ur, gas%uth, gas%uz, m, i, j, k, &
                                     Fw, Fe, Fs, Fn, Fb, Ft)
+                                end if
                                 ein = ( max(Fw,0.0_dp)*gas%T(i-1,j,k) &
                                       - max(-Fw,0.0_dp)*gas%T(i,j,k)  &
                                       - max(Fe,0.0_dp)*gas%T(i,j,k)   &
@@ -479,6 +504,9 @@ contains
                                       + max(-Ft,0.0_dp)*gas%T(i,j,k+1) ) * &
                                       gas%cp(i,j,k)
                                 srcacc(17) = srcacc(17) + ein * cfg%dt
+                                ! masa neta que entra a la celda outlet (A4-6)
+                                acc(AUD_GAS_OUT) = acc(AUD_GAS_OUT) + cfg%dt * &
+                                    (Fw - Fe + Fs - Fn + Fb - Ft)
                             end if
                         end block
                     end if

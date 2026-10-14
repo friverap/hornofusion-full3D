@@ -86,7 +86,7 @@ $(OBJDIR)/mod_mpi_topology.o: $(OBJDIR)/mod_constants.o
 $(OBJDIR)/mod_types_3d.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_mpi_topology.o
 
 $(OBJDIR)/mod_parallel_utils.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
-$(OBJDIR)/mod_audit.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_boundary_3d.o
+$(OBJDIR)/mod_audit.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o $(OBJDIR)/mod_parallel_utils.o $(OBJDIR)/mod_face_flux.o $(OBJDIR)/mod_boundary_3d.o $(OBJDIR)/mod_workspace.o
 $(OBJDIR)/mod_timers.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o $(OBJDIR)/mod_mpi_topology.o
 $(OBJDIR)/mod_workspace.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o
 $(OBJDIR)/mod_face_flux.o: $(OBJDIR)/mod_constants.o $(OBJDIR)/mod_types_3d.o

@@ -142,6 +142,10 @@ DEFS = {
                         "(transfer between state inventories; diagnostic)"),
     "E_slag_liq": ("C", "Heat the slag receives from the bath (own cell or the "
                         "one below) [J] (diagnostic)"),
+    "m_gas_out": ("C", "Net gas mass entering the outlet cells (electrode holes) "
+                       "with the conservative gas fluxes [kg]: the export"),
+    "m_gas_rxn": ("C", "Gas mass created by the reactions ($S_{CO}+S_{CO_2}+S_{O_2}$) "
+                       "[kg]"),
 }
 
 src = open(SRC).read()

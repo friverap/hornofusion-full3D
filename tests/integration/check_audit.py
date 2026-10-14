@@ -42,6 +42,27 @@ def main():
     ap.add_argument("--xfail", default="")
     ap.add_argument("--config", default=None)
     ap.add_argument("--htol", type=float, default=1e-4)
+    # (auditoria 4, A4-4) identidad POR PASO desde el paso 2: el htol
+    # acumulado existe para tragar el paso 1 (fusion instantanea con 5
+    # outers: bath_fill 3.9e6 J, bed_flood 9.6e6) y despues admitia errores
+    # del tamano del arco (melt_forced 95 %). Medido fuera del paso 1:
+    # gap/S_int <= 1.6e-6 (bath_freeze), 4e-7 (bed_drain), 7e-8 (melt)
+    ap.add_argument("--htol-step", type=float, default=5e-5)
+    # libro del gas POR PASO: medido 4.7 % (bath_fill) y 6.5 % (slag_chem_flow)
+    # de S_gas en pasos sueltos (acumulado 1 %); piso absoluto 1e-8 del
+    # inventario total (noflow: 22 J sobre 1e10)
+    ap.add_argument("--etol-step", type=float, default=0.1)
+    # (A4-6) cota al defecto convectivo del gas fuera del venteo:
+    # |E_conv_gas - E_out_conv| <= ctol_gas x S_gas
+    # (A4-6) masa que la EOS reescribe sobre el presupuesto de masa del gas:
+    # medido 13 % (cold, arc_melt, bath_freeze) a 42 % (bath_fill 36, bed_drain
+    # 38, slag_chem_flow 42) en los bancos de dos fluidos; 79 % en bed_flood
+    # (xfail). Es una propiedad del modelo low-Mach (gas fuera del acople por
+    # F2.13/F2.31/fsat, COMP_SRC_CAP, lazo externo); el gate acota regresiones
+    # (>= 50 %) y el juez es B1 (N-M4 abierto)
+    ap.add_argument("--mgtol", type=float, default=0.5)
+    # (A4-5) cierre radiativo: |sum rad fases + E_rad_wall| <= rtol_rad x sum|rad|
+    ap.add_argument("--rtol-rad", type=float, default=0.05)
     # fraccion minima del arco ABSORBIDO que recibe el liquido (casos de
     # baño plano; auditoria 2, N-A2: con reparto por volumen era 0.069)
     ap.add_argument("--min-liq-arc", type=float, default=None)
@@ -105,8 +126,10 @@ def main():
                "E_mix_init")
     EXT_NEG = ("E_wall_conv", "E_slag_red", "E_alpha_clip")
     # traspasos entre fases CONDENSADAS (inventarios de estado exactos): htol
+    # (A4-4) sin E_iph_liq: es -E_iph_sol (misma transferencia contada dos
+    # veces inflaba S_int)
     INTERNAL = ("E_melt_from_solid", "E_resolid", "E_iph_sol",
-                "E_iph_liq", "E_resid_closed")
+                "E_resid_closed")
     # terminos del GAS: su libro (E_gas_abs, forma T con rho(p,T)) tiene error
     # de cuadratura O(dT^2) conocido (~1 % en encendidos) -> etol, como las
     # fuentes externas (auditoria 2, N-A1: el intercambio gas-liquido nuevo)
@@ -146,6 +169,30 @@ def main():
     if not energy_on:
         print("  PASS  energy_balance  (solve_energy = false: no aplica)")
     else:
+        # -- identidad por paso desde el paso 2 (A4-4) --------------------
+        worst, wk = 0.0, 0
+        for k in range(1, len(steps)):
+            a, b = steps[k - 1], steps[k]
+            if "E_gas_abs" in b and any(r["E_gas_abs"] != 0.0 for r in steps):
+                dEg = b["E_gas_abs"]
+            else:
+                dEg = b["E_gas"] - a["E_gas"]
+            gk = total_E(b) - total_E(a) + dEg - ext(b)
+            sx = sum(abs(b.get(c, 0.0)) for c in EXT_POS + EXT_NEG
+                     if not (per_phase and c == "E_conv_defect"))
+            if per_phase:
+                sx += abs(b.get("E_conv_gas", 0.0))
+            sg = sum(abs(b.get(c, 0.0)) for c in GAS)
+            si = sum(abs(b.get(c, 0.0)) for c in INTERNAL)
+            alw = args.etol_step * sg + args.xtol * sx + args.htol_step * si
+            etot = abs(total_E(b)) + abs(b.get("E_gas", 0.0))
+            r = abs(gk) / max(alw, 1.0, 1e-8 * etot)
+            if r > worst:
+                worst, wk = r, int(b["step"])
+        chk.report("energy_balance_step", worst <= 1.0,
+                   f"peor paso {wk}: gap/permitido = {worst:.3e} "
+                   f"(etol_step {args.etol_step} x S_gas + xtol {args.xtol} x S_ext + "
+                   f"htol_step {args.htol_step} x S_int, piso 1e-8 E_tot; por paso desde el 2)")
         ratio = abs(gap) / max(allowed, 1.0)
         chk.report("energy_balance", abs(gap) <= max(allowed, 1.0),
                    f"dE={dE:.4e} J, E_iny={E_in:.4e} J, gap={gap:.3e} J, "
@@ -153,6 +200,44 @@ def main():
                    f"{S_gas:.3e} + xtol {args.xtol} x S_ext {S_ext:.3e} + htol "
                    f"{args.htol} x S_int {S_int:.3e}), "
                    f"gap/permitido={ratio:.3e}")
+
+    # -- mass_gas (A4-6): libro de MASA del gas ------------------------------
+    # d m_gas = -venteo + volfix + reacciones + (lo que la EOS reescribe).
+    # El ultimo termino es la no conservacion del modelo low-Mach (la densidad
+    # la fija rho(p,T) y la fuente de compresibilidad del Poisson solo la
+    # sigue hasta COMP_SRC_CAP / convergencia): se mide como residuo y se acota.
+    # E_conv_gas - E_out_conv es, en forma T, cp T x ese residuo: el 'defecto
+    # convectivo' del gas no es numerico, es la entalpia de la masa reescrita.
+    flow_on = True
+    if args.config:
+        v = read_config(args.config).get("solve_flow", True)
+        flow_on = not (str(v).strip().lower() in ("false", ".false.", "f", "0"))
+    if "m_gas_out" in last and not flow_on:
+        print("  PASS  mass_gas  (solve_flow = false: sin EOS ni Poisson, no aplica)")
+    elif "m_gas_out" in last:
+        dm_g = last["m_gas"] - first["m_gas"]
+        m_out = sum(r["m_gas_out"] for r in steps)
+        m_fix = sum(r.get("m_gas_volfix", 0.0) for r in steps)
+        m_rxn = sum(r.get("m_gas_rxn", 0.0) for r in steps)
+        resid = dm_g - (-m_out + m_fix + m_rxn)
+        den_g = max(abs(dm_g), abs(m_out), abs(m_fix), abs(m_rxn), 1e-2 * abs(first["m_gas"]))
+        chk.report("mass_gas", abs(resid) <= args.mgtol * den_g,
+                   f"dm_gas={dm_g:.4e} vs -venteo+volfix+reacciones="
+                   f"{-m_out + m_fix + m_rxn:.4e} kg (venteo {m_out:.3e}, volfix {m_fix:.3e}, "
+                   f"rxn {m_rxn:.3e}); EOS reescribe {resid:.3e} kg = {abs(resid) / den_g:.3e} rel (max {args.mgtol})")
+        if per_phase and energy_on:
+            cg = sum(r.get("E_conv_gas", 0.0) for r in steps)
+            oc = sum(r.get("E_out_conv", 0.0) for r in steps)
+            print(f"  INFO  conv_gas  E_conv_gas - venteo = {cg - oc:.3e} J; / (cp 1200 x masa EOS {resid:.3e} kg) = "
+                  f"{(cg - oc) / max(1200.0 * abs(resid), 1e-30):.1f} K equivalentes")
+    # -- rad_closure (A4-5) --------------------------------------------------
+    if energy_on:
+        RAD = ("E_src_liq_rad", "E_src_gas_rad", "E_rad_sol", "E_rad_foam", "E_rad_wall")
+        rsum = sum(r.get(c, 0.0) for r in steps for c in RAD)
+        rabs = sum(abs(r.get(c, 0.0)) for r in steps for c in RAD)
+        if rabs > 1.0:
+            chk.report("rad_closure", abs(rsum) <= args.rtol_rad * rabs,
+                       f"sum rad fases + pared = {rsum:.3e} J sobre {rabs:.3e} (max {args.rtol_rad})")
 
     # -- arc_budget ----------------------------------------------------------
     # E_mc_lost: beams que escapan por techo/paredes — pérdida física
