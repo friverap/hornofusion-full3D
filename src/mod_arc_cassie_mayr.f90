@@ -192,23 +192,32 @@ contains
             ! ── P_rad: first pass — Gaussian weight sum at scrap surface ───
             total_gw_vol_rad = 0.0_dp
             if (found_scrap) then
-                do kg = max(1, kg_scrap-1), min(m%nz_g, kg_scrap+1)
+                ! Banda del P_rad directo: la capa de superficie y la de ENCIMA
+                ! (paredes del crater, expuestas), nunca k-1: bajo el piso del
+                ! crater la chatarra esta ENTERRADA y no ve fotones. Con la
+                ! superficie por contenido (M4-7) la capa elegida es el piso del
+                ! crater y la banda +-1 mandaba 1/3 del P_rad a la chatarra
+                ! colapsada bajo el (arc_melt 27.8 -> 8.4 kg fundidos).
+                do kg = kg_scrap, min(m%nz_g, kg_scrap+1)
                     do jg = 1, m%nth_g
                         do ig = 1, m%nr_g
                             if (m%cell_type_global(ig,jg,kg) == 0) cycle
-                            if (alpha_g(ig,jg,kg) < 0.01_dp) cycle
-                            ! peso de chatarra EXPUESTA (M4-7): 1 sin bano, 0 con
-                            ! alpha_l >= 0.4, rampa suave entre 0.2 y 0.4 (un corte
-                            ! en 0.3 dependia del redondeo y rompia la simetria)
-                            wexp = 1.0_dp - min(1.0_dp, max(0.0_dp, (alpha_lg(ig,jg,kg) - 0.2_dp) / 0.2_dp))
-                            if (wexp <= 0.0_dp) cycle
+                            ! Receptoras del P_rad directo: chatarra (>= 1 %) o
+                            ! bano continuo. El peso es SOLO la gaussiana: la
+                            ! rampa de chatarra expuesta (M4-7) decide dentro de
+                            ! la celda cuanto va al solido y cuanto al charco que
+                            ! lo cubre, nunca mueve potencia a las vecinas
+                            ! (arc_melt: 27.8 -> 8.4 kg fundidos cuando la celda
+                            ! central con alpha_l >= 0.4 salia del reparto y el
+                            ! arco calentaba la periferia).
+                            if (alpha_g(ig,jg,kg) < 0.01_dp .and. alpha_lg(ig,jg,kg) < ALPHA_LIQ_CONT) cycle
                             x_cell = m%r_global(ig) * cos(m%theta_global(jg))
                             y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
                             r2 = dist**2 / (sigma_r**2 + SMALL)
                             if (r2 < 16.0_dp) then
                                 total_gw_vol_rad = total_gw_vol_rad + &
-                                    exp(-r2) * wexp * m%vol_global(ig,jg,kg)
+                                    exp(-r2) * m%vol_global(ig,jg,kg)
                             end if
                         end do
                     end do
@@ -259,16 +268,18 @@ contains
             ! P_rad bypasses the gas: arc photons hit the scrap surface and
             ! heat it directly (no gas bottleneck via h_gs).
             if (found_scrap .and. total_gw_vol_rad > SMALL) then
-                do kg = max(1, kg_scrap-1), min(m%nz_g, kg_scrap+1)
+                do kg = kg_scrap, min(m%nz_g, kg_scrap+1)
                     do jg = 1, m%nth_g
                         do ig = 1, m%nr_g
                             if (m%cell_type_global(ig,jg,kg) == 0) cycle
-                            if (alpha_g(ig,jg,kg) < 0.01_dp) cycle
-                            ! peso de chatarra EXPUESTA (M4-7): 1 sin bano, 0 con
+                            if (alpha_g(ig,jg,kg) < 0.01_dp .and. alpha_lg(ig,jg,kg) < ALPHA_LIQ_CONT) cycle
+                            ! fraccion de chatarra EXPUESTA (M4-7): 1 sin bano, 0 con
                             ! alpha_l >= 0.4, rampa suave entre 0.2 y 0.4 (un corte
-                            ! en 0.3 dependia del redondeo y rompia la simetria)
+                            ! en 0.3 dependia del redondeo y rompia la simetria);
+                            ! 0 sin chatarra. El resto de la celda lo absorbe su
+                            ! fluido (charco por kappa_l alpha_l, M4-6).
                             wexp = 1.0_dp - min(1.0_dp, max(0.0_dp, (alpha_lg(ig,jg,kg) - 0.2_dp) / 0.2_dp))
-                            if (wexp <= 0.0_dp) cycle
+                            if (alpha_g(ig,jg,kg) < 0.01_dp) wexp = 0.0_dp
                             x_cell = m%r_global(ig) * cos(m%theta_global(jg))
                             y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
@@ -278,12 +289,12 @@ contains
                             call global_to_local(m, ig, jg, kg, il, jl, kl, owned)
                             if (.not. owned) cycle
 
-                            gw = exp(-r2) * wexp
+                            gw = exp(-r2)
                             ! P_rad directo: los fotones del arco calientan la
-                            ! chatarra (fraccion 1 al solido, con el tope de
-                            ! estado; el excedente al fluido de la celda)
+                            ! chatarra expuesta (fraccion wexp al solido, con el
+                            ! tope de estado; el resto al fluido de la celda)
                             call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), alpha_lg(ig,jg,kg), &
-                                m%vol_global(ig,jg,kg), P_rad_arc * gw / total_gw_vol_rad, 1.0_dp)
+                                m%vol_global(ig,jg,kg), P_rad_arc * gw / total_gw_vol_rad, wexp)
                         end do
                     end do
                 end do
