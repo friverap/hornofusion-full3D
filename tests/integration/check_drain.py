@@ -38,6 +38,8 @@ def main():
     ap.add_argument("--min-drop", type=float, default=0.19)
     ap.add_argument("--min-speed", type=float, default=0.42)
     ap.add_argument("--t-rate", type=float, default=0.15)
+    # (M4-17) cota superior: sin Ergun el liquido caeria libre (>> 1 m/s)
+    ap.add_argument("--max-speed", type=float, default=1.0)
     ap.add_argument("--xfail", default="")
     a = ap.parse_args()
     chk = Checker(parse_xfail_arg(a.xfail))
@@ -60,9 +62,10 @@ def main():
                f"centroide del liquido {first[1]:.4f} -> {z1:.4f} m "
                f"(baja {drop:.4f} m, minimo {a.min_drop})")
     vmin = min(speeds) if speeds else 0.0
-    chk.report("bed_drain_rate", bool(speeds) and vmin >= a.min_speed,
-               f"velocidad media de drenaje minima {vmin:.3f} m/s en {len(speeds)} snapshots "
-               f"(t >= {a.t_rate}; minimo {a.min_speed})")
+    vmax = max(speeds) if speeds else 0.0
+    chk.report("bed_drain_rate", bool(speeds) and vmin >= a.min_speed and vmax <= a.max_speed,
+               f"velocidad media de drenaje {vmin:.3f}..{vmax:.3f} m/s en {len(speeds)} snapshots "
+               f"(t >= {a.t_rate}; minimo {a.min_speed}, maximo {a.max_speed})")
     chk.exit()
 
 

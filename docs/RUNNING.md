@@ -26,7 +26,7 @@ make clean        # elimina obj/ y bin/
 ### Targets de test (roadmap 2026; detalles en tests/README.md)
 
 ```bash
-make test-quick   # gate por commit (~1 min): corrida fría -n 8 + invariantes
+make test-quick   # gate por commit (~1.5 min): corrida fría -n 8 + bath_test + arc_melt + invariantes
                   # + balances de audit.csv + métricas vs golden
 make test-full    # gate por etapa (~5-10 min): unit + matriz {configs}x{-n}
                   # + fusión + simetría 120° + química + convergencia externa

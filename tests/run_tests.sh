@@ -55,9 +55,11 @@ run_case() {
     # (auditoria 3, M3-8) un CG sin converger o un fallback implicito del
     # transporte de alpha son fallos del caso, no ruido de stdout:
     # slag_chem_flow corria con res 2.3e-2 (tol 1e-8) y nadie lo veia
-    if grep -q '\[CG\] AVISO\|\[ALPHA\] AVISO' "$dir/run.log"; then
-        echo "FAIL: aviso del solver en $name -n $np:"
-        grep '\[CG\] AVISO\|\[ALPHA\] AVISO' "$dir/run.log" | head -3
+    # (M4-20) tambien la DO sin converger, carga/ECS sin espacio y avisos
+    # del reinicio
+    if grep -q '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[RESTART\] AVISO' "$dir/run.log"; then
+        echo "FAIL: aviso del solver/carga en $name -n $np:"
+        grep '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[RESTART\] AVISO' "$dir/run.log" | head -3
         note_fail
         return 1
     fi
@@ -92,6 +94,12 @@ run_restart_case() {
     if ! mpirun -n "$np" "$BIN" "$tmpcfg" > "$dir/run.log" 2>&1; then
         echo "FAIL: el reinicio $base n$np terminó con error (ver $dir/run.log)"
         tail -5 "$dir/run.log"
+        note_fail
+        return 1
+    fi
+    if grep -q '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[RESTART\] AVISO' "$dir/run.log"; then
+        echo "FAIL: aviso en el reinicio $base n$np:"
+        grep 'AVISO' "$dir/run.log" | head -3
         note_fail
         return 1
     fi
@@ -173,6 +181,20 @@ quick)
                 note_fail
             fi
         }
+        # Fusion progresiva bajo arco en el gate por commit (auditoria 4,
+        # M4-7 segunda vuelta; ~11 s): es el unico banco del regimen de B1 y
+        # tres commits pasaron test-quick con una regresion 27.8 -> 8.4 kg
+        run_case arc_melt 4 && {
+            check_invariants "$OUT/arc_melt_n4" arc_melt
+            check_audit_if_present "$OUT/arc_melt_n4"
+            run_script "arc_melt" \
+                $PY $INT/check_arcmelt.py "$OUT/arc_melt_n4" --xfail "$(xfail_ids arc_melt)"
+            if ! $PY $INT/metrics_snapshot.py "$OUT" --mode check \
+                    --only arc_melt_n4; then
+                echo ">> FAIL métricas golden (arc_melt)"
+                note_fail
+            fi
+        }
     }
     ;;
 
@@ -205,6 +227,7 @@ full | rebaseline)
     run_case bath_test 4
     run_case bath_test 12
     run_case bath_test_stretch 4
+    run_case bath_test_cold 4
     run_case bath_fill 4
     run_case bath_mix 4
     run_case bath_fill_mix 4
@@ -295,6 +318,10 @@ full | rebaseline)
     run_script "decomposition_slag" \
         $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n8" --rtol 1e-4
     check_invariants "$OUT/bath_test_stretch_n4" bath_test_stretch
+    check_invariants "$OUT/bath_test_cold_n4" bath_test_cold
+    run_script "bath_test_cold" \
+        $PY $INT/check_bath.py "$OUT/bath_test_cold_n4" --config "$CFG/bath_test_cold.dat" --fill \
+        --xfail "$(xfail_ids bath_test_cold)"
     run_script "bath_test_stretch" \
         $PY $INT/check_bath.py "$OUT/bath_test_stretch_n4" --config "$CFG/bath_test_stretch.dat" \
         --xfail "$(xfail_ids bath)"

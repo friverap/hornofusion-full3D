@@ -3,7 +3,7 @@
 ## Uso
 
 ```bash
-make test-quick        # gate por commit (~1 min): corrida fría -n 8 + invariantes + métricas
+make test-quick        # gate por commit (~1.5 min): corrida fría -n 8 + bath_test + arc_melt (fusión bajo arco) + invariantes + métricas
 make test-full         # gate por etapa (~5-10 min): unit tests + matriz {configs}×{-n 1,4,6,8}
 make test-unit         # solo unit tests Fortran
 STAGE=v1 make test-rebaseline   # regenera el golden de métricas (una vez por etapa)

@@ -117,13 +117,14 @@ def main():
                    f"m_liq {m0:.3f} -> {m1:.3f} kg (err {abs(m1 - m0) / m0:.3e})")
         pmax = max(r["p_max"] for r in rows)
         ugmax = max(r["u_gas_max"] for r in rows)
-        chk.report("bath_pv_bounded", pmax <= 3.0 * p_ferro and ugmax < 100.0,
-                   f"p_max {pmax:.3e} Pa (3x ferro = {3 * p_ferro:.3e}), u_gas_max {ugmax:.1f} m/s")
+        chk.report("bath_p_bounded", pmax <= 3.0 * p_ferro, f"p_max {pmax:.3e} Pa (3x ferro = {3 * p_ferro:.3e})")
+        chk.report("bath_gas_bounded", ugmax < 100.0, f"u_gas_max {ugmax:.1f} m/s (max 100)")
     else:
         pmax = max(r["p_max"] for r in rows)
         ugmax = max(r["u_gas_max"] for r in rows)
-        chk.report("bath_pv_bounded", pmax <= 3.0 * p_ferro and ugmax < 300.0,
-                   f"p_max {pmax:.3e} Pa (3x ferro = {3 * p_ferro:.3e}), u_gas_max {ugmax:.1f} m/s")
+        # (M4-15) ids separados: un solo id tapaba presion y gas a la vez
+        chk.report("bath_p_bounded", pmax <= 3.0 * p_ferro, f"p_max {pmax:.3e} Pa (3x ferro = {3 * p_ferro:.3e})")
+        chk.report("bath_gas_bounded", ugmax < 200.0, f"u_gas_max {ugmax:.1f} m/s (max 200; centinela 300)")
         s0 = rows[0]["m_sol"] + rows[0]["m_liq"]
         s1 = rows[-1]["m_sol"] + rows[-1]["m_liq"]
         clip = sum(r["m_alpha_clip"] for r in rows[1:])
