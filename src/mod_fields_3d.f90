@@ -307,6 +307,7 @@ contains
             call mpi_exchange_halos_3d(sh%mu_t,   m%topo)
             call mpi_exchange_halos_3d(sh%Y_CO,   m%topo)
             call mpi_exchange_halos_3d(sh%Y_CO2,  m%topo)
+            call mpi_exchange_halos_3d(sh%Y_O2,   m%topo)   ! (auditoria 3, B3-6)
         else
             call fill_periodic_theta(sh%p,     nth)
             call fill_periodic_theta(sh%pp,    nth)
@@ -741,7 +742,7 @@ contains
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
         real(dp), allocatable :: rf(:,:,:), rf_g(:,:,:), p_g(:,:,:)
-        integer :: i, j, k, il, jl, kl, nzg
+        integer :: i, j, k, il, jl, kl, nzg, kprev
         logical :: owned
         real(dp) :: p_here
 
@@ -762,19 +763,27 @@ contains
         call gather_global_field(rf, rf_g, m)
         nzg = m%nz_g
         p_g = 0.0_dp
+        ! (auditoria 2, N-M14) entre centros con el peso de CARA del momento,
+        ! W_f = (w_k + w_k+1)/2 sobre (z_k+1 - z_k): con dz no uniforme
+        ! (stretch_z 1.5 en produccion) la integral por medias celdas no era
+        ! el punto fijo de la fuerza balanceada. Banco bath_test_stretch.
         do j = 1, m%nth_g
             do i = 1, m%nr_g
-                p_here = 0.0_dp
+                p_here = 0.0_dp; kprev = 0
                 do k = nzg, 1, -1
                     if (m%cell_type_global(i,j,k) == 0) then
                         p_g(i,j,k) = 0.0_dp
                         cycle
                     end if
-                    ! de la cara superior de la celda a su centro
-                    p_here = p_here + rf_g(i,j,k) * GRAVITY * (m%zf_global(k) - m%z_global(k))
+                    if (kprev == 0) then
+                        ! de la cara superior (techo) al centro de la primera celda
+                        p_here = rf_g(i,j,k) * GRAVITY * (m%zf_global(k) - m%z_global(k))
+                    else
+                        p_here = p_here + 0.5_dp * (rf_g(i,j,kprev) + rf_g(i,j,k)) * GRAVITY &
+                                 * (m%z_global(kprev) - m%z_global(k))
+                    end if
                     p_g(i,j,k) = p_here
-                    ! del centro a la cara inferior (para la celda de abajo)
-                    p_here = p_here + rf_g(i,j,k) * GRAVITY * (m%z_global(k) - m%zf_global(k-1))
+                    kprev = k
                 end do
             end do
         end do

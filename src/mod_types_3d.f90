@@ -7,7 +7,7 @@
 ! MPI parallelization: mesh_t contains MPI topology info
 !===============================================================================
 module mod_types_3d
-    use mod_constants, only: dp
+    use mod_constants, only: dp, MC_RAD_SHARE
     use mod_mpi_topology, only: mpi_topology_t
     implicit none
 
@@ -344,7 +344,7 @@ module mod_types_3d
         ! N-A2): MC_RAD_SHARE con chatarra bajo el electrodo (el resto va
         ! directo a su superficie); 1 sin ella (antes iba a la columna de gas).
         ! La fija distribute_arc_heat antes del MC; no es estado del reinicio.
-        real(dp) :: mc_share = 0.5_dp   ! = MC_RAD_SHARE (mod_constants)
+        real(dp) :: mc_share = MC_RAD_SHARE
     end type electrode_t
 
     !---------------------------------------------------------------------------

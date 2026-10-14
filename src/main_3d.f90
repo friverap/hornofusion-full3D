@@ -573,6 +573,9 @@ program eaf_3d_simulator
         call timer_start(T_SOLID)
         if (cfg%solve_melting) then
             call update_solid_postenergy(sol, liq, gas, mesh, cfg)
+            ! (auditoria 2, N-M10) slag_energy lee liq%T del halo
+            call phase_exchange_halos(liq, mesh)
+            call phase_exchange_halos(gas, mesh)
         end if
         ! Intercambio gas-liquido de dos fluidos (auditoria 2, N-A1; la mezcla
         ! lleva el suyo, y sin energia del gas su T no evoluciona)

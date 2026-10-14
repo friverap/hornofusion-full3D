@@ -431,8 +431,11 @@ contains
             res_energy_g = 0.0_dp
         end if
 
-        ! Update properties
+        ! Update properties (+ halos: las especies del paso siguiente leian
+        ! gas%rho rancio en las fronteras de rank; auditoria 2, N-M8)
         call update_properties(liq, gas, sh, m, cfg)
+        call phase_exchange_halos(liq, m)
+        call phase_exchange_halos(gas, m)
 
         ! Record convergence
         conv%res_ur   = max(res_ur_l, res_ur_g)

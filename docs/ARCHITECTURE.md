@@ -362,70 +362,57 @@ Llamado después de cada actualización de campo que necesita coherencia entre r
 
 ## 6. Flujo de ejecución (bucle temporal)
 
+Orden REAL del paso (oct-2026; `main_3d.f90`). Lo que importa del orden está
+en CLAUDE.md («Orden del paso»): fusión y colapso ANTES del SIMPLE, interfase
+DESPUÉS de los solves de energía, y la T del gas al final del SIMPLE como
+referencia de la compresibilidad del paso siguiente (A3-3).
+
 ```fortran
 time_loop: do while (time < t_final)
-    step = step + 1
-    time = time + dt
+    dt_nominal = dt; si time + dt > t_final: dt = t_final - time   ! (M3-12: el snapshot final guarda dt_nominal)
+    step = step + 1;  time = time + dt
+    liq_old = liq; gas_old = gas          ! T, u, alpha, rho del paso anterior
+    cesta 2 (charge_scrap) si corresponde; ECS (ecs_feed) si solve_ecs
+    perfil V/I del electrodo
 
-    ! --- Guardar campos del paso anterior ---
-    liq_old = liq;  gas_old = gas
+    ! --- ARCO (solve_arc) ---
+    update_arc_resistance (Cassie–Mayr) → update_electrodes (bore-in / regulador)
+    distribute_arc_heat   (P_rad directo al sólido con tope de estado; P_conv a la
+                           columna o a la capa del baño; P_elec al baño, A3-4;
+                           la superficie se busca de arriba abajo, M3-3)
+    distribute_arc_radiation_mc (beams round-robin; depósito por absorción F2.30)
+    slag_intercept_arc (si solve_slag) → compute_arc_impingement (S_arc_mom)
+    compute_lorentz_force
 
-    ! --- Cubo 2 (si corresponde) ---
-    if (t >= t_bucket2_charge) call charge_scrap(2)
-
-    ! --- Perfil V/I del electrodo ---
-    call interpolate_profile(elec_prof, time, V_elec, I_elec)
-
-    ! --- ARCO ---
-    if (solve_arc) then
-        call update_arc_resistance(elec, V, I, cfg, dt)    ! Cassie-Mayr ODE
-        call update_electrodes(elec, sol, mesh, cfg, dt)   ! bore-in / regulación
-        call distribute_arc_heat(elec, sh, mesh, ...)      ! S_arc volumétrico
-        call distribute_arc_radiation_mc(...)               ! MC trazado de rayos
-        call compute_arc_impingement(...)                   ! S_arc_mom
-        call compute_lorentz_force(...)                     ! F_lorentz_r/th
-    end if
-
-    ! --- RADIACIÓN DO ---
-    if (solve_radiation) call solve_radiation_do(liq, gas, sol, sh, mesh)
-
-    ! --- QUÍMICA ---
-    if (solve_chemistry) call compute_carbon_oxidation(sol, gas, sh, mesh, cfg)
-
-    ! --- TRANSPORTE DE ESPECIES ---
-    if (solve_species) then
-        Y_CO_old = sh%Y_CO;  Y_CO2_old = sh%Y_CO2
-        call solve_species_3d(gas, sh%Y_CO,  Y_CO_old,  sh%S_CO_src,  ...)
-        call solve_species_3d(gas, sh%Y_CO2, Y_CO2_old, sh%S_CO2_src, ...)
-        call mpi_exchange_halos_3d(sh%Y_CO,  mesh%topo)
-        call mpi_exchange_halos_3d(sh%Y_CO2, mesh%topo)
-    end if
-
-    ! --- SIMPLE (bucle externo) ---
+    ! --- RADIACIÓN DO (S4/S6/S8) ---
+    ! --- QUÍMICA ---  compute_carbon_oxidation → compute_slag_chemistry (Fe
+    !     al baño acotado por el hueco, A3-7); sin transporte de alpha de dos
+    !     fluidos: enforce_volume_constraint (alpha_g complemento, Y diluida)
+    ! --- ESPECIES ---  solve_species_3d (CO, CO2, O2)
+    ! --- SÓLIDO ---    update_solid_premelt (palanca + colapso; mdot, ws_Tsrc);
+    !     sin dos fluidos: apply_mass_source_noflow
+    ! --- SIMPLE ---
     do outer = 1, max_outer
-        call compute_ergun_drag(liq, sol, mesh, cfg, S_drag_r, ...)
-        call multiphase_iteration(liq, gas, liq_old, gas_old, sol, sh, ...)
-        ! internamente: momentum → corrección presión → energía → propiedades
-        if (solve_turb) call solve_k_epsilon(liq, sh, mesh, cfg, dt)
-        if (check_convergence(conv, cfg)) exit
+        multiphase_iteration (o mixture_iteration):
+            máscaras (ws_liq_cont, ws_bed, ws_bed_gas, ws_bub, percolación,
+            ws_pv_active) → Ergun → K gas–líquido (AIAD) → momento (fuerza
+            balanceada por caras + B_f del lecho/burbujas) → PEA → Poisson de
+            volumen (referencia Tg_end) → corrección → transporte de alpha
+            (flujos conservativos, limitador, derrame) → energía (líquido,
+            gas) → propiedades (+ halos, N-M8)
+        k-ε (solve_turb); check_convergence (momento con el iterado entrante,
+        continuidad = desbalance de masa); exit si converge
     end do
+    ws_cc = ws_cc_new (acarreo de compresibilidad, M26); sh%Tg_end = gas%T (A3-3)
 
-    ! --- FASE SÓLIDA ---
-    if (solve_melting) call update_solid_phase(sol, liq, gas, mesh, cfg, dt)
-
-    ! --- ESCORIA ---
-    if (solve_slag) then
-        call update_slag(slag, liq, gas, sh, mesh, cfg, dt)
-        call slag_exchange_halos(slag, mesh)
-    end if
-
-    ! --- DT ADAPTATIVO ---
-    call adapt_timestep(cfg%dt, conv, cfg)
-
-    ! --- SALIDA ---
-    if (mod(step, output_freq) == 0)  call write_hdf5_parallel(...)
-    if (mod(step, monitor_freq) == 0) call write_monitor_line(...)
-
+    ! --- INTERFASE ---  update_solid_postenergy (sólido↔gas/líquido) + halos
+    !     (N-M10); compute_gas_liquid_heat (morfología de F2.22, A3-2) + halos
+    ! --- ESCORIA ---    slag_additions → flotación → slag_energy (columnas
+    !     E_slag_gas/E_slag_liq, M3-7)
+    ! --- AUDIT ---      audit_write (identidades por paso; audit_freq)
+    ! --- DT ---         adapt_timestep (CFL, tau_iph)
+    ! --- SALIDA ---     write_hdf5_parallel (fields + restart + metadata),
+    !     monitor; nan_guard_triggered (todos los ranks salen juntos)
 end do time_loop
 ```
 

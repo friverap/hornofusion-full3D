@@ -204,6 +204,17 @@ tal como quedan al final del paso (la corrida continua arranca el paso con
 las propiedades de la última iteración externa, previas a la interfase y al
 k-ε; recomputarlas de T desviaba p un 15 % en el lecho).
 
+Contenido de `/restart` (oct-2026; la verdad es `write_restart_group` en
+`mod_output_hdf5.f90`): `E_solid`, `m_C`, `layer_id`, `m_slag`, `E_slag`,
+`m_X_*` (FeO/CaO/SiO2/MgO/C), `mu_t`, `rho_gas`, `mu_eff_liquid`, `Tg_end`
+(T del gas al final del SIMPLE: referencia de la compresibilidad, A3-3),
+`alpha_foam_rst`, `comp_carry` (exceso de compresibilidad acarreado, M26),
+`liq_cont_prev` (máscara continuo/disperso del paso anterior) y los atributos
+`dt` (nominal, no el truncado del último paso: M3-12), `m_ecs_pending`,
+`elec_z_tip`, `elec_arc_length`, `elec_arc_R`, `elec_arc_power`,
+`bore_in_done`. Todo estado nuevo que persista entre pasos entra aquí en el
+mismo commit (el test `restart_*` lo delata).
+
 Snapshots anteriores a 2026-09-25 (sin `/restart`) se aceptan con
 reconstrucción aproximada y aviso en stdout: `E_s` desde `T_s`,
 `m_C = carbon_frac·m_s`, `layer_id = 0`, escoria desde `alpha_slag`/`T_slag`

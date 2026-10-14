@@ -12,7 +12,7 @@ module mod_solid_phase
     use mod_scrap_collapse
     use mod_interphase_ht
     use mod_workspace, only: ensure_workspace, ws_Tsrc
-    use mod_audit, only: audit_add, AUD_GAS_VOLFIX
+    use mod_audit, only: audit_add, AUD_GAS_VOLFIX, AUD_ALPHA_CLIP_MASS
     implicit none
 
 contains
@@ -117,13 +117,17 @@ contains
         real(dp), intent(in)         :: dt
         type(shared_t), intent(inout), optional :: sh
         integer :: i, j, k
+        real(dp) :: a_new
         do k = 1, m%nz
             do j = 1, m%ntheta
                 do i = 1, m%nr
                     if (m%cell_type(i,j,k) == 0) cycle
                     if (sol%mdot(i,j,k) == 0.0_dp) cycle
-                    liq%alpha(i,j,k) = max(0.0_dp, liq%alpha(i,j,k) + sol%mdot(i,j,k) * dt &
-                                       / (liq%rho(i,j,k) * m%vol(i,j,k)))
+                    a_new = liq%alpha(i,j,k) + sol%mdot(i,j,k) * dt / (liq%rho(i,j,k) * m%vol(i,j,k))
+                    ! (auditoria 3, B3-10) lo que el max(0, .) recorta queda en
+                    ! el clip auditado (nunca un recorte silencioso)
+                    if (a_new < 0.0_dp) call audit_add(AUD_ALPHA_CLIP_MASS, -a_new * liq%rho(i,j,k) * m%vol(i,j,k))
+                    liq%alpha(i,j,k) = max(0.0_dp, a_new)
                 end do
             end do
         end do

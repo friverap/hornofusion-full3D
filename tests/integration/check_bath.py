@@ -43,6 +43,7 @@ def load(fn):
 
 
 def main():
+    global RHO_L, BETA
     ap = argparse.ArgumentParser()
     ap.add_argument("rundir")
     ap.add_argument("--config", required=True)
@@ -79,6 +80,9 @@ def main():
     with h5py.File(snaps[-1], "r") as f:
         Tl_all = f["fields/T_liquid"][...]
     cfgd = read_config(a.config)
+    # (auditoria 3, B3-12) rho_l y beta del config, no constantes del script
+    RHO_L = float(cfgd.get("rho_steel", RHO_L))
+    BETA = float(cfgd.get("beta_expansion", BETA))
     T_REF = float(cfgd.get("T_ref_boussinesq", cfgd.get("T_liquidus", T_LIQ_DEFAULT)))
     if T_REF < 0:
         T_REF = float(cfgd.get("T_liquidus", T_LIQ_DEFAULT))

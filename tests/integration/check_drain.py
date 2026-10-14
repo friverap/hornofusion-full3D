@@ -8,9 +8,9 @@
                  ambas fases clasicas en el lecho 0.22 m.
   bed_drain_rate la velocidad vertical media (ponderada por masa) del liquido
                  en los snapshots con t >= --t-rate es <= -(--min-speed) m/s:
-                 medido 0.52-0.62 m/s (A3-1) frente a 0.40-0.44 antes.
+                 medido 0.52-0.62 m/s (A3-1; 0.50 con la rampa del lecho M3-2) frente a 0.40-0.44 antes.
 
-Uso: check_drain.py RUNDIR [--min-drop 0.2] [--min-speed 0.48] [--xfail ids]
+Uso: check_drain.py RUNDIR [--min-drop 0.2] [--min-speed 0.45] [--xfail ids]
 """
 import argparse
 import os
@@ -36,7 +36,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("rundir")
     ap.add_argument("--min-drop", type=float, default=0.2)
-    ap.add_argument("--min-speed", type=float, default=0.48)
+    ap.add_argument("--min-speed", type=float, default=0.45)
     ap.add_argument("--t-rate", type=float, default=0.15)
     ap.add_argument("--xfail", default="")
     a = ap.parse_args()

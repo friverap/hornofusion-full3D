@@ -361,6 +361,47 @@ Si el archivo no existe, se usa la receta por defecto:
 
 ---
 
+## 15. Claves adicionales (documentadas en la auditoría 2/3, N-M16)
+
+Defaults de `config_set_defaults` (`mod_config_3d.f90`), que es la verdad.
+
+| Clave | Default | Significado |
+|---|---|---|
+| `audit_freq` | 1 | cada cuántos pasos se escribe `audit.csv` (los gates exigen 1: a freq > 1 la cuadratura de P_arc mete ~4 %) |
+| `cfl_max` | 2.0 | CFL máximo del dt adaptativo (azimutal con `dth_len = max(r dθ, dr)`) |
+| `iph_dt_safety` | 0.5 | dt ≤ safety · τ_iph (acople interfase; evita el equilibrio espurio T_gas = T_sol) |
+| `liq_balanced_force` | true | fuerza vertical balanceada por caras (presión reducida de la mezcla; CLAUDE.md) |
+| `gas_in_poisson` | true | el gas participa del Poisson de volumen (low-Mach) |
+| `gas_compressibility` | true | fuente de compresibilidad ρ(p, T) contra `Tg_end` (M25/A3-3) |
+| `do_quadrature` | 4 | cuadratura S_N de la DO: 4 (24 dir), 6 (48), 8 (80) |
+| `n_beams` | 1000 | beams del MC del arco por paso (0 = sin MC: toda la radiación directa/respaldo) |
+| `emissivity` | `EMISSIVITY` | emisividad de las paredes (DO) |
+| `T_wall` | 300 | temperatura de pared para `h_wall` |
+| `h_wall` | 0 | coeficiente de pérdida a pared [W/m²K] (0 = adiabática) |
+| `d_particle` | `D_PARTICLE` | diámetro de partícula de la chatarra (Ergun, área interfase, película gas–líquido) |
+| `carbon_frac` | 0.005 | fracción de C de la chatarra (inventario `m_C`) |
+| `charge_bucket1` | true | cargar la cesta 1 al arranque |
+| `heel_mass` | 0 | remanente líquido inicial [kg] |
+| `heel_T` | 1850 | temperatura del remanente [K] |
+| `electrode_profile_file` | `input/electrode_profile.dat` | perfil V/I(t); si no existe, `elec_V_const`/`elec_I_const` |
+| `elec_V_const` / `elec_I_const` | 500 V / 50 000 A | V e I constantes sin perfil |
+| `solve_ecs` | false | alimentación continua (E1) |
+| `ecs_mode` | `table` | `table` (perfil/tasa) o `power` (`ecs_k_power` · P_arc / Δh_ref, `ecs_total_mass`) |
+| `ecs_rate` | 0 | tasa [kg/s] sin perfil |
+| `ecs_profile_file` | '' | perfil de tasa(t) |
+| `ecs_theta_center` / `ecs_theta_width` | π / π/6 | banda azimutal de entrada |
+| `ecs_r_inner` | 2.8 | radio interior de la banda [m] |
+| `ecs_vfrac` | 0.5 | fracción de volumen máxima de la chatarra depositada |
+| `ecs_T_charge` | 300 | T de la chatarra ECS [K] |
+| `ecs_carbon_frac` | 0.005 | C de la chatarra ECS |
+| `ecs_t_start` / `ecs_t_stop` | 0 / 1e30 | ventana temporal |
+| `ecs_k_power` / `ecs_total_mass` | 0 / 0 | modo `power` |
+| `cal_rate` / `cal_profile_file` | 0 / '' | adición de cal [kg/s] o perfil |
+| `cal_frac_cao` / `cal_frac_mgo` | 0.75 / 0.20 | composición de la cal |
+| `carbon_inj_rate` / `carbon_inj_profile_file` | 0 / '' | inyección de carbón a la escoria |
+| `slag_x_feo_init` / `slag_x_cao_init` / `slag_x_sio2_init` / `slag_x_mgo_init` | 0.25 / 0.35 / 0.16 / 0.08 | composición inicial de la escoria |
+| `slag_eta_feo` | 0.3 | rendimiento de la oxidación Fe → FeO con el O₂ remanente |
+
 ## Ejemplo completo: config de producción
 
 ```ini

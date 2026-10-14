@@ -713,7 +713,9 @@ contains
 
         ! Correct pressure (con cota física, ver P_HYDRO_CAP)
         sh%p = sh%p + cfg%alpha_p * sh%pp
-        sh%p = max(-P_HYDRO_CAP, min(P_HYDRO_CAP, sh%p))
+        ! (auditoria 3, B3-11) un NaN no se enmascara con la cota: min/max
+        ! con NaN devuelven el otro operando y la guardia de NaN no lo veia
+        if (.not. any(sh%p /= sh%p)) sh%p = max(-P_HYDRO_CAP, min(P_HYDRO_CAP, sh%p))
 
         !-------------------------------------------------------------------
         ! Celdas SIN fase continua (Bug 16): su pp es identicamente 0 (aP=1,

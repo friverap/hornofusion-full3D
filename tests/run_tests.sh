@@ -204,6 +204,7 @@ full | rebaseline)
     run_case bath_test 1
     run_case bath_test 4
     run_case bath_test 12
+    run_case bath_test_stretch 4
     run_case bath_fill 4
     run_case bath_mix 4
     run_case bath_fill_mix 4
@@ -287,6 +288,10 @@ full | rebaseline)
     check_invariants "$OUT/ecs_test_n12" ecs_test
     run_script "decomposition_slag" \
         $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n8" --rtol 1e-4
+    check_invariants "$OUT/bath_test_stretch_n4" bath_test_stretch
+    run_script "bath_test_stretch" \
+        $PY $INT/check_bath.py "$OUT/bath_test_stretch_n4" --config "$CFG/bath_test_stretch.dat" \
+        --xfail "$(xfail_ids bath)"
     for d in "$OUT"/bath_test_n*; do
         check_invariants "$d" bath_test
         run_script "bath_test" \

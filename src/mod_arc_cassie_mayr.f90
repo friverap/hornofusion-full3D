@@ -72,7 +72,7 @@ contains
         ! alpha_l GLOBAL (N-A2): P_elec va al baño bajo el electrodo
         real(dp), intent(in)            :: alpha_lg(:,:,:)
 
-        integer  :: e, ig, jg, kg, il, jl, kl, kg_tip, kg_scrap, kc_lo, kc_hi, kg_bath
+        integer  :: e, ig, jg, kg, il, jl, kl, kg_tip, kg_scrap, kc_lo, kc_hi, kg_bath, kr_lo, kr_hi
         real(dp) :: P_total, P_rad_arc, P_conv, P_elec_flow
         real(dp) :: x_elec, y_elec, x_cell, y_cell, dist
         real(dp) :: r2, sigma_r, gw
@@ -261,9 +261,16 @@ contains
                 ! depositaba en 7 capas, ~3.5x P_rad (energía creada); y con
                 ! chatarra pero total_gw_vol_rad = 0 no entraba en ninguna rama y
                 ! P_rad se perdía.
+                ! (auditoria 3, B3-5) con bano bajo la punta (kbath) y sin
+                ! chatarra, el respaldo de P_rad va a la capa del bano, no a
+                ! la columna de gas
+                kr_lo = max(1, kg_tip-3); kr_hi = min(m%nz_g, kg_tip+3)
+                if (.not. found_scrap .and. kc_lo == kc_hi .and. kc_hi < kg_tip) then
+                    kr_lo = kc_lo; kr_hi = kc_hi
+                end if
                 total_vol = 0.0_dp
                 if (P_rad_arc > 0.0_dp) then
-                do kg = max(1, kg_tip-3), min(m%nz_g, kg_tip+3)
+                do kg = kr_lo, kr_hi
                     do jg = 1, m%nth_g
                         do ig = 1, m%nr_g
                             if (m%cell_type_global(ig,jg,kg) == 0) cycle
@@ -278,7 +285,7 @@ contains
                 end do
                 end if
                 if (total_vol > SMALL) then
-                do kg = max(1, kg_tip-3), min(m%nz_g, kg_tip+3)
+                do kg = kr_lo, kr_hi
                     do jg = 1, m%nth_g
                         do ig = 1, m%nr_g
                             if (m%cell_type_global(ig,jg,kg) == 0) cycle
