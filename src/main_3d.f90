@@ -72,6 +72,7 @@ program eaf_3d_simulator
 
     ! Time loop
     real(dp) :: time, V_elec, I_elec
+    real(dp) :: dt_nominal = 0.0_dp
     integer  :: step, outer, e
 
     ! Coeficiente de drag de Ergun (implícito en aP; C1.4)
@@ -278,6 +279,11 @@ program eaf_3d_simulator
         ! El ultimo paso termina EXACTAMENTE en t_final (auditoria, bajos: el
         ! lazo lo rebasaba y, por el redondeo de la suma de dt, podia dar un
         ! paso de mas: melt_forced t_final 0.11 / dt 0.01 corria 12 pasos)
+        ! El dt TRUNCADO del ultimo paso no es estado (auditoria 3, M3-12):
+        ! el snapshot final guardaba el recorte y una corrida extendida desde
+        ! el arrancaba con ese dt (o desde dt_min), sin ser bit a bit con la
+        ! continua. Se guarda el nominal y se restituye al salir del lazo.
+        dt_nominal = cfg%dt
         if (time + cfg%dt > cfg%t_final) then
             if (cfg%t_final - time <= 1.0e-6_dp * cfg%dt) exit time_loop
             cfg%dt = cfg%t_final - time
@@ -678,6 +684,8 @@ program eaf_3d_simulator
         print *, '============================================================'
     end if
 
+    ! dt nominal (no el truncado del ultimo paso) en el snapshot final (M3-12)
+    if (dt_nominal > 0.0_dp .and. .not. cfg%adaptive_dt) cfg%dt = dt_nominal
     call write_hdf5_parallel(mesh, liq, gas, sol, slag, sh, elec, cfg%dt, &
                              step, time, cfg%output_dir)
 
