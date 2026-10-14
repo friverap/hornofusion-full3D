@@ -85,7 +85,7 @@ contains
                                          alpha_old, rho_old, mdot_m)
         use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, &
-            ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bed_valid, &
+            ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bed_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             aW => ws_aW, &
@@ -612,8 +612,8 @@ contains
             ! gas es la fase continua del poro ambas son clasicas (N-C1).
             if (is_gas) then
                 if (max(ph_other%alpha(ii,jj,ka), ph_other%alpha(ii,jj,kb)) < ALPHA_CUTOFF) return
-                bm = min(max(ws_bed_gas(ii,jj,ka), ws_bub(ii,jj,ka)), &
-                         max(ws_bed_gas(ii,jj,kb), ws_bub(ii,jj,kb)))
+                bm = max(min(ws_bed_gas(ii,jj,ka), ws_bed_gas(ii,jj,kb)), &
+                         ws_bub_f(ii, jj, min(ka, kb)))
             else
                 if (max(ph%alpha(ii,jj,ka), ph%alpha(ii,jj,kb)) < ALPHA_CUTOFF) return
                 ! mascara de CARA del liquido fijada por iteracion externa

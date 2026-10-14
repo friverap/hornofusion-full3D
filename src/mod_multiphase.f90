@@ -23,7 +23,7 @@ module mod_multiphase
     use mod_probe, only: probe_report, probe_current_step
     use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d
-    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bed_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
+    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bed_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
                              ws_liq_room, ws_liq_room_valid, &
                              ws_liq_fr, ws_liq_fth, ws_liq_fz, &
                              ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, ws_Tsrc
@@ -174,25 +174,43 @@ contains
         ws_bed_liq = ws_bed * min(1.0_dp, max(0.0_dp, (gas%alpha - ALPHA_PORE_GAS) / ALPHA_PORE_GAS))
         ws_bed_gas = ws_bed_liq * merge(1.0_dp, 0.0_dp, &
             gas%alpha >= ALPHA_FLOW_CUTOFF .and. ws_gas_perc .and. ws_pv_active)
-        ! Burbujas en el bano (A3-5): liquido continuo sin lecho, gas del
-        ! acople, y bano continuo sin lecho ENCIMA (la celda de superficie y la
-        ! que esta bajo un lecho que gotea no son burbujas). Se evalua en
-        ! celdas propias; el halo se intercambia (la cara lee ambas celdas).
-        ws_bub = 0.0_dp
+        ! Burbujas en el bano (A3-5; A4-8): celda de BANO (alpha_l >=
+        ! ALPHA_LIQ_CONT, sin lecho) con gas que PUEDE deslizar (alpha_g >=
+        ! ALPHA_FLOW_CUTOFF: con gas evanescente, atado al liquido, la
+        ! flotacion del liquido no tenia contraparte y bath_test perdia el
+        ! reposo, 0.13 m/s) y con BANO encima (alpha_l(k+1) >= ALPHA_LIQ_CONT,
+        ! sin lecho: ni la superficie ni la pelicula son burbujas, M4-11). Sin
+        ! condicion de percolacion (fuera del lecho el gas movil es fluido del
+        ! acople, ver gas_percolation_mask). La mascara de CARA ws_bub_f es la
+        ! de la celda inferior si la superior es bano INTERIOR (con liquido
+        ! continuo encima): el frente avanza hacia bano sin gas y nunca hacia
+        ! la celda de superficie. Celdas propias; halos intercambiados.
+        ws_bub = 0.0_dp; ws_bub_f = 0.0_dp
         do k = 1, m%nz
             do j = 1, m%ntheta
                 do i = 1, m%nr
                     if (m%cell_type(i,j,k) == 0) cycle
-                    if (.not. ws_liq_cont(i,j,k) .or. ws_bed(i,j,k) > 0.0_dp) cycle
-                    if (.not. (gas%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF .and. &
-                               ws_gas_perc(i,j,k) .and. ws_pv_active(i,j,k))) cycle
+                    if (liq%alpha(i,j,k) < ALPHA_LIQ_CONT .or. ws_bed(i,j,k) > 0.0_dp) cycle
                     if (m%cell_type(i,j,k+1) == 0) cycle
-                    if (.not. ws_liq_cont(i,j,k+1) .or. ws_bed(i,j,k+1) > 0.0_dp) cycle
-                    ws_bub(i,j,k) = min(1.0_dp, (gas%alpha(i,j,k) - ALPHA_FLOW_CUTOFF) / ALPHA_FLOW_CUTOFF)
+                    if (liq%alpha(i,j,k+1) < ALPHA_LIQ_CONT .or. ws_bed(i,j,k+1) > 0.0_dp) cycle
+                    ws_bub(i,j,k) = min(1.0_dp, max(0.0_dp, &
+                        (gas%alpha(i,j,k) - ALPHA_FLOW_CUTOFF) / ALPHA_FLOW_CUTOFF))
                 end do
             end do
         end do
         call mpi_exchange_halos_3d(ws_bub, m%topo)
+        do k = 0, m%nz
+            do j = 1, m%ntheta
+                do i = 1, m%nr
+                    if (ws_bub(i,j,k) <= 0.0_dp) cycle
+                    if (m%cell_type(i,j,k+2) == 0) cycle
+                    if (.not. (ws_liq_cont(i,j,k+1) .and. ws_liq_cont(i,j,k+2))) cycle
+                    if (ws_bed(i,j,k+1) > 0.0_dp) cycle
+                    ws_bub_f(i,j,k) = ws_bub(i,j,k)
+                end do
+            end do
+        end do
+        call mpi_exchange_halos_3d(ws_bub_f, m%topo)
         ! Mascara de cara del liquido (A4-1; ver mod_workspace): caras
         ! (k|k+1) con k = 0..nz (la cara inferior de la celda 1 usa el halo)
         ws_bedl_f = 0.0_dp
@@ -213,7 +231,7 @@ contains
                         sdir = -uf
                     end if
                     bm = rlo + (rhi - rlo) * tanh(max(0.0_dp, sdir) / U_BEDL)
-                    ws_bedl_f(i,j,k) = max(bm, min(ws_bub(i,j,k), ws_bub(i,j,k+1)))
+                    ws_bedl_f(i,j,k) = max(bm, ws_bub_f(i,j,k))
                 end do
             end do
         end do
@@ -825,7 +843,14 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     call local_to_global(m, i, j, k, ig, jg, kg)
-                    perc(i,j,k) = (seen(ig,jg,kg) == 1)
+                    ! (auditoria 4, A4-8) FUERA del lecho el gas movil es
+                    ! fluido del acople aunque no tenga camino al freeboard:
+                    ! una burbuja en el bano sube desplazando liquido (el
+                    ! Poisson de volumen lo resuelve); Hilfer es un criterio
+                    ! de medio poroso y fuera del lecho no aplica (la bolsa
+                    ! aislada quedaba pared y sin flotacion para siempre)
+                    perc(i,j,k) = (seen(ig,jg,kg) == 1) .or. &
+                                  (free_g(ig,jg,kg) == 1 .and. mob_g(ig,jg,kg) == 1)
                     reach(i,j,k) = (rch(ig,jg,kg) == 1)
                 end do
             end do

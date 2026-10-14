@@ -35,7 +35,7 @@ program test_bed_buoyancy
     use mod_momentum_3d, only: solve_momentum_3d
     use mod_drag_ergun, only: compute_ergun_drag
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
-                             ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bed_valid
+                             ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bed_valid
     implicit none
 
     type(config_t) :: cfg
@@ -123,8 +123,8 @@ program test_bed_buoyancy
 
     ! ---- caso 5: burbujas en el bano ----
     call setup(0.0_dp, 0.8_dp, .false., .false.)
-    ws_bub = 0.0_dp
-    ws_bub(1:6,1:8,1:8) = 1.0_dp
+    ws_bub = 0.0_dp; ws_bub_f = 0.0_dp
+    ws_bub(1:6,1:8,1:8) = 1.0_dp; ws_bub_f(1:6,1:8,0:8) = 1.0_dp
     ws_bedl_f = 1.0_dp
     call run_both()
     call cmp_classic_k('caso 5', 2, 7)
@@ -133,7 +133,7 @@ program test_bed_buoyancy
             ul_bal(ic,jc,kc), ug_bal(ic,jc,kc)
         ok = .false.
     end if
-    ws_bub = 0.0_dp; ws_bedl_f = 0.0_dp
+    ws_bub = 0.0_dp; ws_bub_f = 0.0_dp; ws_bedl_f = 0.0_dp
 
     if (ok) then
         print '(A)', ' PASS test_bed_buoyancy'

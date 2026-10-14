@@ -166,6 +166,13 @@ module mod_workspace
     ! bajo celda de superficie con alpha_g < cutoff, o bajo el freeboard) no
     ! la lleva, y el bano en reposo sigue siendo punto fijo exacto.
     real(dp), allocatable :: ws_bub(:,:,:)
+    ! Mascara de CARA (k | k+1, en k) de las burbujas (A4-8): la de la celda
+    ! inferior si la superior es bano INTERIOR (liquido continuo con liquido
+    ! continuo encima, sin lecho). Asi el frente de una burbuja avanza hacia
+    ! bano sin gas (con el minimo de celdas nunca subia) y NUNCA hacia la
+    ! celda de superficie (el gas de la superficie leeria el salto de presion
+    ! del bano: el chorro de F2.3). Comun a las dos fases.
+    real(dp), allocatable :: ws_bub_f(:,:,:)
     logical, save :: ws_bed_valid = .false.
     ! Flujos de MASA conservativos del GAS por las caras + [kg/s] (auditoria
     ! M24, gas): Q = Q* + a (pp_P - pp_N) del Poisson por la densidad del
@@ -251,8 +258,8 @@ contains
         allocate(ws_lim_step, mold=ws_aW); ws_lim_step = 1.0_dp
         allocate(ws_cc, ws_cc_new, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
         allocate(ws_p_n, mold=ws_aW); ws_p_n = 0.0_dp
-        allocate(ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, mold=ws_aW)
-        ws_bed = 0.0_dp; ws_bed_gas = 0.0_dp; ws_bed_liq = 0.0_dp; ws_bedl_f = 0.0_dp; ws_bub = 0.0_dp
+        allocate(ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, mold=ws_aW)
+        ws_bed = 0.0_dp; ws_bed_gas = 0.0_dp; ws_bed_liq = 0.0_dp; ws_bedl_f = 0.0_dp; ws_bub = 0.0_dp; ws_bub_f = 0.0_dp
         allocate(ws_Fg_r, ws_Fg_th, ws_Fg_z, mold=ws_aW)
         ws_Fg_r = 0.0_dp; ws_Fg_th = 0.0_dp; ws_Fg_z = 0.0_dp
         allocate(ws_Fg_lk_r(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
