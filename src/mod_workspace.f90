@@ -124,6 +124,12 @@ module mod_workspace
     ! de celdas que salen del acople, quedan selladas o sin gas. Lo escribe la
     ! ultima iteracion externa; main lo pasa al audit (m_gas_ccdrop) y lo cera.
     real(dp), allocatable :: ws_cc_drop(:,:,:)
+    ! (auditoria 7, M7-5) caudal de gas entrante CONGELADO por paso [m3/s]:
+    ! el de la primera llamada al Poisson del paso (iteracion externa 1). La
+    ! cota de compresibilidad no depende asi del iterado (diseno original de
+    ! COMP_SRC_CAP). Se reconstruye al entrar a cada paso: no es estado.
+    real(dp), allocatable :: ws_qin_cap(:,:,:)
+    integer, save :: ws_qin_step = -1
     ! Presion manometrica al INICIO del paso (auditoria M25): referencia
     ! p^n de la densidad rho(P0 + p^n, T^n) en la fuente de compresibilidad.
     ! Se copia de sh%p al empezar cada paso (sh%p va al reinicio).
@@ -356,7 +362,8 @@ contains
         allocate(ws_aE, ws_aS, ws_aN, ws_aB, ws_aT, ws_aP, ws_Su, mold=ws_aW)
         allocate(ws_Fr, ws_Fth, ws_Fz, ws_Mr, ws_Mth, ws_Mz, ws_lim, mold=ws_aW)
         allocate(ws_lim_step, mold=ws_aW); ws_lim_step = 1.0_dp
-        allocate(ws_cc, ws_cc_new, ws_cc_drop, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
+        allocate(ws_cc, ws_cc_new, ws_cc_drop, ws_qin_cap, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
+        ws_qin_cap = 0.0_dp
         ws_cc_drop = 0.0_dp
         allocate(ws_p_n, mold=ws_aW); ws_p_n = 0.0_dp
         allocate(ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bedg_f, mold=ws_aW)

@@ -96,7 +96,7 @@ contains
     subroutine solve_pressure_correction(liq, gas, gas_T_ref, sh, m, cfg, &
                                           residual)
         use mod_workspace, only: ensure_workspace, own_weight_face, liq_own_weight, mix_cell_weight, &
-                                 liq_cont_fallback, bed_rel_face, ws_cc, ws_cc_new, ws_cc_drop, ws_p_n, aW => ws_aW, &
+                                 liq_cont_fallback, bed_rel_face, ws_cc, ws_cc_new, ws_cc_drop, ws_qin_cap, ws_qin_step, ws_p_n, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
@@ -486,6 +486,11 @@ contains
             ! acarrean (B5-7): son el sumidero.
             ws_cc_new = 0.0_dp
             ws_cc_drop = 0.0_dp
+            ! (M7-5) cota con el caudal de la PRIMERA llamada del paso
+            if (probe_current_step() /= ws_qin_step) then
+                ws_qin_cap = qin_g
+                ws_qin_step = probe_current_step()
+            end if
             do k = kstart, kend
                 do j = jstart, jend
                     do i = istart, iend
@@ -524,7 +529,10 @@ contains
                         ! por paso (bath_fill) y la cota sobre el propio la
                         ! recortaba cada paso (acarreo saturado: la EOS
                         ! reescribia esa masa, N-M4)
-                        cap = COMP_SRC_CAP * (gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt + qin_g(i,j,k))
+                        ! (auditoria 7, M7-5) con el caudal CONGELADO del paso:
+                        ! la cota sobre el caudal del iterado volvia al lazo
+                        ! externo menos contractivo (cold 0.97 con 5 iteraciones)
+                        cap = COMP_SRC_CAP * (gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt + ws_qin_cap(i,j,k))
                         ! Demanda de volumen del gas [m3/s]: expansion termica
                         ! (-src), A8 advectiva (gadv), M14 fuente de masa de las
                         ! reacciones (S_gas/rho_g) y lo que el tope no dejo
@@ -549,7 +557,7 @@ contains
                         ! acarreo acotado por el mismo volumen de referencia
                         ! que la cota; lo que lo excede se descarta CON registro
                         ws_cc_new(i,j,k) = sign(min(abs(dvol - dcl) * cfg%dt, &
-                            gas%alpha(i,j,k) * m%vol(i,j,k) + qin_g(i,j,k) * cfg%dt), dvol - dcl)
+                            gas%alpha(i,j,k) * m%vol(i,j,k) + ws_qin_cap(i,j,k) * cfg%dt), dvol - dcl)
                         ws_cc_drop(i,j,k) = (dvol - dcl) * cfg%dt - ws_cc_new(i,j,k)
                     end do
                 end do
@@ -872,12 +880,15 @@ contains
             real(dp), intent(in) :: qin
             if (.not. (cfg%gas_compressibility .and. cfg%solve_multiphase)) return
             if (qin <= 0.0_dp) return
-            qin_g(ii,jj,kk) = qin_g(ii,jj,kk) + qin
             ! (auditoria 6, M6-1) solo donde la energia del gas se resuelve
             ! (alpha_g >= ALPHA_CUTOFF en las DOS celdas): en una celda sin gas
             ! T_g es rancia y el termino salia en -3.6e4 veces su volumen de
             ! gas (slag_chem_flow, capa de escoria)
             if (gas%alpha(ii,jj,kk) < ALPHA_CUTOFF .or. gas%alpha(in_,jn_,kn_) < ALPHA_CUTOFF) return
+            ! (auditoria 7, M7-5) el caudal que agranda la cota, con la MISMA
+            ! guardia: desde una vecina con gas evanescente la alpha de cara
+            ! simetrica daba 1/2 alpha_P u_f A de caudal fantasma
+            qin_g(ii,jj,kk) = qin_g(ii,jj,kk) + qin
             gadv(ii,jj,kk) = gadv(ii,jj,kk) + qin * (gas%rho(in_,jn_,kn_) - gas%rho(ii,jj,kk)) &
                                                   / max(gas%rho(ii,jj,kk), SMALL)
         end subroutine gas_adv
