@@ -42,9 +42,12 @@ run_case_restart_from() {
         echo "FAIL: la corrida $name -n $np terminó con error (ver $dir/run.log)"
         tail -5 "$dir/run.log"; note_fail; return 1
     fi
-    if grep -q '\[CONFIG\] WARNING\|\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[RESTART\] AVISO' "$dir/run.log"; then
+    if grep -q '\[CONFIG\] WARNING\|\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[RESTART\] AVISO' "$dir/run.log"; then
         echo "FAIL: aviso en $name -n $np:"; grep 'WARNING\|AVISO' "$dir/run.log" | head -3
         note_fail; return 1
+    fi
+    if ! ls "$dir"/eaf3d_*.h5 > /dev/null 2>&1; then
+        echo "FAIL: $name -n $np no produjo snapshots"; note_fail; return 1
     fi
 }
 
@@ -354,12 +357,15 @@ full | rebaseline)
     # arco: los dos regimenes de B1 que la matriz no ejercia
     run_case bed_bath_rest 4
     run_case bed_bath_rest 1
-    # (auditoria 6, M4-12) bolsa de gas bajo una capa saturada, desde un
-    # estado construido sobre el paso 0 de bed_bath_rest_n4 (opcion
-    # pc_bed_gas_pocket, opt-in hasta el juez de B1)
+    # (auditoria 6-7, M4-12) bolsa de gas bajo una capa saturada, desde un
+    # estado construido sobre el paso 0 de bed_bath_rest_n4 (presion
+    # hidrostatica y rho_gas coherentes; defaults)
     if [ -f "$OUT/bed_bath_rest_n4/eaf3d_00000000.h5" ]; then
-        $PY $INT/make_pocket_init.py "$OUT/bed_bath_rest_n4/eaf3d_00000000.h5" "$OUT/pocket_init.h5" > /dev/null
-        run_case_restart_from pocket_rise 4 "$OUT/pocket_init.h5"
+        if $PY $INT/make_pocket_init.py "$OUT/bed_bath_rest_n4/eaf3d_00000000.h5" "$OUT/pocket_init.h5" > /dev/null; then
+            run_case_restart_from pocket_rise 4 "$OUT/pocket_init.h5"
+        else
+            echo "FAIL: make_pocket_init.py no pudo construir el estado de pocket_rise"; note_fail
+        fi
     else
         echo "FAIL: falta el snapshot inicial de bed_bath_rest_n4 para pocket_rise"; note_fail
     fi

@@ -178,11 +178,9 @@ module mod_workspace
     ! celda de superficie (el gas de la superficie leeria el salto de presion
     ! del bano: el chorro de F2.3). Comun a las dos fases.
     real(dp), allocatable :: ws_bub_f(:,:,:)
-    ! (auditoria 6, M4-12) mascara de CARA del gas (k|k+1), armada en
-    ! mod_multiphase junto a ws_bedl_f: por defecto max(min de ws_bed_gas de
-    ! las dos celdas, ws_bub_f) (A4-1); con pc_bed_gas_pocket la cara de una
-    ! BOLSA acoplada hacia la celda saturada de encima lleva ademas la mascara
-    ! del liquido que baja a la bolsa (contracorriente)
+    ! (auditoria 6) mascara de CARA del gas (k|k+1), armada en mod_multiphase
+    ! junto a ws_bedl_f: gas_face_mask = max(min de ws_bed_gas de las dos
+    ! celdas, ws_bub_f) (A4-1)
     real(dp), allocatable :: ws_bedg_f(:,:,:)
     logical, save :: ws_bed_valid = .false.
     ! Flujos de MASA conservativos del GAS por las caras + [kg/s] (auditoria

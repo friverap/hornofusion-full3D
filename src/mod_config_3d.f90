@@ -98,7 +98,6 @@ contains
         cfg%pc_sat_open = .false.         ! Plan E E1 (10-oct-2026): juez B1 negativo, solo banco
         cfg%pc_sat_gas_off = .false.      ! Plan E E1b (10-oct-2026): juez B1 negativo, nadie la activa
         cfg%pc_gas_spring = .false.       ! Plan F (12-oct-2026): juez B1 NEGATIVO, nadie la activa
-        cfg%pc_bed_gas_pocket = .false.   ! M4-12 (14-oct-2026): opt-in hasta el juez estadistico de B1
         cfg%pc_keep_pore_floor = .false.  ! Plan F (diagnostico del banco)
         cfg%mixture_model = .false.       ! Plan G (oct-2026): en evaluacion
         cfg%tol_alpha_mix = 1.0e-4_dp
@@ -342,7 +341,6 @@ contains
         case ('tol_alpha_mix'); call parse_real(val, key, cfg%tol_alpha_mix)
         case ('mix_eps_perm_min'); call parse_real(val, key, cfg%mix_eps_perm_min)
         case ('pc_drift_source'); cfg%pc_drift_source = parse_bool(val)
-        case ('pc_bed_gas_pocket'); cfg%pc_bed_gas_pocket = parse_bool(val)
         case ('pc_spill_source'); cfg%pc_spill_source = parse_bool(val)
         case ('n_pc_max'); call parse_int(val, key, cfg%n_pc_max)
         case ('tol_alpha_pc'); call parse_real(val, key, cfg%tol_alpha_pc)

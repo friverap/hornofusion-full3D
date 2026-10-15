@@ -73,7 +73,6 @@ module mod_types_3d
         logical :: pc_sat_open        ! Plan E E1: poro saturado = celda incompresible con caras liquido|liquido ABIERTAS (sin cierre F2.8)
         logical :: pc_gas_spring      ! Plan F (oct-2026): el gas es SIEMPRE fluido del acople P-V (bolsa atrapada = resorte, no pared): sin percolacion F2.16, sin venteo F2.31, sin E1b; caras de liquido abiertas (E1) y sin piso de gas de poro en liq_cap
         logical :: pc_keep_pore_floor ! Plan F (diagnostico): con pc_gas_spring, conservar el piso ALPHA_PORE_GAS en liq_cap
-        logical :: pc_bed_gas_pocket  ! M4-12 (auditoria 6, opt-in): una BOLSA de gas movil del lecho (alpha_g >= 2 ALPHA_PORE_GAS) es fluido del acople aunque no percole al freeboard (presion capilar de entrada despreciable en chatarra gruesa)
         logical :: mixture_model      ! Plan G (oct-2026): modelo de MEZCLA con deslizamiento algebraico (drift-flux) en vez de dos fluidos: una velocidad volumetrica de mezcla, una presion, alpha_l con flujo de deslizamiento acotado (mod_mixture_3d)
         real(dp) :: tol_alpha_mix     ! Plan G: convergencia del lazo externo en alpha (max |dalpha| entre iteraciones externas): acople alpha-p implicito
         real(dp) :: mix_eps_perm_min  ! Plan G (diagnostico): piso de porosidad en la PERMEABILIDAD del lecho (movilidades de Darcy); 0 = sin piso

@@ -113,9 +113,7 @@ audit_oneflow:energy_balance_step
 # el transporte destruia por complemento sin registro: melt_forced 128 % -> 32
 # %, bed_flood 76 % -> 23 % (y su peor paso de energia 1.06 -> 0.61), bath_fill
 # 37 -> 10 %, bed_drain 37 -> 1.8 %.
-# (auditoria 6, M4-12) pocket_rise arranca de un estado CONSTRUIDO
-# (make_pocket_init.py) con la presion del snapshot de origen, que no es la
-# hidrostatica de la nueva estratificacion: en los primeros ~40 pasos el p se
-# reajusta, el venteo oscila de signo y la EOS reescribe 0.163 kg (todo el
-# residuo; despues 1e-5 kg/paso). Igual con y sin pc_bed_gas_pocket.
-audit_pocket:mass_gas
+# (auditoria 7) audit_pocket:mass_gas RETIRADO: era el estado construido con
+# la presion y rho_gas del snapshot de origen; con la hidrostatica y la EOS
+# coherentes pasa (0.44: el gas de poro fuera del acople sigue a la presion
+# mientras el fondo se reajusta, familia N-M4).

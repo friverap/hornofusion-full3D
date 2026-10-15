@@ -231,27 +231,10 @@ contains
                         sdir = -uf
                     end if
                     bm = rlo + (rhi - rlo) * tanh(max(0.0_dp, sdir) / U_BEDL)
-                    ! (auditoria 6, M4-12, opt-in) drenaje por GRAVEDAD desde el
-                    ! reposo: si la receptora de mayor rampa esta ABAJO, el
-                    ! liquido de encima cae en ella clasico sin esperar a que el
-                    ! ruido le de velocidad (con el minimo en reposo la capa
-                    ! saturada sobre una bolsa quedaba 0.25 s retenida). Sin
-                    ! cambio de signo en u: no reabre la simetria de A4-1
-                    if (cfg%pc_bed_gas_pocket .and. ws_bed_liq(i,j,k) > ws_bed_liq(i,j,k+1)) &
-                        bm = max(bm, ws_bed_liq(i,j,k))
                     ws_bedl_f(i,j,k) = max(bm, ws_bub_f(i,j,k))
-                    ! mascara de cara del gas (auditoria 6): la de siempre
-                    ! (A4-1) y, con pc_bed_gas_pocket, en la cara de una BOLSA
-                    ! acoplada (abajo) hacia la celda de encima, la del liquido
-                    ! que baja a ella: las dos fases clasicas en esa cara, el
-                    ! gas sube a contracorriente (M4-12). La trampa de A4-1 (gas
-                    ! libre ENCIMA de un poro saturado) no aplica: la condicion
-                    ! es sobre la celda de ABAJO.
+                    ! mascara de cara del gas (A4-1; explicita desde la
+                    ! auditoria 6, una sola definicion: gas_face_mask)
                     ws_bedg_f(i,j,k) = gas_face_mask(ws_bed_gas(i,j,k), ws_bed_gas(i,j,k+1), ws_bub_f(i,j,k))
-                    if (cfg%pc_bed_gas_pocket) then
-                        if (ws_bed_gas(i,j,k) > 0.0_dp .and. gas%alpha(i,j,k) >= 2.0_dp * ALPHA_PORE_GAS) &
-                            ws_bedg_f(i,j,k) = max(ws_bedg_f(i,j,k), ws_bedl_f(i,j,k) * ws_bed_gas(i,j,k))
-                    end if
                 end do
             end do
         end do
@@ -894,17 +877,6 @@ contains
                     ! aislada quedaba pared y sin flotacion para siempre)
                     perc(i,j,k) = (seen(ig,jg,kg) == 1) .or. &
                                   (free_g(ig,jg,kg) == 1 .and. mob_g(ig,jg,kg) == 1)
-                    ! (auditoria 6, M4-12, opt-in pc_bed_gas_pocket) DENTRO del
-                    ! lecho una BOLSA de gas movil (no el piso de poro) tampoco
-                    ! es subfase inmovil: en chatarra gruesa la presion capilar
-                    ! de entrada (sigma/r ~ 1e2 Pa) es despreciable frente al
-                    ! peso del liquido de una celda (~2e4 Pa) y la bolsa bajo
-                    ! una capa saturada sube a contracorriente desplazando
-                    ! liquido (como la burbuja fuera del lecho de A4-8). Sin
-                    ! esto la bolsa era pared hasta que el liquido de encima
-                    ! drenaba por otro camino (la «tapa» de M4-12)
-                    if (cfg%pc_bed_gas_pocket .and. mob_g(ig,jg,kg) == 1 .and. &
-                        gas%alpha(i,j,k) >= 2.0_dp * ALPHA_PORE_GAS) perc(i,j,k) = .true.
                     reach(i,j,k) = (rch(ig,jg,kg) == 1)
                 end do
             end do
