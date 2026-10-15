@@ -171,10 +171,15 @@ contains
                     end do
                 end do
                 if (wvo <= SMALL) cycle
-                ! (M6-5) umbral en ESPESOR equivalente: wvo/dz es el area
-                ! ponderada de la capa, asi que material/area >= ARC_SURF_H
+                ! (M6-5) umbral del BANO en ESPESOR equivalente: wvo/dz es el
+                ! area ponderada de la capa, asi que bano/area >= ARC_SURF_H.
+                ! (M7-1) la CHATARRA por su fraccion del volumen (5 %). Cada
+                ! material en su escala: la capa es superficie si la suma de
+                ! las dos fracciones de umbral llega a 1 (con dz = 0.28 m,
+                ! frac_surf = 0.0498: el criterio de siempre)
                 frac_surf = ARC_SURF_H / max(m%zf_global(kg) - m%zf_global(kg-1), SMALL)
-                if (.not. surf_found .and. wsc + wba >= frac_surf * wvo) then
+                if (.not. surf_found .and. &
+                    wsc / ARC_SURF_FRAC_S + wba / frac_surf >= wvo) then
                     surf_found = .true.
                     if (wsc >= wba) then
                         kg_scrap = kg; found_scrap = .true.

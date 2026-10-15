@@ -1,6 +1,7 @@
 !===============================================================================
 ! test_arc_surface.f90 - Superficie del bano bajo el arco con malla FINA
-! (auditoria 6, M6-5). Malla de produccion en z (80 capas, dz 0.056 m):
+! (auditoria 6, M6-5; auditoria 7, M7-1). Malla FINA en z (80 capas con el
+! stretch por defecto, dz ~0.058 m en la capa de la pelicula):
 ! bano lleno hasta la capa K y encima una PELICULA (alpha_l 0.31 en ~1/3 de
 ! las celdas) cuyo material ponderado supera el 5 % del volumen de su capa
 ! (criterio viejo: seria la superficie y recibiria P_elec, ~13-20 kg) pero
@@ -16,6 +17,7 @@ program test_arc_surface
     use mod_mesh_3d, only: mesh_generate_parallel
     use mod_fields_3d
     use mod_arc_cassie_mayr, only: distribute_arc_heat
+    use mod_melting_3d, only: solid_enthalpy
     implicit none
 
     type(config_t) :: cfg
@@ -101,8 +103,48 @@ program test_arc_surface
     if (abs(e_k - P) > 1.0e-12_dp * P) call fail('la capa K no recibe todo el arco (rel)', (e_k - P) / P)
     if (abs(e_tot - P) > 1.0e-12_dp * P) call fail('presupuesto del arco (rel)', (e_tot - P) / P)
 
+    ! --- caso 2 (M7-1): CRATER a medio fundir. La capa K+1 tiene chatarra
+    ! alpha_s 0.15 (sin liquido) sobre el bano: ES la superficie (la chatarra
+    ! se mide por su fraccion del volumen de la capa, no por espesor: con el
+    ! espesor equivalente M6-5 exigia alpha_s >= 0.24 en esta malla y la
+    ! potencia caia al bano de debajo). Nada debe llegar a la capa del bano.
+    asg = 0.0_dp; alg = 0.0_dp
+    alg(:,:,1:K) = 1.0_dp
+    asg(:,:,K+1) = 0.15_dp
+    where (mesh%cell_type_global == 0) alg = 0.0_dp
+    where (mesh%cell_type_global == 0) asg = 0.0_dp
+    sol%alpha_s = 0.0_dp; sol%m_s = 0.0_dp; sol%E_s = 0.0_dp
+    do kk = 1, mesh%nz
+        do j = 1, mesh%ntheta
+            do i = 1, mesh%nr
+                sol%alpha_s(i,j,kk) = asg(i,j,kk)
+                sol%m_s(i,j,kk) = asg(i,j,kk) * cfg%rho_steel * mesh%vol(i,j,kk)
+                sol%T_s(i,j,kk) = 1500.0_dp
+                sol%E_s(i,j,kk) = sol%m_s(i,j,kk) * solid_enthalpy(1500.0_dp, cfg)
+            end do
+        end do
+    end do
+    e_film = sum(sol%E_s)
+    sh%S_arc = 0.0_dp
+    call distribute_arc_heat(elec, sh, sol, mesh, cfg, asg, 1, alg)
+    ! el solido recibe JOULES del paso (arc_deposit: Q = P V dt); S_arc en W/m3
+    e_k = 0.0_dp; e_tot = (sum(sol%E_s) - e_film) / cfg%dt
+    do kk = 1, mesh%nz
+        do j = 1, mesh%ntheta
+            do i = 1, mesh%nr
+                e_tot = e_tot + sh%S_arc(i,j,kk) * mesh%vol(i,j,kk)
+                if (kk <= K) e_k = e_k + sh%S_arc(i,j,kk) * mesh%vol(i,j,kk)
+            end do
+        end do
+    end do
+    print '(A,ES11.3,A,ES11.3)', '   crater: potencia en el bano ', e_k, '  total ', e_tot
+    if (e_k /= 0.0_dp) call fail('crater: el arco salta la chatarra y calienta el bano (W)', e_k)
+    ! tolerancia: 1e-12 de P mas el redondeo de restar el inventario de E_s
+    if (abs(e_tot - P) > 1.0e-12_dp * P + 1.0e-15_dp * e_film / cfg%dt) &
+        call fail('crater: presupuesto del arco (rel)', (e_tot - P) / P)
+
     if (ok) then
-        print '(A)', ' PASS test_arc_surface (malla fina: una pelicula delgada no es la superficie del arco)'
+        print '(A)', ' PASS test_arc_surface (malla fina: una pelicula delgada no es superficie; un crater con chatarra si)'
     else
         print '(A)', ' FAIL test_arc_surface'
         stop 1

@@ -343,9 +343,13 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   que `ALPHA_FLOW_CUTOFF` a propósito.
 - **Auditoría 5 (14-oct-2026), lo que cambió de convención**: (A5-1) la
   superficie bajo el arco, chatarra O baño, se decide en UN solo barrido por
-  contenido ponderado (`ksurf`; umbral en ESPESOR equivalente `ARC_SURF_H`
-  0.014 m desde M6-5, nunca en fraccion del volumen de la capa: dependia de
-  dz y en produccion bastaban ~13 kg para recibir P_elec); nunca volver a una
+  contenido ponderado (`ksurf`; cada material en SU escala: el baño por
+  ESPESOR equivalente `ARC_SURF_H` 0.014 m —M6-5: con fracción del volumen
+  dependía de dz y en producción bastaban ~13 kg para recibir P_elec— y la
+  chatarra por FRACCIÓN del volumen `ARC_SURF_FRAC_S` 5 % —M7-1: es un lecho;
+  con espesor un cráter a medio fundir dejaba de ser superficie en
+  producción—; la capa es superficie si las dos fracciones de umbral suman
+  1); nunca volver a una
   búsqueda aparte del baño por celda. (M5-1) la DO guarda su reparto por fase
   (`sh%w_rad_l`, αⁿ) y la energía resta la emisión con ESE peso: con α^{n+1}
   se creaba energía en cada paso con fusión (melt_forced 1 %). (M5-2) el lazo
@@ -670,7 +674,8 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   «líquido» absorbía 0.145 del arco por trazas; ahora 0.026).
 - **Superficie del arco por CONTENIDO ponderado y P_elec a esa misma
   superficie (auditoría 4, M4-7/M4-8)**: la primera capa bajo la punta con
-  > 5 % de material ponderado por la gaussiana (hasta 4σ: un corte duro a 2σ
+  material ponderado por la gaussiana sobre el umbral (hoy por material, ver
+  la sección de la auditoría 5: M6-5/M7-1) (hasta 4σ: un corte duro a 2σ
   dejaba la pertenencia de las celdas del borde al redondeo y rompía la
   simetría 120°) es chatarra si Σwα_s ≥ Σwα_l, si no baño; el P_rad directo
   pesa la chatarra EXPUESTA (rampa 1 → 0 entre α_l 0.2 y 0.4); P_elec va a

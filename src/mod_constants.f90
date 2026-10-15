@@ -124,6 +124,13 @@ module mod_constants
     ! la celda de los bancos (dz 0.28 m): los bancos no cambian y la masa
     ! minima (~67 kg ponderados con sigma = 0.45 m) ya no depende de la malla.
     real(dp), parameter :: ARC_SURF_H = 0.014_dp
+    ! (auditoria 7, M7-1) la CHATARRA se mide por su FRACCION del volumen
+    ! ponderado de la capa (es un lecho: una capa llena de carga tiene alpha_s
+    ! ~0.5, no espesor dz), con el 5 % de siempre; el espesor equivalente
+    ! (M6-5) vale para el BANO. Con el espesor tambien para la chatarra, en la
+    ! malla de produccion un crater a medio fundir (alpha_s < 0.22-0.37) dejaba
+    ! de ser superficie y la potencia caia al bano de debajo.
+    real(dp), parameter :: ARC_SURF_FRAC_S = 0.05_dp
     ! Cota física de velocidad del ACERO líquido [m/s]. El acero en el
     ! horno se mueve a O(1) m/s (plumas, EBT ~5-7 m/s); 20 m/s es 3x el
     ! máximo físico. Sin la cota, gotas apenas sobre ALPHA_FLOW_CUTOFF
