@@ -74,6 +74,9 @@ program eaf_3d_simulator
     ! Time loop
     real(dp) :: time, V_elec, I_elec
     real(dp) :: dt_nominal = 0.0_dp
+    ! (auditoria 5, B5-28/B5-29) ultimo paso decidido UNA vez con el dt del
+    ! paso; fila del audit ya escrita en este paso (el freno de NaN no la repite)
+    logical  :: last_step = .false., audit_written = .false.
     integer  :: step, outer, e
     integer  :: step_start   ! paso del estado inicial (0 o el del snapshot; B4-5)
 
@@ -288,6 +291,10 @@ program eaf_3d_simulator
         ! el snapshot final guardaba el recorte y una corrida extendida desde
         ! el arrancaba con ese dt (o desde dt_min), sin ser bit a bit con la
         ! continua. Se guarda el nominal y se restituye al salir del lazo.
+        ! (B5-28) el ultimo paso lo decidio el paso anterior con SU dt (antes
+        ! este test usaba el dt ya adaptado y podia discrepar del predicado
+        ! que escribio la ultima fila del audit)
+        if (last_step) exit time_loop
         dt_nominal = cfg%dt
         if (time + cfg%dt > cfg%t_final) then
             if (cfg%t_final - time <= 1.0e-6_dp * cfg%dt) exit time_loop
@@ -296,6 +303,8 @@ program eaf_3d_simulator
 
         step = step + 1
         time = time + cfg%dt
+        last_step = (cfg%t_final - time <= 1.0e-6_dp * cfg%dt)
+        audit_written = .false.
         
         if (should_print(mesh)) then
             !print '(A,I0,A,F8.2)', ' [DEBUG] Starting step ', step, ' t=', time
@@ -628,6 +637,29 @@ program eaf_3d_simulator
         ! Auditoría de balances (antes de adaptar dt: usa el dt del paso).
         ! Las integrales de fuente se acumulan CADA paso; la línea CSV se
         ! escribe cada audit_freq pasos y cubre todo el intervalo.
+        ! (auditoria 4, M4-3) propiedades coherentes con la T FINAL del paso,
+        ! ANTES del snapshot (el reinicio arranca con ellas, bit a bit). Con
+        ! gas%rho rancio (de la ultima iteracion externa) la fuente de
+        ! compresibilidad del paso siguiente valia 0 bit a bit en la primera
+        ! iteracion externa (rho = rho(Tg_end)), F2.31 no excluia nada en el
+        ! outer 1 y si desde el 2 (topologia del acople alternando por outer),
+        ! y con un solo outer se perdia la demanda.
+        ! El LIBRO del gas (audit_accumulate, E_gas_abs) se acumula ANTES de
+        ! actualizar propiedades: usa la rho con la que se resolvio la energia
+        ! (M4-3; medido en la auditoria 5: con rho(T_fin) el balance de
+        ! arc_melt pasa de -4.7e3 a -5.8e5 J). La FILA (inventarios) se
+        ! escribe DESPUES (B5-25): describe el estado que va al snapshot (m_gas
+        ! con la rho final; el reinicio arranca su fila 0 de ese estado y
+        ! compare_audit la exige igual; antes bath_freeze s50 difería 1.1e-3).
+        call timer_start(T_IO)
+        if (cfg%audit_freq > 0) &
+            call audit_accumulate(liq, gas, gas_old%T, sh, mesh, cfg, ag_heat)
+        call timer_stop(T_IO)
+        if (cfg%solve_flow .and. cfg%solve_multiphase .and. cfg%solve_energy) then
+            call update_properties(liq, gas, sh, mesh, cfg)
+            call phase_exchange_halos(liq, mesh)
+            call phase_exchange_halos(gas, mesh)
+        end if
         call timer_start(T_IO)
         ! (auditoria 4, B4-4) todo SNAPSHOT (output_freq y el final de la
         ! corrida) cierra ademas el intervalo del audit: con audit_freq > 1 el
@@ -635,27 +667,14 @@ program eaf_3d_simulator
         ! parte y un reinicio desde ese snapshot (que arranca su audit de
         ! cero) lo perdia. Con audit_freq = 1 no cambia nada.
         if (cfg%audit_freq > 0) then
-            call audit_accumulate(liq, gas, gas_old%T, sh, mesh, cfg, ag_heat)
             if (mod(step, cfg%audit_freq) == 0 .or. mod(step, cfg%output_freq) == 0 &
-                .or. cfg%t_final - time <= 1.0e-6_dp * cfg%dt) then
+                .or. last_step) then
                 call audit_write_step(liq, gas, sol, slag, sh, elec, mesh, &
                                       cfg, step, time)
+                audit_written = .true.
             end if
         end if
         call timer_stop(T_IO)
-        ! (auditoria 4, M4-3) propiedades coherentes con la T FINAL del paso,
-        ! DESPUES del audit (su libro del gas usa la rho con la que resolvio la
-        ! energia) y ANTES del snapshot (el reinicio arranca con ellas, bit a
-        ! bit). Con gas%rho rancio (de la ultima iteracion externa) la fuente
-        ! de compresibilidad del paso siguiente valia 0 bit a bit en la primera
-        ! iteracion externa (rho = rho(Tg_end)), F2.31 no excluia nada en el
-        ! outer 1 y si desde el 2 (topologia del acople alternando por outer),
-        ! y con un solo outer se perdia la demanda.
-        if (cfg%solve_flow .and. cfg%solve_multiphase .and. cfg%solve_energy) then
-            call update_properties(liq, gas, sh, mesh, cfg)
-            call phase_exchange_halos(liq, mesh)
-            call phase_exchange_halos(gas, mesh)
-        end if
 
         !---------------------------------------------------------------
         ! FRENO DE NaN: si algun campo o residual dejo de ser finito, la
@@ -673,8 +692,9 @@ program eaf_3d_simulator
                 print '(A,A)', '   snapshot: ', trim(cfg%output_dir)
                 print '(A)', ' ================================================'
             end if
-            ! volcado colectivo del estado corrupto (todos los ranks)
-            if (cfg%audit_freq > 0) then
+            ! volcado colectivo del estado corrupto (todos los ranks);
+            ! (B5-29) sin repetir la fila si este paso ya la escribio
+            if (cfg%audit_freq > 0 .and. .not. audit_written) then
                 call audit_write_step(liq, gas, sol, slag, sh, elec, mesh, &
                                       cfg, step, time)
             end if
@@ -685,9 +705,16 @@ program eaf_3d_simulator
         end if
 
         ! Adaptive time stepping (criterio CFL + convergencia real; C3.2)
+        ! (auditoria 5, B5-27) se adapta el dt NOMINAL, no el truncado del
+        ! ultimo paso: asi el snapshot final guarda el nominal YA adaptado por
+        ! el ultimo paso (M4-1 restituia el nominal sin adaptar y una corrida
+        ! extendida no era bit a bit con la continua). En los pasos no
+        ! truncados nominal = cfg%dt y nada cambia.
+        cfg%dt = dt_nominal
         call adapt_timestep(cfg%dt, conv, &
                             compute_cfl_rate(liq, gas, mesh), &
                             interphase_tau_global(mesh), cfg)
+        dt_nominal = cfg%dt
 
         !---------------------------------------------------------------
         ! OUTPUT (HDF5 parallel)
