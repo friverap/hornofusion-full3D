@@ -107,10 +107,20 @@ contains
                     kmix(i,j,k) = sh%kappa_f(i,j,k) + ks_a + kf_a
 
                     ! Reparto de la emision fluida por fase: por ABSORCION
-                    ! kappa_q alpha_q (mismos pesos que la energia, A11)
-                    w_l = KAPPA_LIQ_ABS * max(liq%alpha(i,j,k), 0.0_dp) / &
-                          max(sh%kappa_f(i,j,k), SMALL)
+                    ! kappa_q alpha_q (mismos pesos que la energia, A11).
+                    ! (auditoria 5, M5-1) una fase bajo ALPHA_CUTOFF no
+                    ! resuelve su energia (B4-13): no emite ni absorbe; y el
+                    ! peso se GUARDA (sh%w_rad_l) para que la energia reste
+                    ! exactamente la emision que esta DO transporta. Con la
+                    ! alpha del SIMPLE (alpha^{n+1}) en la energia y alpha^n
+                    ! aqui, la emision creaba kappa_f 4 sigma (w^{n+1} - w^n)
+                    ! T^4 V dt por paso: el 1 % radiativo de melt_forced.
+                    w_l = KAPPA_LIQ_ABS * merge(liq%alpha(i,j,k), 0.0_dp, liq%alpha(i,j,k) >= ALPHA_CUTOFF)
+                    w_g = KAPPA_GAS_ABS * merge(gas%alpha(i,j,k), 0.0_dp, gas%alpha(i,j,k) >= ALPHA_CUTOFF)
+                    w_l = w_l / max(w_l + w_g, SMALL)
+                    if (w_l + w_g <= SMALL) w_l = 0.0_dp
                     w_g = 1.0_dp - w_l
+                    sh%w_rad_l(i,j,k) = w_l
                     B_fluid = STEFAN_BOLTZMANN / PI * &
                               (w_l * liq%T(i,j,k)**4 + w_g * gas%T(i,j,k)**4)
                     Bmix(i,j,k) = (sh%kappa_f(i,j,k) * B_fluid + &

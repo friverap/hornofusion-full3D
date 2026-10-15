@@ -323,6 +323,11 @@ module mod_types_3d
         !   Su += w*kappa_f*G*vol ;  aP += w*kappa_f*4*sigma*T_old^3*vol
         real(dp), allocatable :: G_rad(:,:,:)
         real(dp), allocatable :: kappa_f(:,:,:)
+        ! (auditoria 5, M5-1) fraccion de la emision/absorcion del FLUIDO que
+        ! la DO atribuyo al LIQUIDO (kappa_l alpha_l / kappa_f con la alpha
+        ! del momento de la llamada); la energia la usa tal cual para que la
+        ! emision que resta sea la que la DO transporto.
+        real(dp), allocatable :: w_rad_l(:,:,:)
 
         ! Chemistry
         real(dp), allocatable :: S_chem(:,:,:)

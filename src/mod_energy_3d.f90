@@ -72,7 +72,7 @@ contains
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
         real(dp) :: Dw, De, Ds, Dn, Db, Dt
         real(dp) :: rho_f, k_f, vol, rho_cp_vol_dt, alpha_tr, ee
-        real(dp) :: alpha_f, w_src, w_rad, C0_datum, aP_rad, T_it, aP_wall
+        real(dp) :: alpha_f, w_src, w_rad, w_do, C0_datum, aP_rad, T_it, aP_wall
 
         ! Get loop bounds
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -255,6 +255,15 @@ contains
                     ! plano el liquido recibia el 6.9 % del arco absorbido). La
                     ! quimica va al gas (w_chem).
                     w_rad = rad_weight(alpha_q(i,j,k), alpha_other(i,j,k))
+                    ! (auditoria 5, M5-1) la radiacion de la DO (absorcion y
+                    ! emision) se reparte con el peso que la DO uso al
+                    ! llamarse (alpha^n), no con el iterado alpha^{n+1}: la
+                    ! absorcion cerraba con cualquier reparto (suma 1) pero la
+                    ! emision w_q T_q^4 no, y la diferencia era energia creada
+                    ! en cada paso con fusion (melt_forced rad 1 %). El arco
+                    ! (S_arc, presupuesto cerrado por construccion) conserva
+                    ! el reparto por alpha^{n+1}.
+                    w_do = do_weight(i, j, k)
                     T_it = max(ph%T(i,j,k), 200.0_dp)
                     ! (auditoria 4, A4-5) la EMISION que resta esta ecuacion es
                     ! la MISMA que transporto la DO (a T_old, la T con la que se
@@ -270,7 +279,7 @@ contains
                     Su(i,j,k) = rho_cp_vol_dt * T_old(i,j,k) &
                                + (sh%S_arc(i,j,k) * w_rad &
                                   + sh%S_chem(i,j,k) * w_chem(i,j,k, w_src)) * vol &
-                               + w_rad * sh%kappa_f(i,j,k) * vol * &
+                               + w_do * sh%kappa_f(i,j,k) * vol * &
                                  (sh%G_rad(i,j,k) + STEFAN_BOLTZMANN * &
                                   (16.0_dp * T_it**4 - 4.0_dp * max(T_old(i,j,k), 200.0_dp)**4))
 
@@ -298,7 +307,7 @@ contains
                     end if
 
                     ! Emisión radiativa implícita (pendiente de Newton a aP)
-                    aP_rad = w_rad * sh%kappa_f(i,j,k) * 16.0_dp * &
+                    aP_rad = w_do * sh%kappa_f(i,j,k) * 16.0_dp * &
                              STEFAN_BOLTZMANN * T_it**3 * vol
 
                     ! Central coefficient — forma ACOTADA de Patankar
@@ -507,7 +516,7 @@ contains
                         s_arc = s_arc + sh%S_arc(ii,jj,kk) &
                                 * rad_weight(alpha_q(ii,jj,kk), alpha_other(ii,jj,kk)) * vv * cfg%dt
                         s_chem = s_chem + sh%S_chem(ii,jj,kk) * w_chem(ii,jj,kk, ww) * vv * cfg%dt
-                        s_rad = s_rad + rad_weight(alpha_q(ii,jj,kk), alpha_other(ii,jj,kk)) &
+                        s_rad = s_rad + do_weight(ii, jj, kk) &
                                 * sh%kappa_f(ii,jj,kk) * vv * &
                                 (sh%G_rad(ii,jj,kk) + STEFAN_BOLTZMANN * &
                                  (16.0_dp * Tit**4 - 4.0_dp * max(T_old(ii,jj,kk), 200.0_dp)**4 &
@@ -557,9 +566,24 @@ contains
                                   -s_conv, s_wall, s_mass)
         end subroutine energy_audit_hook
 
+        ! Peso de la radiacion de la DO para ESTA fase: el que la DO guardo
+        ! al llamarse (M5-1). Una fase que cruza ALPHA_CUTOFF entre la DO y
+        ! la energia (no se resuelve) pierde su parte: es el residuo de B4-13
+        ! (<= 1.5e-6 del arco), no el de alpha^{n+1} frente a alpha^n.
+        pure function do_weight(ii, jj, kk) result(w)
+            integer, intent(in) :: ii, jj, kk
+            real(dp) :: w
+            if (is_gas) then
+                w = 1.0_dp - sh%w_rad_l(ii,jj,kk)
+            else
+                w = sh%w_rad_l(ii,jj,kk)
+            end if
+        end function do_weight
+
         ! Fraccion de la absorcion/emision radiativa del fluido que toca a ESTA
         ! fase: kappa_q alpha_q / (kappa_l alpha_l + kappa_g alpha_g), los
-        ! mismos coeficientes con que la DO arma kappa_f (A11)
+        ! mismos coeficientes con que la DO arma kappa_f (A11). Reparto del
+        ! ARCO (S_arc); la radiacion de la DO usa do_weight (M5-1).
         pure function rad_weight(aq, ao) result(w)
             real(dp), intent(in) :: aq, ao
             real(dp) :: w, kq, ko
