@@ -14,7 +14,7 @@
 module mod_interphase_ht
     use mod_constants
     use mod_audit, only: audit_add, AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
-    use mod_mpi_topology, only: mpi_allreduce_min
+    use mod_mpi_topology, only: mpi_allreduce_min, mpi_exchange_halos_3d
     use mod_types_3d
     use mod_melting_3d, only: solid_T_from_enthalpy
     use mod_workspace, only: ws_liq_cont, ws_liq_cont_valid
@@ -215,7 +215,7 @@ contains
         type(solid_t), intent(in)    :: sol
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
-        integer  :: i, j, k, jm, jp, kl, kg
+        integer  :: i, j, k, jm, jp, kl, kg, sweep, k_off
         real(dp) :: al, ag, as, cg, cl, G, f, q, d, dp_, k_mol, urel, xb, f_disp, wet
         real(dp) :: fbed, G_in, G_out, a_fs
         logical  :: cont_el, cont
@@ -315,10 +315,26 @@ contains
         ! liquido continuo y el nodo gas el de la otra, con area A_z |d alpha_l|;
         ! h = conduccion 2k/dz + placa con la longitud de flujo L. Dos nodos
         ! implicitos exactos; cada rank aplica solo a sus celdas propias y la
-        ! Q se evalua igual a los dos lados de la frontera de bloque (halos de
-        ! alpha, rho, cp, T validos). Fuera del lecho (celdas de superficie:
-        ! sin chatarra el area de pelicula no aplica).
+        ! Q se evalua igual a los dos lados de la frontera de bloque. Fuera
+        ! del lecho (celdas de superficie: sin chatarra el area de pelicula no
+        ! aplica).
+        ! (auditoria 5, M5-2) para que los dos ranks de una frontera de bloque
+        ! en z evaluen la MISMA q hace falta que lean las mismas T: el lazo
+        ! por celda de arriba ya modifico las T propias (el halo del vecino
+        ! es rancio) y un barrido Gauss-Seidel en k usaba en la cara k|k+1
+        ! la T recien modificada por la cara k-1|k. Dos barridos por PARIDAD
+        ! de la cara GLOBAL (k_g par, luego impar), con halos de T frescos
+        ! antes de cada uno: dentro de un barrido ninguna celda toca dos
+        ! caras, asi que cada cara ve las T de entrada del barrido (dos nodos
+        ! exactos, sin sobrepaso) y el resultado no depende del corte. La
+        ! matriz no lo veia: la superficie de los bancos queda a k = 4-5 y los
+        ! cortes en k = 8 (n4) y 5|6 (n9); produccion 2x3x2 corta en k = 42.
+        k_off = m%topo%kglobal_start - 1
+        do sweep = 0, 1
+        call mpi_exchange_halos_3d(gas%T, m%topo)
+        call mpi_exchange_halos_3d(liq%T, m%topo)
         do k = 0, m%nz
+            if (mod(k + k_off, 2) /= sweep) cycle
             do j = 1, m%ntheta
                 do i = 1, m%nr
                     if (m%cell_type(i,j,k) == 0 .or. m%cell_type(i,j,k+1) == 0) cycle
@@ -354,6 +370,7 @@ contains
                     end if
                 end do
             end do
+        end do
         end do
     contains
         ! Ranz-Marshall para esfera de diametro dd [W/m2/K]
