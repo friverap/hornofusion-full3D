@@ -88,6 +88,12 @@ contains
         ! CO burbujea hacia ARRIBA hasta la primera celda con gas: pasadas
         ! Jacobi con halos (invariante a la descomposicion en z).
         real(dp), allocatable :: co_up(:,:,:), co_new(:,:,:)
+        ! (auditoria 5, B5-14) Fe de la reduccion que NO cupo en el bano de
+        ! abajo al aplicarlo (dos celdas de escoria apiladas: la de arriba
+        ! calculo su cap_b con la alpha del halo, sin lo que la de abajo ya
+        ! habia metido): vuelve a la propia celda de escoria en una pasada 3
+        real(dp), allocatable :: fe_back(:,:,:)
+        real(dp) :: room_now, dm_ok
         real(dp) :: co_loc, co_tot, inc
         integer  :: npass
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
@@ -106,8 +112,9 @@ contains
         allocate(fe_out(lbound(liq%alpha,1):ubound(liq%alpha,1), &
                         lbound(liq%alpha,2):ubound(liq%alpha,2), &
                         lbound(liq%alpha,3):ubound(liq%alpha,3)))
-        allocate(fe_in, t_in, co_up, co_new, mold=fe_out)
+        allocate(fe_in, t_in, co_up, co_new, fe_back, mold=fe_out)
         fe_out = 0.0_dp; fe_in = 0.0_dp; t_in = 0.0_dp; co_up = 0.0_dp; co_new = 0.0_dp
+        fe_back = 0.0_dp
         call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
         do k = kstart, kend
@@ -286,11 +293,30 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     if (fe_out(i,j,k+1) > 0.0_dp) call remove_fe(i, j, k, fe_out(i,j,k+1))
-                    if (fe_in(i,j,k+1) > 0.0_dp) call add_fe(i, j, k, fe_in(i,j,k+1), t_in(i,j,k+1))
+                    if (fe_in(i,j,k+1) > 0.0_dp) then
+                        ! (B5-14) solo lo que CABE ahora; el resto vuelve a
+                        ! la celda de escoria de arriba (pasada 3)
+                        room_now = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k), slag%alpha_sl(i,j,k)) &
+                                   - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k)
+                        dm_ok = min(fe_in(i,j,k+1), room_now)
+                        if (dm_ok > 0.0_dp) call add_fe(i, j, k, dm_ok, t_in(i,j,k+1))
+                        fe_back(i,j,k) = fe_in(i,j,k+1) - dm_ok
+                    end if
                 end do
             end do
         end do
-        deallocate(fe_out, fe_in, t_in)
+        ! ── Pasada 3 (B5-14): el excedente vuelve a la celda de escoria que lo
+        ! produjo (su propio liquido, como el resto que no cabia abajo)
+        call mpi_exchange_halos_3d(fe_back, m%topo)
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0 .or. m%cell_type(i,j,k-1) == 0) cycle
+                    if (fe_back(i,j,k-1) > 0.0_dp) call add_fe(i, j, k, fe_back(i,j,k-1), t_in(i,j,k))
+                end do
+            end do
+        end do
+        deallocate(fe_out, fe_in, t_in, fe_back)
 
         ! ── Pasada 3: el CO nacido sin gas sube hasta la primera celda con gas
         ! (co_up(k) es lo pendiente de pasar a k+1; cada pasada mueve una
