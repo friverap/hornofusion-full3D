@@ -42,7 +42,7 @@ program test_bed_rel_face
 
     ! --- 1. ceros exactos ---
     ws_bed_valid = .true.
-    ws_bedl_f = 0.7_dp; ws_bed_gas = 0.5_dp; ws_bub_f = 0.0_dp
+    ws_bedl_f = 0.7_dp; ws_bedg_f = 0.5_dp; ws_bub_f = 0.0_dp
     call zero(bed_rel_face(.false., 2, 2, 3, 4, al, al, al, al, wl, wl, W, .false.), 'sin fuerza balanceada')
     ws_bed_valid = .false.
     call zero(bed_rel_face(.false., 2, 2, 3, 4, al, al, al, al, wl, wl, W, .true.), 'mascaras no validas')
@@ -57,16 +57,17 @@ program test_bed_rel_face
     hand = 0.7_dp * ((0.3_dp * wl + 0.1_dp * 0.9_dp * wl) / (0.3_dp + 0.1_dp) - W)
     call near(bed_rel_face(.false., 2, 2, 3, 4, 0.3_dp, 0.1_dp, 0.3_dp, 0.1_dp, wl, 0.9_dp * wl, W, .true.), &
               hand, 'liquido a mano')
-    ws_bed_gas = 0.0_dp; ws_bed_gas(2,2,3) = 0.8_dp; ws_bed_gas(2,2,4) = 0.4_dp
-    ws_bub_f = 0.0_dp; ws_bub_f(2,2,3) = 0.6_dp
-    hand = 0.6_dp * (wg - W)                             ! max(min(0.8,0.4), 0.6)
-    call near(bed_rel_face(.true., 2, 2, 3, 4, al, al, ag, ag, wg, wg, W, .true.), hand, 'gas a mano (ws_bub_f gana)')
-    ws_bub_f(2,2,3) = 0.1_dp
-    hand = 0.4_dp * (wg - W)                             ! max(min(0.8,0.4), 0.1)
-    call near(bed_rel_face(.true., 2, 2, 3, 4, al, al, ag, ag, wg, wg, W, .true.), hand, 'gas a mano (minimo de celdas)')
+    ! mascara de cara del gas por defecto (gas_face_mask, la que arma
+    ! mod_multiphase en ws_bedg_f sin pc_bed_gas_pocket)
+    call near(gas_face_mask(0.8_dp, 0.4_dp, 0.6_dp), 0.6_dp, 'gas_face_mask (ws_bub_f gana)')
+    call near(gas_face_mask(0.8_dp, 0.4_dp, 0.1_dp), 0.4_dp, 'gas_face_mask (minimo de celdas)')
+    call zero(gas_face_mask(0.8_dp, 0.0_dp, 0.0_dp), 'gas_face_mask: cara hacia poro saturado')
+    ws_bedg_f = 0.0_dp; ws_bedg_f(2,2,3) = gas_face_mask(0.8_dp, 0.4_dp, 0.6_dp)
+    hand = 0.6_dp * (wg - W)
+    call near(bed_rel_face(.true., 2, 2, 3, 4, al, al, ag, ag, wg, wg, W, .true.), hand, 'gas a mano (ws_bedg_f)')
 
     ! --- 3. sum alpha_q B_q = 0 en columna uniforme con mascara comun ---
-    ws_bedl_f = 0.6_dp; ws_bed_gas = 0.6_dp; ws_bub_f = 0.0_dp
+    ws_bedl_f = 0.6_dp; ws_bedg_f = 0.6_dp; ws_bub_f = 0.0_dp
     Bl = bed_rel_face(.false., 2, 2, 3, 4, al, al, al, al, wl, wl, W, .true.)
     Bg = bed_rel_face(.true.,  2, 2, 3, 4, al, al, ag, ag, wg, wg, W, .true.)
     if (abs(al * Bl + ag * Bg) > 1.0e-14_dp * (al * abs(Bl) + ag * abs(Bg))) &

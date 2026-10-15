@@ -178,6 +178,12 @@ module mod_workspace
     ! celda de superficie (el gas de la superficie leeria el salto de presion
     ! del bano: el chorro de F2.3). Comun a las dos fases.
     real(dp), allocatable :: ws_bub_f(:,:,:)
+    ! (auditoria 6, M4-12) mascara de CARA del gas (k|k+1), armada en
+    ! mod_multiphase junto a ws_bedl_f: por defecto max(min de ws_bed_gas de
+    ! las dos celdas, ws_bub_f) (A4-1); con pc_bed_gas_pocket la cara de una
+    ! BOLSA acoplada hacia la celda saturada de encima lleva ademas la mascara
+    ! del liquido que baja a la bolsa (contracorriente)
+    real(dp), allocatable :: ws_bedg_f(:,:,:)
     logical, save :: ws_bed_valid = .false.
     ! Flujos de MASA conservativos del GAS por las caras + [kg/s] (auditoria
     ! M24, gas): Q = Q* + a (pp_P - pp_N) del Poisson por la densidad del
@@ -306,6 +312,13 @@ contains
         end if
     end function mix_cell_weight
 
+    ! Mascara de cara del gas POR DEFECTO (A4-1): el minimo de las dos celdas
+    ! (la cara gas libre | poro saturado es superficie libre) o la burbuja
+    pure real(dp) function gas_face_mask(bg_a, bg_b, bub_f)
+        real(dp), intent(in) :: bg_a, bg_b, bub_f
+        gas_face_mask = max(min(bg_a, bg_b), bub_f)
+    end function gas_face_mask
+
     ! Continuidad del liquido de RESPALDO cuando ws_liq_cont no es valida
     ! (rama de una fase): la del Poisson (act_l), para momento y Poisson
     pure elemental logical function liq_cont_fallback(al)
@@ -314,9 +327,9 @@ contains
     end function liq_cont_fallback
 
     ! Flotacion relativa en la cara (ka,kb) de la columna (ii,jj) [N/m3]:
-    ! B_f = bm (w_q,f - W_f), con la mascara de cara comun a las dos fases
-    ! (A4-1): gas = max(min de ws_bed_gas de las dos celdas, ws_bub_f);
-    ! liquido = ws_bedl_f. 0 EXACTO sin fuerza balanceada, sin mascaras
+    ! B_f = bm (w_q,f - W_f), con las mascaras de cara de mod_multiphase:
+    ! gas = ws_bedg_f (por defecto gas_face_mask: max(min de ws_bed_gas de las
+    ! dos celdas, ws_bub_f), A4-1); liquido = ws_bedl_f. 0 EXACTO sin fuerza balanceada, sin mascaras
     ! validas o sin liquido en la cara (corridas frias bit a bit). w_q,f es el
     ! peso propio ponderado por la alpha de la fase (own_weight_face, B4-10).
     pure real(dp) function bed_rel_face(isg, ii, jj, ka, kb, al_a, al_b, &
@@ -329,7 +342,7 @@ contains
         if (.not. (lbf .and. ws_bed_valid)) return
         if (max(al_a, al_b) < ALPHA_CUTOFF) return
         if (isg) then
-            bm = max(min(ws_bed_gas(ii,jj,ka), ws_bed_gas(ii,jj,kb)), ws_bub_f(ii, jj, min(ka, kb)))
+            bm = ws_bedg_f(ii, jj, min(ka, kb))
         else
             bm = ws_bedl_f(ii, jj, min(ka, kb))
         end if
@@ -348,7 +361,8 @@ contains
         allocate(ws_cc, ws_cc_new, ws_cc_drop, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
         ws_cc_drop = 0.0_dp
         allocate(ws_p_n, mold=ws_aW); ws_p_n = 0.0_dp
-        allocate(ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, mold=ws_aW)
+        allocate(ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bedg_f, mold=ws_aW)
+        ws_bedg_f = 0.0_dp
         ws_bed = 0.0_dp; ws_bed_gas = 0.0_dp; ws_bed_liq = 0.0_dp; ws_bedl_f = 0.0_dp; ws_bub = 0.0_dp; ws_bub_f = 0.0_dp
         allocate(ws_Fg_r, ws_Fg_th, ws_Fg_z, mold=ws_aW)
         ws_Fg_r = 0.0_dp; ws_Fg_th = 0.0_dp; ws_Fg_z = 0.0_dp

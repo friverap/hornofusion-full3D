@@ -678,6 +678,17 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   — tres commits pasaron `test-quick` con la regresión dentro; desde fc15c60
   está en `test-quick`, y desde la auditoría 5 (M5-8) también
   `bed_bath_rest`, el único banco que vigila la bomba de A4-1.
+- **M4-12, gas bajo una capa saturada (auditoría 6)**: medido en el banco
+  `pocket_rise` (bolsa de gas bajo la capa 8 saturada, estado construido por
+  `make_pocket_init.py`): con los defaults la capa queda RETENIDA 0.25–0.3 s
+  (la máscara de cara del líquido de A4-1 vale el mínimo en reposo y la bolsa
+  sin camino al freeboard es subfase inmóvil de F2.16) y después el
+  intercambio a contracorriente arranca solo. `pc_bed_gas_pocket` (opt-in)
+  lo resuelve con tres piezas JUNTAS (bolsa acoplada, máscara de cara del gas
+  hacia arriba = la del líquido que baja, drenaje por gravedad desde el
+  reposo); cualquiera sola no basta (la bolsa acoplada sola: ráfaga de 47
+  m/s). Bloqueo para hacerla default: bath_freeze (congelación + derrame,
+  energía por paso 5.2). El juez sigue siendo B1.
 - **Energía del gas = inventario LOGARÍTMICO, una sola definición (auditoría
   4, M4-13)**: la masa del gas la fija la EOS (ρ ∝ 1/T a p fija), así que su
   energía es `C_g ln(T/T_ref)` con `C_g = α ρ_ref T_ref cp V (P0+p)/P0`

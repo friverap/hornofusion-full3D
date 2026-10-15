@@ -1,0 +1,36 @@
+# Banco pocket_rise (auditoria 6, M4-12): BOLSA de gas bajo una capa saturada
+# del lecho. Reanuda desde un estado construido (make_pocket_init.py sobre el
+# paso 0 de bed_bath_rest_n4; el harness agrega restart_file): capa 8
+# saturada, capas 6-7 con gas, sin camino al freeboard. Con la opcion
+# pc_bed_gas_pocket (opt-in, default false hasta el juez de B1) el gas sube a
+# contracorriente desde el primer paso; sin ella la capa queda retenida
+# 0.25-0.3 s (la «tapa»). Criterio: check_pocket.py.
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+charge_recipe_file = input/recipe_bed_flood.dat
+dt = 0.005
+t_final = 0.5
+adaptive_dt = false
+heel_mass = 100000.0
+heel_T = 1850.0
+T_initial = 1850.0
+T_ambient = 1850.0
+solve_flow = true
+solve_energy = true
+solve_melting = false
+solve_turb = false
+solve_radiation = false
+solve_chemistry = false
+solve_arc = false
+solve_multiphase = true
+alpha_p = 0.3
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 200
+audit_freq = 1
+output_freq = 10
+monitor_freq = 20
+pc_bed_gas_pocket = true

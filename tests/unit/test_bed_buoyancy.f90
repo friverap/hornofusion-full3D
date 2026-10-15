@@ -39,7 +39,8 @@ program test_bed_buoyancy
     use mod_momentum_3d, only: solve_momentum_3d
     use mod_drag_ergun, only: compute_ergun_drag
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, &
-                             ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bed_valid
+                             ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bed_valid, &
+                             ws_bedg_f, gas_face_mask
     implicit none
 
     type(config_t) :: cfg
@@ -227,6 +228,17 @@ contains
     end subroutine cmp_classic
 
     subroutine run_both()
+        integer :: ia, ja, ka
+        ! mascara de CARA del gas por defecto (la que arma mod_multiphase sin
+        ! pc_bed_gas_pocket; auditoria 6): max(min de las dos celdas, burbuja)
+        ws_bedg_f = 0.0_dp
+        do ka = lbound(ws_bedg_f,3), ubound(ws_bedg_f,3) - 1
+            do ja = lbound(ws_bedg_f,2), ubound(ws_bedg_f,2)
+                do ia = lbound(ws_bedg_f,1), ubound(ws_bedg_f,1)
+                    ws_bedg_f(ia,ja,ka) = gas_face_mask(ws_bed_gas(ia,ja,ka), ws_bed_gas(ia,ja,ka+1), ws_bub_f(ia,ja,ka))
+                end do
+            end do
+        end do
         ! forma balanceada (+ flotacion del lecho por caras)
         cfg%liq_balanced_force = .true.; cfg%pc_fs_liquid_gradient = .false.
         call one(ul_bal, ug_bal, .false.)

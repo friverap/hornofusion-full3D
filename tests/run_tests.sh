@@ -29,6 +29,25 @@ is_xfail()  { grep -qx "$1" "$XFAIL_LIST" 2>/dev/null; }
 xfail_ids() { grep "^$1:" "$XFAIL_LIST" 2>/dev/null | cut -d: -f2- | paste -sd, -; }
 note_fail() { FAILURES=$((FAILURES + 1)); }
 
+# run_case_restart_from <config_name> <nprocs> <snapshot>: como run_case pero
+# reanudando desde un estado construido (auditoria 6, pocket_rise)
+run_case_restart_from() {
+    local name=$1 np=$2 snap=$3
+    local dir=$OUT/${name}_n${np}
+    rm -rf "$dir" && mkdir -p "$dir"
+    cp "$CFG/$name.dat" "$dir/config.dat"
+    printf '\noutput_dir = %s\nrestart_file = %s\n' "$dir" "$snap" >> "$dir/config.dat"
+    echo "== corrida $name -n $np (desde $snap)"
+    if ! mpirun -n "$np" "$BIN" "$dir/config.dat" > "$dir/run.log" 2>&1; then
+        echo "FAIL: la corrida $name -n $np terminó con error (ver $dir/run.log)"
+        tail -5 "$dir/run.log"; note_fail; return 1
+    fi
+    if grep -q '\[CONFIG\] WARNING\|\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[RESTART\] AVISO' "$dir/run.log"; then
+        echo "FAIL: aviso en $name -n $np:"; grep 'WARNING\|AVISO' "$dir/run.log" | head -3
+        note_fail; return 1
+    fi
+}
+
 #------------------------------------------------------------------------------
 # run_case <config_name> <nprocs>  -> corrida en tests/out/<name>_n<np>
 #------------------------------------------------------------------------------
@@ -136,6 +155,7 @@ audit_xfail_prefix() {
         bath_fill_mix) echo audit_mix ;;
         melt_forced)   echo audit_melt ;;
         oneflow_test)  echo audit_oneflow ;;
+        pocket_rise)   echo audit_pocket ;;
         *)             echo "" ;;
     esac
 }
@@ -334,6 +354,15 @@ full | rebaseline)
     # arco: los dos regimenes de B1 que la matriz no ejercia
     run_case bed_bath_rest 4
     run_case bed_bath_rest 1
+    # (auditoria 6, M4-12) bolsa de gas bajo una capa saturada, desde un
+    # estado construido sobre el paso 0 de bed_bath_rest_n4 (opcion
+    # pc_bed_gas_pocket, opt-in hasta el juez de B1)
+    if [ -f "$OUT/bed_bath_rest_n4/eaf3d_00000000.h5" ]; then
+        $PY $INT/make_pocket_init.py "$OUT/bed_bath_rest_n4/eaf3d_00000000.h5" "$OUT/pocket_init.h5" > /dev/null
+        run_case_restart_from pocket_rise 4 "$OUT/pocket_init.h5"
+    else
+        echo "FAIL: falta el snapshot inicial de bed_bath_rest_n4 para pocket_rise"; note_fail
+    fi
     run_case arc_melt 4
     run_case arc_melt 1
 
@@ -409,6 +438,8 @@ full | rebaseline)
         $PY $INT/check_drain.py "$OUT/bed_drain_n4" --xfail "$(xfail_ids bed_drain)"
     run_script "bed_bath_rest" \
         $PY $INT/check_bedbath.py "$OUT/bed_bath_rest_n4" --xfail "$(xfail_ids bed_bath_rest)"
+    run_script "pocket_rise" \
+        $PY $INT/check_pocket.py "$OUT/pocket_rise_n4" --xfail "$(xfail_ids pocket_rise)"
     run_script "arc_melt" \
         $PY $INT/check_arcmelt.py "$OUT/arc_melt_n4" --xfail "$(xfail_ids arc_melt)"
     # Auditoria de energia/masa/arco en TODA corrida de la matriz (auditoria
