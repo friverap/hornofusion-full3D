@@ -142,7 +142,7 @@ run_restart_case() {
     # sobre una ventana corta no tiene el S_gas de los primeros pasos
     check_audit_if_present "$dir" "audit_restart_${base}" "$(audit_extra_args "$base")" "$base"
     run_script "restart_audit_${base}_n${npb}_to_n${np}" \
-        $PY $INT/compare_audit.py "$dir" "$src" --from-step "$st" --rtol $rtol
+        $PY $INT/compare_audit.py "$dir" "$src" --from-step "$st" --rtol $rtol $( [ "$np" = "$npb" ] || echo --decomp )
 }
 
 # audit_xfail_prefix <base> -> prefijo de xfail del audit propio del caso

@@ -6,8 +6,9 @@ Compara audit.csv de un REINICIO (DIR_A) con el de la corrida continua
 inicial, sin fuentes). Todas las columnas son por intervalo o inventarios
 instantaneos, asi que deben coincidir bit a bit con el mismo numero de
 ranks (auditoria 4, B4-19: el gate del reinicio solo miraba el snapshot).
-Error por columna relativo al mayor |valor| de esa columna en DIR_B, con una
-tolerancia absoluta de 1e-15 del inventario de su unidad (auditoria 6). (auditoria 5, B5-21) Filas
+Error por columna relativo al mayor |valor| de esa columna en DIR_B; con
+--decomp, m_gas_ccdrop (redondeo puro) se mide contra 1e-15 del inventario de
+gas (auditoria 7, M7-2). (auditoria 5, B5-21) Filas
 duplicadas y columnas de un solo lado son FAIL; en la fila N se comparan los
 inventarios instantaneos (el estado de arranque del reinicio).
 """
@@ -44,6 +45,8 @@ def main():
     ap.add_argument("dir_b")
     ap.add_argument("--from-step", type=int, required=True)
     ap.add_argument("--rtol", type=float, default=1e-12)
+    ap.add_argument("--decomp", action="store_true",
+                    help="reinicio con otro numero de ranks (piso de redondeo en m_gas_ccdrop)")
     args = ap.parse_args()
     pa, pb = (os.path.join(d, "audit.csv") for d in (args.dir_a, args.dir_b))
     for p in (pa, pb):
@@ -63,16 +66,17 @@ def main():
               f"solo en B {sorted(set(cb) - set(ca))}")
         sys.exit(1)
     cols = ca
-    # (auditoria 6) tolerancia ABSOLUTA por unidad: una columna que es
-    # redondeo puro (m_gas_ccdrop ~1e-18 kg) difiere al 100 % entre
-    # descomposiciones; ademas de rtol x su escala se acepta |a - b| <= 1e-15
-    # del inventario de su misma unidad (masa m_*, energia E_*), el redondeo de
-    # una suma de ese tamano.
-    MASS_INV = ("m_liq", "m_gas", "m_sol", "m_slag")
-    E_INV = ("E_liq", "E_gas", "E_sol", "E_slag")
+    # (auditoria 7, M7-2) tolerancia ABSOLUTA solo para las columnas de
+    # REDONDEO PURO (m_gas_ccdrop: ~1e-18 kg que cambia de signo entre
+    # descomposiciones) y solo con --decomp (reinicio con otro numero de
+    # ranks): 1e-15 del inventario de gas. Con el mismo numero de ranks el
+    # reinicio es BIT A BIT (el piso de la auditoria 6 se aplicaba a toda
+    # columna m_*/E_* y aflojaba m_spill, m_vf_*, m_gas_volfix a 1e-3)
+    ROUNDOFF_COLS = ("m_gas_ccdrop",)
     def inv_floor(c):
-        keys = MASS_INV if c.startswith("m_") else E_INV if c.startswith("E_") else ()
-        v = [abs(float(B[s][k])) for s in steps for k in keys if k in B[s]]
+        if not (args.decomp and c in ROUNDOFF_COLS):
+            return 0.0
+        v = [abs(float(B[s]["m_gas"])) for s in steps if "m_gas" in B[s]]
         return 1e-15 * max(v) if v else 0.0
     worst, worst_id = 0.0, "-"
     # fila N: inventarios del estado de arranque frente a la continua
