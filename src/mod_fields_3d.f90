@@ -8,7 +8,8 @@ module mod_fields_3d
     use mod_types_3d
     use mod_mpi_topology
     use mod_melting_3d, only: solid_enthalpy, solid_T_from_enthalpy
-    use mod_audit, only: audit_add, AUD_CHARGE_MASS, AUD_CHARGE_E
+    use mod_audit, only: audit_add, AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
+                         gas_inventory_cell
     use mod_parallel_utils, only: global_to_local, gather_global_field
     implicit none
 
@@ -520,12 +521,16 @@ contains
                 cfg%heel_mass, ' kg de liquido'
     end subroutine init_heel
 
-    subroutine charge_scrap(sol, gas, m, cfg, bucket)
+    subroutine charge_scrap(sol, gas, m, cfg, bucket, sh)
         type(solid_t), intent(inout)  :: sol
         type(phase_t), intent(inout)  :: gas
         type(mesh_t), intent(in)      :: m
         type(config_t), intent(in)    :: cfg
         integer, intent(in)           :: bucket
+        ! (auditoria 5, M5-4) p para el inventario del gas que la carga
+        ! destruye (columnas m_gas_volfix / E_gas_volfix, como el volfix)
+        type(shared_t), intent(in), optional :: sh
+        real(dp) :: ag_old, pc, dmg, deg
 
         integer :: i, j, k, k_global, n
         real(dp) :: vfrac
@@ -703,10 +708,25 @@ contains
                                     sol%T_s(i,j,k) = solid_T_from_enthalpy( &
                                         sol%E_s(i,j,k) / sol%m_s(i,j,k), cfg)
                                     sol%layer_id(i,j,k) = best_layer
+                                    ag_old = gas%alpha(i,j,k)
                                     gas%alpha(i,j,k) = max(0.0_dp, gas%alpha(i,j,k) - vfrac_eff)
                                     if (bucket > 1) then
                                         call audit_add(AUD_CHARGE_MASS, dm_c)
                                         call audit_add(AUD_CHARGE_E, de_c)
+                                        ! (M5-4) la chatarra desplaza gas: la
+                                        ! masa y la energia de inventario de
+                                        ! ese gas van al libro del gas (antes
+                                        ! sin columna: cold_bucket2 atribuia
+                                        ! 10.4 de 12.5 kg a la EOS)
+                                        pc = 0.0_dp
+                                        if (present(sh)) pc = sh%p(i,j,k)
+                                        dmg = (gas%alpha(i,j,k) - ag_old) * gas%rho(i,j,k) * m%vol(i,j,k)
+                                        deg = gas_inventory_cell(gas%alpha(i,j,k), gas%T(i,j,k), pc, &
+                                                  gas%cp(i,j,k), m%vol(i,j,k), cfg) &
+                                            - gas_inventory_cell(ag_old, gas%T(i,j,k), pc, &
+                                                  gas%cp(i,j,k), m%vol(i,j,k), cfg)
+                                        call audit_add(AUD_GAS_VOLFIX, dmg)
+                                        call audit_add(AUD_GAS_VOLFIX_E, deg)
                                     end if
                                 end if
                             end do

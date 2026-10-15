@@ -32,7 +32,8 @@ module mod_ecs_feed
     use mod_parallel_utils, only: global_to_local
     use mod_mpi_topology, only: mpi_allreduce_sum
     use mod_melting_3d, only: solid_enthalpy, solid_T_from_enthalpy
-    use mod_audit, only: audit_add, AUD_ECS_MASS, AUD_ECS_ENERGY
+    use mod_audit, only: audit_add, AUD_ECS_MASS, AUD_ECS_ENERGY, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
+                         gas_inventory_cell
     implicit none
 
     ! layer_id de la carga continua (las capas de receta usan 1..MAX_LAYERS)
@@ -49,7 +50,7 @@ module mod_ecs_feed
 
 contains
 
-    subroutine ecs_feed(sol, gas, liq, m, cfg, mdot, dt)
+    subroutine ecs_feed(sol, gas, liq, m, cfg, mdot, dt, sh)
         type(solid_t), intent(inout) :: sol
         type(phase_t), intent(inout) :: gas
         ! liquido: el tope del BAÑO tambien es superficie (auditoria M38)
@@ -58,6 +59,9 @@ contains
         type(config_t), intent(in)   :: cfg
         real(dp), intent(in)         :: mdot   ! kg/s (ya evaluado en main)
         real(dp), intent(in)         :: dt
+        ! (auditoria 5, M5-4) p para el inventario del gas desplazado
+        type(shared_t), intent(in), optional :: sh
+        real(dp) :: ag_old, pc, dmg, deg
 
         real(dp), allocatable :: h_loc(:,:), h_glob(:,:)
         integer,  allocatable :: k0_glob(:,:)
@@ -185,11 +189,23 @@ contains
                     sol%T_s(il,jl,kl) = solid_T_from_enthalpy( &
                         sol%E_s(il,jl,kl) / sol%m_s(il,jl,kl), cfg)
                     sol%layer_id(il,jl,kl) = ID_ECS
+                    ag_old = gas%alpha(il,jl,kl)
                     gas%alpha(il,jl,kl) = max(0.0_dp, gas%alpha(il,jl,kl) &
                         - dm_cell / (cfg%rho_steel * vol))
 
                     call audit_add(AUD_ECS_MASS, dm_cell)
                     call audit_add(AUD_ECS_ENERGY, dm_cell * e_in)
+                    ! (M5-4) el gas que la carga desplaza: masa y energia de
+                    ! inventario al libro del gas (antes sin columna: ecs_test
+                    ! destruia 0.048 kg con m_gas_volfix = 0)
+                    pc = 0.0_dp
+                    if (present(sh)) pc = sh%p(il,jl,kl)
+                    dmg = (gas%alpha(il,jl,kl) - ag_old) * gas%rho(il,jl,kl) * vol
+                    deg = gas_inventory_cell(gas%alpha(il,jl,kl), gas%T(il,jl,kl), pc, &
+                              gas%cp(il,jl,kl), vol, cfg) &
+                        - gas_inventory_cell(ag_old, gas%T(il,jl,kl), pc, gas%cp(il,jl,kl), vol, cfg)
+                    call audit_add(AUD_GAS_VOLFIX, dmg)
+                    call audit_add(AUD_GAS_VOLFIX_E, deg)
                 end do
             end do
 
