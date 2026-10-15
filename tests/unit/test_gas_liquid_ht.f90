@@ -31,6 +31,7 @@ program test_gas_liquid_ht
     use mod_fields_3d
     use mod_interphase_ht, only: compute_gas_liquid_heat, PR_GAS_MOL
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid
+    use mod_audit, only: gas_inventory_cell, gas_heat_capacity_ref
     implicit none
 
     type(config_t) :: cfg
@@ -71,7 +72,10 @@ program test_gas_liquid_ht
     ! (M4-10) la superficie intercambia por CARAS: el gas de la celda de
     ! superficie (K0) se equilibra con el liquido de la celda de abajo (K0-1)
     ! por la cara inferior, el liquido de K0 con el gas de K0+1 por la superior
-    Tm = (Cg * Tg0 + Clb * Tl0) / (Cg + Clb)
+    ! (auditoria 5, B5-3) con el gas en forma log el equilibrio es
+    ! Clb (Tl0 - Teq) = Cg_log ln(Teq/Tg0): los dos nodos acaban en la MISMA T
+    Tm = Teq_hand(Clb, Tl0, gas_heat_capacity_ref(gas%alpha(I0,J0,K0), 0.0_dp, gas%cp(I0,J0,K0), &
+                                                  mesh%vol(I0,J0,K0), cfg), Tg0)
     if (abs(gas%T(I0,J0,K0) - Tm) > 1.0e-6_dp .or. abs(liq%T(I0,J0,K0-1) - Tm) > 1.0e-6_dp) &
         call fail('caso 2: no llega al equilibrio (gas K0 - liquido K0-1)', gas%T(I0,J0,K0) - Tm)
 
@@ -104,12 +108,13 @@ program test_gas_liquid_ht
     h    = kmol / dpp * (2.0_dp + 0.6_dp * sqrt(Re) * PR_GAS_MOL**(1.0_dp/3.0_dp))
     a_i  = 6.0_dp * 0.5_dp / dpp * min(1.0_dp, 0.05_dp / 0.5_dp)
     G    = h * a_i * mesh%vol(I0,J0,K0)
-    f    = 1.0_dp - exp(-cfg%dt * G * (1.0_dp / Cg + 1.0_dp / Cl))
-    q    = Cg * Cl / (Cg + Cl) * (Tg0 - Tl0) * f
-    Tg_hand = Tg0 - q / Cg
+    ! (B5-3) relajacion log exacta del gas hacia la T nueva del liquido, que
+    ! cumple el balance (biseccion a mano, independiente del codigo)
+    Tg_hand = Tg_log_hand(Cl, Tl0, gas_heat_capacity_ref(gas%alpha(I0,J0,K0), 0.0_dp, gas%cp(I0,J0,K0), &
+                                                          mesh%vol(I0,J0,K0), cfg), Tg0, G, cfg%dt)
     call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg)
     call checks('caso 5')
-    if (abs(gas%T(I0,J0,K0) - Tg_hand) > 1.0e-12_dp * (Tl0 - Tg0)) &
+    if (abs(gas%T(I0,J0,K0) - Tg_hand) > 1.0e-10_dp * (Tl0 - Tg0)) &
         call fail('caso 5: T del gas /= G a mano (pelicula del lecho)', gas%T(I0,J0,K0) - Tg_hand)
     if (.not. (gas%T(I0,J0,K0) - Tg0 > 1.0_dp)) call fail('caso 5: la pelicula del lecho no intercambia', gas%T(I0,J0,K0) - Tg0)
 
@@ -182,14 +187,21 @@ contains
     subroutine checks(tag)
         character(len=*), intent(in) :: tag
         real(dp) :: dE, sc
-        integer :: kk
+        integer :: kk, jj, ii
         ! conservacion GLOBAL de la columna (M4-10: la superficie libre
         ! intercambia por caras, entre nodos de celdas distintas)
+        ! (B5-3) el gas en su inventario LOG (gas_inventory_cell, p = 0)
         dE = 0.0_dp; sc = 0.0_dp
         do kk = 1, 10
-            dE = dE + sum(gas%alpha(1:6,1:8,kk) * gas%rho(1:6,1:8,kk) * gas%cp(1:6,1:8,kk) * mesh%vol(1:6,1:8,kk) &
-                          * (gas%T(1:6,1:8,kk) - Tg0)) &
-                    + sum(liq%alpha(1:6,1:8,kk) * liq%rho(1:6,1:8,kk) * liq%cp(1:6,1:8,kk) * mesh%vol(1:6,1:8,kk) &
+            do jj = 1, 8
+                do ii = 1, 6
+                    dE = dE + gas_inventory_cell(gas%alpha(ii,jj,kk), gas%T(ii,jj,kk), 0.0_dp, &
+                                                 gas%cp(ii,jj,kk), mesh%vol(ii,jj,kk), cfg) &
+                            - gas_inventory_cell(gas%alpha(ii,jj,kk), Tg0, 0.0_dp, &
+                                                 gas%cp(ii,jj,kk), mesh%vol(ii,jj,kk), cfg)
+                end do
+            end do
+            dE = dE + sum(liq%alpha(1:6,1:8,kk) * liq%rho(1:6,1:8,kk) * liq%cp(1:6,1:8,kk) * mesh%vol(1:6,1:8,kk) &
                           * (liq%T(1:6,1:8,kk) - Tl0))
             sc = sc + sum(gas%alpha(1:6,1:8,kk) * gas%rho(1:6,1:8,kk) * gas%cp(1:6,1:8,kk) * mesh%vol(1:6,1:8,kk)) &
                     * abs(Tl0 - Tg0)
@@ -200,6 +212,45 @@ contains
         if (gas%T(I0,J0,K0) < Tg0 - 1.0e-9_dp .or. liq%T(I0,J0,K0) > Tl0 + 1.0e-9_dp) &
             call fail(tag // ': fuera de cota', gas%T(I0,J0,K0))
     end subroutine checks
+
+    ! equilibrio log/lineal a mano por BISECCION (independiente del Newton
+    ! del codigo): Co (To - Teq) = Cg_log ln(Teq/Tg)
+    function Teq_hand(Co, To, Cgl, Tg) result(Teq)
+        real(dp), intent(in) :: Co, To, Cgl, Tg
+        real(dp) :: Teq, lo, hi
+        integer :: it
+        lo = min(To, Tg); hi = max(To, Tg)
+        do it = 1, 200
+            Teq = 0.5_dp * (lo + hi)
+            if (Co * (To - Teq) - Cgl * log(Teq / Tg) > 0.0_dp) then
+                lo = Teq
+            else
+                hi = Teq
+            end if
+        end do
+        Teq = 0.5_dp * (lo + hi)
+    end function Teq_hand
+
+    ! paso implicito a mano: T* (liquido nuevo) por biseccion de
+    ! Co (T* - To) = Cg ln(Tg/Tg'(T*)), Tg'(T*) = T*/(1 - (1 - T*/Tg) e^{-G T* dt/Cg})
+    function Tg_log_hand(Co, To, Cgl, Tg, Gc, dt) result(Tgn)
+        real(dp), intent(in) :: Co, To, Cgl, Tg, Gc, dt
+        real(dp) :: Tgn, lo, hi, Ts, x
+        integer :: it
+        lo = min(To, Tg); hi = max(To, Tg)
+        do it = 1, 200
+            Ts = 0.5_dp * (lo + hi)
+            x = (1.0_dp - Ts / Tg) * exp(-Gc * Ts * dt / Cgl)
+            if (Co * (Ts - To) - Cgl * log(Tg / (Ts / (1.0_dp - x))) > 0.0_dp) then
+                hi = Ts
+            else
+                lo = Ts
+            end if
+        end do
+        Ts = 0.5_dp * (lo + hi)
+        x = (1.0_dp - Ts / Tg) * exp(-Gc * Ts * dt / Cgl)
+        Tgn = Ts / (1.0_dp - x)
+    end function Tg_log_hand
 
     subroutine fail(msg, v)
         character(len=*), intent(in) :: msg

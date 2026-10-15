@@ -557,12 +557,12 @@ contains
                                                    m%vol(i,j,k), cfg)
                         Tg = max(gas%T(i,j,k), T_MIN_GAS)
                         Ts = slag%E_sl(i,j,k) / Cs
-                        Cf = Cg / Tg                             ! capacidad lineal en Tg
                         hA = cfg%h_contact_sl * m%Az(i,j,k)
-                        f = 1.0_dp - exp(-dt * hA * (1.0_dp / Cs + 1.0_dp / Cf))
                         ! (auditoria 5, B5-3) una sola definicion del
-                        ! intercambio log de dos nodos (gas_log_exchange)
-                        call gas_log_exchange(Cg, Tg, Cs, Ts, f, gas%T(i,j,k), Q)   ! Q hacia la escoria
+                        ! intercambio log de dos nodos (gas_log_exchange):
+                        ! el gas se relaja exacto hacia la T NUEVA de la
+                        ! escoria, que cumple el balance; Q hacia la escoria
+                        call gas_log_exchange(Cg, Tg, Cs, Ts, hA, dt, gas%T(i,j,k), Q)
                         slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
                         call audit_add(AUD_SLAG_GAS, Q)
                     end if

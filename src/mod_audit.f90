@@ -173,36 +173,74 @@ contains
     ! de mezcla es low-Mach: p no entra).
     !---------------------------------------------------------------------------
     !---------------------------------------------------------------------------
-    ! Intercambio exacto de dos nodos entre el GAS (inventario log, capacidad
-    ! de referencia Cg: energia Cg ln T) y otro nodo LINEAL (capacidad Co, T
-    ! To): equilibrio Co (To - Teq) = Cg ln(Teq/Tg) por Newton acotado; el gas
-    ! avanza la fraccion f hacia Teq en ln T (Tg_new = Tg (Teq/Tg)^f, acotada
-    ! entre Tg y Teq) y Q = Cg ln(Tg/Tg_new) es lo que el gas ENTREGA (positivo
-    ! si se enfria): el otro nodo recibe exactamente lo que perdio el
-    ! inventario del gas (M4-13: escoria; auditoria 5, B5-3: interfases).
-    ! Un poke lineal T -= Q/(alpha rho cp V) solo vale a primer orden en dT.
+    ! Intercambio implicito entre el GAS (inventario log: energia Cg ln T,
+    ! capacidad lineal Cg/T) y un nodo LINEAL (Co, To) con conductancia G
+    ! [W/K] durante dt, y opcionalmente un segundo nodo lineal (C2, T2, G2)
+    ! que se relaja al mismo objetivo (el solido con gas y liquido). El gas
+    ! se relaja EXACTAMENTE hacia la T nueva del nodo objetivo T*:
+    !   Cg/T dT/dt = -G (T - T*)  =>  1 - T*/T = (1 - T*/Tg) exp(-G T* dt/Cg)
+    ! (tasa inicial exacta hA (Tg - T*), acotada entre Tg y T*), y entrega
+    ! Q = Cg ln(Tg/Tg'). El nodo objetivo cumple el balance
+    !   Co (T* - To) = Q(T*) + Q2(T*),   Q2 = b2 (T2 - T*), b2 = G2 dt C2/(C2 + G2 dt)
+    ! (F monotona en T*: biseccion acotada entre el minimo y el maximo de las
+    ! T). Conservativo por construccion, sin sobrepaso, tasa fisica a dt -> 0
+    ! y equilibrio exacto a dt -> inf. Un poke lineal T -= Q/(alpha rho cp V)
+    ! perdia O(dT^2) en el inventario (M4-13 escoria; auditoria 5, B5-3
+    ! interfases; el primer intento aplicaba la fraccion lineal en ln T y
+    ! daba 1.7x el calor fisico a dt pequeno).
     !---------------------------------------------------------------------------
-    pure subroutine gas_log_exchange(Cg, Tg, Co, To, f, Tg_new, Q)
-        real(dp), intent(in)  :: Cg, Tg, Co, To, f
+    pure subroutine gas_log_exchange(Cg, Tg, Co, To, G, dt, Tg_new, Q, C2, T2, G2, Q2)
+        real(dp), intent(in)  :: Cg, Tg, Co, To, G, dt
         real(dp), intent(out) :: Tg_new, Q
-        real(dp) :: Teq, Tlo, Thi, Fn, dFn
+        real(dp), intent(in),  optional :: C2, T2, G2
+        real(dp), intent(out), optional :: Q2
+        real(dp) :: lo, hi, Ts, b2, Fn, Qg, Qs
         integer  :: it
-        Tlo = min(Tg, To); Thi = max(Tg, To)
-        Teq = (Co * To + Cg / Tg * Tg) / (Co + Cg / Tg)
-        do it = 1, 30
-            Fn  = Co * (To - Teq) - Cg * log(Teq / Tg)
-            dFn = -Co - Cg / Teq
+        b2 = 0.0_dp
+        if (present(C2) .and. present(G2)) then
+            if (C2 > 0.0_dp .and. G2 > 0.0_dp) b2 = G2 * dt * C2 / (C2 + G2 * dt)
+        end if
+        lo = min(Tg, To); hi = max(Tg, To)
+        if (present(T2) .and. b2 > 0.0_dp) then
+            lo = min(lo, T2); hi = max(hi, T2)
+        end if
+        if (hi - lo <= 1.0e-12_dp * hi .or. Cg <= 0.0_dp .or. Co <= 0.0_dp) then
+            Tg_new = Tg; Q = 0.0_dp
+            if (present(Q2)) Q2 = 0.0_dp
+            return
+        end if
+        do it = 1, 60
+            Ts = 0.5_dp * (lo + hi)
+            Qg = q_gas(Ts)
+            Qs = 0.0_dp
+            if (b2 > 0.0_dp) Qs = b2 * (T2 - Ts)
+            Fn = Co * (Ts - To) - Qg - Qs
             if (Fn > 0.0_dp) then
-                Tlo = Teq
+                hi = Ts
             else
-                Thi = Teq
+                lo = Ts
             end if
-            Teq = Teq - Fn / dFn
-            if (Teq <= Tlo .or. Teq >= Thi) Teq = 0.5_dp * (Tlo + Thi)
-            if (abs(Fn) <= 1.0e-13_dp * (Co * Thi + Cg) .or. Thi - Tlo <= 1.0e-10_dp * Thi) exit
+            if (hi - lo <= 1.0e-14_dp * hi) exit
         end do
-        Tg_new = Tg * (Teq / Tg)**f
+        Ts = 0.5_dp * (lo + hi)
+        Tg_new = t_gas(Ts)
         Q = Cg * log(Tg / Tg_new)
+        if (present(Q2)) then
+            Q2 = 0.0_dp
+            if (b2 > 0.0_dp) Q2 = b2 * (T2 - Ts)
+        end if
+    contains
+        pure function t_gas(Tstar) result(Tn)
+            real(dp), intent(in) :: Tstar
+            real(dp) :: Tn, x
+            x = (1.0_dp - Tstar / Tg) * exp(-G * Tstar * dt / Cg)
+            Tn = Tstar / (1.0_dp - x)
+        end function t_gas
+        pure function q_gas(Tstar) result(Qv)
+            real(dp), intent(in) :: Tstar
+            real(dp) :: Qv
+            Qv = Cg * log(Tg / t_gas(Tstar))
+        end function q_gas
     end subroutine gas_log_exchange
 
     pure function gas_inventory_cell(alpha, T, p, cp, vol, cfg) result(e)

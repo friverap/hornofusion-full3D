@@ -144,19 +144,34 @@ contains
                     ! C_s = m_s cp_s sin latente: con fusion la capacidad real es
                     ! mayor y la T_s final (de la entalpia) queda por debajo de
                     ! T_s' -> sigue acotada.
-                    cap_g = gas%alpha(i,j,k) * gas%rho(i,j,k) * gas%cp(i,j,k) * m%vol(i,j,k)
+                    ! (auditoria 5, B5-3) el GAS lleva su inventario LOG
+                    ! (M4-13): gas_log_exchange relaja el gas exacto hacia la
+                    ! T NUEVA del solido (tasa hA (Tg - T_s') a dt -> 0,
+                    ! acotado entre Tg y T_s'), el liquido lineal implicito
+                    ! hacia la misma T, y T_s' cumple el balance del solido
+                    ! (biseccion monotona). Conservacion exacta en los
+                    ! inventarios de estado; el poke lineal perdia O(dT^2)
+                    ! (96 J, 0.28 %, en noflow_energy).
+                    pc = 0.0_dp
+                    if (present(sh)) pc = sh%p(i,j,k)
+                    Cg_log = gas_heat_capacity_ref(gas%alpha(i,j,k), pc, gas%cp(i,j,k), &
+                                                   m%vol(i,j,k), cfg)
+                    T_g = max(T_g, T_MIN_GAS)
                     cap_l = liq%alpha(i,j,k) * liq%rho(i,j,k) * liq%cp(i,j,k) * m%vol(i,j,k)
                     cap_s = sol%m_s(i,j,k) * cfg%cp_s
-                    b_g = 0.0_dp; b_l = 0.0_dp
-                    if (G_gs > 0.0_dp .and. cap_g > 0.0_dp) &
-                        b_g = G_gs * cfg%dt * cap_g / (cap_g + G_gs * cfg%dt)
-                    if (G_ls > 0.0_dp .and. cap_l > 0.0_dp) &
-                        b_l = G_ls * cfg%dt * cap_l / (cap_l + G_ls * cfg%dt)
-                    Q_gs = 0.0_dp; Q_ls = 0.0_dp
-                    if (b_g + b_l > 0.0_dp .and. cap_s > 0.0_dp) then
-                        T_sn = (cap_s * T_s + b_g * T_g + b_l * T_l) / (cap_s + b_g + b_l)
-                        Q_gs = b_g * (T_g - T_sn) / cfg%dt
-                        Q_ls = b_l * (T_l - T_sn) / cfg%dt
+                    if (gas%alpha(i,j,k) <= 1.0e-6_dp .or. Cg_log <= 0.0_dp) G_gs = 0.0_dp
+                    if (liq%alpha(i,j,k) <= 1.0e-6_dp .or. cap_l <= 0.0_dp) G_ls = 0.0_dp
+                    Q_gs = 0.0_dp; Q_ls = 0.0_dp; Tg_new = T_g
+                    if ((G_gs > 0.0_dp .or. G_ls > 0.0_dp) .and. cap_s > 0.0_dp) then
+                        if (G_gs > 0.0_dp) then
+                            call gas_log_exchange(Cg_log, T_g, cap_s, T_s, G_gs, cfg%dt, Tg_new, Q_gs, &
+                                                  cap_l, T_l, G_ls, Q_ls)
+                        else
+                            b_l = G_ls * cfg%dt * cap_l / (cap_l + G_ls * cfg%dt)
+                            T_sn = (cap_s * T_s + b_l * T_l) / (cap_s + b_l)
+                            Q_ls = b_l * (T_l - T_sn)
+                        end if
+                        Q_gs = Q_gs / cfg%dt; Q_ls = Q_ls / cfg%dt
                     end if
 
                     ! Retiro de los fluidos PRIMERO (el solido recibe lo que
@@ -168,24 +183,14 @@ contains
                     ! T_s': exp(x - 1) >= x) y Q_gs se REDEFINE como lo que
                     ! perdio el inventario log: conservacion exacta, el poke
                     ! lineal perdia O(dT^2) (96 J, 0.28 %, en noflow_energy).
-                    if (gas%alpha(i,j,k) > 1.0e-6_dp .and. abs(Q_gs) > SMALL) then
-                        pc = 0.0_dp
-                        if (present(sh)) pc = sh%p(i,j,k)
-                        Cg_log = gas_heat_capacity_ref(gas%alpha(i,j,k), pc, gas%cp(i,j,k), &
-                                                       m%vol(i,j,k), cfg)
-                        Tg_new = T_g * exp(-Q_gs * cfg%dt / Cg_log)
-                        Tg_new = min(max(Tg_new, min(T_g, T_sn)), max(T_g, T_sn))
-                        Q_gs = Cg_log * log(T_g / Tg_new) / cfg%dt
+                    if (abs(Q_gs) > SMALL) then
                         gas%T(i,j,k) = Tg_new
                         call audit_add(AUD_IPH_GAS, Q_gs * cfg%dt)
                     else
                         Q_gs = 0.0_dp
                     end if
-                    if (liq%alpha(i,j,k) > 1.0e-6_dp .and. abs(Q_ls) > SMALL) then
-                        cap_l = liq%alpha(i,j,k) * liq%rho(i,j,k) * &
-                                liq%cp(i,j,k) * m%vol(i,j,k)
-                        liq%T(i,j,k) = liq%T(i,j,k) - Q_ls * cfg%dt / (cap_l + SMALL)
-                        Q_ls = Q_ls * cap_l / (cap_l + SMALL)
+                    if (abs(Q_ls) > SMALL) then
+                        liq%T(i,j,k) = liq%T(i,j,k) - Q_ls * cfg%dt / cap_l
                         call audit_add(AUD_IPH_LIQ, Q_ls * cfg%dt)
                     else
                         Q_ls = 0.0_dp
@@ -315,13 +320,12 @@ contains
                     G = fbed * G_in + (1.0_dp - fbed) * G_out
                     G = G * m%vol(i,j,k)
                     if (G <= 0.0_dp) cycle
-                    f = 1.0_dp - exp(-cfg%dt * G * (1.0_dp / cg + 1.0_dp / cl))
-                    ! (B5-3) gas en forma log: la tasa f es la del cierre
-                    ! lineal; el equilibrio y lo entregado, exactos
+                    ! (B5-3) gas en forma log: relajacion exacta hacia la T
+                    ! nueva del liquido, que cumple el balance
                     pc = 0.0_dp
                     if (present(sh)) pc = sh%p(i,j,k)
                     Cg_log = gas_heat_capacity_ref(ag, pc, gas%cp(i,j,k), m%vol(i,j,k), cfg)
-                    call gas_log_exchange(Cg_log, max(gas%T(i,j,k), T_MIN_GAS), cl, liq%T(i,j,k), f, Tg_new, q)
+                    call gas_log_exchange(Cg_log, max(gas%T(i,j,k), T_MIN_GAS), cl, liq%T(i,j,k), G, cfg%dt, Tg_new, q)
                     gas%T(i,j,k) = Tg_new
                     liq%T(i,j,k) = liq%T(i,j,k) + q / cl
                     call audit_add(AUD_IPH_GAS,  q)
@@ -396,12 +400,11 @@ contains
                     G = k_mol * (2.0_dp / m%dz(kg) + 0.664_dp * PR_GAS_MOL**(1.0_dp/3.0_dp) * &
                         sqrt(gas%rho(i,j,kg) * urel * max(cfg%R_shell, m%dz(kg)) / (gas%mu(i,j,kg) + SMALL)) &
                         / max(cfg%R_shell, m%dz(kg))) * a_fs
-                    f = 1.0_dp - exp(-cfg%dt * G * (1.0_dp / cg + 1.0_dp / cl))
                     ! (B5-3) gas en forma log, mismo helper que el lazo por celda
                     pc = 0.0_dp
                     if (present(sh)) pc = sh%p(i,j,kg)
                     Cg_log = gas_heat_capacity_ref(ag, pc, gas%cp(i,j,kg), m%vol(i,j,kg), cfg)
-                    call gas_log_exchange(Cg_log, max(gas%T(i,j,kg), T_MIN_GAS), cl, liq%T(i,j,kl), f, Tg_new, q)
+                    call gas_log_exchange(Cg_log, max(gas%T(i,j,kg), T_MIN_GAS), cl, liq%T(i,j,kl), G, cfg%dt, Tg_new, q)
                     if (kg >= 1 .and. kg <= m%nz) then
                         gas%T(i,j,kg) = Tg_new
                         call audit_add(AUD_IPH_GAS, q)

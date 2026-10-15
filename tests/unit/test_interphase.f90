@@ -20,6 +20,7 @@ program test_interphase
     use mod_fields_3d
     use mod_melting_3d, only: solid_enthalpy
     use mod_interphase_ht, only: compute_interphase_heat
+    use mod_audit, only: gas_inventory_cell
     implicit none
 
     type(config_t) :: cfg
@@ -60,11 +61,16 @@ program test_interphase
     Cl = liq%alpha(I0,J0,K0) * liq%rho(I0,J0,K0) * liq%cp(I0,J0,K0) * V
     Tmix = (sol%m_s(I0,J0,K0) * cfg%cp_s * 300.0_dp + Cl * 900.0_dp + Cg * 1200.0_dp) / &
            (sol%m_s(I0,J0,K0) * cfg%cp_s + Cl + Cg)
+    E0 = energy()
     call compute_interphase_heat(liq, gas, sol, mesh, cfg)
-    print '(A,4F12.4)', '   caso 2: T_mix, T_s, T_l, T_g = ', Tmix, sol%T_s(I0,J0,K0), liq%T(I0,J0,K0), gas%T(I0,J0,K0)
-    if (abs(sol%T_s(I0,J0,K0) - Tmix) > 0.1_dp .or. abs(liq%T(I0,J0,K0) - Tmix) > 0.1_dp &
-        .or. abs(gas%T(I0,J0,K0) - Tmix) > 0.1_dp) &
-        call fail('caso 2: sin equilibrio, T_s - T_mix =', sol%T_s(I0,J0,K0) - Tmix)
+    E1 = energy()
+    ! (auditoria 5, B5-3) con el gas en forma log el equilibrio no es la
+    ! media LINEAL T_mix (informativa): los tres nodos acaban en la MISMA T,
+    ! entre T_mix y la media log, conservando el inventario
+    print '(A,4F12.4)', '   caso 2: T_mix(lineal), T_s, T_l, T_g = ', Tmix, sol%T_s(I0,J0,K0), liq%T(I0,J0,K0), gas%T(I0,J0,K0)
+    if (abs(liq%T(I0,J0,K0) - sol%T_s(I0,J0,K0)) > 0.1_dp .or. abs(gas%T(I0,J0,K0) - sol%T_s(I0,J0,K0)) > 0.1_dp) &
+        call fail('caso 2: sin equilibrio, T_l - T_s =', liq%T(I0,J0,K0) - sol%T_s(I0,J0,K0))
+    if (abs(E1 - E0) > 1.0e-10_dp * abs(E0)) call fail('caso 2: conservacion', (E1 - E0) / E0)
 
     ! --- caso 3: area repartida ------------------------------------------------
     ! mismo fluido caliente (T_l = T_g, mismas propiedades): el calor al solido
@@ -97,13 +103,16 @@ contains
         liq%alpha = 0.0_dp; gas%alpha = 1.0_dp
         gas%ur = 0.0_dp; gas%uth = 0.0_dp; gas%uz = 0.0_dp
         liq%rho = 7000.0_dp; liq%cp = 800.0_dp; liq%kth = 30.0_dp
-        gas%rho = 0.2_dp; gas%cp = 1200.0_dp; gas%kth = 0.1_dp; gas%mu = 5.0e-5_dp
+        ! (B5-3) rho del gas por la EOS: la capacidad lineal del cierre es
+        ! Cg_log/Tg y el inventario que se conserva es el log
+        gas%cp = 1200.0_dp; gas%kth = 0.1_dp; gas%mu = 5.0e-5_dp
         sol%alpha_s(I0,J0,K0) = as
         sol%m_s(I0,J0,K0) = as * cfg%rho_steel * V
         sol%T_s(I0,J0,K0) = Ts0
         sol%E_s(I0,J0,K0) = sol%m_s(I0,J0,K0) * solid_enthalpy(Ts0, cfg)
         liq%alpha(I0,J0,K0) = al; gas%alpha(I0,J0,K0) = ag
         liq%T(I0,J0,K0) = Tl0; gas%T(I0,J0,K0) = Tg0
+        gas%rho = gas_eos(cfg%rho_gas, gas%T, 0.0_dp)
     end subroutine setup
 
     subroutine clone_gas_props()
@@ -115,9 +124,10 @@ contains
 
     function energy() result(e)
         real(dp) :: e
+        ! (B5-3) gas en su inventario log (gas_inventory_cell, p = 0)
         e = sol%E_s(I0,J0,K0) &
           + liq%alpha(I0,J0,K0) * liq%rho(I0,J0,K0) * liq%cp(I0,J0,K0) * V * liq%T(I0,J0,K0) &
-          + gas%alpha(I0,J0,K0) * gas%rho(I0,J0,K0) * gas%cp(I0,J0,K0) * V * gas%T(I0,J0,K0)
+          + gas_inventory_cell(gas%alpha(I0,J0,K0), gas%T(I0,J0,K0), 0.0_dp, gas%cp(I0,J0,K0), V, cfg)
     end function energy
 
     subroutine fail(msg, v)
