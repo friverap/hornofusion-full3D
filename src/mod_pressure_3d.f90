@@ -95,7 +95,8 @@ contains
 
     subroutine solve_pressure_correction(liq, gas, gas_T_ref, sh, m, cfg, &
                                           residual)
-        use mod_workspace, only: ensure_workspace, own_weight_face, ws_cc, ws_cc_new, ws_cc_drop, ws_p_n, aW => ws_aW, &
+        use mod_workspace, only: ensure_workspace, own_weight_face, liq_own_weight, mix_cell_weight, &
+                                 liq_cont_fallback, bed_rel_face, ws_cc, ws_cc_new, ws_cc_drop, ws_p_n, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
@@ -209,7 +210,7 @@ contains
         if (ws_liq_cont_valid) then
             act_l = ws_liq_cont
         else
-            act_l = (liq%alpha >= ALPHA_FLOW_CUTOFF)
+            act_l = liq_cont_fallback(liq%alpha)   ! (auditoria 6) mismo respaldo que momento
         end if
         ! Gas del acople (F2.16/F2.17): activo donde hay gas que percola, y
         ! tambien — con el CANAL RESIDUAL — donde el gas puede entrar aunque
@@ -893,19 +894,10 @@ contains
 
         pure real(dp) function cell_wp(ii, jj, kk)
             integer, intent(in) :: ii, jj, kk
-            real(dp) :: eps
-            cell_wp = GRAVITY * merge(1.0_dp, 0.0_dp, act_l(ii,jj,kk)) * &
-                liq%alpha(ii,jj,kk) * liq%rho(ii,jj,kk) * &
-                (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,kk) - cfg%T_ref_boussinesq))
-            if (lbf) then
-                eps = max(liq%alpha(ii,jj,kk), 0.0_dp) + max(gas%alpha(ii,jj,kk), 0.0_dp)
-                if (eps > 1.0e-12_dp) then
-                    cell_wp = (cell_wp + GRAVITY * max(gas%alpha(ii,jj,kk), 0.0_dp) &
-                               * gas%rho(ii,jj,kk)) / eps
-                else
-                    cell_wp = 0.0_dp
-                end if
-            end if
+            ! (auditoria 6) mod_workspace::mix_cell_weight, la MISMA que momento
+            cell_wp = mix_cell_weight(liq%alpha(ii,jj,kk), &
+                liq_own_weight(liq%rho(ii,jj,kk), liq%T(ii,jj,kk), cfg%beta_expansion, cfg%T_ref_boussinesq), &
+                gas%alpha(ii,jj,kk), gas%rho(ii,jj,kk), act_l(ii,jj,kk), lbf)
         end function cell_wp
 
         ! Flotacion relativa de la fase en el LECHO, en la cara (ka,kb)
@@ -916,29 +908,17 @@ contains
         pure real(dp) function bed_rel_fp(isg_, ii, jj, ka, kb)
             logical, intent(in) :: isg_
             integer, intent(in) :: ii, jj, ka, kb
-            real(dp) :: bm, w
-            bed_rel_fp = 0.0_dp
-            if (.not. (lbf .and. ws_bed_valid)) return
-            ! sin liquido en la cara, 0 exacto (ver mod_momentum_3d)
-            if (max(liq%alpha(ii,jj,ka), liq%alpha(ii,jj,kb)) < ALPHA_CUTOFF) return
-            ! misma mascara de cara para ambas fases (A4-1; ver
-            ! mod_momentum_3d::bed_rel_f)
-            ! (B4-10) peso propio de cara ponderado por la alpha de la fase
-            ! (own_weight_face: la MISMA expresion que mod_momentum_3d)
             if (isg_) then
-                bm = max(min(ws_bed_gas(ii,jj,ka), ws_bed_gas(ii,jj,kb)), &
-                         ws_bub_f(ii, jj, min(ka, kb)))
-                w  = own_weight_face(GRAVITY * gas%rho(ii,jj,ka), GRAVITY * gas%rho(ii,jj,kb), &
-                                     gas%alpha(ii,jj,ka), gas%alpha(ii,jj,kb))
+                bed_rel_fp = bed_rel_face(.true., ii, jj, ka, kb, &
+                    liq%alpha(ii,jj,ka), liq%alpha(ii,jj,kb), gas%alpha(ii,jj,ka), gas%alpha(ii,jj,kb), &
+                    GRAVITY * gas%rho(ii,jj,ka), GRAVITY * gas%rho(ii,jj,kb), liq_weight_f(ii, jj, ka, kb), lbf)
             else
-                bm = ws_bedl_f(ii, jj, min(ka, kb))
-                w  = own_weight_face( &
-                     GRAVITY * liq%rho(ii,jj,ka) * (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,ka) - cfg%T_ref_boussinesq)), &
-                     GRAVITY * liq%rho(ii,jj,kb) * (1.0_dp - cfg%beta_expansion * (liq%T(ii,jj,kb) - cfg%T_ref_boussinesq)), &
-                     liq%alpha(ii,jj,ka), liq%alpha(ii,jj,kb))
+                bed_rel_fp = bed_rel_face(.false., ii, jj, ka, kb, &
+                    liq%alpha(ii,jj,ka), liq%alpha(ii,jj,kb), liq%alpha(ii,jj,ka), liq%alpha(ii,jj,kb), &
+                    liq_own_weight(liq%rho(ii,jj,ka), liq%T(ii,jj,ka), cfg%beta_expansion, cfg%T_ref_boussinesq), &
+                    liq_own_weight(liq%rho(ii,jj,kb), liq%T(ii,jj,kb), cfg%beta_expansion, cfg%T_ref_boussinesq), &
+                    liq_weight_f(ii, jj, ka, kb), lbf)
             end if
-            if (bm <= 0.0_dp) return
-            bed_rel_fp = bm * (w - liq_weight_f(ii, jj, ka, kb))
         end function bed_rel_fp
 
         ! Gradiente vertical de celda que ve el GAS: caras sin el peso del

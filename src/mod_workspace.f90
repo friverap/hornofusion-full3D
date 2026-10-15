@@ -270,6 +270,73 @@ contains
         end if
     end function own_weight_face
 
+    !---------------------------------------------------------------------------
+    ! FLOTACION RELATIVA DEL LECHO por caras: UNA definicion para momento
+    ! (bed_rel_f) y Poisson (bed_rel_fp) (auditoria 6: el pendiente de la
+    ! auditoria 4 era un unitario que las comparara; eran dos copias internas
+    ! de sus subrutinas, intestables, y el peso de celda de la mezcla usaba dos
+    ! criterios de continuidad de respaldo distintos). El Rhie-Chow del Poisson
+    ! cancela la flotacion exactamente solo si las dos son identicas.
+    ! Test: test_bed_rel_face.
+    !---------------------------------------------------------------------------
+
+    ! Peso propio del LIQUIDO por unidad de su volumen [N/m3], con Boussinesq
+    ! referido a T_ref (A7)
+    pure real(dp) function liq_own_weight(rho, T, beta, Tref)
+        real(dp), intent(in) :: rho, T, beta, Tref
+        liq_own_weight = GRAVITY * rho * (1.0_dp - beta * (T - Tref))
+    end function liq_own_weight
+
+    ! Peso de celda que entra en el W_f de la fuerza balanceada [N/m3]: sin
+    ! fuerza balanceada, alpha_l w_l del liquido CONTINUO; con ella (lbf), el
+    ! de la MEZCLA CONTINUA por volumen de FLUIDO (alpha_l w_l + alpha_g rho_g
+    ! g)/(alpha_l + alpha_g) (0 sin fluido)
+    pure real(dp) function mix_cell_weight(al, wl, ag, rg, cont, lbf)
+        real(dp), intent(in) :: al, wl, ag, rg
+        logical, intent(in)  :: cont, lbf
+        real(dp) :: eps
+        mix_cell_weight = merge(1.0_dp, 0.0_dp, cont) * al * wl
+        if (lbf) then
+            eps = max(al, 0.0_dp) + max(ag, 0.0_dp)
+            if (eps > 1.0e-12_dp) then
+                mix_cell_weight = (mix_cell_weight + GRAVITY * max(ag, 0.0_dp) * rg) / eps
+            else
+                mix_cell_weight = 0.0_dp
+            end if
+        end if
+    end function mix_cell_weight
+
+    ! Continuidad del liquido de RESPALDO cuando ws_liq_cont no es valida
+    ! (rama de una fase): la del Poisson (act_l), para momento y Poisson
+    pure elemental logical function liq_cont_fallback(al)
+        real(dp), intent(in) :: al
+        liq_cont_fallback = (al >= ALPHA_FLOW_CUTOFF)
+    end function liq_cont_fallback
+
+    ! Flotacion relativa en la cara (ka,kb) de la columna (ii,jj) [N/m3]:
+    ! B_f = bm (w_q,f - W_f), con la mascara de cara comun a las dos fases
+    ! (A4-1): gas = max(min de ws_bed_gas de las dos celdas, ws_bub_f);
+    ! liquido = ws_bedl_f. 0 EXACTO sin fuerza balanceada, sin mascaras
+    ! validas o sin liquido en la cara (corridas frias bit a bit). w_q,f es el
+    ! peso propio ponderado por la alpha de la fase (own_weight_face, B4-10).
+    pure real(dp) function bed_rel_face(isg, ii, jj, ka, kb, al_a, al_b, &
+                                        aq_a, aq_b, wq_a, wq_b, wf, lbf)
+        logical, intent(in)  :: isg, lbf
+        integer, intent(in)  :: ii, jj, ka, kb
+        real(dp), intent(in) :: al_a, al_b, aq_a, aq_b, wq_a, wq_b, wf
+        real(dp) :: bm
+        bed_rel_face = 0.0_dp
+        if (.not. (lbf .and. ws_bed_valid)) return
+        if (max(al_a, al_b) < ALPHA_CUTOFF) return
+        if (isg) then
+            bm = max(min(ws_bed_gas(ii,jj,ka), ws_bed_gas(ii,jj,kb)), ws_bub_f(ii, jj, min(ka, kb)))
+        else
+            bm = ws_bedl_f(ii, jj, min(ka, kb))
+        end if
+        if (bm <= 0.0_dp) return
+        bed_rel_face = bm * (own_weight_face(wq_a, wq_b, aq_a, aq_b) - wf)
+    end function bed_rel_face
+
     subroutine ensure_workspace(m)
         type(mesh_t), intent(in) :: m
 

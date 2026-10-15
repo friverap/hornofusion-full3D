@@ -84,6 +84,7 @@ contains
                                          alpha_q, drag_coef, is_gas, comp, residual, &
                                          alpha_old, rho_old, mdot_m)
         use mod_workspace, only: ensure_workspace, own_weight_face, ws_liq_cont, ws_liq_cont_valid, &
+                                 liq_own_weight, mix_cell_weight, liq_cont_fallback, bed_rel_face, &
             ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, &
             ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bed_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
@@ -591,40 +592,20 @@ contains
         ! media el gas de encima recibia 1/4 rho_l g (201 m/s en bath_freeze).
         pure real(dp) function bed_rel_f(ii, jj, ka, kb)
             integer, intent(in) :: ii, jj, ka, kb
-            real(dp) :: bm
-            bed_rel_f = 0.0_dp
-            if (.not. (lbf_m .and. ws_bed_valid)) return
-            ! sin liquido en la cara no hay flotacion relativa (0 exacto: las
-            ! corridas frias quedan bit a bit)
-            ! (auditoria 4, A4-1) la MISMA mascara de cara para las dos fases:
-            ! minimo de las dos celdas de max(ws_bed_gas, ws_bub). Con el gas
-            ! al minimo de ws_bed_gas y el liquido a la media de ws_bed, en el
-            ! poro saturado (gas en el piso, peso 0) el liquido seguia clasico
-            ! y el gas reducido: condiciones de reposo incompatibles, fuerza
-            ! neta sobre la mezcla alpha_l alpha_g drho g/eps (~1-2 kN/m3, la
-            ! bomba de A3-1 con el motor en el liquido) y gas de piso subiendo
-            ! ~30x la velocidad del liquido (bed_bath_rest: 0.29 m/s en un
-            ! lecho inundado en reposo; bath_freeze: 840 celdas saturadas con
-            ! u_l mediana -0.24 m/s). Con mascaras iguales sum alpha_q B_q = 0
-            ! en TODA cara: en el poro saturado ambas fases ven la hidrostatica
-            ! de la mezcla (el liquido se mueve ahi por Darcy, grad p, no por
-            ! flotacion relativa: no hay gas con el que intercambiar) y donde el
-            ! gas es la fase continua del poro ambas son clasicas (N-C1).
+            ! (auditoria 6) UNA definicion con el Poisson (mod_workspace::
+            ! bed_rel_face; la logica de mascaras y el porque estan alli y en
+            ! las notas de arriba)
             if (is_gas) then
-                if (max(ph_other%alpha(ii,jj,ka), ph_other%alpha(ii,jj,kb)) < ALPHA_CUTOFF) return
-                bm = max(min(ws_bed_gas(ii,jj,ka), ws_bed_gas(ii,jj,kb)), &
-                         ws_bub_f(ii, jj, min(ka, kb)))
+                bed_rel_f = bed_rel_face(.true., ii, jj, ka, kb, &
+                    ph_other%alpha(ii,jj,ka), ph_other%alpha(ii,jj,kb), &
+                    ph%alpha(ii,jj,ka), ph%alpha(ii,jj,kb), own_w(ii, jj, ka), own_w(ii, jj, kb), &
+                    liq_weight_f(ii, jj, ka, kb), lbf_m)
             else
-                if (max(ph%alpha(ii,jj,ka), ph%alpha(ii,jj,kb)) < ALPHA_CUTOFF) return
-                ! mascara de CARA del liquido fijada por iteracion externa
-                ! (ws_bedl_f: rampa de la celda receptora; ver mod_workspace)
-                bm = ws_bedl_f(ii, jj, min(ka, kb))
+                bed_rel_f = bed_rel_face(.false., ii, jj, ka, kb, &
+                    ph%alpha(ii,jj,ka), ph%alpha(ii,jj,kb), &
+                    ph%alpha(ii,jj,ka), ph%alpha(ii,jj,kb), own_w(ii, jj, ka), own_w(ii, jj, kb), &
+                    liq_weight_f(ii, jj, ka, kb), lbf_m)
             end if
-            if (bm <= 0.0_dp) return
-            ! (B4-10) peso propio de cara ponderado por la alpha de la fase
-            bed_rel_f = bm * (own_weight_face(own_w(ii, jj, ka), own_w(ii, jj, kb), &
-                                              ph%alpha(ii,jj,ka), ph%alpha(ii,jj,kb)) &
-                              - liq_weight_f(ii, jj, ka, kb))
         end function bed_rel_f
 
 
@@ -632,9 +613,11 @@ contains
         ! solo en el liquido; el gas lleva rho(p,T))
         pure real(dp) function own_w(ii, jj, kk)
             integer, intent(in) :: ii, jj, kk
-            own_w = GRAVITY * ph%rho(ii,jj,kk)
-            if (.not. is_gas) own_w = own_w * (1.0_dp - cfg%beta_expansion &
-                                               * (ph%T(ii,jj,kk) - cfg%T_ref_boussinesq))
+            if (is_gas) then
+                own_w = GRAVITY * ph%rho(ii,jj,kk)
+            else
+                own_w = liq_own_weight(ph%rho(ii,jj,kk), ph%T(ii,jj,kk), cfg%beta_expansion, cfg%T_ref_boussinesq)
+            end if
         end function own_w
 
         function wall_shear() result(ap_w)
@@ -732,34 +715,29 @@ contains
         ! (test_poisson_bath caso 5).
         pure real(dp) function cell_w(ii, jj, kk)
             integer, intent(in) :: ii, jj, kk
-            real(dp) :: al, rl, Tl, ag, rg, eps
+            ! (auditoria 6) mod_workspace::mix_cell_weight, la MISMA que el Poisson
             if (is_gas) then
-                al = ph_other%alpha(ii,jj,kk); rl = ph_other%rho(ii,jj,kk); Tl = ph_other%T(ii,jj,kk)
-                ag = ph%alpha(ii,jj,kk); rg = ph%rho(ii,jj,kk)
+                cell_w = mix_cell_weight(ph_other%alpha(ii,jj,kk), &
+                    liq_own_weight(ph_other%rho(ii,jj,kk), ph_other%T(ii,jj,kk), cfg%beta_expansion, cfg%T_ref_boussinesq), &
+                    ph%alpha(ii,jj,kk), ph%rho(ii,jj,kk), cont_ok(ii,jj,kk), lbf_m)
             else
-                al = ph%alpha(ii,jj,kk); rl = ph%rho(ii,jj,kk); Tl = ph%T(ii,jj,kk)
-                ag = ph_other%alpha(ii,jj,kk); rg = ph_other%rho(ii,jj,kk)
-            end if
-            cell_w = GRAVITY * merge(1.0_dp, 0.0_dp, cont_ok(ii,jj,kk)) * al * rl &
-                   * (1.0_dp - cfg%beta_expansion * (Tl - cfg%T_ref_boussinesq))
-            if (lbf_m) then
-                eps = max(al, 0.0_dp) + max(ag, 0.0_dp)
-                if (eps > 1.0e-12_dp) then
-                    cell_w = (cell_w + GRAVITY * max(ag, 0.0_dp) * rg) / eps
-                else
-                    cell_w = 0.0_dp
-                end if
+                cell_w = mix_cell_weight(ph%alpha(ii,jj,kk), &
+                    liq_own_weight(ph%rho(ii,jj,kk), ph%T(ii,jj,kk), cfg%beta_expansion, cfg%T_ref_boussinesq), &
+                    ph_other%alpha(ii,jj,kk), ph_other%rho(ii,jj,kk), cont_ok(ii,jj,kk), lbf_m)
             end if
         end function cell_w
 
+        ! (auditoria 6) respaldo sin ws_liq_cont: el MISMO criterio que el
+        ! act_l del Poisson (liq_cont_fallback; antes 0.3 aqui y 1e-2 alli: el
+        ! peso de cara de la mezcla no coincidia en la rama de una fase)
         pure logical function cont_ok(ii, jj, kk)
             integer, intent(in) :: ii, jj, kk
             if (ws_liq_cont_valid) then
                 cont_ok = ws_liq_cont(ii,jj,kk)
             else if (is_gas) then
-                cont_ok = (ph_other%alpha(ii,jj,kk) >= ALPHA_LIQ_CONT)
+                cont_ok = liq_cont_fallback(ph_other%alpha(ii,jj,kk))
             else
-                cont_ok = (ph%alpha(ii,jj,kk) >= ALPHA_LIQ_CONT)
+                cont_ok = liq_cont_fallback(ph%alpha(ii,jj,kk))
             end if
         end function cont_ok
 
