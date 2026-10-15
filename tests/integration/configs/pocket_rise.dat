@@ -1,11 +1,17 @@
-# Banco pocket_rise (auditoria 6-7, M4-12): BOLSA de gas bajo una capa saturada
-# del lecho. Reanuda desde un estado construido (make_pocket_init.py sobre el
-# paso 0 de bed_bath_rest_n4; el harness agrega restart_file): capa 8
+# Banco pocket_rise (auditorias 6-8, M4-12): BOLSA de gas bajo una capa
+# saturada del lecho. Reanuda desde un estado construido (make_pocket_init.py
+# sobre el paso 0 de bed_bath_rest_n4; el harness agrega restart_file): capa 8
 # saturada, capas 6-7 con gas, sin camino al freeboard, presion HIDROSTATICA
-# de la nueva estratificacion y rho_gas coherente. Con los defaults el gas
-# sube a contracorriente desde el primer paso, sin rafaga. (La retencion de
-# 0.25-0.3 s medida en la auditoria 6 era el estado construido con la
-# presion del snapshot de origen, no el modelo.) Criterio: check_pocket.py.
+# de la nueva estratificacion y rho_gas coherente. El gas sube a
+# contracorriente desde el primer paso. (La retencion de 0.25-0.3 s de la
+# auditoria 6 era el estado construido con la presion del snapshot de origen.)
+# El estado hidrostatico NO es punto fijo (auditoria 8, M8-3): la capa
+# saturada drena por Darcy, su peso pasa al arrastre del lecho (la presion del
+# piso baja ~19 kPa) y la bolsa se despresuriza y ventea por los huecos de los
+# electrodos (gas ~30 m/s en el techo: fisico). max_outer = 20: con 5 el
+# desfase alpha-p del lazo externo ventea 0.92 kg con 0.52 kg de perdida real
+# (la EOS crea 0.40 kg) y el gas llega a 45 m/s (99 con 10 ms); el banco
+# juzga la fisica de la bolsa, no ese truncamiento. Criterio: check_pocket.py.
 nr = 12
 ntheta = 24
 nz = 16
@@ -28,9 +34,9 @@ solve_chemistry = false
 solve_arc = false
 solve_multiphase = true
 alpha_p = 0.3
-max_outer = 5
+max_outer = 20
 max_inner_mom = 3
 max_inner_pres = 200
 audit_freq = 1
-output_freq = 10
+output_freq = 2
 monitor_freq = 20

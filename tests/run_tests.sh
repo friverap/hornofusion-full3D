@@ -159,6 +159,7 @@ audit_xfail_prefix() {
         melt_forced)   echo audit_melt ;;
         oneflow_test)  echo audit_oneflow ;;
         pocket_rise)   echo audit_pocket ;;
+        pocket_rise_dt10) echo audit_pocket_dt10 ;;
         *)             echo "" ;;
     esac
 }
@@ -361,8 +362,12 @@ full | rebaseline)
     # estado construido sobre el paso 0 de bed_bath_rest_n4 (presion
     # hidrostatica y rho_gas coherentes; defaults)
     if [ -f "$OUT/bed_bath_rest_n4/eaf3d_00000000.h5" ]; then
-        if $PY $INT/make_pocket_init.py "$OUT/bed_bath_rest_n4/eaf3d_00000000.h5" "$OUT/pocket_init.h5" > /dev/null; then
+        if $PY $INT/make_pocket_init.py "$OUT/bed_bath_rest_n4/eaf3d_00000000.h5" "$OUT/pocket_init.h5" > /dev/null \
+           && $PY $INT/make_pocket_init.py "$OUT/bed_bath_rest_n4/eaf3d_00000000.h5" "$OUT/pocket_init_dt10.h5" --dt 0.01 > /dev/null; then
             run_case_restart_from pocket_rise 4 "$OUT/pocket_init.h5"
+            # (auditoria 8, M8-2) la misma bolsa con dt = 10 ms: la movilidad
+            # de F2.16 no puede depender del dt de la corrida
+            run_case_restart_from pocket_rise_dt10 4 "$OUT/pocket_init_dt10.h5"
         else
             echo "FAIL: make_pocket_init.py no pudo construir el estado de pocket_rise"; note_fail
         fi
@@ -446,6 +451,9 @@ full | rebaseline)
         $PY $INT/check_bedbath.py "$OUT/bed_bath_rest_n4" --xfail "$(xfail_ids bed_bath_rest)"
     run_script "pocket_rise" \
         $PY $INT/check_pocket.py "$OUT/pocket_rise_n4" --xfail "$(xfail_ids pocket_rise)"
+    run_script "pocket_rise_dt10" \
+        $PY $INT/check_pocket.py "$OUT/pocket_rise_dt10_n4" --prefix pocket_dt10 \
+        --xfail "$(xfail_ids pocket_rise_dt10)"
     run_script "arc_melt" \
         $PY $INT/check_arcmelt.py "$OUT/arc_melt_n4" --xfail "$(xfail_ids arc_melt)"
     # Auditoria de energia/masa/arco en TODA corrida de la matriz (auditoria

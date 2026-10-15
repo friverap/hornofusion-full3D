@@ -287,13 +287,24 @@ module mod_constants
 
     ! Movilidad del gas en una celda (F2.16): fraccion de su balance de
     ! momento que NO se lleva el arrastre del lecho,
-    !     mob = (alpha_g rho_g/dt) / (alpha_g rho_g/dt + drag_Ergun).
+    !     mob = (alpha_g rho_g/DT_MOB_REF) / (alpha_g rho_g/DT_MOB_REF + drag_Ergun).
     ! mob ~ 1 gas libre; mob -> 0 gas inmovilizado por la chatarra. La
     ! distribucion es BIMODAL (medido en B1 v33: el grueso del gas activo
     ! entre 0.4 y 1.0, la cola bloqueada en 1e-5..1e-6), asi que el umbral
     ! no es critico: entre 1e-2 y 1e-4 el conteo de celdas bloqueadas cambia
     ! menos del 12 %.
     real(dp), parameter :: GAS_MOB_MIN = 1.0e-2_dp
+    ! (auditoria 8, M8-2) La inercia de la movilidad se evalua con un paso de
+    ! REFERENCIA fijo, no con el dt de la corrida: con alpha_g rho_g/dt la
+    ! clasificacion dependia del integrador. El gas de piso de una capa
+    ! saturada (eps_g = 0.015, la via de F2.7) tiene mob ~0.025 con 2 ms y
+    ! ~0.01 con 5 ms: con dt >= ~6.5 ms la capa cortaba el camino y una bolsa
+    ! bajo el lecho inundado quedaba pared (pocket_rise a 10 ms: sin subir y
+    ! gas a 131 m/s). 2 ms es el dt de B1 (v33, donde se midio la
+    ! distribucion bimodal; 125 000 pasos hasta 296 s): B1 y los bancos a
+    ! 2 ms no cambian, y el desplazamiento del umbral por el dt adaptativo
+    ! de B1 (~2.4 ms) es << el rango 1e-2..1e-4 medido como no critico.
+    real(dp), parameter :: DT_MOB_REF = 2.0e-3_dp
 
     ! Fraccion residual de una fase EVANESCENTE (F2.20; CATHARE usa 1e-5,
     ! NEPTUNE lo mismo, AUSM+ para dos fluidos 1e-4). Solo entra en el aP de
