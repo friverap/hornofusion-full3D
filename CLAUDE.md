@@ -600,8 +600,10 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   quedan en `ws_Fr/ws_Fth/ws_Fz` (`ws_flux_valid`) y la energía del
   líquido los REUTILIZA: nunca recalcular flujos del líquido en la
   energía si el transporte de α ya los produjo. El exceso residual se
-  DERRAMA hacia arriba (conservativo, columna `m_spill`, entra a `ws_Fz`)
-  y solo lo que no cabe bajo el techo va al clip auditado (`m_alpha_clip`,
+  DERRAMA hacia arriba (conservativo, columna `m_spill`, entra a `ws_Fz`;
+  una celda LLENA no corta la cascada: recibe el exceso y lo cede en la
+  pasada siguiente —auditoría 8: el fondo de un baño lleno recortaba con
+  hueco encima—) y solo lo que no cabe bajo el techo va al clip auditado (`m_alpha_clip`,
   contabilizado POR PASO: la última iteración externa, no la suma de las
   5 — `audit_step_delta`). Nunca reintroducir un recorte silencioso de α:
   toda restricción de volumen se resuelve moviendo masa, no borrándola.
