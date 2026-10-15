@@ -483,6 +483,10 @@ program eaf_3d_simulator
                 call phase_exchange_halos(liq, mesh)
                 call phase_exchange_halos(gas, mesh)
                 call species_exchange_halos(sh, mesh)   ! (B4-1) Y diluidas por el volfix
+                ! (auditoria 5, B5-12) halos del solido tras fusion/colapso:
+                ! los lee el lazo de caras del intercambio gas-liquido (en la
+                ! rama de dos fluidos los intercambia multiphase_iteration)
+                call solid_exchange_halos(sol, mesh)
             end if
         end if
         call timer_stop(T_SOLID)

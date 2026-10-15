@@ -61,13 +61,14 @@ contains
     ! serial run, so the totals are bit-identical regardless of the MPI
     ! decomposition.  Deposits are then applied only to locally-owned cells.
     !---------------------------------------------------------------------------
-    subroutine distribute_arc_heat(elec, sh, sol, m, cfg, alpha_g, n_elec, alpha_lg)
+    subroutine distribute_arc_heat(elec, sh, sol, m, cfg, alpha_sg, n_elec, alpha_lg)
         type(electrode_t), intent(inout) :: elec(:)
         type(shared_t), intent(inout)   :: sh
         type(solid_t), intent(inout)    :: sol
         type(mesh_t), intent(in)        :: m
         type(config_t), intent(in)      :: cfg
-        real(dp), intent(in)            :: alpha_g(:,:,:)
+        ! alpha_s GLOBAL (B5-15: antes se llamaba alpha_g y era la del solido)
+        real(dp), intent(in)            :: alpha_sg(:,:,:)
         integer, intent(in)             :: n_elec
         ! alpha_l GLOBAL (N-A2): P_elec va al baño bajo el electrodo
         real(dp), intent(in)            :: alpha_lg(:,:,:)
@@ -165,7 +166,7 @@ contains
                         if (r2 >= 16.0_dp) cycle
                         gw = exp(-r2) * m%vol_global(ig,jg,kg)
                         wvo = wvo + gw
-                        if (alpha_g(ig,jg,kg) > ALPHA_SCRAP_SURF) wsc = wsc + gw * alpha_g(ig,jg,kg)
+                        if (alpha_sg(ig,jg,kg) > ALPHA_SCRAP_SURF) wsc = wsc + gw * alpha_sg(ig,jg,kg)
                         if (alpha_lg(ig,jg,kg) >= ALPHA_LIQ_CONT) wba = wba + gw * alpha_lg(ig,jg,kg)
                     end do
                 end do
@@ -220,7 +221,7 @@ contains
                             ! (arc_melt: 27.8 -> 8.4 kg fundidos cuando la celda
                             ! central con alpha_l >= 0.4 salia del reparto y el
                             ! arco calentaba la periferia).
-                            if (alpha_g(ig,jg,kg) < ALPHA_BED .and. alpha_lg(ig,jg,kg) < ALPHA_LIQ_CONT) cycle
+                            if (alpha_sg(ig,jg,kg) < ALPHA_ARC_RECV .and. alpha_lg(ig,jg,kg) < ALPHA_LIQ_CONT) cycle
                             x_cell = m%r_global(ig) * cos(m%theta_global(jg))
                             y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
@@ -282,14 +283,14 @@ contains
                     do jg = 1, m%nth_g
                         do ig = 1, m%nr_g
                             if (m%cell_type_global(ig,jg,kg) == 0) cycle
-                            if (alpha_g(ig,jg,kg) < ALPHA_BED .and. alpha_lg(ig,jg,kg) < ALPHA_LIQ_CONT) cycle
+                            if (alpha_sg(ig,jg,kg) < ALPHA_ARC_RECV .and. alpha_lg(ig,jg,kg) < ALPHA_LIQ_CONT) cycle
                             ! fraccion de chatarra EXPUESTA (M4-7): 1 sin bano, 0 con
                             ! alpha_l >= 0.4, rampa suave entre 0.2 y 0.4 (un corte
                             ! en 0.3 dependia del redondeo y rompia la simetria);
                             ! 0 sin chatarra. El resto de la celda lo absorbe su
                             ! fluido (charco por kappa_l alpha_l, M4-6).
                             wexp = 1.0_dp - min(1.0_dp, max(0.0_dp, (alpha_lg(ig,jg,kg) - 0.2_dp) / 0.2_dp))
-                            if (alpha_g(ig,jg,kg) < ALPHA_BED) wexp = 0.0_dp
+                            if (alpha_sg(ig,jg,kg) < ALPHA_ARC_RECV) wexp = 0.0_dp
                             x_cell = m%r_global(ig) * cos(m%theta_global(jg))
                             y_cell = m%r_global(ig) * sin(m%theta_global(jg))
                             dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
@@ -303,7 +304,7 @@ contains
                             ! P_rad directo: los fotones del arco calientan la
                             ! chatarra expuesta (fraccion wexp al solido, con el
                             ! tope de estado; el resto al fluido de la celda)
-                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), alpha_lg(ig,jg,kg), &
+                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_sg(ig,jg,kg), alpha_lg(ig,jg,kg), &
                                 m%vol_global(ig,jg,kg), P_rad_arc * gw / total_gw_vol_rad, wexp)
                         end do
                     end do
@@ -361,7 +362,7 @@ contains
                             if (.not. owned) cycle
 
                             gw = exp(-r2)
-                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), alpha_lg(ig,jg,kg), &
+                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_sg(ig,jg,kg), alpha_lg(ig,jg,kg), &
                                 m%vol_global(ig,jg,kg), P_rad_arc * gw / total_vol, -1.0_dp)
                         end do
                     end do
@@ -385,7 +386,7 @@ contains
                             if (.not. owned) cycle
 
                             gw = exp(-r2)
-                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg), alpha_lg(ig,jg,kg), &
+                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_sg(ig,jg,kg), alpha_lg(ig,jg,kg), &
                                 m%vol_global(ig,jg,kg), P_conv * gw / total_gw_vol_conv, -1.0_dp)
                         end do
                     end do
@@ -419,7 +420,7 @@ contains
                             call global_to_local(m, ig, jg, kg_bath, il, jl, kl, owned)
                             if (.not. owned) cycle
                             if (wel(ig, jg, kg_bath) <= 0.0_dp) cycle
-                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg_bath), alpha_lg(ig,jg,kg_bath), &
+                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_sg(ig,jg,kg_bath), alpha_lg(ig,jg,kg_bath), &
                                 m%vol_global(ig,jg,kg_bath), P_elec_flow * exp(-r2) * wel(ig, jg, kg_bath) &
                                 / (total_vol * m%vol_global(ig,jg,kg_bath)), -1.0_dp)
                         end do
@@ -449,7 +450,7 @@ contains
                             if (r2 >= 16.0_dp) cycle
                             call global_to_local(m, ig, jg, kg_bath, il, jl, kl, owned)
                             if (.not. owned) cycle
-                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_g(ig,jg,kg_bath), alpha_lg(ig,jg,kg_bath), &
+                            call arc_deposit(sol, sh, cfg, il, jl, kl, alpha_sg(ig,jg,kg_bath), alpha_lg(ig,jg,kg_bath), &
                                 m%vol_global(ig,jg,kg_bath), P_elec_flow * exp(-r2) * wel(ig, jg, kg_bath) &
                                 / (total_vol * m%vol_global(ig,jg,kg_bath)), -1.0_dp)
                         end do

@@ -148,10 +148,16 @@ contains
                     ! el clip auditado (nunca un recorte silencioso); (auditoria
                     ! 4, B4-3) tambien su ENERGIA, con la misma entalpia
                     ! especifica del liquido que usa el clip del transporte
+                    ! (auditoria 5, B5-11) SIGNO: aqui el recorte es liquido
+                    ! que la congelacion dijo quitar y la celda NO tenia; el
+                    ! inventario queda por ENCIMA de fundido - resolid, asi que
+                    ! el clip entra negativo (en el transporte el clip es masa
+                    ! que se pierde: positivo). Rama hoy inalcanzable (la
+                    ! palanca congela como maximo lo que hay).
                     if (a_new < 0.0_dp) then
                         dmc = -a_new * liq%rho(i,j,k) * m%vol(i,j,k)
-                        call audit_add(AUD_ALPHA_CLIP_MASS, dmc)
-                        call audit_add(AUD_ALPHA_CLIP_E, dmc * (liq%cp(i,j,k) * liq%T(i,j,k) &
+                        call audit_add(AUD_ALPHA_CLIP_MASS, -dmc)
+                        call audit_add(AUD_ALPHA_CLIP_E, -dmc * (liq%cp(i,j,k) * liq%T(i,j,k) &
                              + (cfg%cp_s - cfg%cp_l) * cfg%T_liquidus + cfg%h_fusion))
                     end if
                     liq%alpha(i,j,k) = max(0.0_dp, a_new)

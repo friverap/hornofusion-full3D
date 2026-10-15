@@ -338,7 +338,7 @@ contains
             do j = 1, m%ntheta
                 do i = 1, m%nr
                     if (m%cell_type(i,j,k) == 0 .or. m%cell_type(i,j,k+1) == 0) cycle
-                    if (sol%alpha_s(i,j,k) >= 2.0e-2_dp .or. sol%alpha_s(i,j,k+1) >= 2.0e-2_dp) cycle
+                    if (sol%alpha_s(i,j,k) >= 2.0_dp * ALPHA_BED .or. sol%alpha_s(i,j,k+1) >= 2.0_dp * ALPHA_BED) cycle
                     if (liq%alpha(i,j,k) >= liq%alpha(i,j,k+1)) then
                         kl = k; kg = k + 1
                     else

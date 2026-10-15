@@ -411,7 +411,9 @@ contains
                 do kk = ks, m%nz_g
                     if (vneed <= 0.0_dp) exit
                     if (m%cell_type_global(i,j,kk) == 0) cycle
-                    room = max(0.0_dp, 1.0_dp - al_g(i,j,kk) - as_g(i,j,kk)) * m%vol_global(i,j,kk)
+                    ! (auditoria 5, B5-13) hueco con el piso de gas del poro
+                    ! (liq_cap): la escoria no ocupa el gas residual del lecho
+                    room = max(0.0_dp, liq_cap(as_g(i,j,kk), 0.0_dp) - al_g(i,j,kk)) * m%vol_global(i,j,kk)
                     if (kk == m%nz_g) room = vneed           ! techo: lo que no cupo queda aqui
                     dv = min(vneed, room)
                     if (dv <= 0.0_dp) cycle
