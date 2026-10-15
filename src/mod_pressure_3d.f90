@@ -490,10 +490,15 @@ contains
                         ! total; el exceso se ACARREA (antes se perdia: el
                         ! comentario decia que la demanda se re-emitia, pero la
                         ! referencia del paso siguiente ya es la T nueva)
-                        ! (auditoria 4, B4-9) el acarreo lleva el MISMO peso que
-                        ! la demanda que lo origino: el gas de piso de un poro
-                        ! que se saturo no plantea tampoco la demanda arrastrada
-                        dvol = fsat * (-src + gadv(i,j,k) + ws_cc(i,j,k) / cfg%dt) &
+                        ! (auditoria 5, M5-3) el acarreo NO se vuelve a pesar:
+                        ! ws_cc es el resto de una demanda YA pesada (B4-9 lo
+                        ! multiplicaba otra vez por fsat y con fsat = f perdia
+                        ! (1 - f) del acarreo por paso sin columna; y la masa
+                        ! de CO/CO2 que no cupo bajo COMP_SRC_CAP desaparecia
+                        ! al saturarse el poro, contra la regla de que las
+                        ! reacciones no se pesan). Solo la demanda NUEVA
+                        ! (termica + advectiva) lleva fsat.
+                        dvol = fsat * (-src + gadv(i,j,k)) + ws_cc(i,j,k) / cfg%dt &
                              + (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) &
                                * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL)
                         dcl = max(-cap, min(cap, dvol))
