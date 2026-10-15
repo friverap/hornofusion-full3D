@@ -349,7 +349,10 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   chatarra por FRACCIÓN del volumen `ARC_SURF_FRAC_S` 5 % —M7-1: es un lecho;
   con espesor un cráter a medio fundir dejaba de ser superficie en
   producción—; la capa es superficie si las dos fracciones de umbral suman
-  1); nunca volver a una
+  1, y QUIÉN es la superficie se decide en esa MISMA escala:
+  chatarra si `wsc/ARC_SURF_FRAC_S ≥ wba/frac_surf` —M8-1: con las fracciones
+  crudas una capa con chatarra dominante y una película fina pasaba por baño);
+  nunca volver a una
   búsqueda aparte del baño por celda. (M5-1) la DO guarda su reparto por fase
   (`sh%w_rad_l`, αⁿ) y la energía resta la emisión con ESE peso: con α^{n+1}
   se creaba energía en cada paso con fusión (melt_forced 1 %). (M5-2) el lazo
@@ -388,7 +391,12 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   no plantean demanda ni acarrean. (M6-1) La cota `COMP_SRC_CAP` es el 20 %
   del gas que ATRAVIESA la celda en el paso (propio + entrante), no del
   propio: en un poro con caudal pasante la contracción del gas caliente que
-  entra vale 1.2–1.6 × el gas propio por paso.
+  entra vale 1.2–1.6 × el gas propio por paso. (M7-5) El caudal entrante de
+  la cota (`ws_qin_cap`) se CONGELA en la primera llamada del paso (la cota
+  no depende del iterado `u*` de cada iteración externa) y solo cuenta caras
+  con gas RESUELTO (α_g ≥ ALPHA_CUTOFF) en las dos celdas: nunca acumularlo
+  antes de esa guardia ni con la α de cara simétrica (caudal fantasma ½α_P u
+  A desde vecinas con gas evanescente de `ws_gas_reach`).
   (B5-1/2) el nodo líquido de la cara es continuo por `ws_liq_cont` y el área
   lleva la rampa (1 − fbed). (B5-4) la rama de UNA fase (flujo sin dos
   fluidos) es legada: `oneflow_test` la vigila con xfail con causa (corriente
@@ -511,7 +519,13 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
 - **Gas atrapado = subfase DESCONECTADA (F2.16, sep-2026)**: el gas de una
   celda es fluido del acople P-V sólo si PERCOLA hasta el freeboard por
   celdas cuyo gas puede moverse (movilidad = transitorio/(transitorio +
-  Ergun) > GAS_MOB_MIN; distribución bimodal medida). Es criterio de CAMINO,
+  Ergun) > GAS_MOB_MIN; distribución bimodal medida). **El transitorio usa
+  el paso de REFERENCIA fijo `DT_MOB_REF` = 2 ms (el dt de B1 donde se
+  calibró), nunca el dt de la corrida (auditoría 8, M8-2)**: el gas de piso de
+  una capa saturada (ε_g = 0.015, la vía de F2.7) tiene movilidad ~0.025 con
+  2 ms y 0.01 con 5 ms; con dt ≥ ~6.5 ms la capa cortaba el camino y una bolsa
+  bajo el lecho inundado quedaba pared (`pocket_rise_dt10`: sin subir, gas a
+  131 m/s). La clasificación es del estado, no del integrador. Es criterio de CAMINO,
   no local: F2.13 lo probaba celda a celda y al declarar pared a las celdas
   del piso de poro encerraba a vecinas con movilidad propia (B1 v33: 1.4 MPa
   a t = 204 s). Hilfer, Phys. Rev. E 58 (1998) 2090: la subfase conectada es
@@ -620,7 +634,14 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   propio recortaba la contracción del gas que atraviesa los poros (M6-1).
   Residuo ahora: bed_drain 1.8 %, cold 3.5 %, bath_fill 10 %, arc_melt 13 %,
   bed_flood 23 %, melt_forced 32 %; lo que queda es la congelación
-  (bath_freeze 12 %), el lazo externo truncado y el gas fuera del acople. `E_conv_gas − E_out_conv` es, en
+  (bath_freeze 12 %), el lazo externo truncado y el gas fuera del acople.
+  **Auditoría 8 (M8-3), medido**: el lazo externo TRUNCADO es la parte
+  dominante fuera de la congelación. Con 20 iteraciones en vez de 5,
+  melt_forced baja de 32 a 3.5 % y pocket_rise de 44 a 0.9 %; bath_freeze
+  apenas cambia (12 → 11.5 %). El desfase α–p de 5 iteraciones VENTEA gas
+  que la EOS vuelve a crear (pocket_rise: 0.92 kg de venteo con 0.52 de
+  pérdida real), y crece con el dt (10 ms: 1.50 kg, gas 99 m/s por los huecos
+  de los electrodos). B1 corre con `max_outer` = 5: decisión abierta. `E_conv_gas − E_out_conv` es, en
   forma T, la entalpía de esa masa: el «defecto convectivo» del gas no es
   numérico. Gate `mgtol` 0.5 (regresiones); el juez es B1 (N-M4 abierto).
 - **Identidad de energía POR PASO (A4-4)**: además de la acumulada, cada paso
@@ -677,7 +698,8 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   material ponderado por la gaussiana sobre el umbral (hoy por material, ver
   la sección de la auditoría 5: M6-5/M7-1) (hasta 4σ: un corte duro a 2σ
   dejaba la pertenencia de las celdas del borde al redondeo y rompía la
-  simetría 120°) es chatarra si Σwα_s ≥ Σwα_l, si no baño; el P_rad directo
+  simetría 120°) es chatarra si pesa más que el baño (cada uno en su escala,
+  M8-1), si no baño; el P_rad directo
   pesa la chatarra EXPUESTA (rampa 1 → 0 entre α_l 0.2 y 0.4); P_elec va a
   la capa del baño (gaussiana, α_l V) solo cuando la superficie es baño y si
   no se deposita con P_conv (antes buscaba baño en 2 R_elec saltando la
@@ -699,7 +721,15 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   `pocket_rise` (bolsa de gas bajo la capa 8 saturada; estado construido por
   `make_pocket_init.py` con presión HIDROSTÁTICA de la nueva estratificación y
   `rho_gas` de la EOS). Con los defaults el gas sube a contracorriente desde
-  el primer paso, sin ráfaga (gas ≤ 8 m/s en los 5 primeros pasos). La
+  el primer paso. El estado hidrostático NO es punto fijo (auditoría 8,
+  M8-3): la capa saturada drena por Darcy y su peso pasa al arrastre del
+  lecho (la presión del piso baja ~20 kPa, físico) y la bolsa se
+  despresuriza y ventea por los huecos de los electrodos (gas ~30 m/s). El
+  banco corre con `max_outer` = 20 (con 5 el desfase α–p ventea gas
+  fantasma: 45 m/s) y el juez mide el EXCESO de presión sobre la
+  hidrostática de la estratificación vigente (`max|p|` es siempre el piso y no
+  veía la bolsa: la bolsa tapada de M8-2 da +11.8 kPa), el cierre de masa del
+  gas y el máximo del gas en TODA la corrida. La
   «retención de 0.25–0.3 s» medida en la auditoría 6 era el estado construido
   con la presión del snapshot de origen, NO el modelo; la opción
   `pc_bed_gas_pocket` que se añadió para quitarla se RETIRÓ (con el estado
