@@ -135,6 +135,7 @@ audit_xfail_prefix() {
         bed_flood)     echo audit_bedflood ;;
         bath_fill_mix) echo audit_mix ;;
         melt_forced)   echo audit_melt ;;
+        oneflow_test)  echo audit_oneflow ;;
         *)             echo "" ;;
     esac
 }
@@ -302,6 +303,8 @@ full | rebaseline)
     run_case bath_test 12
     run_case bath_test_stretch 4
     run_case bath_test_cold 4
+    # (auditoria 5, B5-4) rama de UNA fase (flujo sin dos fluidos): banco legado
+    run_case oneflow_test 4
     run_case bath_fill 4
     run_case bath_mix 4
     run_case bath_fill_mix 4
@@ -375,6 +378,9 @@ full | rebaseline)
     run_script "bath_test_cold" \
         $PY $INT/check_bath.py "$OUT/bath_test_cold_n4" --config "$CFG/bath_test_cold.dat" --fill \
         --xfail "$(xfail_ids bath_test_cold)"
+    run_script "oneflow_test" \
+        $PY $INT/check_bath.py "$OUT/oneflow_test_n4" --config "$CFG/oneflow_test.dat" \
+        --xfail "$(xfail_ids oneflow_test)"
     run_script "bath_test_stretch" \
         $PY $INT/check_bath.py "$OUT/bath_test_stretch_n4" --config "$CFG/bath_test_stretch.dat" \
         --xfail "$(xfail_ids bath)"

@@ -103,3 +103,15 @@ audit_mix:mass_gas
 # de B1 con el lazo de produccion) tiene el mismo origen: +1.8e3..2.9e3
 # J/paso desde el paso 60 que con 20 outers queda en ~1e1 J/paso; su tramo
 # reanudado 100-200 sigue a 0.90 de lo permitido con causa conocida.
+# (auditoria 5, B5-4) oneflow_test: la rama de UNA fase (solve_flow sin
+# solve_multiphase) no tiene la fuerza balanceada por caras ni el Poisson de
+# volumen de dos fluidos: el bano en reposo de bath_test resuelto por ella
+# tiene corriente fantasma de 0.20 m/s, error ferrostatico del 2 % y crea
+# 1.1e5 J en 0.5 s sin ninguna fuente. Rama legada (solo
+# input/config_test_physics.dat la usa; la radiacion esta prohibida en ella
+# por la validacion del config); el banco la vigila para que no empeore
+# (masa exacta, alpha congelada, centinelas) y documenta lo que no hace.
+oneflow_test:bath_rest
+oneflow_test:bath_hydrostatic
+audit_oneflow:energy_balance
+audit_oneflow:energy_balance_step

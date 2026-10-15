@@ -557,6 +557,20 @@ contains
             call require(cfg%solve_species, &
                          'solve_chemistry requires solve_species (O2 finito)', ok)
         end if
+        ! (auditoria 5, B5-4) en la rama de UNA fase (flujo sin dos fluidos)
+        ! solo se resuelve la energia del liquido: la parte del gas de la
+        ! radiacion de la DO (w_g kappa_f (G - 4 sigma T_g^4)) no la paga nadie
+        if (cfg%solve_flow .and. .not. cfg%solve_multiphase) then
+            call require(.not. cfg%solve_radiation, &
+                         'solve_radiation with solve_flow requires solve_multiphase ' // &
+                         '(rama de una fase: la emision del gas quedaria sin pagar)', ok)
+        end if
+        ! (B5-8) con n_pc_max > 1 la cancelacion del Rhie-Chow deja de ser
+        ! exacta desde la segunda pasada (la alpha del Poisson ya no es la del
+        ! momento); ningun config lo usa
+        if (cfg%n_pc_max > 1 .and. cfg_root()) print '(A)', &
+            ' [CONFIG] NOTA: n_pc_max > 1: la cancelacion del Rhie-Chow (bed_rel_f/bed_rel_fp con ' // &
+            'own_weight_face) no es exacta desde la segunda pasada (auditoria 5, B5-8)'
         if (cfg%solve_ecs) then
             call require(cfg%ecs_vfrac > 0.0_dp .and. cfg%ecs_vfrac <= 1.0_dp, &
                          'ecs_vfrac must be in (0, 1]', ok)
