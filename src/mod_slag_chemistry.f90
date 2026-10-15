@@ -70,7 +70,7 @@ contains
 
         integer  :: i, j, k
         integer  :: istart, iend, jstart, jend, kstart, kend
-        real(dp) :: o2_rem, r_feo, dm_feo, dm_fe, dm_o2, dm_b, cap_b, cap_o, fcap
+        real(dp) :: o2_rem, r_feo, dm_feo, dm_fe, dm_o2, dm_b, fcap
         real(dp) :: vol, vol_b, q_rx, q_lim, e_fe, c0
         real(dp) :: r_red, dm_red, dm_c, dm_co
         real(dp) :: b2, x_feo, j_co, h_foam, rho_co, dm_co_cell
@@ -92,8 +92,20 @@ contains
         ! abajo al aplicarlo (dos celdas de escoria apiladas: la de arriba
         ! calculo su cap_b con la alpha del halo, sin lo que la de abajo ya
         ! habia metido): vuelve a la propia celda de escoria en una pasada 3
-        real(dp), allocatable :: fe_back(:,:,:)
-        real(dp) :: room_now, dm_ok
+        ! (auditoria 6, M6-3/M6-4) reduccion en DOS fases: la pasada 1a calcula
+        ! lo que cada celda de escoria QUIERE reducir (req_fe, kg de Fe tras
+        ! las cotas cinetica y termica); el hueco de cada celda (room, kg,
+        ! congelado antes de aplicar nada) se reparte con una regla fija y
+        ! local: el Fe va PRIMERO a la propia celda de escoria (la superficie
+        ! del bano) hasta su hueco, y el resto al bano de abajo hasta lo que le
+        ! deja la escoria de esa celda. Asi ninguna celda recibe mas que su
+        ! hueco (B5-14 devolvia el excedente sin cota: Sigma alpha > 1 en la
+        ! escoria) y el reparto no depende del orden del lazo ni de la
+        ! descomposicion (antes Gauss-Seidel dentro del rank y Jacobi entre
+        ! ranks). Con prioridad al bano de abajo la escoria apilada reducia la
+        ! mitad (la de arriba se llevaba el hueco de la de abajo).
+        real(dp), allocatable :: req_fe(:,:,:), room(:,:,:)
+        real(dp) :: dm_fe_req, o_own, o_below, o_up, b_up, gas_after
         real(dp) :: co_loc, co_tot, inc
         integer  :: npass
         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
@@ -112,9 +124,9 @@ contains
         allocate(fe_out(lbound(liq%alpha,1):ubound(liq%alpha,1), &
                         lbound(liq%alpha,2):ubound(liq%alpha,2), &
                         lbound(liq%alpha,3):ubound(liq%alpha,3)))
-        allocate(fe_in, t_in, co_up, co_new, fe_back, mold=fe_out)
+        allocate(fe_in, t_in, co_up, co_new, req_fe, room, mold=fe_out)
         fe_out = 0.0_dp; fe_in = 0.0_dp; t_in = 0.0_dp; co_up = 0.0_dp; co_new = 0.0_dp
-        fe_back = 0.0_dp
+        req_fe = 0.0_dp; room = 0.0_dp
         call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
         do k = kstart, kend
@@ -191,49 +203,71 @@ contains
                             dm_red = dm_red * q_lim / q_rx
                             q_rx   = q_lim
                         end if
-                        if (dm_red > SMALL) then
+                        ! (M6-4) solo la SOLICITUD; se aplica en la pasada 1b
+                        if (dm_red > SMALL) req_fe(i,j,k) = dm_red * MW_FE / MW_FEO
+                    end if
+                end do
+            end do
+        end do
+
+        ! ── Huecos congelados de las celdas de bano (kg de Fe que caben) y
+        ! solicitudes, con halos: la pasada 1b solo lee estos valores
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    room(i,j,k) = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k), slag%alpha_sl(i,j,k)) &
+                                  - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k)
+                end do
+            end do
+        end do
+        call mpi_exchange_halos_3d(room,   m%topo)
+        call mpi_exchange_halos_3d(req_fe, m%topo)
+
+        ! ── Pasada 1b: aplicar la reduccion con el reparto fijo, T de la
+        ! escoria y espuma
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (slag%m_sl(i,j,k) <= SMALL_SL) cycle
+                    vol = m%vol(i,j,k)
+                    dm_co_cell = 0.0_dp
+                    ! Fe que la escoria de ENCIMA mete en esta celda (su
+                    ! sobrante tras llenar su propio hueco)
+                    o_own = min(req_fe(i,j,k), room(i,j,k))
+                    b_up = 0.0_dp
+                    if (m%cell_type(i,j,k+1) /= 0) then
+                        o_up = min(req_fe(i,j,k+1), room(i,j,k+1))
+                        b_up = min(req_fe(i,j,k+1) - o_up, max(0.0_dp, room(i,j,k) - o_own))
+                    end if
+                    if (req_fe(i,j,k) > 0.0_dp) then
+                        dm_fe_req = req_fe(i,j,k)
+                        below = (m%cell_type(i,j,k-1) /= 0)
+                        ! (M4-5) el sobrante al bano de ABAJO, hasta lo que le
+                        ! deja la escoria de esa celda
+                        dm_b = 0.0_dp
+                        if (below) then
+                            o_below = min(req_fe(i,j,k-1), room(i,j,k-1))
+                            dm_b = min(dm_fe_req - o_own, max(0.0_dp, room(i,j,k-1) - o_below))
+                        end if
+                        dm_fe = o_own + dm_b
+                        if (dm_fe > SMALL) then
+                            ! si no cabe todo, el FeO queda sin reducir
+                            ! (conservativo: nada se crea ni se pierde)
+                            fcap = dm_fe / dm_fe_req
+                            dm_red = dm_fe_req * MW_FEO / MW_FE * fcap
                             dm_c  = dm_red * MW_C_S / MW_FEO
-                            dm_fe = dm_red * MW_FE / MW_FEO
                             dm_co = dm_red * MW_CO_S / MW_FEO
-                            ! (auditoria 4, M4-5) la reduccion se LIMITA a lo
-                            ! que cabe: hueco del bano de abajo (liq_cap, con el
-                            ! piso de poro) + hueco de la propia celda. Con una
-                            ! capa de escoria de varias celdas la inferior esta
-                            ! llena y el resto iba a la propia celda sin cota
-                            ! (sum alpha > 1). Si no cabe, el FeO queda sin
-                            ! reducir (conservativo: nada se crea ni se pierde).
-                            below = (m%cell_type(i,j,k-1) /= 0)
-                            cap_b = 0.0_dp
-                            if (below) cap_b = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k-1), &
-                                slag%alpha_sl(i,j,k-1)) - liq%alpha(i,j,k-1)) &
-                                * liq%rho(i,j,k-1) * m%vol(i,j,k-1)
-                            cap_o = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k), slag%alpha_sl(i,j,k)) &
-                                - liq%alpha(i,j,k)) * liq%rho(i,j,k) * vol
-                            if (dm_fe > cap_b + cap_o) then
-                                fcap = (cap_b + cap_o) / dm_fe
-                                dm_red = dm_red * fcap; dm_c = dm_c * fcap
-                                dm_fe = dm_fe * fcap;   dm_co = dm_co * fcap
-                                q_rx = q_rx * fcap
-                            end if
+                            q_rx  = dm_red * DH_FEO_RED / MW_FEO
                             slag%m_X(i,j,k,SL_FEO) = &
                                 slag%m_X(i,j,k,SL_FEO) - dm_red
                             slag%m_X(i,j,k,SL_C) = &
                                 slag%m_X(i,j,k,SL_C) - dm_c
                             slag%m_sl(i,j,k) = slag%m_sl(i,j,k) &
                                                - dm_red - dm_c
-                            ! Fe vuelve al baño de abajo (si existe; si no,
-                            ! a la propia celda si tiene líquido)
+                            ! entalpia del Fe que VIAJA (a T_sl) + endo
                             e_fe = dm_fe * (cfg%cp_l * slag%T_sl(i,j,k) + c0)
-                            ! Fe al bano de ABAJO (pasada 2) o, sobre pared, a
-                            ! la propia celda (antes se perdia)
-                            ! (auditoria 3, A3-7) el bano de abajo recibe
-                            ! solo lo que CABE en su hueco (1 - alpha_s -
-                            ! alpha_sl - alpha_l; alpha de la vecina con halo
-                            ! valido); el resto entra a la propia celda de
-                            ! escoria, que es la superficie del bano y tiene
-                            ! gas. Antes todo iba a la celda llena de abajo:
-                            ! alpha_l = 1.000104 (slag_chem_test, sum_alpha).
-                            dm_b = min(dm_fe, cap_b)
                             if (dm_b > 0.0_dp) then
                                 fe_in(i,j,k) = fe_in(i,j,k) + dm_b
                                 t_in(i,j,k) = slag%T_sl(i,j,k)
@@ -241,9 +275,14 @@ contains
                             if (dm_fe - dm_b > 0.0_dp) &
                                 call add_fe(i, j, k, dm_fe - dm_b, slag%T_sl(i,j,k))
                             slag%E_sl(i,j,k) = slag%E_sl(i,j,k) - e_fe - q_rx
-                            ! CO al gas (fuente de especies) y a la espuma;
-                            ! sin gas en la celda, sube (pasada 3)
-                            if (gas%alpha(i,j,k) >= ALPHA_CUTOFF) then
+                            ! (M6-3) CO al gas de la celda solo si le QUEDA gas
+                            ! despues del Fe (el propio y el de la escoria de
+                            ! encima); si no, sube (pasada 3). Antes se decidia
+                            ! con la alpha_g previa y el CO se perdia cuando el
+                            ! Fe llenaba el hueco.
+                            gas_after = 1.0_dp - sol%alpha_s(i,j,k) - slag%alpha_sl(i,j,k) &
+                                      - liq%alpha(i,j,k) - b_up / (liq%rho(i,j,k) * vol)
+                            if (gas_after >= ALPHA_CUTOFF) then
                                 sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + &
                                     dm_co / (vol * cfg%dt)
                             else
@@ -293,30 +332,12 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     if (fe_out(i,j,k+1) > 0.0_dp) call remove_fe(i, j, k, fe_out(i,j,k+1))
-                    if (fe_in(i,j,k+1) > 0.0_dp) then
-                        ! (B5-14) solo lo que CABE ahora; el resto vuelve a
-                        ! la celda de escoria de arriba (pasada 3)
-                        room_now = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k), slag%alpha_sl(i,j,k)) &
-                                   - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k)
-                        dm_ok = min(fe_in(i,j,k+1), room_now)
-                        if (dm_ok > 0.0_dp) call add_fe(i, j, k, dm_ok, t_in(i,j,k+1))
-                        fe_back(i,j,k) = fe_in(i,j,k+1) - dm_ok
-                    end if
+                    ! (M6-4) cabe por construccion (reparto de la pasada 1b)
+                    if (fe_in(i,j,k+1) > 0.0_dp) call add_fe(i, j, k, fe_in(i,j,k+1), t_in(i,j,k+1))
                 end do
             end do
         end do
-        ! ── Pasada 3 (B5-14): el excedente vuelve a la celda de escoria que lo
-        ! produjo (su propio liquido, como el resto que no cabia abajo)
-        call mpi_exchange_halos_3d(fe_back, m%topo)
-        do k = kstart, kend
-            do j = jstart, jend
-                do i = istart, iend
-                    if (m%cell_type(i,j,k) == 0 .or. m%cell_type(i,j,k-1) == 0) cycle
-                    if (fe_back(i,j,k-1) > 0.0_dp) call add_fe(i, j, k, fe_back(i,j,k-1), t_in(i,j,k))
-                end do
-            end do
-        end do
-        deallocate(fe_out, fe_in, t_in, fe_back)
+        deallocate(fe_out, fe_in, t_in, req_fe, room)
 
         ! ── Pasada 3: el CO nacido sin gas sube hasta la primera celda con gas
         ! (co_up(k) es lo pendiente de pasar a k+1; cada pasada mueve una
