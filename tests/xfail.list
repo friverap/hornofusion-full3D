@@ -115,3 +115,12 @@ oneflow_test:bath_rest
 oneflow_test:bath_hydrostatic
 audit_oneflow:energy_balance
 audit_oneflow:energy_balance_step
+# (auditoria 6, M6-1) bed_flood (banco patologico del lecho inundado, Plan D):
+# con la cota de compresibilidad sobre el gas que atraviesa la celda, UN paso de
+# 1499 (el 612) queda en 1.064 del permitido por paso; la distribucion MEJORA
+# frente a v93 (mediana 0.016/0.017, p99 0.18/0.29, pasos > 0.5: 3/7; v93 max
+# 0.80 en la misma ventana 594-622). Es truncacion del lazo externo cortado en
+# 5 en un banco caotico; con 10 iteraciones el peor paso es 0.14 pero el banco
+# toca U_GAS_MAX en AMBOS binarios (lazo no contractivo, B3-14), asi que se
+# queda en 5.
+audit_bedflood:energy_balance_step

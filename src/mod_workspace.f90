@@ -119,6 +119,11 @@ module mod_workspace
     ! el del inicio del paso (estado: va al snapshot de reinicio) y ws_cc_new
     ! el que deja la ultima iteracion externa.
     real(dp), allocatable :: ws_cc(:,:,:), ws_cc_new(:,:,:)
+    ! (auditoria 6, M6-1/M6-2) volumen de demanda de compresibilidad que el
+    ! paso DESCARTA [m3, con signo]: desborde de la cota del acarreo y acarreo
+    ! de celdas que salen del acople, quedan selladas o sin gas. Lo escribe la
+    ! ultima iteracion externa; main lo pasa al audit (m_gas_ccdrop) y lo cera.
+    real(dp), allocatable :: ws_cc_drop(:,:,:)
     ! Presion manometrica al INICIO del paso (auditoria M25): referencia
     ! p^n de la densidad rho(P0 + p^n, T^n) en la fuente de compresibilidad.
     ! Se copia de sh%p al empezar cada paso (sh%p va al reinicio).
@@ -273,7 +278,8 @@ contains
         allocate(ws_aE, ws_aS, ws_aN, ws_aB, ws_aT, ws_aP, ws_Su, mold=ws_aW)
         allocate(ws_Fr, ws_Fth, ws_Fz, ws_Mr, ws_Mth, ws_Mz, ws_lim, mold=ws_aW)
         allocate(ws_lim_step, mold=ws_aW); ws_lim_step = 1.0_dp
-        allocate(ws_cc, ws_cc_new, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
+        allocate(ws_cc, ws_cc_new, ws_cc_drop, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
+        ws_cc_drop = 0.0_dp
         allocate(ws_p_n, mold=ws_aW); ws_p_n = 0.0_dp
         allocate(ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, mold=ws_aW)
         ws_bed = 0.0_dp; ws_bed_gas = 0.0_dp; ws_bed_liq = 0.0_dp; ws_bedl_f = 0.0_dp; ws_bub = 0.0_dp; ws_bub_f = 0.0_dp

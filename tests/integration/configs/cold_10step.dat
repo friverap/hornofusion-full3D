@@ -24,7 +24,11 @@ solve_chemistry = false
 solve_arc = true
 solve_multiphase = true
 
-max_outer = 5
+# (auditoria 6, M6-1) lazo de PRODUCCION (10): con la cota de compresibilidad
+# medida contra el gas que atraviesa la celda, la demanda que antes se
+# recortaba ahora se pide y con 5 iteraciones el encendido quedaba truncado
+# (energy_balance 0.97 de lo permitido; con 40 cierra a 0.8 J, con 10 a 0.03)
+max_outer = 10
 max_inner_mom = 3
 max_inner_pres = 200  # Poisson de dominio completo con el gas (low-Mach)
 

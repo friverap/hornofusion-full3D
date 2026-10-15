@@ -32,7 +32,7 @@ program eaf_3d_simulator
     use mod_continuity
     use mod_multiphase
     use mod_mixture_3d
-    use mod_workspace, only: ensure_workspace, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new, ws_p_n, ws_Fg_valid, &
+    use mod_workspace, only: ensure_workspace, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new, ws_cc_drop, ws_p_n, ws_Fg_valid, &
                              ws_liq_cont, ws_liq_cont_valid
     use mod_solid_phase
     use mod_melting_3d
@@ -586,6 +586,25 @@ program eaf_3d_simulator
         ! Acarreo del exceso de compresibilidad: el de la ultima iteracion
         ! externa pasa al paso siguiente (M26)
         ws_cc = ws_cc_new
+        ! (auditoria 6, M6-1/M6-2) lo que la ultima iteracion externa descarto
+        ! de la demanda de compresibilidad, como masa de gas (rho_g del paso)
+        if (cfg%audit_freq > 0) then
+            block
+                integer :: ia, ja, ka, i0a, i1a, j0a, j1a, k0a, k1a
+                real(dp) :: dmc
+                call get_loop_bounds(mesh, i0a, i1a, j0a, j1a, k0a, k1a)
+                dmc = 0.0_dp
+                do ka = k0a, k1a
+                    do ja = j0a, j1a
+                        do ia = i0a, i1a
+                            dmc = dmc + ws_cc_drop(ia,ja,ka) * gas%rho(ia,ja,ka)
+                        end do
+                    end do
+                end do
+                call audit_add(AUD_GAS_CCDROP, dmc)
+            end block
+        end if
+        ws_cc_drop = 0.0_dp
         ! T del gas al final del SIMPLE: referencia de la fuente de
         ! compresibilidad del paso siguiente (A3-3; la mezcla fija la suya).
         ! Estado del reinicio (/restart Tg_end).

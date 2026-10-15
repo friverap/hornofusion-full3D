@@ -153,6 +153,10 @@ DEFS = {
                      "slag buoyancy, bucket charge or ECS [kg] (created gas carries no species)"),
     "m_vf_CO": ("C", "CO mass leaving with the destroyed gas [kg]"),
     "m_vf_CO2": ("C", "CO$_2$ mass leaving with the destroyed gas [kg]"),
+    "m_gas_ccdrop": ("C", "Gas mass whose compressibility volume demand the step discards "
+                          "($\\rho_g$ x overflow of the carry bound, carry of cells that leave "
+                          "the coupling, lose their gas or are sealed) [kg]; named part of the "
+                          "EOS residual of mass\\_gas (audit 6, M6-1/M6-2)"),
 }
 
 src = open(SRC).read()

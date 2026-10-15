@@ -95,7 +95,7 @@ contains
 
     subroutine solve_pressure_correction(liq, gas, gas_T_ref, sh, m, cfg, &
                                           residual)
-        use mod_workspace, only: ensure_workspace, own_weight_face, ws_cc, ws_cc_new, ws_p_n, aW => ws_aW, &
+        use mod_workspace, only: ensure_workspace, own_weight_face, ws_cc, ws_cc_new, ws_cc_drop, ws_p_n, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
@@ -152,6 +152,13 @@ contains
         ! Fraccion del gas en los coeficientes de cara (F2.17: la REAL)
         real(dp), allocatable :: ag_eff(:,:,:)
         real(dp), allocatable :: gadv(:,:,:)   ! A8: fuente advectiva del gas [m3/s]
+        ! (auditoria 6, M6-1) caudal de gas ENTRANTE por celda [m3/s]: la cota
+        ! de la fuente de compresibilidad se mide contra el gas que ATRAVIESA
+        ! la celda en el paso (propio + entrante), no solo contra el propio
+        real(dp), allocatable :: qin_g(:,:,:)
+        ! parte acotada de la demanda de compresibilidad que entra a Su (para
+        ! registrar lo que una fila sellada descarta, M6-2)
+        real(dp), allocatable :: su_cc(:,:,:)
         real(dp), allocatable :: Fs_r(:,:,:), Fs_th(:,:,:), Fs_z(:,:,:)
         real(dp), allocatable :: Fg_r(:,:,:), Fg_th(:,:,:), Fg_z(:,:,:), ag_r(:,:,:), ag_th(:,:,:), ag_z(:,:,:)
         real(dp), allocatable :: ac_r(:,:,:), ac_th(:,:,:), ac_z(:,:,:)
@@ -185,7 +192,7 @@ contains
         allocate(pvl, fsl, pvg, mold=act_l)
         liq_mask_on = cfg%pc_liq_sealed_wall .and. ws_pv_liq_valid .and. (ws_pv_liq_id == probe_current_step())
         allocate(ag_eff, mold=sh%pp)
-        allocate(gadv, mold=sh%pp); gadv = 0.0_dp
+        allocate(gadv, qin_g, su_cc, mold=sh%pp); gadv = 0.0_dp; qin_g = 0.0_dp; su_cc = 0.0_dp
         allocate(Fs_r, Fs_th, Fs_z, ac_r, ac_th, ac_z, mold=sh%pp)
         ! Completos a cero (halos incluidos): las caras de frontera fisica
         ! no las escribe nadie y el transporte de alpha las lee (leccion v10)
@@ -273,10 +280,18 @@ contains
                         ! fila: E1b -cerrar la valvula, NEGATIVO en B1- por la
                         ! puerta de atras)
                         src = src * fsat_cell(i, j, k)
-                        ! (auditoria 5, B5-9) la demanda que juzga el venteo
-                        ! incluye el ACARREO del paso anterior (misma demanda
-                        ! que plantea la fuente; antes solo la termica)
-                        src = abs(src + ws_cc(i,j,k) / cfg%dt)
+                        ! (auditoria 6, M6-2) la demanda que juzga el venteo
+                        ! es la que plantea la fuente, CON SIGNO: expansion
+                        ! termica (-src, aqui src ya es |.|: se recupera el
+                        ! signo), reacciones y acarreo (B5-9 sumaba |termica| +
+                        ! acarreo: con gas que se enfria el signo salia
+                        ! invertido). El advectivo aun no existe aqui (se arma
+                        ! con las caras del Poisson).
+                        src = abs(sign(src, gas_eos(cfg%rho_gas, gas_T_ref(i,j,k), ws_p_n(i,j,k)) &
+                                             - gas%rho(i,j,k)) &
+                                  + (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) &
+                                    * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL) &
+                                  + ws_cc(i,j,k) / cfg%dt)
                         src = min(src, COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt)
                         if (src <= 0.0_dp) cycle
                         cg = 0.0_dp
@@ -460,24 +475,27 @@ contains
         if (cfg%gas_compressibility .and. cfg%solve_multiphase) then
         block
             real(dp) :: src, cap, dvol, dcl, fsat
-            ! (auditoria 5, B5-9) el acarreo de una celda que no esta en el
-            ! acople se CONSERVA (antes se perdia sin rastro al salir de act_g
-            ! por F2.13/F2.31); las celdas OUTLET (Dirichlet p' = 0, techo bajo
-            ! los electrodos) no plantean demanda ni acarrean (B5-7: el tope
-            ! actuaba cada paso en la columna de salida y el acarreo acumulado
-            ! iba al snapshot)
-            ws_cc_new = ws_cc
+            ! (auditoria 6, M6-2) el acarreo vive SOLO mientras la celda esta
+            ! en el acople: una celda fuera de act_g (F2.13/F2.31), sin gas o
+            ! sellada (F2.29, abajo) lo DESCARTA con registro (ws_cc_drop ->
+            ! m_gas_ccdrop). B5-9 lo conservaba congelado: la exclusion de F2.31
+            ! se volvia pegajosa (el acarreo entraba al test de venteo) y
+            ! slag_chem_flow guardaba acarreo creciente en 24 celdas sin gas.
+            ! Las celdas OUTLET (Dirichlet p' = 0) no plantean demanda ni
+            ! acarrean (B5-7): son el sumidero.
+            ws_cc_new = 0.0_dp
+            ws_cc_drop = 0.0_dp
             do k = kstart, kend
                 do j = jstart, jend
                     do i = istart, iend
                         if (m%cell_type(i,j,k) == 0) cycle
                         if (at_zmax .and. k == kend) then
-                            if (any(m%is_electrode(i,j,k,:))) then
-                                ws_cc_new(i,j,k) = 0.0_dp
-                                cycle
-                            end if
+                            if (any(m%is_electrode(i,j,k,:))) cycle
                         end if
-                        if (.not. act_g(i,j,k)) cycle
+                        if (.not. act_g(i,j,k) .or. gas%alpha(i,j,k) < ALPHA_CUTOFF) then
+                            ws_cc_drop(i,j,k) = ws_cc(i,j,k)
+                            cycle
+                        end if
                         ! El gas RESIDUAL de un poro SATURADO (alpha_g en el
                         ! piso ALPHA_PORE_GAS, liquido en el cap) es un canal
                         ! hidraulico (F2.7), no un inventario termodinamico: su
@@ -498,7 +516,14 @@ contains
                         src = gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt * &
                               (gas%rho(i,j,k) - gas_eos(cfg%rho_gas, gas_T_ref(i,j,k), &
                                ws_p_n(i,j,k))) / max(gas%rho(i,j,k), SMALL)
-                        cap = COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt
+                        ! (auditoria 6, M6-1) la cota es el 20 % del gas que
+                        ! ATRAVIESA la celda en el paso (propio + entrante): en
+                        ! un poro con caudal pasante la contraccion del gas
+                        ! caliente que entra vale 1.2-1.6 veces el gas propio
+                        ! por paso (bath_fill) y la cota sobre el propio la
+                        ! recortaba cada paso (acarreo saturado: la EOS
+                        ! reescribia esa masa, N-M4)
+                        cap = COMP_SRC_CAP * (gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt + qin_g(i,j,k))
                         ! Demanda de volumen del gas [m3/s]: expansion termica
                         ! (-src), A8 advectiva (gadv), M14 fuente de masa de las
                         ! reacciones (S_gas/rho_g) y lo que el tope no dejo
@@ -519,8 +544,12 @@ contains
                                * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL)
                         dcl = max(-cap, min(cap, dvol))
                         Su(i,j,k) = Su(i,j,k) + dcl
+                        su_cc(i,j,k) = dcl
+                        ! acarreo acotado por el mismo volumen de referencia
+                        ! que la cota; lo que lo excede se descarta CON registro
                         ws_cc_new(i,j,k) = sign(min(abs(dvol - dcl) * cfg%dt, &
-                            gas%alpha(i,j,k) * m%vol(i,j,k)), dvol - dcl)
+                            gas%alpha(i,j,k) * m%vol(i,j,k) + qin_g(i,j,k) * cfg%dt), dvol - dcl)
+                        ws_cc_drop(i,j,k) = (dvol - dcl) * cfg%dt - ws_cc_new(i,j,k)
                     end do
                 end do
             end do
@@ -562,11 +591,13 @@ contains
                         aS(i,j,k) = 0.0_dp; aN(i,j,k) = 0.0_dp
                         aB(i,j,k) = 0.0_dp; aT(i,j,k) = 0.0_dp
                         aP(i,j,k) = 1.0_dp; Su(i,j,k) = 0.0_dp
-                        ! (B5-9) la fila sellada no evacua su demanda: el
-                        ! acarreo previo se conserva (la demanda nueva del
-                        ! paso se replantea contra Tg_end)
-                        if (cfg%gas_compressibility .and. cfg%solve_multiphase .and. sealed(i,j,k)) &
-                            ws_cc_new(i,j,k) = ws_cc(i,j,k)
+                        ! (M6-2) la fila sellada no evacua nada: lo que la
+                        ! celda planteo este paso (Su ya incluia la parte
+                        ! acotada) se descarta CON registro
+                        if (cfg%gas_compressibility .and. cfg%solve_multiphase .and. sealed(i,j,k)) then
+                            ws_cc_drop(i,j,k) = ws_cc_drop(i,j,k) + ws_cc_new(i,j,k) + su_cc(i,j,k) * cfg%dt
+                            ws_cc_new(i,j,k) = 0.0_dp
+                        end if
                     else
                         ! Compliance: ver nota de PP_COMPLIANCE arriba
                         aP(i,j,k) = (aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + &
@@ -785,7 +816,7 @@ contains
         end block
         call mpi_exchange_halos_3d(sh%p, m%topo)
 
-        deallocate(gpr, gpth, gpz, act_l, act_g, ag_eff, sealed, lcoef, gadv)
+        deallocate(gpr, gpth, gpz, act_l, act_g, ag_eff, sealed, lcoef, gadv, qin_g, su_cc)
         deallocate(lcoef_r, lcoef_th, lcoef_z, pvl, fsl, pvg)
         deallocate(Fs_r, Fs_th, Fs_z, ac_r, ac_th, ac_z)
         deallocate(Fg_r, Fg_th, Fg_z, ag_r, ag_th, ag_z)
@@ -840,6 +871,12 @@ contains
             real(dp), intent(in) :: qin
             if (.not. (cfg%gas_compressibility .and. cfg%solve_multiphase)) return
             if (qin <= 0.0_dp) return
+            qin_g(ii,jj,kk) = qin_g(ii,jj,kk) + qin
+            ! (auditoria 6, M6-1) solo donde la energia del gas se resuelve
+            ! (alpha_g >= ALPHA_CUTOFF en las DOS celdas): en una celda sin gas
+            ! T_g es rancia y el termino salia en -3.6e4 veces su volumen de
+            ! gas (slag_chem_flow, capa de escoria)
+            if (gas%alpha(ii,jj,kk) < ALPHA_CUTOFF .or. gas%alpha(in_,jn_,kn_) < ALPHA_CUTOFF) return
             gadv(ii,jj,kk) = gadv(ii,jj,kk) + qin * (gas%rho(in_,jn_,kn_) - gas%rho(ii,jj,kk)) &
                                                   / max(gas%rho(ii,jj,kk), SMALL)
         end subroutine gas_adv

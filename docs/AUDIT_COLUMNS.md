@@ -82,3 +82,4 @@ Generado por `scripts/make_audit_glossary.py` desde el encabezado de `src/mod_au
 | `m_vf_O2` | C | O`_2` mass leaving with the gas destroyed by the volume constraint, slag buoyancy, bucket charge or ECS [kg] (created gas carries no species) |
 | `m_vf_CO` | C | CO mass leaving with the destroyed gas [kg] |
 | `m_vf_CO2` | C | CO`_2` mass leaving with the destroyed gas [kg] |
+| `m_gas_ccdrop` | C | Gas mass whose compressibility volume demand the step discards (`\rho_g` x overflow of the carry bound, carry of cells that leave the coupling, lose their gas or are sealed) [kg]; named part of the EOS residual of mass_gas (audit 6, M6-1/M6-2) |
