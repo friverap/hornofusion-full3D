@@ -31,7 +31,8 @@ module mod_slag_chemistry
                          AUD_SLAG_OX_E, AUD_SLAG_RED_E
     use mod_melting_3d, only: liquid_datum_offset
     use mod_foam, only: xi_pretorius
-    use mod_mpi_topology, only: mpi_exchange_halos_3d
+    use mod_mpi_topology, only: mpi_exchange_halos_3d, mpi_allreduce_sum
+    use mod_boundary_3d, only: physical_boundary_flags
     implicit none
 
     real(dp), parameter :: SMALL_SL = 1.0e-6_dp   ! (como mod_slag_3d)
@@ -80,6 +81,16 @@ contains
         ! la escritura en un halo de k-1 se perdia; auditoria A14)
         real(dp), allocatable :: fe_out(:,:,:), fe_in(:,:,:), t_in(:,:,:)
         logical  :: below
+        ! (auditoria 5, M5-5 bis) CO de la reduccion nacido en una celda de
+        ! escoria SIN gas (alpha_g < ALPHA_CUTOFF: escoria sobre bano lleno).
+        ! El solver de especies descarta la fuente de una celda sin gas (su
+        ! guardia de fase minima) y slag_chem_test perdia el 24 % del CO. El
+        ! CO burbujea hacia ARRIBA hasta la primera celda con gas: pasadas
+        ! Jacobi con halos (invariante a la descomposicion en z).
+        real(dp), allocatable :: co_up(:,:,:), co_new(:,:,:)
+        real(dp) :: co_loc, co_tot, inc
+        integer  :: npass
+        logical  :: at_rmin, at_rmax, at_zmin, at_zmax
 
         if (m%is_parallel) then
             istart = m%topo%istart; iend = m%topo%iend
@@ -95,8 +106,9 @@ contains
         allocate(fe_out(lbound(liq%alpha,1):ubound(liq%alpha,1), &
                         lbound(liq%alpha,2):ubound(liq%alpha,2), &
                         lbound(liq%alpha,3):ubound(liq%alpha,3)))
-        allocate(fe_in, t_in, mold=fe_out)
-        fe_out = 0.0_dp; fe_in = 0.0_dp; t_in = 0.0_dp
+        allocate(fe_in, t_in, co_up, co_new, mold=fe_out)
+        fe_out = 0.0_dp; fe_in = 0.0_dp; t_in = 0.0_dp; co_up = 0.0_dp; co_new = 0.0_dp
+        call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
         do k = kstart, kend
             do j = jstart, jend
@@ -222,9 +234,14 @@ contains
                             if (dm_fe - dm_b > 0.0_dp) &
                                 call add_fe(i, j, k, dm_fe - dm_b, slag%T_sl(i,j,k))
                             slag%E_sl(i,j,k) = slag%E_sl(i,j,k) - e_fe - q_rx
-                            ! CO al gas (fuente de especies) y a la espuma
-                            sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + &
-                                dm_co / (vol * cfg%dt)
+                            ! CO al gas (fuente de especies) y a la espuma;
+                            ! sin gas en la celda, sube (pasada 3)
+                            if (gas%alpha(i,j,k) >= ALPHA_CUTOFF) then
+                                sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + &
+                                    dm_co / (vol * cfg%dt)
+                            else
+                                co_up(i,j,k) = co_up(i,j,k) + dm_co
+                            end if
                             dm_co_cell = dm_co
                             call audit_add(AUD_FE_RETURN, dm_fe)
                             call audit_add(AUD_SLAG_RED_E, q_rx)
@@ -274,6 +291,37 @@ contains
             end do
         end do
         deallocate(fe_out, fe_in, t_in)
+
+        ! ── Pasada 3: el CO nacido sin gas sube hasta la primera celda con gas
+        ! (co_up(k) es lo pendiente de pasar a k+1; cada pasada mueve una
+        ! capa; en el techo fisico sin gas se deposita igual, el solver lo
+        ! descartaria y quedaria sin columna)
+        co_loc = sum(co_up(istart:iend, jstart:jend, kstart:kend))
+        call mpi_allreduce_sum(co_loc, co_tot, m%topo)
+        npass = 0
+        do while (co_tot > 0.0_dp .and. npass < m%nz_g)
+            npass = npass + 1
+            call mpi_exchange_halos_3d(co_up, m%topo)
+            co_new = 0.0_dp
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        if (m%cell_type(i,j,k) == 0 .or. m%cell_type(i,j,k-1) == 0) cycle
+                        inc = co_up(i,j,k-1)
+                        if (inc <= 0.0_dp) cycle
+                        if (gas%alpha(i,j,k) >= ALPHA_CUTOFF .or. (k == kend .and. at_zmax)) then
+                            sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + inc / (m%vol(i,j,k) * cfg%dt)
+                        else
+                            co_new(i,j,k) = inc
+                        end if
+                    end do
+                end do
+            end do
+            co_up = co_new
+            co_loc = sum(co_up(istart:iend, jstart:jend, kstart:kend))
+            call mpi_allreduce_sum(co_loc, co_tot, m%topo)
+        end do
+        deallocate(co_up, co_new)
 
     contains
 

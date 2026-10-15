@@ -13,7 +13,7 @@ module mod_slag_3d
     use mod_types_3d
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_allreduce_sum, mpi_exchange_halos_3d
     use mod_parallel_utils, only: gather_global_field, global_to_local
-    use mod_audit, only: audit_add, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT, AUD_SLAG_TCLIP, &
+    use mod_audit, only: audit_add, audit_gas_destroyed, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT, AUD_SLAG_TCLIP, &
                          AUD_SLAG_GAS, AUD_SLAG_LIQ, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
                          gas_inventory_cell, gas_heat_capacity_ref
     implicit none
@@ -324,7 +324,8 @@ contains
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
         real(dp),      intent(in)    :: dt
-        type(shared_t), intent(in), optional :: sh   ! p para el inventario del gas (M4-13)
+        ! p para el inventario del gas (M4-13); especies del gas creado (M5-5)
+        type(shared_t), intent(inout), optional :: sh
 
         call slag_buoyancy(slag, liq, gas, sol, m, cfg, sh)
         call slag_energy(slag, liq, gas, m, cfg, dt, sh)
@@ -349,7 +350,8 @@ contains
         type(solid_t), intent(in)    :: sol
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
-        type(shared_t), intent(in), optional :: sh
+        type(shared_t), intent(inout), optional :: sh
+        real(dp) :: fdil
 
         integer  :: i, j, k, c, ks, kk, il, jl, kl
         logical  :: owned
@@ -451,6 +453,20 @@ contains
                                                    m%vol(il,jl,kl), cfg) &
                               - gas_inventory_cell(gas%alpha(il,jl,kl), gas%T(il,jl,kl), pc, &
                                                    gas%cp(il,jl,kl), m%vol(il,jl,kl), cfg)
+                    ! (auditoria 5, M5-5) el gas CREADO no trae especies: Y se
+                    ! diluye por alpha_old/alpha_new como en el volfix (A3-7);
+                    ! antes las Y quedaban y el gas que reaparecia bajo la
+                    ! escoria creaba O y C de la nada. Al destruir gas la
+                    ! especie se va con el.
+                    if (present(sh) .and. ag_new > gas%alpha(il,jl,kl) .and. ag_new > 0.0_dp) then
+                        fdil = max(gas%alpha(il,jl,kl), 0.0_dp) / ag_new
+                        sh%Y_O2(il,jl,kl)  = sh%Y_O2(il,jl,kl)  * fdil
+                        sh%Y_CO(il,jl,kl)  = sh%Y_CO(il,jl,kl)  * fdil
+                        sh%Y_CO2(il,jl,kl) = sh%Y_CO2(il,jl,kl) * fdil
+                    else if (present(sh)) then
+                        call audit_gas_destroyed(sh, il, jl, kl, &
+                            (gas%alpha(il,jl,kl) - ag_new) * gas%rho(il,jl,kl) * m%vol(il,jl,kl))
+                    end if
                     gas%alpha(il,jl,kl) = ag_new
                 end do
             end do

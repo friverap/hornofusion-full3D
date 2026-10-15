@@ -12,7 +12,17 @@ Sobre una corrida SIN flujo (chem_test): entre el primer y último snapshot,
 Tolerancia holgada (default 5%): rho_gas(T) introduce deriva de inventario
 al calentarse el gas (agujero EOS documentado).
 
-Uso: check_chem.py RUNDIR --config CFG [--rtol 1e-7]
+(auditoria 5, M5-5) --slag: identidades con la quimica de la escoria y el gas
+destruido. El gas que crea la restriccion de volumen o la flotacion de la
+escoria no trae especies (Y diluida) y el destruido se las lleva (columnas
+m_vf_*). Con FeO formado (m_fe_yield, consume O2 del gas) y reducido
+(m_fe_return, devuelve CO al gas):
+  O_1 + O_dil + O_vf - O_0 = (16/55.85) (m_fe_return - m_fe_yield)
+  C_1 + C_dil + C_vf - C_0 = m_C_oxid + (12/55.85) m_fe_return
+Solo vale sin flujo (solve_flow = false): con la EOS reescribiendo masa del
+gas (N-M4) el inventario elemental no es una identidad.
+
+Uso: check_chem.py RUNDIR --config CFG [--rtol 1e-7] [--slag]
 """
 import argparse, csv, os, sys
 import numpy as np
@@ -36,7 +46,18 @@ def rho_gas(T, p):
 def elements(path):
     f, mesh, meta = load_snapshot(path)
     vol = cell_volumes(mesh)
-    arho = f["alpha_gas"] * rho_gas(f["T_gas"], f["pressure"])
+    # (auditoria 5, M5-5) la densidad con la que el CODIGO lleva las especies
+    # (/restart/rho_gas): sin flujo ni energia (slag_chem_test) rho_g queda en
+    # su valor inicial aunque la escoria caliente el gas, y la EOS evaluada
+    # con la T del snapshot restaba 0.9 kg de O (5.6 %) que nunca salieron
+    import h5py
+    with h5py.File(path, "r") as h:
+        if "restart" in h and "rho_gas" in h["restart"]:
+            rho = h["restart"]["rho_gas"][:]
+        else:
+            rho = rho_gas(f["T_gas"], f["pressure"])
+    arho = f["alpha_gas"] * rho
+    f["_rho_gas"] = rho
     O = float(np.sum(arho * (f["Y_O2"] + f["Y_CO"] * 16 / 28 +
                              f["Y_CO2"] * 32 / 44) * vol))
     C = float(np.sum(arho * (f["Y_CO"] * 12 / 28 + f["Y_CO2"] * 12 / 44) * vol))
@@ -49,6 +70,8 @@ def main():
     ap.add_argument("--config", required=True)
     # medido O 1.2e-12, C 1.7e-10 (auditoria 2, N-A6: antes 5 %)
     ap.add_argument("--rtol", type=float, default=1e-7)
+    ap.add_argument("--slag", action="store_true",
+                    help="incluir la quimica de la escoria (FeO) y el gas destruido")
     args = ap.parse_args()
 
     global RHO_REF
@@ -59,7 +82,9 @@ def main():
     O1, C1, f1 = elements(files[-1])
 
     # columnas del audit (si existen): dilucion y carbono oxidado
-    dil = {"m_dil_O2": 0.0, "m_dil_CO": 0.0, "m_dil_CO2": 0.0, "m_C_oxid": 0.0}
+    dil = {"m_dil_O2": 0.0, "m_dil_CO": 0.0, "m_dil_CO2": 0.0, "m_C_oxid": 0.0,
+           "m_vf_O2": 0.0, "m_vf_CO": 0.0, "m_vf_CO2": 0.0,
+           "m_fe_yield": 0.0, "m_fe_return": 0.0}
     apath = os.path.join(args.rundir, "audit.csv")
     have_audit = False
     if os.path.exists(apath):
@@ -69,19 +94,49 @@ def main():
             have_audit = True
             for r in rows:
                 for kk in dil:
-                    dil[kk] += float(r[kk])
+                    dil[kk] += float(r.get(kk, 0.0))
     O_dil = dil["m_dil_O2"] + dil["m_dil_CO"] * 16 / 28 + dil["m_dil_CO2"] * 32 / 44
     C_dil = dil["m_dil_CO"] * 12 / 28 + dil["m_dil_CO2"] * 12 / 44
+    # (M5-5) especies que salieron con el gas destruido (volfix, escoria,
+    # cesta, ECS): mismo signo que la dilucion (salen del inventario)
+    O_dil += dil["m_vf_O2"] + dil["m_vf_CO"] * 16 / 28 + dil["m_vf_CO2"] * 32 / 44
+    C_dil += dil["m_vf_CO"] * 12 / 28 + dil["m_vf_CO2"] * 12 / 44
+    # quimica de la escoria (MW del codigo: Fe 55.85, O 16, C 12)
+    O_slag = C_slag = 0.0
+    if args.slag:
+        O_slag = (dil["m_fe_return"] - dil["m_fe_yield"]) * 16.0 / 55.85
+        C_slag = dil["m_fe_return"] * 12.0 / 55.85
 
-    print(f"[chem] {args.rundir}")
+    print(f"[chem] {args.rundir}" + (" (con escoria)" if args.slag else ""))
     ok = True
 
-    errO = abs(O1 + O_dil - O0) / max(O0, 1e-12)
+    errO = abs(O1 + O_dil - O0 - O_slag) / max(O0, 1e-12)
     print(f"  {'PASS' if errO <= args.rtol else 'FAIL'}  O_conservation  "
-          f"O: {O0:.4e} -> {O1:.4e} + desplazado {O_dil:.4e} kg (err {errO:.3e})")
+          f"O: {O0:.4e} -> {O1:.4e} + desplazado {O_dil:.4e} kg"
+          + (f" (FeO: {O_slag:+.4e})" if args.slag else "")
+          + f" (err {errO:.3e})")
     ok = ok and errO <= args.rtol
 
     dC_gas = C1 - C0 + C_dil
+    if args.slag:
+        # el C que entra al gas: carbono del acero oxidado + el de la escoria
+        # que reduce FeO (CO); m_C_oxid puede ser 0 (sin chatarra)
+        C_src = dil["m_C_oxid"] + C_slag
+        errCg = abs(dC_gas - C_src) / max(C_src, 1e-12)
+        okCg = errCg <= args.rtol
+        print(f"  {'PASS' if okCg else 'FAIL'}  C_conservation  C en gas + desplazado "
+              f"{dC_gas:.4e} vs oxidado {dil['m_C_oxid']:.4e} + reduccion FeO "
+              f"{C_slag:.4e} kg (err {errCg:.3e})")
+        ok = ok and okCg
+        if dil["m_fe_yield"] <= 1e-6 or dil["m_fe_return"] <= 1e-6:
+            print("  FAIL  reaccion_activa  sin oxidacion o sin reduccion de FeO: "
+                  "test inconcluyente")
+            sys.exit(1)
+        sY = float(np.max(f1["Y_O2"] + f1["Y_CO"] + f1["Y_CO2"]))
+        okY = sY <= 1.0 + 1e-9
+        print(f"  {'PASS' if okY else 'FAIL'}  suma_Y  max(Y_O2+Y_CO+Y_CO2) = {sY:.6f}")
+        ok = ok and okY
+        sys.exit(0 if ok else 1)
     if have_audit:
         # M15: el carbono oxidado SALE del acero. La masa de solido perdida
         # (sin fusion en chem_test) debe ser exactamente m_C_oxid; y el C que
@@ -106,8 +161,8 @@ def main():
     # O_consumido = 4/3*C_a_CO + 4/7*CO_a_CO2... chequeo directo:
     # el C en gas debe ser consistente con el O2 desaparecido:
     vol0 = cell_volumes(load_snapshot(files[0])[1])
-    O2_0 = float(np.sum(f0["Y_O2"] * f0["alpha_gas"] * rho_gas(f0["T_gas"], f0["pressure"]) * vol0))
-    O2_1 = float(np.sum(f1["Y_O2"] * f1["alpha_gas"] * rho_gas(f1["T_gas"], f1["pressure"]) * vol0))
+    O2_0 = float(np.sum(f0["Y_O2"] * f0["alpha_gas"] * f0["_rho_gas"] * vol0))
+    O2_1 = float(np.sum(f1["Y_O2"] * f1["alpha_gas"] * f1["_rho_gas"] * vol0))
     dO2 = O2_0 - O2_1 - dil["m_dil_O2"]   # O2 consumido por las reacciones
     # cota estequiométrica: 4/3 <= O2_consumido/C_gas <= 4/3 + 4/7·(CO2/(CO+CO2))
     ratio = dO2 / dC_gas * (12.0 / 16.0)  # mol O / mol C

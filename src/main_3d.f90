@@ -621,6 +621,8 @@ program eaf_3d_simulator
             call phase_exchange_halos(liq, mesh)
             call phase_exchange_halos(gas, mesh)
             call slag_exchange_halos(slag, mesh)
+            ! (M5-5) la flotacion diluye las Y del gas que crea
+            if (cfg%solve_species) call species_exchange_halos(sh, mesh)
         end if
         call timer_stop(T_SLAG)
         ! Auditoría de balances (antes de adaptar dt: usa el dt del paso).

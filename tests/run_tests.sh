@@ -337,6 +337,11 @@ full | rebaseline)
         $PY $INT/compare_decomposition.py "$OUT/ecs_test_n1" "$OUT/ecs_test_n8" --rtol 1e-12
     run_script "slag_chem" \
         $PY $INT/check_slag_chem.py "$OUT/slag_chem_test_n8" --config "$CFG/slag_chem_test.dat"
+    # (auditoria 5, M5-5) balance elemental de O y C CON escoria (FeO formado
+    # y reducido, gas creado sin especies y destruido con ellas): solo sin
+    # flujo, con la EOS reescribiendo masa (N-M4) no es una identidad
+    run_script "chem_slag_elements" \
+        $PY $INT/check_chem.py "$OUT/slag_chem_test_n8" --config "$CFG/slag_chem_test.dat" --slag
     run_script "slag_chem_flow" \
         $PY $INT/check_slag_chem.py "$OUT/slag_chem_flow_n4" --config "$CFG/slag_chem_flow.dat"
     # escoria por columna global (auditoria A14): invariante a la descomposicion

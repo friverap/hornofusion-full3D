@@ -12,7 +12,7 @@ module mod_solid_phase
     use mod_scrap_collapse
     use mod_interphase_ht
     use mod_workspace, only: ensure_workspace, ws_Tsrc
-    use mod_audit, only: audit_add, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, AUD_ALPHA_CLIP_MASS, AUD_ALPHA_CLIP_E, &
+    use mod_audit, only: audit_add, audit_gas_destroyed, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, AUD_ALPHA_CLIP_MASS, AUD_ALPHA_CLIP_E, &
                          gas_inventory_cell
     implicit none
 
@@ -105,6 +105,10 @@ contains
                         sh%Y_O2(i,j,k)  = sh%Y_O2(i,j,k)  * fdil
                         sh%Y_CO(i,j,k)  = sh%Y_CO(i,j,k)  * fdil
                         sh%Y_CO2(i,j,k) = sh%Y_CO2(i,j,k) * fdil
+                    else if (present(sh)) then
+                        ! (M5-5) las especies del gas destruido salen con el
+                        call audit_gas_destroyed(sh, i, j, k, &
+                            (gas%alpha(i,j,k) - a_new) * gas%rho(i,j,k) * m%vol(i,j,k))
                     end if
                     gas%alpha(i,j,k) = a_new
                 end do

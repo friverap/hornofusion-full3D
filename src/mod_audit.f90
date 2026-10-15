@@ -43,6 +43,7 @@ module mod_audit
     public :: AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
     public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2, AUD_GAS_VOLFIX, AUD_SLAG_TCLIP, AUD_MIX_INIT
     public :: AUD_RESOLID_E, AUD_ALPHA_CLIP_E
+    public :: AUD_VF_O2, AUD_VF_CO, AUD_VF_CO2, audit_gas_destroyed
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -123,7 +124,15 @@ module mod_audit
     ! destruye la restriccion de volumen (m_gas_volfix x cp T): fuente externa
     ! exacta de la identidad (slag_chem_test sin energia: 1e6 J en el paso 1)
     integer, parameter :: AUD_GAS_VOLFIX_E    = 49
-    integer, parameter :: N_AUD = 49
+    ! (auditoria 5, M5-5) kg de cada especie que SALEN con el gas destruido
+    ! (restriccion de volumen, flotacion de la escoria, carga de cesta, ECS):
+    ! el gas creado no trae especies (Y diluida), el destruido se las lleva.
+    ! Con m_dil_* cierran los balances elementales de O y C con escoria
+    ! (check_chem --slag).
+    integer, parameter :: AUD_VF_O2           = 50
+    integer, parameter :: AUD_VF_CO           = 51
+    integer, parameter :: AUD_VF_CO2          = 52
+    integer, parameter :: N_AUD = 52
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -196,6 +205,18 @@ contains
         acc(id) = acc(id) + val
     end subroutine audit_add
 
+    ! Especies que se van con dm kg de gas destruido en la celda (i,j,k)
+    ! (M5-5): columnas m_vf_O2/CO/CO2. dm <= 0 no hace nada.
+    subroutine audit_gas_destroyed(sh, i, j, k, dm)
+        type(shared_t), intent(in) :: sh
+        integer, intent(in)        :: i, j, k
+        real(dp), intent(in)       :: dm
+        if (dm <= 0.0_dp) return
+        acc(AUD_VF_O2)  = acc(AUD_VF_O2)  + sh%Y_O2(i,j,k)  * dm
+        acc(AUD_VF_CO)  = acc(AUD_VF_CO)  + sh%Y_CO(i,j,k)  * dm
+        acc(AUD_VF_CO2) = acc(AUD_VF_CO2) + sh%Y_CO2(i,j,k) * dm
+    end subroutine audit_gas_destroyed
+
     !---------------------------------------------------------------------------
     ! Crea audit.csv con encabezado y escribe la línea del estado inicial
     ! (paso 0: solo inventarios; llamar DESPUÉS de charge_scrap/slag_init)
@@ -249,7 +270,8 @@ contains
                 'm_resid_closed,E_resid_closed,m_spill,' // &
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
-                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq,m_gas_out,m_gas_rxn,E_gas_volfix'
+                'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq,m_gas_out,m_gas_rxn,E_gas_volfix,' // &
+                'm_vf_O2,m_vf_CO,m_vf_CO2'
             close(iu)
         end if
         acc = 0.0_dp
@@ -408,7 +430,8 @@ contains
                 ',', a(AUD_RESOLID_E), ',', a(AUD_ALPHA_CLIP_E), &
                 ',', a(AUD_CONV_LIQ), ',', a(AUD_CONV_GAS), ',', a(AUD_ABS_GAS_HOOK), &
                 ',', a(AUD_SLAG_GAS), ',', a(AUD_SLAG_LIQ), &
-                ',', a(AUD_GAS_OUT), ',', a(AUD_GAS_RXN), ',', a(AUD_GAS_VOLFIX_E)
+                ',', a(AUD_GAS_OUT), ',', a(AUD_GAS_RXN), ',', a(AUD_GAS_VOLFIX_E), &
+                ',', a(AUD_VF_O2), ',', a(AUD_VF_CO), ',', a(AUD_VF_CO2)
             close(iu)
         end if
     end subroutine audit_write_step
