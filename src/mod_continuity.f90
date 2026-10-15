@@ -439,6 +439,15 @@ contains
                                   - alpha_slag(i,j,k+1) - liq%alpha(i,j,k+1)) &
                                   * m%vol(i,j,k+1) / m%vol(i,j,k)
                         ws_lim(i,j,k) = min(give, room_up)
+                        ! (auditoria 8) una celda de arriba LLENA no bloquea:
+                        ! recibe el exceso y lo cede en la pasada siguiente
+                        ! (su give pasa a ser > 0). Antes una columna de bano
+                        ! llena cortaba la cascada y el exceso del fondo iba
+                        ! al clip con hueco de sobra encima (pocket_rise_dt10:
+                        ! 32 mg; el limitador agota N_LIM_MAX en la capa
+                        ! inferior del bano). Solo va al clip lo que llega a
+                        ! la celda del techo.
+                        if (room_up <= 1.0e-15_dp) ws_lim(i,j,k) = give
                     end do
                 end do
             end do

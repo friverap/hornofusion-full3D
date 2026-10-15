@@ -72,10 +72,9 @@ audit_noflow:arc_budget
 # (bed_flood:bath_gas_bounded y audit_bedflood:sentinel_gas retirados el
 # 14-oct-2026: con A4-8 el gas de bed_flood queda en 130 m/s, por debajo del
 # regimen 200 y de la centinela 300; auditoria 4, M4-15.)
-# bath_fill_mix (Plan G, modelo de mezcla opt-in, juez B1 NEGATIVO): recorta
-# 232 kg de alpha (3.5e-3 del fundido) por el limitador de la mezcla. Es el
-# banco del modelo cerrado negativo, no el camino de produccion.
-audit_mix:alpha_clip
+# (audit_mix:alpha_clip retirado el 15-oct-2026, auditoria 8: los 232 kg que
+# recortaba bath_fill_mix eran exceso que el derrame no podia subir a traves
+# de una celda LLENA; con la cascada que atraviesa celdas llenas, clip 0.)
 # bath_fill_mix (modelo de mezcla, opt-in negativo): la EOS reescribe el 76 %
 audit_mix:mass_gas
 # (auditoria 4, B4-19) tramo reanudado de slag_chem_flow (pasos 10-20): el
