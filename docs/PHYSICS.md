@@ -485,7 +485,23 @@ barridos por paridad de la cara global con halos de T frescos antes de cada
 uno** (auditoría 5, M5-2): así los dos ranks de una frontera de bloque en z
 evalúan la misma q (el lazo por celda y un Gauss–Seidel en k dejaban halos
 rancios: `melt_forced` n1 frente a n7 difería 3.3e-8 en α_s; ahora 6e-11) y
-dentro de un barrido ninguna celda toca dos caras (dos nodos exactos).
+dentro de un barrido ninguna celda toca dos caras (dos nodos exactos). El nodo
+líquido de la cara es continuo por `ws_liq_cont` (B5-1: la celda de superficie
+con α_l < 0.3 quedaba sin intercambio) y el área lleva la rampa (1 − fbed) de
+la celda con más chatarra (B5-2), nunca un corte duro. **Todo intercambio con
+el gas es en forma LOG (B5-3)**: una sola definición de dos nodos
+(`gas_log_exchange`, mod_audit): el gas se relaja EXACTAMENTE con su capacidad
+C_g/T hacia la T nueva T* del otro nodo, 1 − T*/T = (1 − T*/T_g) e^{−G T* dt/C_g}
+(tasa inicial hA(T_g − T*), acotada, equilibrio exacto a dt → ∞), entrega
+Q = C_g ln(T_g/T_g′) y T* cumple el balance C_o(T* − T_o) = Q (+ el nodo
+líquido lineal implícito en la interfase gas–sólido), por bisección monótona.
+Vale para el lazo por celda, el de caras, la escoria y la interfase gas–sólido.
+Aplicar la fracción lineal en ln T (primer intento) daba 1.7× el calor físico
+a dt pequeño: la tasa es física, el inventario decide ΔT. `noflow_energy`
+cierra a 2e-5 J (antes 96 J). El libro del gas del audit
+(`E_gas_abs`) se parte por lo mismo en la parte de la ECUACIÓN (medida de
+estado lineal entre T_old y `Tg_end`) y los pokes exactos: con un solo libro
+lineal un poke log perdía O(dT²) (arc_melt −4.7e3 → +3.2e5 J).
 
 ```
 gas–sólido:      h_gs = (k_mol/d)(2 + 1.1 Pr^⅓ Re^0.6) [Wakao], k_mol = μ c_p / 0.7;
@@ -579,7 +595,7 @@ El acople de momento con el gas es el arrastre físico de la gota, exacto en el 
 
 - **Ecuación de presión.** Suma de las continuidades de fase divididas por su densidad (GCBA de Darwish–Moukalled; `multiphaseEulerFoam`): `Σ_q[∂α_q/∂t + div(α_q u_q)] = −(α_g/ρ_g)Dρ_g/Dt`. Los coeficientes de cara son `α_f (α V/aP)_f A/δ` por fase y la fuente `−Σ_f α_f u_f A` (flujo volumétrico de Rhie–Chow). La fusión y la re-solidificación (ρ_l = ρ_s) son exactamente neutras sin fuente alguna; el líquido que entra a una celda desplaza igual **volumen** de gas. La forma de masa de la mezcla (que el código tuvo hasta F1) exigía gas de igual masa, 7500× su volumen: era el origen de las presiones de MPa al formarse el baño.
 - **Corrección de velocidad** `u' = −(α V/aP)∇p'` y `d_f = (αV/aP)_f` en el Rhie–Chow: consistentes con el predictor `−α∇p`.
-- **Burbujas en el baño (auditoría 4, B4-25).** En las celdas de burbuja (`ws_bub`: líquido continuo sin lecho, gas que puede deslizar y baño continuo encima) el cierre de interfase resuelta `α_l α_g ρ_mez/TAU_LG` cede, con el peso de `ws_bub`, al arrastre físico de burbuja `K = α_g (ρ_l − ρ_g) g / U_BUBBLE`, con `U_BUBBLE` = 0.23 m/s (Clift, Grace & Weber 1978: burbujas elipsoidales de 3–10 mm en líquidos de baja viscosidad; el estado estacionario del momento de la fase dispersa, Bug 17). `TAU_LG` fijaba el deslizamiento en g τ ≈ 0.1 m/s sin depender de nada. La celda de superficie (`ws_bub` = 0) conserva `TAU_LG`.
+- **Burbujas en el baño (auditoría 4, B4-25).** En las celdas de burbuja (`ws_bub`: líquido continuo sin lecho, gas que puede deslizar y baño continuo encima) el cierre de interfase resuelta `α_l α_g ρ_mez/TAU_LG` cede, con el peso de `ws_bub`, al arrastre físico de burbuja `K = α_g α_l (ρ_l − ρ_g) g / U_BUBBLE` (con α_l porque la flotación que el gas ve en la forma balanceada es la relativa α_g(ρ_mez − ρ_g)g; auditoría 5, B5-10: sin α_l el deslizamiento efectivo era α_l·U_BUBBLE), con `U_BUBBLE` = 0.23 m/s (Clift, Grace & Weber 1978: burbujas elipsoidales de 3–10 mm en líquidos de baja viscosidad; el estado estacionario del momento de la fase dispersa, Bug 17). `TAU_LG` fijaba el deslizamiento en g τ ≈ 0.1 m/s sin depender de nada. La celda de superficie (`ws_bub` = 0) conserva `TAU_LG`.
 - **Acople del arrastre.** Eliminación parcial (Spalding; Karema & Lo) por celda tras los solves de momento, con las soluciones sin relajar: `u_l' = (aP_g H_l + KV H_g)/det`, `u_g' = (aP_l H_g + KV H_l)/det`. Necesaria donde `K` es grande (celdas de superficie, `TAU_LG`).
 - **Superficie libre.** Con una sola presión por celda, la celda de superficie está sobre la línea hidrostática de la mezcla; el gas contiguo no debe sentir ese salto como fuerza (sería la flotación de la fase ligera en la mezcla, física para burbujas pero espuria en una interfase grande). En las caras verticales el gas usa `∇p_f + (α_lρ_l)_f g_eff` con α_l sólo del líquido **continuo**; el disperso (niebla) conserva el gradiente de mezcla, cuya flotación compensa el arrastre de las gotas.
 - **Estado inicial.** Presión hidrostática de la mezcla por integración de columna desde el techo (patrón gather global).

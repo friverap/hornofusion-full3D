@@ -331,7 +331,8 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   celdas burbuja; bed_flood 7.1 → 0 % de pasos > 200 m/s. **El arrastre de
   la burbuja es el físico (B4-25)**: en las celdas `ws_bub` el cierre
   `α_l α_g ρ_mez/TAU_LG` (deslizamiento fijo g τ ≈ 0.1 m/s) cede con el
-  peso de `ws_bub` a `K = α_g Δρ g/U_BUBBLE`, `U_BUBBLE` = 0.23 m/s (Clift);
+  peso de `ws_bub` a `K = α_g α_l Δρ g/U_BUBBLE` (B5-10: la flotación que el
+  gas ve es la RELATIVA, con α_l), `U_BUBBLE` = 0.23 m/s (Clift);
   la celda de superficie conserva `TAU_LG`. bath_fill 77.5 kPa / 61 m/s.
   **El peso propio de una fase en la cara es la media PONDERADA por su α
   (`own_weight_face`, B4-10)**: la T/ρ de la celda sin la fase son rancias
@@ -359,6 +360,29 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   fuga; slag_chem_flow corre con 10. (M5-7) las identidades de masa llevan
   piso relativo al inventario (`mtol_inv` 1e-14 ≈ 45 ulp). (M5-8)
   `bed_bath_rest` está en test-quick.
+  **Bajos de la auditoría 5 (misma fecha)**: (B5-3) TODO intercambio de calor
+  con el gas es en forma log con `gas_log_exchange` (mod_audit): el gas se
+  relaja EXACTO con capacidad C_g/T hacia la T NUEVA del otro nodo y esa T
+  cumple el balance (bisección monótona); la tasa es la física hA ΔT y el
+  inventario decide ΔT — aplicar la fracción lineal en ln T daba 1.7× el
+  calor a dt pequeño (lección del primer intento). El libro `E_gas_abs` se
+  parte en la parte de la ECUACIÓN (estado lineal entre T_old y `Tg_end`) +
+  pokes exactos; un libro lineal único con pokes log perdía O(dT²). (B5-25)
+  el libro se acumula ANTES de `update_properties` (M4-3) y la FILA del
+  audit se escribe DESPUÉS: describe el snapshot y la fila 0 del reinicio
+  coincide exacta (`compare_audit` compara también los inventarios de la fila
+  N). (B5-27/28/29) `adapt_timestep` parte del dt nominal; `last_step` se
+  decide una vez con el dt del paso; el freno de NaN no repite la fila.
+  (B5-7/9) el acarreo `ws_cc` nunca se pierde sin rastro: las celdas fuera de
+  `act_g` y las filas selladas lo conservan, el test de venteo de F2.31 lo
+  incluye en la demanda, y las celdas outlet no plantean demanda ni acarrean.
+  (B5-1/2) el nodo líquido de la cara es continuo por `ws_liq_cont` y el área
+  lleva la rampa (1 − fbed). (B5-4) la rama de UNA fase (flujo sin dos
+  fluidos) es legada: `oneflow_test` la vigila con xfail con causa (corriente
+  fantasma 0.2 m/s, ferrostática 2 %, energía creada) y la radiación está
+  prohibida en ella. (B5-11) el clip sin flujo entra negativo. (B5-13/14) la
+  escoria no ocupa el gas de poro y el Fe que no cabe abajo vuelve a su celda
+  (pasada 3). (B5-24) este archivo vive en el repo.
 - **Lo que NO funcionó en la ventana 280–370 s (oct-2026)**: la salvaguarda de
   water packing de RELAP5 §3.4.6 / TRACE cap. 2 (F2.32, archivada en
   dev-history) casi no se activa — la succión del piso del lecho no es water
