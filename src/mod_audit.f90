@@ -30,7 +30,7 @@ module mod_audit
     private
 
     public :: audit_init, audit_write_step, audit_add, audit_accumulate
-    public :: audit_set_energy, gas_inventory_cell, gas_heat_capacity_ref
+    public :: audit_set_energy, gas_inventory_cell, gas_heat_capacity_ref, gas_log_exchange
     public :: AUD_ARC_DIRECT, AUD_ARC_DISCARD, AUD_MC_DEPOSIT
     public :: AUD_ALPHA_CLIP_MASS, AUD_MELT_MASS, AUD_RESOLID_MASS
     public :: AUD_MELT_E_SOLID, AUD_SLAG_INTERCEPT, AUD_SLAG_GAS, AUD_SLAG_LIQ, AUD_GAS_OUT, AUD_GAS_RXN, AUD_GAS_VOLFIX_E
@@ -141,6 +141,13 @@ module mod_audit
     ! hito bore-in con audit_freq=10; los contadores acc() siempre fueron
     ! completos). audit_accumulate se llama CADA paso desde main.
     real(dp), save :: srcacc(9:19) = 0.0_dp
+    ! (auditoria 5, B5-3) el libro del gas se parte en dos: la parte de la
+    ! ECUACION (medida de estado lineal entre T_old y Tg_end, la T al final del
+    ! SIMPLE) y los POKES (interfase gas-solido/gas-liquido, escoria), que son
+    ! log-exactos y entran con su propio Q. Un poke log medido linealmente
+    ! perdia O(dT^2) (arc_melt: gap -4.7e3 -> +3.2e5 J al pasar las interfases
+    ! a log). book_split dice si la ultima acumulacion uso Tg_end.
+    logical, save :: book_split = .false.
 
     ! Términos EXACTOS del enunciado discreto de la energía, reportados por
     ! solve_energy_3d en cada llamada (hook; la última iteración externa
@@ -165,6 +172,39 @@ contains
     ! alpha*rho_ref*T_ref*cp*ln(T/T_ref); M25: factor (P0 + p)/P0 (el modelo
     ! de mezcla es low-Mach: p no entra).
     !---------------------------------------------------------------------------
+    !---------------------------------------------------------------------------
+    ! Intercambio exacto de dos nodos entre el GAS (inventario log, capacidad
+    ! de referencia Cg: energia Cg ln T) y otro nodo LINEAL (capacidad Co, T
+    ! To): equilibrio Co (To - Teq) = Cg ln(Teq/Tg) por Newton acotado; el gas
+    ! avanza la fraccion f hacia Teq en ln T (Tg_new = Tg (Teq/Tg)^f, acotada
+    ! entre Tg y Teq) y Q = Cg ln(Tg/Tg_new) es lo que el gas ENTREGA (positivo
+    ! si se enfria): el otro nodo recibe exactamente lo que perdio el
+    ! inventario del gas (M4-13: escoria; auditoria 5, B5-3: interfases).
+    ! Un poke lineal T -= Q/(alpha rho cp V) solo vale a primer orden en dT.
+    !---------------------------------------------------------------------------
+    pure subroutine gas_log_exchange(Cg, Tg, Co, To, f, Tg_new, Q)
+        real(dp), intent(in)  :: Cg, Tg, Co, To, f
+        real(dp), intent(out) :: Tg_new, Q
+        real(dp) :: Teq, Tlo, Thi, Fn, dFn
+        integer  :: it
+        Tlo = min(Tg, To); Thi = max(Tg, To)
+        Teq = (Co * To + Cg / Tg * Tg) / (Co + Cg / Tg)
+        do it = 1, 30
+            Fn  = Co * (To - Teq) - Cg * log(Teq / Tg)
+            dFn = -Co - Cg / Teq
+            if (Fn > 0.0_dp) then
+                Tlo = Teq
+            else
+                Thi = Teq
+            end if
+            Teq = Teq - Fn / dFn
+            if (Teq <= Tlo .or. Teq >= Thi) Teq = 0.5_dp * (Tlo + Thi)
+            if (abs(Fn) <= 1.0e-13_dp * (Co * Thi + Cg) .or. Thi - Tlo <= 1.0e-10_dp * Thi) exit
+        end do
+        Tg_new = Tg * (Teq / Tg)**f
+        Q = Cg * log(Tg / Tg_new)
+    end subroutine gas_log_exchange
+
     pure function gas_inventory_cell(alpha, T, p, cp, vol, cfg) result(e)
         real(dp),       intent(in) :: alpha, T, p, cp, vol
         type(config_t), intent(in) :: cfg
@@ -367,6 +407,9 @@ contains
         ! Las integrales de fuente (columnas 9..16) las acumula
         ! audit_accumulate CADA paso; aquí solo se recogen
         s(9:19) = srcacc(9:19)
+        ! (B5-3) E_gas_abs = parte de la ecuacion + pokes exactos (lo que el
+        ! gas ENTREGO a solido, liquido y escoria, con signo de absorcion)
+        if (book_split) s(18) = s(18) - acc(AUD_IPH_GAS) - acc(AUD_SLAG_GAS)
 
         ! Reducción global (contadores locales + sumas de celda)
         if (m%is_parallel) then
@@ -461,7 +504,7 @@ contains
         type(mesh_t), intent(in)   :: m
         type(config_t), intent(in) :: cfg
 
-        real(dp) :: vol, src_dt, w_l, w_g
+        real(dp) :: vol, src_dt, w_l, w_g, dT_eq
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, dfl, dfg
         integer  :: i, j, k
         integer  :: istart, iend, jstart, jend, kstart, kend
@@ -471,6 +514,9 @@ contains
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         call physical_boundary_flags(m, at_rmin_aud, at_rmax_aud, &
                                      at_zmin_aud, at_zmax_aud)
+        ! (B5-3) Tg_end valido en todas las ramas salvo la mezcla (B4-9)
+        book_split = (.not. cfg%mixture_model) .and. allocated(sh%Tg_end)
+        if (book_split) book_split = all(sh%Tg_end(istart:iend,jstart:jend,kstart:kend) > 0.0_dp)
         liq_energy_on = cfg%solve_energy
         gas_energy_on = cfg%solve_energy .and. cfg%solve_flow .and. &
                         cfg%solve_multiphase
@@ -496,14 +542,20 @@ contains
                         ! cae al residuo iterativo (3e-6, gate deep). La
                         ! medida exacta exige acumular en cada update de T
                         ! con el rho local (pendiente del audit).
+                        ! (B5-3) hasta Tg_end (fin del SIMPLE) si existe: lo
+                        ! que la ECUACION hizo; los pokes posteriores entran
+                        ! exactos al escribir (ver audit_write_step)
+                        if (book_split) then
+                            dT_eq = sh%Tg_end(i,j,k) - gas_T_old(i,j,k)
+                        else
+                            dT_eq = gas%T(i,j,k) - gas_T_old(i,j,k)
+                        end if
                         if (present(ag_heat)) then
                             srcacc(18) = srcacc(18) + ag_heat(i,j,k) * &
-                                gas%rho(i,j,k) * gas%cp(i,j,k) * &
-                                (gas%T(i,j,k) - gas_T_old(i,j,k)) * vol
+                                gas%rho(i,j,k) * gas%cp(i,j,k) * dT_eq * vol
                         else
                             srcacc(18) = srcacc(18) + gas%alpha(i,j,k) * &
-                                gas%rho(i,j,k) * gas%cp(i,j,k) * &
-                                (gas%T(i,j,k) - gas_T_old(i,j,k)) * vol
+                                gas%rho(i,j,k) * gas%cp(i,j,k) * dT_eq * vol
                         end if
                     end if
 

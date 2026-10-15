@@ -13,7 +13,8 @@
 !===============================================================================
 module mod_interphase_ht
     use mod_constants
-    use mod_audit, only: audit_add, AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
+    use mod_audit, only: audit_add, AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ, &
+                         gas_heat_capacity_ref, gas_log_exchange
     use mod_mpi_topology, only: mpi_allreduce_min, mpi_exchange_halos_3d
     use mod_types_3d
     use mod_melting_3d, only: solid_T_from_enthalpy
@@ -34,11 +35,14 @@ module mod_interphase_ht
 
 contains
 
-    subroutine compute_interphase_heat(liq, gas, sol, m, cfg)
+    subroutine compute_interphase_heat(liq, gas, sol, m, cfg, sh)
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(inout) :: sol
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
+        ! (auditoria 5, B5-3) p para la capacidad de referencia del gas (log)
+        type(shared_t), intent(in), optional :: sh
+        real(dp) :: Cg_log, Tg_new, pc
 
         integer :: i, j, k
         real(dp) :: T_g, T_l, T_s, alpha_s, d_s
@@ -155,13 +159,42 @@ contains
                         Q_ls = b_l * (T_l - T_sn) / cfg%dt
                     end if
 
+                    ! Retiro de los fluidos PRIMERO (el solido recibe lo que
+                    ! de verdad salio de cada inventario).
+                    ! (auditoria 5, B5-3) GAS en forma LOG (M4-13): Q_gs es la
+                    ! tasa del cierre lineal de tres nodos; el estado del gas
+                    ! avanza T = Tg exp(-Q dt/Cg) acotado entre Tg y T_s' (sin
+                    ! la cota, un gas frio sobre chatarra caliente rebasaba
+                    ! T_s': exp(x - 1) >= x) y Q_gs se REDEFINE como lo que
+                    ! perdio el inventario log: conservacion exacta, el poke
+                    ! lineal perdia O(dT^2) (96 J, 0.28 %, en noflow_energy).
+                    if (gas%alpha(i,j,k) > 1.0e-6_dp .and. abs(Q_gs) > SMALL) then
+                        pc = 0.0_dp
+                        if (present(sh)) pc = sh%p(i,j,k)
+                        Cg_log = gas_heat_capacity_ref(gas%alpha(i,j,k), pc, gas%cp(i,j,k), &
+                                                       m%vol(i,j,k), cfg)
+                        Tg_new = T_g * exp(-Q_gs * cfg%dt / Cg_log)
+                        Tg_new = min(max(Tg_new, min(T_g, T_sn)), max(T_g, T_sn))
+                        Q_gs = Cg_log * log(T_g / Tg_new) / cfg%dt
+                        gas%T(i,j,k) = Tg_new
+                        call audit_add(AUD_IPH_GAS, Q_gs * cfg%dt)
+                    else
+                        Q_gs = 0.0_dp
+                    end if
+                    if (liq%alpha(i,j,k) > 1.0e-6_dp .and. abs(Q_ls) > SMALL) then
+                        cap_l = liq%alpha(i,j,k) * liq%rho(i,j,k) * &
+                                liq%cp(i,j,k) * m%vol(i,j,k)
+                        liq%T(i,j,k) = liq%T(i,j,k) - Q_ls * cfg%dt / (cap_l + SMALL)
+                        Q_ls = Q_ls * cap_l / (cap_l + SMALL)
+                        call audit_add(AUD_IPH_LIQ, Q_ls * cfg%dt)
+                    else
+                        Q_ls = 0.0_dp
+                    end if
                     Q_total = Q_gs + Q_ls
 
-                    ! Apply heat to solid energy balance
+                    ! Apply heat to solid energy balance (lo que salio de los
+                    ! fluidos, exacto)
                     sol%E_s(i,j,k) = sol%E_s(i,j,k) + Q_total * cfg%dt
-                    ! Auditoría del intercambio interfase (el hook del gas
-                    ! no ve este retiro: se contabiliza aquí tal como se
-                    ! aplica, con el mismo denominador +SMALL)
                     call audit_add(AUD_IPH_SOL, Q_total * cfg%dt)
 
                     ! Update solid temperature (función de entalpía ÚNICA, C1.8:
@@ -169,23 +202,6 @@ contains
                     if (sol%m_s(i,j,k) > SMALL) then
                         sol%T_s(i,j,k) = solid_T_from_enthalpy( &
                             sol%E_s(i,j,k) / sol%m_s(i,j,k), cfg)
-                    end if
-
-                    ! Corresponding heat removal from fluid phases
-                    if (gas%alpha(i,j,k) > 1.0e-6_dp .and. abs(Q_gs) > SMALL) then
-                        cap_g = gas%alpha(i,j,k) * gas%rho(i,j,k) * &
-                                gas%cp(i,j,k) * m%vol(i,j,k)
-                        gas%T(i,j,k) = gas%T(i,j,k) - Q_gs * cfg%dt / (cap_g + SMALL)
-                        ! energía realmente retirada del estado del gas
-                        call audit_add(AUD_IPH_GAS, &
-                            Q_gs * cfg%dt * cap_g / (cap_g + SMALL))
-                    end if
-                    if (liq%alpha(i,j,k) > 1.0e-6_dp .and. abs(Q_ls) > SMALL) then
-                        cap_l = liq%alpha(i,j,k) * liq%rho(i,j,k) * &
-                                liq%cp(i,j,k) * m%vol(i,j,k)
-                        liq%T(i,j,k) = liq%T(i,j,k) - Q_ls * cfg%dt / (cap_l + SMALL)
-                        call audit_add(AUD_IPH_LIQ, &
-                            Q_ls * cfg%dt * cap_l / (cap_l + SMALL))
                     end if
                 end do
             end do
@@ -210,14 +226,16 @@ contains
     ! gana el liquido (E_iph_gas = -E_iph_liq; la identidad de la interfase
     ! sigue cerrando). La radiacion entre la superficie y el gas la lleva la DO.
     !---------------------------------------------------------------------------
-    subroutine compute_gas_liquid_heat(liq, gas, sol, m, cfg)
+    subroutine compute_gas_liquid_heat(liq, gas, sol, m, cfg, sh)
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
+        ! (auditoria 5, B5-3) p para la capacidad de referencia del gas (log)
+        type(shared_t), intent(in), optional :: sh
         integer  :: i, j, k, jm, jp, kl, kg, sweep, k_off
         real(dp) :: al, ag, as, cg, cl, G, f, q, d, dp_, k_mol, urel, xb, f_disp, wet
-        real(dp) :: fbed, G_in, G_out, a_fs
+        real(dp) :: fbed, G_in, G_out, a_fs, Cg_log, Tg_new, pc, fb2
         logical  :: cont_el, cont
         d = cfg%d_droplet
         if (d <= 0.0_dp) d = 2.0e-3_dp
@@ -298,8 +316,13 @@ contains
                     G = G * m%vol(i,j,k)
                     if (G <= 0.0_dp) cycle
                     f = 1.0_dp - exp(-cfg%dt * G * (1.0_dp / cg + 1.0_dp / cl))
-                    q = cg * cl / (cg + cl) * (gas%T(i,j,k) - liq%T(i,j,k)) * f
-                    gas%T(i,j,k) = gas%T(i,j,k) - q / cg
+                    ! (B5-3) gas en forma log: la tasa f es la del cierre
+                    ! lineal; el equilibrio y lo entregado, exactos
+                    pc = 0.0_dp
+                    if (present(sh)) pc = sh%p(i,j,k)
+                    Cg_log = gas_heat_capacity_ref(ag, pc, gas%cp(i,j,k), m%vol(i,j,k), cfg)
+                    call gas_log_exchange(Cg_log, max(gas%T(i,j,k), T_MIN_GAS), cl, liq%T(i,j,k), f, Tg_new, q)
+                    gas%T(i,j,k) = Tg_new
                     liq%T(i,j,k) = liq%T(i,j,k) + q / cl
                     call audit_add(AUD_IPH_GAS,  q)
                     call audit_add(AUD_IPH_LIQ, -q)
@@ -338,15 +361,30 @@ contains
             do j = 1, m%ntheta
                 do i = 1, m%nr
                     if (m%cell_type(i,j,k) == 0 .or. m%cell_type(i,j,k+1) == 0) cycle
-                    if (sol%alpha_s(i,j,k) >= 2.0_dp * ALPHA_BED .or. sol%alpha_s(i,j,k+1) >= 2.0_dp * ALPHA_BED) cycle
+                    ! (auditoria 5, B5-2) rampa del lecho (1 - fbed) de la
+                    ! celda con mas chatarra, como el lazo por celda (M4-9):
+                    ! el corte duro en 2e-2 saltaba al cruzarlo
+                    fb2 = min(1.0_dp, max(0.0_dp, (max(sol%alpha_s(i,j,k), sol%alpha_s(i,j,k+1)) &
+                                                   - ALPHA_BED) / ALPHA_BED))
+                    if (fb2 >= 1.0_dp) cycle
                     if (liq%alpha(i,j,k) >= liq%alpha(i,j,k+1)) then
                         kl = k; kg = k + 1
                     else
                         kl = k + 1; kg = k
                     end if
                     al = liq%alpha(i,j,kl); ag = gas%alpha(i,j,kg)
-                    if (al < ALPHA_LIQ_CONT .or. ag <= 1.0e-6_dp) cycle
-                    a_fs = abs(liq%alpha(i,j,k) - liq%alpha(i,j,k+1)) * m%Az(i,j,k)
+                    ! (auditoria 5, B5-1) el nodo liquido es CONTINUO por la
+                    ! misma regla que el resto del codigo (ws_liq_cont, con la
+                    ! superficie libre): la celda de superficie con alpha_l <
+                    ! 0.3 (bath_fill 0.15-0.22) quedaba sin intercambio y el
+                    ! area saltaba al cruzar 0.3
+                    if (ws_liq_cont_valid) then
+                        cont = ws_liq_cont(i,j,kl)
+                    else
+                        cont = (al >= ALPHA_LIQ_CONT)
+                    end if
+                    if (.not. cont .or. al <= 1.0e-6_dp .or. ag <= 1.0e-6_dp) cycle
+                    a_fs = abs(liq%alpha(i,j,k) - liq%alpha(i,j,k+1)) * m%Az(i,j,k) * (1.0_dp - fb2)
                     if (a_fs <= 0.0_dp) cycle
                     cl = al * liq%rho(i,j,kl) * liq%cp(i,j,kl) * m%vol(i,j,kl)
                     cg = ag * gas%rho(i,j,kg) * gas%cp(i,j,kg) * m%vol(i,j,kg)
@@ -359,9 +397,13 @@ contains
                         sqrt(gas%rho(i,j,kg) * urel * max(cfg%R_shell, m%dz(kg)) / (gas%mu(i,j,kg) + SMALL)) &
                         / max(cfg%R_shell, m%dz(kg))) * a_fs
                     f = 1.0_dp - exp(-cfg%dt * G * (1.0_dp / cg + 1.0_dp / cl))
-                    q = cg * cl / (cg + cl) * (gas%T(i,j,kg) - liq%T(i,j,kl)) * f
+                    ! (B5-3) gas en forma log, mismo helper que el lazo por celda
+                    pc = 0.0_dp
+                    if (present(sh)) pc = sh%p(i,j,kg)
+                    Cg_log = gas_heat_capacity_ref(ag, pc, gas%cp(i,j,kg), m%vol(i,j,kg), cfg)
+                    call gas_log_exchange(Cg_log, max(gas%T(i,j,kg), T_MIN_GAS), cl, liq%T(i,j,kl), f, Tg_new, q)
                     if (kg >= 1 .and. kg <= m%nz) then
-                        gas%T(i,j,kg) = gas%T(i,j,kg) - q / cg
+                        gas%T(i,j,kg) = Tg_new
                         call audit_add(AUD_IPH_GAS, q)
                     end if
                     if (kl >= 1 .and. kl <= m%nz) then

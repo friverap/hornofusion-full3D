@@ -15,7 +15,7 @@ module mod_slag_3d
     use mod_parallel_utils, only: gather_global_field, global_to_local
     use mod_audit, only: audit_add, audit_gas_destroyed, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT, AUD_SLAG_TCLIP, &
                          AUD_SLAG_GAS, AUD_SLAG_LIQ, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
-                         gas_inventory_cell, gas_heat_capacity_ref
+                         gas_inventory_cell, gas_heat_capacity_ref, gas_log_exchange
     implicit none
 
     real(dp), parameter :: SMALL_SL = 1.0e-6_dp
@@ -495,8 +495,8 @@ contains
         real(dp),      intent(in)    :: dt
         type(shared_t), intent(in), optional :: sh
 
-        integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend, it
-        real(dp) :: Cs, Cf, hA, f, Q, Cg, Tg, Ts, Teq, Tlo, Thi, Fn, dFn, pc
+        integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
+        real(dp) :: Cs, Cf, hA, f, Q, Cg, Tg, Ts, pc
         real(dp), allocatable :: qdown(:,:,:)
 
         if (m%is_parallel) then
@@ -560,22 +560,9 @@ contains
                         Cf = Cg / Tg                             ! capacidad lineal en Tg
                         hA = cfg%h_contact_sl * m%Az(i,j,k)
                         f = 1.0_dp - exp(-dt * hA * (1.0_dp / Cs + 1.0_dp / Cf))
-                        Tlo = min(Tg, Ts); Thi = max(Tg, Ts)
-                        Teq = (Cs * Ts + Cf * Tg) / (Cs + Cf)
-                        do it = 1, 30
-                            Fn  = Cs * (Ts - Teq) - Cg * log(Teq / Tg)
-                            dFn = -Cs - Cg / Teq
-                            if (Fn > 0.0_dp) then
-                                Tlo = Teq
-                            else
-                                Thi = Teq
-                            end if
-                            Teq = Teq - Fn / dFn
-                            if (Teq <= Tlo .or. Teq >= Thi) Teq = 0.5_dp * (Tlo + Thi)
-                            if (abs(Fn) <= 1.0e-13_dp * (Cs * Thi + Cg) .or. Thi - Tlo <= 1.0e-10_dp * Thi) exit
-                        end do
-                        gas%T(i,j,k) = Tg * (Teq / Tg)**f
-                        Q = Cg * log(Tg / gas%T(i,j,k))          ! hacia la escoria
+                        ! (auditoria 5, B5-3) una sola definicion del
+                        ! intercambio log de dos nodos (gas_log_exchange)
+                        call gas_log_exchange(Cg, Tg, Cs, Ts, f, gas%T(i,j,k), Q)   ! Q hacia la escoria
                         slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
                         call audit_add(AUD_SLAG_GAS, Q)
                     end if

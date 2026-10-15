@@ -37,7 +37,7 @@ Generado por `scripts/make_audit_glossary.py` desde el encabezado de `src/mod_au
 | `E_chem_sol` | C | Primary carbon-oxidation heat to the solid [J] |
 | `E_mc_lost` | C | Monte Carlo ray energy escaped through ports/walls [J] (closes the arc budget) |
 | `E_out_conv` | S | Net convective enthalpy into the outlet sink cells [J] (diagnostic; included in the defect) |
-| `E_gas_abs` | S | Heat absorbed by the gas over the step `\sum \alpha_g\rho_g c_p \Delta T  V` [J] (the gas dE of the balance; includes explicit interphase removal) |
+| `E_gas_abs` | S | Heat absorbed by the gas over the step [J]: `\sum \alpha_g\rho_g c_p (T_{end,SIMPLE}-T_{old}) V` (what the gas equation did) plus the exact log-form heat of the interphase and slag pokes (the gas dE of the balance; audit 5, B5-3) |
 | `E_mass_liq` | S | Melting/freezing mass-source terms of the liquid energy equation [J] (diagnostic) |
 | `m_ecs_in` | C | Solid mass charged by the continuous feeder (ECS) [kg] |
 | `E_ecs_in` | C | Enthalpy charged by the continuous feeder `\sum dm  e_s(T_{charge})` [J] |

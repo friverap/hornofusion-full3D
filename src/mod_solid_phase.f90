@@ -53,13 +53,14 @@ contains
     ! liq%T/gas%T directamente; correrla antes duplicaría el calor (el
     ! sólido lo recibe pero la energía re-resuelve T desde liq_old sin
     ! saber que el fluido lo cedió — medido: fusión 10x espuria).
-    subroutine update_solid_postenergy(sol, liq, gas, m, cfg)
+    subroutine update_solid_postenergy(sol, liq, gas, m, cfg, sh)
         type(solid_t), intent(inout) :: sol
         type(phase_t), intent(inout) :: liq, gas
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
+        type(shared_t), intent(in), optional :: sh   ! p del gas (B5-3)
 
-        call compute_interphase_heat(liq, gas, sol, m, cfg)
+        call compute_interphase_heat(liq, gas, sol, m, cfg, sh)
 
     end subroutine update_solid_postenergy
 

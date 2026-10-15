@@ -600,7 +600,7 @@ program eaf_3d_simulator
         ! Transferencia interfase (tras los solves de energía)
         call timer_start(T_SOLID)
         if (cfg%solve_melting) then
-            call update_solid_postenergy(sol, liq, gas, mesh, cfg)
+            call update_solid_postenergy(sol, liq, gas, mesh, cfg, sh)
             ! (auditoria 2, N-M10) slag_energy lee liq%T del halo
             call phase_exchange_halos(liq, mesh)
             call phase_exchange_halos(gas, mesh)
@@ -614,7 +614,7 @@ program eaf_3d_simulator
             ! iteracion externa (halos de alpha ya intercambiados)
             call liquid_continuity_mask(liq, sol, mesh, ws_liq_cont)
             ws_liq_cont_valid = .true.
-            call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg)
+            call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg, sh)
             call phase_exchange_halos(liq, mesh)
             call phase_exchange_halos(gas, mesh)
         end if
