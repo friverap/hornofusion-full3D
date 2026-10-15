@@ -349,9 +349,13 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   chatarra por FRACCIÓN del volumen `ARC_SURF_FRAC_S` 5 % —M7-1: es un lecho;
   con espesor un cráter a medio fundir dejaba de ser superficie en
   producción—; la capa es superficie si las dos fracciones de umbral suman
-  1, y QUIÉN es la superficie se decide en esa MISMA escala:
-  chatarra si `wsc/ARC_SURF_FRAC_S ≥ wba/frac_surf` —M8-1: con las fracciones
-  crudas una capa con chatarra dominante y una película fina pasaba por baño);
+  1; QUIÉN es la superficie (M8-1/M9-3): si solo un material pasa su umbral
+  PROPIO, ese; si pasan los dos, la fracción cruda `wsc ≥ wba` (independiente
+  de la malla: baño con chatarra sumergida = baño, M3-3; lecho inundado =
+  chatarra, M4-8); si ninguno lo pasa solo, el más cercano a su umbral
+  (`wsc/ARC_SURF_FRAC_S ≥ wba/frac_surf`: película fina sobre chatarra suelta
+  = chatarra). La normalizada en todos los casos (M8-1) daba chatarra a un
+  baño con chatarra sumergida en la malla fina);
   nunca volver a una
   búsqueda aparte del baño por celda. (M5-1) la DO guarda su reparto por fase
   (`sh%w_rad_l`, αⁿ) y la energía resta la emisión con ESE peso: con α^{n+1}
@@ -700,8 +704,8 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   material ponderado por la gaussiana sobre el umbral (hoy por material, ver
   la sección de la auditoría 5: M6-5/M7-1) (hasta 4σ: un corte duro a 2σ
   dejaba la pertenencia de las celdas del borde al redondeo y rompía la
-  simetría 120°) es chatarra si pesa más que el baño (cada uno en su escala,
-  M8-1), si no baño; el P_rad directo
+  simetría 120°) es chatarra o baño según la regla de tres regímenes de
+  M8-1/M9-3 (ver la sección de la auditoría 5); el P_rad directo
   pesa la chatarra EXPUESTA (rampa 1 → 0 entre α_l 0.2 y 0.4); P_elec va a
   la capa del baño (gaussiana, α_l V) solo cuando la superficie es baño y si
   no se deposita con P_conv (antes buscaba baño en 2 R_elec saltando la

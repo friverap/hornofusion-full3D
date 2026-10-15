@@ -78,7 +78,7 @@ contains
         real(dp) :: x_elec, y_elec, x_cell, y_cell, dist
         real(dp) :: r2, sigma_r, gw
         real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol, wsc, wba, wvo, wexp, frac_surf
-        logical  :: found_scrap, owned, any_liq, found_bath, surf_found
+        logical  :: found_scrap, owned, any_liq, found_bath, surf_found, sc_ok, ba_ok, is_scrap
         integer  :: kg_bath_any   ! capa del bano bajo la punta aunque la superficie sea chatarra (B4-14)
         ! (El tope de 2 K por paso al solido se sustituyo por el tope de estado
         ! solid_arc_room: auditoria 12-oct-2026, M13.)
@@ -142,7 +142,7 @@ contains
             ! la punta contara como superficie de chatarra (y el P_rad directo
             ! iba a la chatarra SUMERGIDA de k-1). Primera capa con material
             ! (umbral de M7-1: chatarra por fraccion, bano por espesor):
-            ! chatarra si pesa mas que el bano en esa misma escala (M8-1).
+            ! la clasificacion chatarra/bano, en M8-1/M9-3 (bloque ksurf).
             ! (auditoria 5, A5-1) la superficie del BANO se decide con la MISMA
             ! regla de contenido, en el mismo barrido: antes `kbath` seguia con
             ! la regla antigua (una celda con alpha_l >= 0.3 a < 2 sigma) y
@@ -177,17 +177,33 @@ contains
                 ! (M7-1) la CHATARRA por su fraccion del volumen (5 %). Cada
                 ! material en su escala: la capa es superficie si la suma de
                 ! las dos fracciones de umbral llega a 1 (con dz = 0.28 m,
-                ! frac_surf = 0.0498: el criterio de siempre). (auditoria 8,
-                ! M8-1) QUIEN es la superficie se decide en la MISMA escala:
-                ! chatarra si wsc/0.05 >= wba/frac_surf. Con las fracciones
-                ! crudas (wsc >= wba) una capa con chatarra dominante en su
-                ! escala y una pelicula fina pasaba por bano (P_conv y P_elec
-                ! a la pelicula) en la malla de produccion.
+                ! frac_surf = 0.0498: el criterio de siempre). QUIEN es la
+                ! superficie: ver M8-1/M9-3 abajo.
                 frac_surf = ARC_SURF_H / max(m%zf_global(kg) - m%zf_global(kg-1), SMALL)
                 if (.not. surf_found .and. &
                     wsc / ARC_SURF_FRAC_S + wba / frac_surf >= wvo) then
                     surf_found = .true.
-                    if (wsc / ARC_SURF_FRAC_S >= wba / frac_surf) then
+                    ! (auditoria 9, M9-3) QUIEN es la superficie: si solo un
+                    ! material pasa su umbral PROPIO, ese; si pasan los dos,
+                    ! la fraccion cruda (la regla de siempre, independiente
+                    ! de la malla: un bano con chatarra SUMERGIDA es bano,
+                    ! M3-3; un lecho inundado es chatarra, M4-8); si ninguno
+                    ! lo pasa solo (la suma llega), el mas cercano a su
+                    ! umbral (M8-1: pelicula fina sobre chatarra suelta).
+                    ! Con la normalizada en todos los casos el umbral de
+                    ! dominancia valia 0.05 dz/0.014 (0.14-0.23 en
+                    ! produccion) y una capa con alpha_l 0.75 y alpha_s 0.2
+                    ! salia CHATARRA en la malla fina y bano en la media.
+                    sc_ok = wsc >= ARC_SURF_FRAC_S * wvo
+                    ba_ok = wba >= frac_surf * wvo
+                    if (sc_ok .neqv. ba_ok) then
+                        is_scrap = sc_ok
+                    else if (sc_ok) then
+                        is_scrap = wsc >= wba
+                    else
+                        is_scrap = wsc / ARC_SURF_FRAC_S >= wba / frac_surf
+                    end if
+                    if (is_scrap) then
                         kg_scrap = kg; found_scrap = .true.
                     else
                         ! superficie de bano: P_conv y P_elec a esta capa
