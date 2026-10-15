@@ -77,7 +77,7 @@ contains
         real(dp) :: x_elec, y_elec, x_cell, y_cell, dist
         real(dp) :: r2, sigma_r, gw
         real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol, wsc, wba, wvo, wexp
-        logical  :: found_scrap, owned, any_liq, found_bath
+        logical  :: found_scrap, owned, any_liq, found_bath, surf_found
         integer  :: kg_bath_any   ! capa del bano bajo la punta aunque la superficie sea chatarra (B4-14)
         ! (El tope de 2 K por paso al solido se sustituyo por el tope de estado
         ! solid_arc_room: auditoria 12-oct-2026, M13.)
@@ -123,9 +123,10 @@ contains
                 end if
             end do
 
-            ! ── Scrap surface below electrode (global search) ───────────────
+            ! ── Superficie bajo el electrodo (busqueda global) ────────────────
             kg_scrap = max(1, kg_tip - 1)
-            found_scrap = .false.
+            found_scrap = .false.; found_bath = .false.; surf_found = .false.
+            kg_bath_any = 0
             ! (auditoria 3, M3-3) barrido de ARRIBA hacia abajo: la primera
             ! capa con material bajo la punta es la superficie. Si en esa
             ! capa hay bano (alpha_l >= ALPHA_LIQ_CONT) y ninguna celda de
@@ -140,7 +141,16 @@ contains
             ! la punta contara como superficie de chatarra (y el P_rad directo
             ! iba a la chatarra SUMERGIDA de k-1). Primera capa con material
             ! (> 5 % del volumen ponderado): chatarra si pesa mas que el bano.
-            kscrap: do kg = kg_tip, 1, -1
+            ! (auditoria 5, A5-1) la superficie del BANO se decide con la MISMA
+            ! regla de contenido, en el mismo barrido: antes `kbath` seguia con
+            ! la regla antigua (una celda con alpha_l >= 0.3 a < 2 sigma) y
+            ! podia elegir una capa por ENCIMA de la de contenido (bath_fill_mix
+            ! paso 30, electrodo 0: 5.5 MW de P_elec a una celda de 3.5e-3 m3 y
+            ! P_conv a una capa de gas, mientras los otros dos electrodos usaban
+            ! la capa de contenido). kg_bath_any (respaldo de B4-14) es la
+            ! primera capa con > 5 % de bano ponderado, y nunca por debajo de
+            ! la superficie de chatarra (B5-5: un bano enterrado no ve fotones).
+            ksurf: do kg = kg_tip, 1, -1
                 wsc = 0.0_dp; wba = 0.0_dp; wvo = 0.0_dp
                 do jg = 1, m%nth_g
                     do ig = 1, m%nr_g
@@ -160,40 +170,34 @@ contains
                     end do
                 end do
                 if (wvo <= SMALL) cycle
-                if (wsc + wba < 0.05_dp * wvo) cycle
-                if (wsc >= wba) then
-                    kg_scrap = kg; found_scrap = .true.
+                if (.not. surf_found .and. wsc + wba >= ARC_SURF_FRAC * wvo) then
+                    surf_found = .true.
+                    if (wsc >= wba) then
+                        kg_scrap = kg; found_scrap = .true.
+                    else
+                        ! superficie de bano: P_conv y P_elec a esta capa
+                        kc_lo = kg; kc_hi = kg; found_bath = .true.
+                        kg_bath_any = kg
+                        exit ksurf
+                    end if
                 end if
-                exit kscrap
-            end do kscrap
+                if (wba >= ARC_SURF_FRAC * wvo) then
+                    kg_bath_any = kg
+                    exit ksurf
+                end if
+                ! con superficie de chatarra, el bano de las capas inferiores
+                ! esta enterrado: no es receptor de nada
+                if (found_scrap .and. kg <= kg_scrap) exit ksurf
+            end do ksurf
 
-            ! ── Superficie del BAÑO bajo el electrodo (auditoria 2, N-A2) ───
+            ! ── Columna de P_conv (auditoria 2, N-A2) ────────────────────────
             ! Sin chatarra, el chorro de plasma pega en el baño: P_conv va a la
             ! capa de la superficie del baño (antes a la columna de gas bajo la
-            ! punta, que no podia cederlo al baño: N-A1)
-            kc_lo = kg_scrap; kc_hi = kg_tip; found_bath = .false.; kg_bath_any = 0
-            ! (auditoria 4, B4-14) la capa del bano se busca SIEMPRE
-            ! (kg_bath_any): el respaldo de P_rad sin MC con chatarra sin
-            ! receptoras la necesita; found_bath (P_conv/P_elec al bano) sigue
-            ! exigiendo que la superficie no sea chatarra
-            kbath: do kg = kg_tip, 1, -1
-                    do jg = 1, m%nth_g
-                        do ig = 1, m%nr_g
-                            if (m%cell_type_global(ig,jg,kg) == 0) cycle
-                            x_cell = m%r_global(ig) * cos(m%theta_global(jg))
-                            y_cell = m%r_global(ig) * sin(m%theta_global(jg))
-                            dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
-                            if (dist <= sigma_r * 2.0_dp .and. &
-                                alpha_lg(ig,jg,kg) >= ALPHA_LIQ_CONT) then
-                                kg_bath_any = kg
-                                if (.not. found_scrap) then
-                                    kc_lo = kg; kc_hi = kg; found_bath = .true.
-                                end if
-                                exit kbath
-                            end if
-                        end do
-                    end do
-                end do kbath
+            ! punta, que no podia cederlo al baño: N-A1). Con chatarra (o sin
+            ! superficie), a la columna kg_scrap..kg_tip.
+            if (.not. found_bath) then
+                kc_lo = kg_scrap; kc_hi = kg_tip
+            end if
 
             ! ── P_rad: first pass — Gaussian weight sum at scrap surface ───
             total_gw_vol_rad = 0.0_dp

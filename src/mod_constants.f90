@@ -111,6 +111,10 @@ module mod_constants
     ! del MC del arco (antes 0.01 / 0.05 / 0.1 para el mismo concepto). El
     ! umbral hidraulico del lecho (in_bed, 1e-2) es otro concepto.
     real(dp), parameter :: ALPHA_SCRAP_SURF = 0.05_dp
+    ! Fraccion del volumen ponderado por la gaussiana del arco (hasta 4 sigma)
+    ! que una capa necesita en chatarra + bano para ser la SUPERFICIE bajo
+    ! la punta (M4-7); la misma para la capa del bano (A5-1).
+    real(dp), parameter :: ARC_SURF_FRAC = 0.05_dp
     ! Cota física de velocidad del ACERO líquido [m/s]. El acero en el
     ! horno se mueve a O(1) m/s (plumas, EBT ~5-7 m/s); 20 m/s es 3x el
     ! máximo físico. Sin la cota, gotas apenas sobre ALPHA_FLOW_CUTOFF
