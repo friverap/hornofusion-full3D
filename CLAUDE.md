@@ -376,16 +376,27 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   coincide exacta (`compare_audit` compara también los inventarios de la fila
   N). (B5-27/28/29) `adapt_timestep` parte del dt nominal; `last_step` se
   decide una vez con el dt del paso; el freno de NaN no repite la fila.
-  (B5-7/9) el acarreo `ws_cc` nunca se pierde sin rastro: las celdas fuera de
-  `act_g` y las filas selladas lo conservan, el test de venteo de F2.31 lo
-  incluye en la demanda, y las celdas outlet no plantean demanda ni acarrean.
+  (B5-7/9, corregido por M6-2) el acarreo `ws_cc` nunca se pierde sin rastro,
+  pero vive SOLO dentro del acople: fuera de `act_g`, sin gas o en una fila
+  sellada se DESCARTA con registro (`ws_cc_drop` → columna `m_gas_ccdrop`;
+  conservarlo volvía pegajosa la exclusión de F2.31), el test de venteo juzga
+  la demanda con signo (térmica + reacciones + acarreo), y las celdas outlet
+  no plantean demanda ni acarrean. (M6-1) La cota `COMP_SRC_CAP` es el 20 %
+  del gas que ATRAVIESA la celda en el paso (propio + entrante), no del
+  propio: en un poro con caudal pasante la contracción del gas caliente que
+  entra vale 1.2–1.6 × el gas propio por paso.
   (B5-1/2) el nodo líquido de la cara es continuo por `ws_liq_cont` y el área
   lleva la rampa (1 − fbed). (B5-4) la rama de UNA fase (flujo sin dos
   fluidos) es legada: `oneflow_test` la vigila con xfail con causa (corriente
   fantasma 0.2 m/s, ferrostática 2 %, energía creada) y la radiación está
-  prohibida en ella. (B5-11) el clip sin flujo entra negativo. (B5-13/14) la
-  escoria no ocupa el gas de poro y el Fe que no cabe abajo vuelve a su celda
-  (pasada 3). (B5-24) este archivo vive en el repo.
+  prohibida en ella. (B5-11) el clip sin flujo entra negativo. (B5-13) la
+  escoria no ocupa el gas de poro. (M6-4, reemplaza a B5-14) la reducción de
+  FeO va en DOS fases: solicitud por celda, huecos congelados con halos y
+  reparto fijo —el Fe va PRIMERO a la propia celda de escoria hasta su hueco
+  y el sobrante al baño de abajo hasta lo que le deja su escoria—; no hay
+  pasada 3 (devolvía Fe sin cota: Σα > 1) y con prioridad al baño de abajo la
+  escoria apilada reducía la mitad. (M6-3) el CO va al gas de la celda solo
+  si le queda gas después del Fe. (B5-24) este archivo vive en el repo.
 - **Lo que NO funcionó en la ventana 280–370 s (oct-2026)**: la salvaguarda de
   water packing de RELAP5 §3.4.6 / TRACE cap. 2 (F2.32, archivada en
   dev-history) casi no se activa — la succión del piso del lecho no es water
@@ -647,8 +658,9 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   masa en `m_gas_volfix`) y el gas CREADO no trae especies (Y diluida por
   α_old/α_new: la masa de O/C se conserva, check_chem 5e-13; sin la dilución
   el relleno del poro creaba O y C de la nada). El Fe que la escoria devuelve
-  al baño entra solo hasta el hueco de la celda de abajo y el resto a la
-  propia celda de escoria (slag_chem_test tenía α_l = 1.000104).
+  al baño nunca pasa del hueco de ninguna celda (A3-7: slag_chem_test tenía
+  α_l = 1.000104); el reparto vigente es el de M6-4 (propia celda primero, el
+  sobrante abajo; ver la sección de la auditoría 5).
   `check_invariants` corre en TODA la matriz.
 - **P_elec del arco va al BAÑO, nunca a trazas de líquido (auditoría 3,
   A3-4)**: tras el bore-in, solo celdas con α_l ≥ `ALPHA_LIQ_CONT` de la capa
