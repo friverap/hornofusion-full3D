@@ -5,9 +5,10 @@ poros de un lecho frío, sin arco ni fusión. Criterios:
                         <= --dalpha (medido 4e-7; antes de A4-1 7e-6)
   bedbath_p_bounded     p_max del audit <= --pfac x p_max inicial
   bedbath_liq_rest      u_liq_max del audit con t >= --t0 <= --uliq m/s
-                        (medido 0.07 — velocidad fantasma de la celda
-                        sellada, B4-4 abierto; antes de A4-1 0.29: la bomba del
-                        poro saturado con el motor en el líquido)
+                        (medido 0.069 — velocidad fantasma de la celda
+                        sellada de F2.29, abierto sin id propio (B5-23: no es
+                        B4-4); antes de A4-1 0.29: la bomba del poro saturado
+                        con el motor en el líquido)
   bedbath_gas_rest      u_gas_max del audit con t >= --t0 <= --ugas m/s
                         (medido 0.2; antes 1.6)
 Uso: check_bedbath.py RUNDIR [--xfail ids]

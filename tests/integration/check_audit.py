@@ -33,7 +33,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from eafutil import Checker, parse_xfail_arg, read_config, safe_float
+from eafutil import cfg_bool, Checker, parse_xfail_arg, read_config, safe_float
 
 
 def main():
@@ -60,6 +60,9 @@ def main():
     # (xfail). Es una propiedad del modelo low-Mach (gas fuera del acople por
     # F2.13/F2.31/fsat, COMP_SRC_CAP, lazo externo); el gate acota regresiones
     # (>= 50 %) y el juez es B1 (N-M4 abierto)
+    # (A4-6) residuo de la EOS: medido 2-37 % en los bancos de dos fluidos
+    # (bed_drain 0.37, bath_fill 0.36; auditoria 5, golden v92); los xfail
+    # con causa: bed_flood 0.80, bath_fill_mix 0.76, melt_forced 1.28
     ap.add_argument("--mgtol", type=float, default=0.5)
     # (A4-5) cierre radiativo: |sum rad fases + E_rad_wall| <= rtol_rad x sum|rad|
     ap.add_argument("--rtol-rad", type=float, default=0.05)
@@ -125,9 +128,8 @@ def main():
     # mezcla). Lo decide el config; sin --config, los datos (audits viejos).
     if args.config:
         cfgd = read_config(args.config)
-        gas_book = (str(cfgd.get("solve_energy", True)).lower() != "false"
-                    and str(cfgd.get("solve_flow", True)).lower() != "false"
-                    and str(cfgd.get("solve_multiphase", True)).lower() != "false")
+        gas_book = (cfg_bool(cfgd, "solve_energy") and cfg_bool(cfgd, "solve_flow")
+                    and cfg_bool(cfgd, "solve_multiphase"))
     else:
         gas_book = "E_gas_abs" in last and any(r["E_gas_abs"] != 0.0 for r in steps)
     if gas_book and "E_gas_abs" not in last:
@@ -198,8 +200,7 @@ def main():
     allowed = args.etol * S_gas + args.xtol * S_ext + args.htol * S_int
     energy_on = True
     if args.config:
-        v = read_config(args.config).get("solve_energy", True)
-        energy_on = not (str(v).strip().lower() in ("false", ".false.", "f", "0"))
+        energy_on = cfg_bool(read_config(args.config), "solve_energy")
     if not energy_on and S_ext + S_int < 1.0:
         print("  PASS  energy_balance  (solve_energy = false y sin fuentes: no aplica)")
     else:
@@ -209,7 +210,9 @@ def main():
         worst, wk = 0.0, 0
         for k in range(1, len(steps)):
             a, b = steps[k - 1], steps[k]
-            if "E_gas_abs" in b and any(r["E_gas_abs"] != 0.0 for r in steps):
+            # (B5-17) el mismo libro del gas que la acumulada (lo decide el
+            # config, B4-24; antes aqui lo decidian los datos)
+            if gas_book:
                 dEg = b["E_gas_abs"]
             else:
                 dEg = b["E_gas"] - a["E_gas"]
@@ -246,8 +249,7 @@ def main():
     # convectivo' del gas no es numerico, es la entalpia de la masa reescrita.
     flow_on = True
     if args.config:
-        v = read_config(args.config).get("solve_flow", True)
-        flow_on = not (str(v).strip().lower() in ("false", ".false.", "f", "0"))
+        flow_on = cfg_bool(read_config(args.config), "solve_flow")
     if "m_gas_out" in last and not flow_on:
         print("  PASS  mass_gas  (solve_flow = false: sin EOS ni Poisson, no aplica)")
     elif "m_gas_out" in last:
@@ -264,8 +266,9 @@ def main():
         if per_phase and energy_on:
             cg = sum(r.get("E_conv_gas", 0.0) for r in steps)
             oc = sum(r.get("E_out_conv", 0.0) for r in steps)
-            print(f"  INFO  conv_gas  E_conv_gas - venteo = {cg - oc:.3e} J; / (cp 1200 x masa EOS {resid:.3e} kg) = "
-                  f"{(cg - oc) / max(1200.0 * abs(resid), 1e-30):.1f} K equivalentes")
+            cp_g = float(read_config(args.config).get("cp_gas", 1200.0)) if args.config else 1200.0
+            print(f"  INFO  conv_gas  E_conv_gas - venteo = {cg - oc:.3e} J; / (cp {cp_g:.0f} x masa EOS {resid:.3e} kg) = "
+                  f"{(cg - oc) / max(cp_g * abs(resid), 1e-30):.1f} K equivalentes")
     # -- rad_closure (A4-5) --------------------------------------------------
     if energy_on:
         RAD = ("E_src_liq_rad", "E_src_gas_rad", "E_rad_sol", "E_rad_foam", "E_rad_wall")
@@ -285,7 +288,10 @@ def main():
     # Integración por Δt ENTRE filas: con audit_freq>1 el dt de la fila
     # solo cubre el último paso y subcuenta la energía disponible ~freq×
     # (los acumuladores del numerador sí se vuelcan completos por escritura)
-    E_arc_avail = steps[0]["P_arc"] * steps[0]["dt"] + sum(
+    # (auditoria 5, B5-26) la primera fila cubre desde el estado inicial
+    # (fila 0), no un solo dt: con audit_freq > 1 y la disposicion de B4-4
+    # (todo snapshot cierra el intervalo) arc_budget daba 1.25
+    E_arc_avail = steps[0]["P_arc"] * (steps[0]["time"] - first["time"]) + sum(
         steps[i]["P_arc"] * (steps[i]["time"] - steps[i - 1]["time"])
         for i in range(1, len(steps)))
     # LIMITACIÓN CONOCIDA (pendiente 2026-09): las identidades de este
@@ -293,8 +299,14 @@ def main():
     # Con freq>1 la cuadratura de P_arc introduce ~4% sistemático y el
     # balance de energía mezcla columnas de distinta semántica de volcado
     # — los resultados son INFORMATIVOS, no gate.
-    freq_gt1 = len(steps) > 1 and \
-        (steps[1]["time"] - steps[0]["time"]) > 1.5 * steps[1]["dt"]
+    # (B5-26) lo decide el config si lo hay; si no, CUALQUIER par de filas
+    # consecutivas separado mas de un paso (antes solo el primero, y con la
+    # disposicion de B4-4 ese par puede ser de un solo paso)
+    if args.config:
+        freq_gt1 = int(float(read_config(args.config).get("audit_freq", 1))) > 1
+    else:
+        freq_gt1 = any((steps[i]["time"] - steps[i - 1]["time"]) > 1.5 * steps[i]["dt"]
+                       for i in range(1, len(steps)))
     if freq_gt1:
         print("  [WARN] audit_freq>1 detectado: energy_balance y "
               "arc_budget son INFORMATIVOS (identidades calibradas "

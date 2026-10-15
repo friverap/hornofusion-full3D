@@ -32,6 +32,7 @@ SRCS = \
 	$(SRCDIR)/mod_drag_ergun.f90 \
        $(SRCDIR)/mod_continuity.f90 \
 	$(SRCDIR)/mod_melting_3d.f90 \
+	$(SRCDIR)/mod_fields_3d.f90 \
 	$(SRCDIR)/mod_scrap_collapse.f90 \
 	$(SRCDIR)/mod_ecs_feed.f90 \
 	$(SRCDIR)/mod_interphase_ht.f90 \
@@ -51,7 +52,6 @@ SRCS = \
 	$(SRCDIR)/mod_species_transport.f90 \
 	$(SRCDIR)/mod_convergence_3d.f90 \
 	$(SRCDIR)/mod_input_profiles.f90 \
-	$(SRCDIR)/mod_fields_3d.f90 \
 	$(SRCDIR)/mod_output_hdf5.f90 \
 	$(SRCDIR)/mod_restart.f90 \
 	$(SRCDIR)/main_3d.f90
@@ -174,5 +174,6 @@ test-quick: all
 test-full: all test-unit
 	@bash tests/run_tests.sh full
 
-test-rebaseline: all
+# (auditoria 5, B5-24) el golden no se regenera con unit tests rotos
+test-rebaseline: all test-unit
 	@bash tests/run_tests.sh rebaseline

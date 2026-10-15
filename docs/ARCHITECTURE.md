@@ -96,7 +96,7 @@ Los módulos se compilan en orden topológico. El orden en `SRCS` respeta las de
 ```fortran
 type :: config_t
     ! Geometría
-    real(dp) :: R_shell, H_total, H_bowl, R_bowl, R_pcd, R_elec, R_outlet
+    real(dp) :: R_shell, H_total, H_bowl, R_bowl, R_pcd, R_elec
 
     ! Malla
     integer  :: nr, ntheta, nz

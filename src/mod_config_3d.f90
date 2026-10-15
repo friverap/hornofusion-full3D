@@ -18,7 +18,6 @@ contains
         cfg%R_bowl   = 2.50_dp
         cfg%R_pcd    = 0.85_dp
         cfg%R_elec   = 0.30_dp
-        cfg%R_outlet = 0.35_dp
 
         ! Mesh (~604,800 cells)
         cfg%nr      = 60

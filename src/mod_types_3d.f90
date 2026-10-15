@@ -25,7 +25,6 @@ module mod_types_3d
         real(dp) :: R_bowl        ! Bowl radius at shell floor [m]
         real(dp) :: R_pcd         ! Pitch circle radius of electrodes [m]
         real(dp) :: R_elec        ! Electrode radius [m]
-        real(dp) :: R_outlet      ! Outlet region radius at roof [m]
 
         ! Mesh
         integer  :: nr, ntheta, nz

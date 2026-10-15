@@ -1,0 +1,84 @@
+# Columnas de `audit.csv`
+
+Generado por `scripts/make_audit_glossary.py` desde el encabezado de `src/mod_audit.f90` (no editar a mano; regenerar tras añadir una columna). Una fila por paso (`audit_freq`), más la fila 0 del estado inicial. Tipo: I = inventario instantáneo; S = integral de fuente por intervalo (hooks del solver); C = contador acumulativo (`audit_add`), acumula desde la fila anterior; D = diagnóstico. Las identidades que los relacionan viven en `tests/integration/check_audit.py`.
+
+| Columna | Tipo | Definición |
+|---|---|---|
+| `step` | -- | Time-step index at the row |
+| `time` | -- | Simulated time [s] |
+| `dt` | -- | Time step of the written step [s] |
+| `m_liq` | I | Liquid inventory `\sum \alpha_l\rho_l V` [kg] |
+| `m_gas` | I | Gas inventory `\sum \alpha_g\rho_g(T) V` [kg] |
+| `m_sol` | I | Solid inventory `\sum m_s` [kg] |
+| `m_slag` | I | Slag inventory `\sum m_{sl}` [kg] |
+| `E_liq` | I | Liquid energy `\sum \alpha_l\rho_l(c_{p,l}T+C_0)V` [J] (solid-consistent datum) |
+| `E_gas` | I | Gas log-form energy inventory [J] (diagnostic; the balance uses E_gas_abs) |
+| `E_sol` | I | Solid enthalpy `\sum E_s` [J] |
+| `E_slag` | I | Slag enthalpy `\sum E_{sl}` [J] |
+| `P_arc` | D | Instantaneous total arc power `\sum_e I^2R` [W] |
+| `E_src_liq_arc` | S | Arc+MC source absorbed by the liquid equation [J] (exact in-solver hook) |
+| `E_src_liq_rad` | S | Net DO radiation to the liquid [J] (Newton linearisation at the assembled iterate) |
+| `E_src_liq_chem` | S | Post-combustion heat to the liquid [J] |
+| `E_src_gas_arc` | S | Arc+MC source absorbed by the gas equation [J] |
+| `E_src_gas_rad` | S | Net DO radiation to the gas [J] |
+| `E_src_gas_chem` | S | Post-combustion heat to the gas [J] |
+| `E_arc_direct_sol` | C | Direct arc footprint deposited into solid enthalpy [J] |
+| `E_arc_discarded` | C | Arc energy discarded by caps [J] (sentinel; 0 by design since C1.6) |
+| `E_mc_deposit` | C | Monte Carlo ray energy deposited into S_arc [J] |
+| `m_melted` | C | Melted solid mass [kg] |
+| `m_resolid` | C | Re-solidified liquid mass [kg] |
+| `E_melt_from_solid` | C | Enthalpy removed from the solid by melting `\sum \dot m  e_s(T_s) dt` [J] |
+| `m_alpha_clip` | C | Net mass removed by the volume-constraint clip of `\alpha_l` [kg] (the only mass error of the explicit transport) |
+| `E_slag_intercept` | C | Arc energy intercepted by the slag cover [J] |
+| `E_rad_sol` | C | DO radiation deposited into solid enthalpy [J] |
+| `E_rad_wall` | C | Net radiative loss to black walls [J] |
+| `E_conv_defect` | S | Global conservation defect of the bounded convection operator [J] (exact assembled-coefficient statement; enters the balance identity) |
+| `E_wall_conv` | S | Robin wall loss `\sum h_w A \alpha (T-T_w) dt` [J] |
+| `E_chem_sol` | C | Primary carbon-oxidation heat to the solid [J] |
+| `E_mc_lost` | C | Monte Carlo ray energy escaped through ports/walls [J] (closes the arc budget) |
+| `E_out_conv` | S | Net convective enthalpy into the outlet sink cells [J] (diagnostic; included in the defect) |
+| `E_gas_abs` | S | Heat absorbed by the gas over the step `\sum \alpha_g\rho_g c_p \Delta T  V` [J] (the gas dE of the balance; includes explicit interphase removal) |
+| `E_mass_liq` | S | Melting/freezing mass-source terms of the liquid energy equation [J] (diagnostic) |
+| `m_ecs_in` | C | Solid mass charged by the continuous feeder (ECS) [kg] |
+| `E_ecs_in` | C | Enthalpy charged by the continuous feeder `\sum dm  e_s(T_{charge})` [J] |
+| `m_flux_in` | C | Lime/dololime/injected-carbon mass added to the slag [kg] |
+| `E_flux_in` | C | Sensible enthalpy of slag additions (enter at ambient temperature) [J] |
+| `m_fe_yield` | C | Iron oxidised out of the bath into slag FeO (yield loss) [kg] |
+| `m_fe_return` | C | Iron returned to the bath by FeO+C reduction [kg] |
+| `E_slag_ox` | C | Exothermic heat of Fe+1/2O`_2``\to`FeO to the slag [J] |
+| `E_slag_red` | C | Endothermic heat of FeO+C`\to`Fe+CO from the slag [J] |
+| `E_rad_foam` | C | DO radiation absorbed by the foam/slag layer [J] |
+| `E_iph_sol` | C | Interphase heat gained by the solid over the interval, as applied to `E_s` [J] |
+| `E_iph_gas` | C | Interphase heat removed from the gas (with the regularised denominator of the `T` update) [J] |
+| `E_iph_liq` | C | Interphase heat removed from the liquid (idem) [J] |
+| `m_resid_closed` | C | Residual solid handed to the liquid by the vanishing-phase closure (`0<\alpha_s\le10^{-4}`) [kg]; subset of m_melted |
+| `E_resid_closed` | C | Enthalpy handed with that residual [J]; subset of E_melt_from_solid |
+| `m_spill` | C | Liquid displaced upward by the conservative spill of volume-constraint excess [kg] (informative; no mass error) |
+| `vol_dalpha_outer` | D | Liquid volume moved between the incoming outer iterate and the transported fraction, last outer iteration [m`^3`] (lag of `\alpha` in the pressure equation) |
+| `vol_lim` | D | Liquid inflow blocked by the pore-capacity limiter, last outer iteration [m`^3`] |
+| `vol_unlinked` | D | Liquid volume crossing faces not linked in the pressure equation (dispersed/drift), last outer iteration [m`^3`] |
+| `p_max` | D | Maximum `|p|` over active cells at the written step [Pa] (blow-up sentinel: the cap is `2\times10^6`) |
+| `u_gas_max` | D | Maximum gas speed over cells with `\alpha_g\ge10^{-2}` [m s`^{-1}`] |
+| `u_liq_max` | D | Maximum liquid speed over cells with `\alpha_l\ge10^{-2}` [m s`^{-1}`] (cap 20) |
+| `m_charge_in` | C | Scrap mass charged by baskets after start-up [kg] |
+| `E_charge_in` | C | Enthalpy charged with that scrap [J] |
+| `m_C_oxid` | C | Carbon oxidised to CO; leaves the steel inventory [kg] |
+| `m_dil_O2` | C | O`_2` displaced by the dilution of reaction mass entering the gas (`-Y_k S_{gas}`, EOS-fixed density) [kg] |
+| `m_dil_CO` | C | CO displaced by that dilution [kg] |
+| `m_dil_CO2` | C | CO`_2` displaced by that dilution [kg] |
+| `m_gas_volfix` | C | Gas mass created (+) or destroyed (-) when `\alpha_g=1-\sum\alpha` is re-imposed without the two-fluid `\alpha` transport [kg] |
+| `E_slag_tclip` | C | Enthalpy injected by the slag floor `T_{sl}\ge300` K [J] |
+| `E_mix_init` | C | Heat the liquid receives from the gas in the start-up equilibration of the mixture model [J] |
+| `E_resolid` | C | Enthalpy handed to the solid by freezing (`dm e_{entry}`) [J] |
+| `E_alpha_clip` | C | Enthalpy removed with the audited `\alpha` clip [J] |
+| `E_conv_liq` | D | Convective defect of the bounded liquid energy statement [J] |
+| `E_conv_gas` | D | Convective defect of the bounded gas energy statement [J]; the only one that enters the identity |
+| `E_abs_gas_hook` | D | Heat absorbed by the gas equation according to its own hook [J] (diagnostic against E_gas_abs) |
+| `E_slag_gas` | C | Heat the slag receives from the gas of its cell [J] (transfer between state inventories; diagnostic) |
+| `E_slag_liq` | C | Heat the slag receives from the bath (own cell or the one below) [J] (diagnostic) |
+| `m_gas_out` | C | Net gas mass entering the outlet cells (electrode holes) with the conservative gas fluxes [kg]: the export |
+| `m_gas_rxn` | C | Gas mass created by the reactions (`S_{CO}+S_{CO_2}+S_{O_2}`) [kg] |
+| `E_gas_volfix` | C | Enthalpy carried by the gas mass the volume constraint creates or destroys (`m_{gas,volfix} c_p T`) [J]; exact external term |
+| `m_vf_O2` | C | O`_2` mass leaving with the gas destroyed by the volume constraint, slag buoyancy, bucket charge or ECS [kg] (created gas carries no species) |
+| `m_vf_CO` | C | CO mass leaving with the destroyed gas [kg] |
+| `m_vf_CO2` | C | CO`_2` mass leaving with the destroyed gas [kg] |

@@ -50,7 +50,6 @@ Claves desconocidas se ignoran silenciosamente.
 | `R_bowl` | real | 2.50 | m | Radio del cuenco en la base |
 | `R_pcd` | real | 0.85 | m | Radio del círculo de electrodos (pitch circle diameter / 2) |
 | `R_elec` | real | 0.30 | m | Radio de cada electrodo |
-| `R_outlet` | real | 0.35 | m | Radio de la zona de salida en el techo |
 
 ### Notas
 

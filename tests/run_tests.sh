@@ -99,9 +99,16 @@ run_restart_case() {
         note_fail
         return 1
     fi
-    if grep -q '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[RESTART\] AVISO' "$dir/run.log"; then
+    # (auditoria 5, B5-18) los MISMOS filtros que run_case (M4-20 a medias)
+    if grep -q '\[CONFIG\] WARNING' "$dir/run.log"; then
+        echo "FAIL: clave de config desconocida en el reinicio $base (¿typo?):"
+        grep '\[CONFIG\] WARNING' "$dir/run.log" | head -3
+        note_fail
+        return 1
+    fi
+    if grep -q '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[RESTART\] AVISO' "$dir/run.log"; then
         echo "FAIL: aviso en el reinicio $base n$np:"
-        grep 'AVISO' "$dir/run.log" | head -3
+        grep '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[RESTART\] AVISO' "$dir/run.log" | head -3
         note_fail
         return 1
     fi
@@ -428,7 +435,7 @@ full | rebaseline)
         $PY $INT/compare_decomposition.py "$OUT/arc_noscrap_n1" "$OUT/arc_noscrap_n4" --rtol 1e-11
     run_script "decomposition_melt" \
         $PY $INT/compare_decomposition.py "$OUT/melt_forced_n1" "$OUT/melt_forced_n8" --rtol 1e-8
-    # (A4-7) medido 2e-9 y 1.4e-13
+    # (A4-7) medido 2.4e-8 (n1 frente a n4, golden v92; 2e-9 en A4-7) y 1.4e-13 (B5-19: margen 4x, no 50x)
     run_script "decomposition_bedbath" \
         $PY $INT/compare_decomposition.py "$OUT/bed_bath_rest_n1" "$OUT/bed_bath_rest_n4" --rtol 1e-7
     run_script "decomposition_arcmelt" \

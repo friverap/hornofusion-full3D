@@ -188,3 +188,22 @@ with open(OUT, "w") as f:
         f.write(f"    \\texttt{{{cname}}} & {typ} & {desc} \\\\\n")
     f.write("    \\bottomrule\n  \\end{tabular}\n\\end{table*}\n")
 print(f"escrito {OUT} ({len(cols)} columnas)")
+
+# (auditoria 5, B5-22) el mismo glosario en Markdown DENTRO del repo (paper/
+# esta en .gitignore): docs/AUDIT_COLUMNS.md, referenciado desde OUTPUT.md
+OUT_MD = os.path.join(REPO, "docs", "AUDIT_COLUMNS.md")
+with open(OUT_MD, "w") as f:
+    f.write("# Columnas de `audit.csv`\n\n")
+    f.write("Generado por `scripts/make_audit_glossary.py` desde el encabezado de "
+            "`src/mod_audit.f90` (no editar a mano; regenerar tras añadir una "
+            "columna). Una fila por paso (`audit_freq`), más la fila 0 del estado "
+            "inicial. Tipo: I = inventario instantáneo; S = integral de fuente por "
+            "intervalo (hooks del solver); C = contador acumulativo (`audit_add`), "
+            "acumula desde la fila anterior; D = diagnóstico. Las identidades que "
+            "los relacionan viven en `tests/integration/check_audit.py`.\n\n")
+    f.write("| Columna | Tipo | Definición |\n|---|---|---|\n")
+    for c in cols:
+        typ, desc = DEFS[c]
+        d = desc.replace("\\_", "_").replace("$", "`").replace("\\,", " ")
+        f.write(f"| `{c}` | {typ} | {d} |\n")
+print(f"escrito {OUT_MD}")

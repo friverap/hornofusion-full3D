@@ -26,6 +26,20 @@ DEFAULTS = {
 
 N_ELECTRODES = 3
 
+# grafias booleanas de parse_bool (mod_config_3d.f90); '1'/'0' llegan como int
+BOOL_TRUE = ("true", ".true.", "t", ".t.", "yes", "on", "1")
+BOOL_FALSE = ("false", ".false.", "f", ".f.", "no", "off", "0")
+
+
+def cfg_bool(cfg, key, default=True):
+    """Valor booleano de una clave del config leida con read_config."""
+    v = cfg.get(key, default)
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return v != 0
+    return str(v).strip().lower() not in BOOL_FALSE
+
 
 def safe_float(tok):
     """Float robusto ante el formato Fortran ES con exponente >= 100,
@@ -62,9 +76,12 @@ def read_config(path):
                 except ValueError:
                     continue
             else:
-                if val in ("true", ".true."):
+                # (auditoria 5, B5-16) las MISMAS grafias que parse_bool
+                # (mod_config_3d): antes 'F', 'off', 'no' o '.f.' quedaban
+                # como cadena, verdadera en Python
+                if val.lower() in BOOL_TRUE:
                     cfg[key] = True
-                elif val in ("false", ".false."):
+                elif val.lower() in BOOL_FALSE:
                     cfg[key] = False
                 else:
                     cfg[key] = val
