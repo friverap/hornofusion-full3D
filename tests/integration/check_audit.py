@@ -83,6 +83,12 @@ def main():
     # masa: medido <= 3e-11 en toda la matriz (auditoria 4, B4-20; antes 3e-6,
     # y 5e-3 antes de M3-6 dejaba pasar ~330 kg en melt_forced)
     ap.add_argument("--mtol", type=float, default=1e-9)
+    # (auditoria 5, M5-7) piso RELATIVO AL INVENTARIO: sin fusion (B4-22) la
+    # identidad se mide contra 1 kg y dm_liq es el redondeo de la suma del
+    # inventario (m_liq 2.7e5 kg: ulp 5.8e-11, medido 11-14 ulp = 8.1e-10 en
+    # arc_noscrap_n1, 7.6e-10 en bath_test_n4, a 1.2x del gate). 1e-14 del
+    # inventario = ~45 ulp; no afecta a los casos con fusion (mtol x fundido)
+    ap.add_argument("--mtol-inv", type=float, default=1e-14)
     # recorte de alpha (M3-5): fraccion maxima del fundido que puede perderse
     # por el clip auditado (medido 0 en dos fluidos; 3.5e-3 en la mezcla, xfail)
     ap.add_argument("--ctol", type=float, default=1e-6)
@@ -331,11 +337,14 @@ def main():
     # liquido que cambiaba 0.9 kg sin fusion no lo veia nadie
     denom = max(abs(m_melt) + abs(m_res), abs(dm_l), 1.0)
     err = abs(dm_l - expected) / denom
-    chk.report("mass_liq", err <= args.mtol,
+    # (M5-7) permitido = mtol x denom + mtol_inv x inventario (redondeo)
+    inv_l = max(abs(first["m_liq"]), abs(last["m_liq"]))
+    tol_l = args.mtol + args.mtol_inv * inv_l / denom
+    chk.report("mass_liq", err <= tol_l,
                f"dm_liq={dm_l:.4e} vs fundido-resolid-clip="
                f"{expected:.4e} kg (fundido={m_melt:.3e}, "
                f"resolid={m_res:.3e}, clip={m_clip:.3e}), "
-               f"err rel={err:.3e}")
+               f"err rel={err:.3e} (max {tol_l:.3e})")
     # -- alpha_clip (M3-5): el recorte auditado tiene cota --------------------
     chk.report("alpha_clip", abs(m_clip) <= args.ctol * max(abs(m_melt), 1.0),
                f"clip auditado {m_clip:.3e} kg sobre fundido {m_melt:.3e} kg "
@@ -353,9 +362,11 @@ def main():
         den_s = max(abs(m_chg) + abs(m_ecs) + abs(m_melt) + abs(m_res) + abs(m_cox), abs(dm_s))
         # (B4-22) siempre, absoluta contra 1 kg si no hay movimiento
         err_s = abs(dm_s - exp_s) / max(den_s, 1.0)
-        chk.report("mass_sol", err_s <= args.mtol,
+        inv_s = max(abs(first["m_sol"]), abs(last["m_sol"]))
+        tol_s = args.mtol + args.mtol_inv * inv_s / max(den_s, 1.0)
+        chk.report("mass_sol", err_s <= tol_s,
                    f"dm_sol={dm_s:.4e} vs cargas+ECS-fundido+resolid-Cox="
-                   f"{exp_s:.4e} kg, err rel={err_s:.3e}")
+                   f"{exp_s:.4e} kg, err rel={err_s:.3e} (max {tol_s:.3e})")
 
     # -- centinelas (M3-9): nunca se tocan en regimen sano -------------------
     if "p_max" in last and "u_gas_max" in last:
