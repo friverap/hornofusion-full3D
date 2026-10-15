@@ -111,6 +111,10 @@ module mod_constants
     ! del MC del arco (antes 0.01 / 0.05 / 0.1 para el mismo concepto). El
     ! umbral hidraulico del lecho (in_bed, 1e-2) es otro concepto.
     real(dp), parameter :: ALPHA_SCRAP_SURF = 0.05_dp
+    ! Chatarra RECEPTORA del P_rad directo del arco (auditoria 5, B5-15):
+    ! mismo valor que ALPHA_BED, concepto distinto (una celda del borde del
+    ! crater con 1 % de chatarra ve fotones)
+    real(dp), parameter :: ALPHA_ARC_RECV = 1.0e-2_dp
     ! Fraccion del volumen ponderado por la gaussiana del arco (hasta 4 sigma)
     ! que una capa necesita en chatarra + bano para ser la SUPERFICIE bajo
     ! la punta (M4-7); la misma para la capa del bano (A5-1).
@@ -216,8 +220,10 @@ module mod_constants
     ! deslizamiento de una burbuja en el bano en g tau ~ 0.1 m/s, sin
     ! dependencia de nada: en las celdas de BURBUJA (ws_bub: bano con gas que
     ! puede deslizar y bano encima) el arrastre es el fisico,
-    ! K = alpha_g (rho_l - rho_g) g / U_BUBBLE (estado estacionario del
-    ! momento de la fase dispersa, Bug 17), mezclado con el peso de ws_bub.
+    ! K = alpha_g alpha_l (rho_l - rho_g) g / U_BUBBLE (estado estacionario
+    ! del momento de la fase dispersa, Bug 17, con la flotacion RELATIVA de la
+    ! forma balanceada alpha_g (rho_mez - rho_g) g; auditoria 5, B5-10),
+    ! mezclado con el peso de ws_bub.
     real(dp), parameter :: U_BUBBLE = 0.23_dp   ! m/s
 
     ! Cizalla interfacial de SUPERFICIE LIBRE (AIAD; Hoehne-Egorov, HZDR;
