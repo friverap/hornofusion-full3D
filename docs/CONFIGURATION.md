@@ -16,8 +16,11 @@ nz     = 84
 solve_flow = true
 ```
 
-Los valores booleanos aceptan: `true`, `false`, `.true.`, `.false.`  
-Claves desconocidas se ignoran silenciosamente.
+Los valores booleanos aceptan (sin distinguir mayusculas): `true`, `.true.`,
+`t`, `.t.`, `yes`, `on`, `1` y `false`, `.false.`, `f`, `.f.`, `no`, `off`,
+`0`; cualquier otro valor detiene la corrida.  
+Las claves desconocidas imprimen `[CONFIG] WARNING` (rank 0) y no detienen la
+corrida; el harness lo trata como FAIL.
 
 ---
 
@@ -237,8 +240,18 @@ Las propiedades del gas son constantes de referencia (modelo de gas ideal simpli
 ### Dependencias entre flags
 
 ```
-solve_species = true  →  requiere solve_chemistry = true
-                          (para generar S_CO_src y S_CO2_src ≠ 0)
+solve_chemistry = true  →  REQUIERE solve_species = true (validado al
+                            arrancar: sin transporte el O₂ seria infinito)
+solve_species   = true  →  sin solve_chemistry solo transporta (S_CO_src,
+                            S_CO2_src = 0, salvo la reduccion de la escoria)
+
+solve_flow = true y solve_multiphase = false (rama de UNA fase, legada)
+                       →  PROHIBE solve_radiation (auditoria 5, B5-4: solo
+                          se resuelve la energia del liquido y la emision del
+                          gas quedaria sin pagar). Banco: oneflow_test.
+
+n_pc_max > 1          →  aviso [CONFIG] NOTA: la cancelacion del Rhie-Chow
+                          no es exacta desde la segunda pasada (B5-8)
 
 solve_slag    = true  →  independiente de los demás flags
 

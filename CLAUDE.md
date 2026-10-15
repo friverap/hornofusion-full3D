@@ -178,8 +178,9 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   por la puerta de atrás). **Una sola definición, `fsat_cell` (B4-9)**: la
   saturación exige LÍQUIDO (rampa α_l 0 → APG; un lecho seco compactado no
   está saturado y demanda entero), vale 1 sin piso de poro
-  (`pore_floor_on` falso: resorte de Plan F, mezcla) y el acarreo `ws_cc`
-  lleva el mismo peso que la demanda que lo originó. `Tg_end = gas%T` al
+  (`pore_floor_on` falso: resorte de Plan F, mezcla). El acarreo `ws_cc` NO
+  se vuelve a pesar (M5-3: es el resto de una demanda YA pesada; B4-9 lo
+  pesaba dos veces). `Tg_end = gas%T` al
   final del paso en TODAS las ramas salvo la mezcla (la rama sin flujo
   arrastraba el del snapshot de origen). Con el área de película de A3-2 el
   piso se calentaba 5× en un paso y bombeaba el 7.5 % del volumen de cada
@@ -585,9 +586,9 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   12σT_it⁴ (emisión a T_it al converger): 4κσ(T_it⁴ − T_old⁴) de energía
   creada o destruida por paso, 1.2–2.5 % del arco (41 % de lo radiado en
   cold_10step). Ahora `rad_closure` (Σ fases + sólido + pared, tolerancia 5 %)
-  cierra a 3.6 % en frío y 0.1 % con baño; melt_forced se queda en 1 % por
-  otra causa (abierto). Re-resolver la DO por iteración externa NO ayuda: la
-  pared se contabiliza por llamada.
+  cierra a 3.6 % en frío y 0.1 % con baño; el 1 % de melt_forced era el
+  reparto por fase con α^{n+1} (M5-1, cerrado: +51 J). Re-resolver la DO por
+  iteración externa NO ayuda: la pared se contabiliza por llamada.
 - **Libro de MASA del gas (auditoría 4, A4-6)**: columnas `m_gas_out`
   (venteo neto a las celdas outlet con los flujos conservativos `ws_Fg`) y
   `m_gas_rxn`; identidad `mass_gas`: Δm_gas = −venteo + volfix + reacciones +
