@@ -141,7 +141,8 @@ contains
             ! del crater en el anillo 2-3 R con chatarra hacia que un bano bajo
             ! la punta contara como superficie de chatarra (y el P_rad directo
             ! iba a la chatarra SUMERGIDA de k-1). Primera capa con material
-            ! (> 5 % del volumen ponderado): chatarra si pesa mas que el bano.
+            ! (umbral de M7-1: chatarra por fraccion, bano por espesor):
+            ! chatarra si pesa mas que el bano en esa misma escala (M8-1).
             ! (auditoria 5, A5-1) la superficie del BANO se decide con la MISMA
             ! regla de contenido, en el mismo barrido: antes `kbath` seguia con
             ! la regla antigua (una celda con alpha_l >= 0.3 a < 2 sigma) y
@@ -149,7 +150,7 @@ contains
             ! paso 30, electrodo 0: 5.5 MW de P_elec a una celda de 3.5e-3 m3 y
             ! P_conv a una capa de gas, mientras los otros dos electrodos usaban
             ! la capa de contenido). kg_bath_any (respaldo de B4-14) es la
-            ! primera capa con > 5 % de bano ponderado, y nunca por debajo de
+            ! primera capa con bano de espesor equivalente >= ARC_SURF_H, y nunca por debajo de
             ! la superficie de chatarra (B5-5: un bano enterrado no ve fotones).
             ksurf: do kg = kg_tip, 1, -1
                 wsc = 0.0_dp; wba = 0.0_dp; wvo = 0.0_dp
@@ -176,12 +177,17 @@ contains
                 ! (M7-1) la CHATARRA por su fraccion del volumen (5 %). Cada
                 ! material en su escala: la capa es superficie si la suma de
                 ! las dos fracciones de umbral llega a 1 (con dz = 0.28 m,
-                ! frac_surf = 0.0498: el criterio de siempre)
+                ! frac_surf = 0.0498: el criterio de siempre). (auditoria 8,
+                ! M8-1) QUIEN es la superficie se decide en la MISMA escala:
+                ! chatarra si wsc/0.05 >= wba/frac_surf. Con las fracciones
+                ! crudas (wsc >= wba) una capa con chatarra dominante en su
+                ! escala y una pelicula fina pasaba por bano (P_conv y P_elec
+                ! a la pelicula) en la malla de produccion.
                 frac_surf = ARC_SURF_H / max(m%zf_global(kg) - m%zf_global(kg-1), SMALL)
                 if (.not. surf_found .and. &
                     wsc / ARC_SURF_FRAC_S + wba / frac_surf >= wvo) then
                     surf_found = .true.
-                    if (wsc >= wba) then
+                    if (wsc / ARC_SURF_FRAC_S >= wba / frac_surf) then
                         kg_scrap = kg; found_scrap = .true.
                     else
                         ! superficie de bano: P_conv y P_elec a esta capa
