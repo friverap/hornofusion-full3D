@@ -90,7 +90,16 @@ audit_mix:mass_gas
 # (auditoria 4, B4-19) tramo reanudado de slag_chem_flow (pasos 10-20): el
 # audit.csv es BIT A BIT el de la continua y la misma ventana 10-20 de la
 # continua da el MISMO gap (1.21e5 J sobre S_gas 3.3e6, 3.7 %); la corrida
-# completa pasa porque S_gas de los pasos 1-10 (1.3e7) es 4x mayor. Es la
-# imprecision del libro del gas con el lazo externo cortado en 5 (misma causa
-# que audit_cold:energy_balance antes de M25), no una fuga del reinicio.
-audit_restart_slag_chem_flow:energy_balance
+# completa pasa porque S_gas de los pasos 1-10 (1.3e7) es 4x mayor.
+# RETIRADO 14-oct-2026 (auditoria 5, M5-6): la justificacion anterior ("lazo
+# cortado en 5, imprecision del libro del gas") era incorrecta en el numero y
+# en el mecanismo: el config corria con max_outer = 2 y el hueco por paso era
+# sistematico y CRECIENTE (9.5e3 -> 1.4e4 J). Medido: con max_outer 10 o 40 el
+# mismo caso baja a 5e2 J/paso y decrece (x27); el libro del gas cierra con
+# sus pokes a 3e3 J/paso (log frente a lineal, negativo) y la DO a 6e2 J. Es
+# la TRUNCACION del lazo externo segregado (interfase evaluada con iterados
+# distintos en cada fase), no una fuga. El config pasa a max_outer = 10 (el
+# de produccion; 1.0 -> 1.8 s). arc_melt (max_outer 5, a proposito: regimen
+# de B1 con el lazo de produccion) tiene el mismo origen: +1.8e3..2.9e3
+# J/paso desde el paso 60 que con 20 outers queda en ~1e1 J/paso; su tramo
+# reanudado 100-200 sigue a 0.90 de lo permitido con causa conocida.

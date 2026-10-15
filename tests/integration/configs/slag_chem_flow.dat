@@ -55,7 +55,10 @@ carbon_frac = 0.0
 charge_bucket1 = false
 t_bucket2_charge = 1.0e30
 
-max_outer = 2
+# (auditoria 5, M5-6) 10 = lazo de produccion: con 2 el hueco de energia por
+# paso era la TRUNCACION del lazo externo (1.4e4 J/paso, creciente; con 10 o
+# 40 cae a 5e2 J/paso y decrece) y el tramo reanudado 10-20 fallaba
+max_outer = 10
 max_inner_mom = 2
 max_inner_pres = 200
 output_freq = 5
