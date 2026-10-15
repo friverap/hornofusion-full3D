@@ -248,6 +248,20 @@ quick)
                 note_fail
             fi
         }
+        # Lecho inundado en reposo (auditoria 5, M5-8; ~3.5 s): el unico banco
+        # que vigila la bomba de A4-1 (0.29 -> 0.069 m/s); una regresion de
+        # las mascaras de flotacion pasaba el gate por commit
+        run_case bed_bath_rest 4 && {
+            check_invariants "$OUT/bed_bath_rest_n4" bed_bath_rest
+            check_audit_if_present "$OUT/bed_bath_rest_n4"
+            run_script "bed_bath_rest" \
+                $PY $INT/check_bedbath.py "$OUT/bed_bath_rest_n4" --xfail "$(xfail_ids bed_bath_rest)"
+            if ! $PY $INT/metrics_snapshot.py "$OUT" --mode check \
+                    --only bed_bath_rest_n4; then
+                echo ">> FAIL métricas golden (bed_bath_rest)"
+                note_fail
+            fi
+        }
     }
     ;;
 
