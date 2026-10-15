@@ -148,6 +148,10 @@ DEFS = {
                        "[kg]"),
     "E_gas_volfix": ("C", "Enthalpy carried by the gas mass the volume constraint creates "
                           "or destroys ($m_{gas,volfix}\\,c_p T$) [J]; exact external term"),
+    "m_vf_O2": ("C", "O$_2$ mass leaving with the gas destroyed by the volume constraint, "
+                     "slag buoyancy, bucket charge or ECS [kg] (created gas carries no species)"),
+    "m_vf_CO": ("C", "CO mass leaving with the destroyed gas [kg]"),
+    "m_vf_CO2": ("C", "CO$_2$ mass leaving with the destroyed gas [kg]"),
 }
 
 src = open(SRC).read()

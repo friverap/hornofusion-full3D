@@ -265,8 +265,8 @@ este modelo no resuelve.
 |----------|---------|
 | `frac_rad` × `MC_RAD_SHARE` (0.5) | Monte Carlo (§7) |
 | `frac_rad` × (1 − `MC_RAD_SHARE`) | depósito directo en la superficie de la chatarra bajo el electrodo; **sin chatarra, también al MC** (`mc_share` = 1) |
-| `frac_conv` | columna de gas entre la punta y la superficie de chatarra; **sin chatarra, la capa de la superficie del baño** (chorro de plasma que impacta) |
-| `frac_elec` | tras el bore-in, SOLO las celdas de baño (α_l ≥ `ALPHA_LIQ_CONT`) de la capa más alta con baño bajo el electrodo (radio 2 R_elec, peso α_l V; auditoría 3 A3-4: antes una gota con α_l > 1e-6 en la columna recibía todo P_elec); sin baño en la columna, por volumen con reparto por absorción; antes del bore-in, con `frac_conv` |
+| `frac_conv` | columna de gas entre la punta y la superficie de chatarra; **sin chatarra, la capa de la superficie del baño** (chorro de plasma que impacta). La superficie (chatarra o baño) se decide en UN solo barrido por contenido ponderado con la gaussiana del arco hasta 4σ (primera capa con > `ARC_SURF_FRAC` = 5 % de material; chatarra si Σwα_s ≥ Σwα_l; auditoría 4 M4-7, auditoría 5 A5-1: con la regla antigua del baño, una celda con α_l ≥ 0.3 a < 2σ, un electrodo mandaba 5.5 MW de P_elec a una celda casi vacía mientras los otros dos usaban la capa de contenido) |
+| `frac_elec` | tras el bore-in, SOLO las celdas de baño (α_l ≥ `ALPHA_LIQ_CONT`) de la capa de superficie del baño elegida por contenido (gaussiana hasta 4σ, peso α_l V; auditoría 3 A3-4: antes una gota con α_l > 1e-6 en la columna recibía todo P_elec; A5-1: misma capa que P_conv); con chatarra como superficie o sin baño, con `frac_conv`; antes del bore-in, con `frac_conv` |
 
 (Auditoría 2, N-A2: con baño plano el líquido recibía el 6.9 % del arco
 absorbido; ahora 71 %, el resto es la atenuación del gas en el camino del MC.)
@@ -325,7 +325,14 @@ S_rad,q = (κ_q α_q / Σκα) κ_f (G − 4σT_q⁴)        reparto por absorci
 Sin limitador de `S_rad`: la radiación es implícita (linearización de Newton
 alrededor del iterado). Paredes: la coraza y el techo son frías; el tazón, el
 piso y el eje re-irradian (`Bmix` de la celda). La DO no es invariante a
-rotaciones de 120° (efecto de rayos de S4).
+rotaciones de 120° (efecto de rayos de S4). **El reparto por fase lo fija la
+DO** (auditoría 5, M5-1): `sh%w_rad_l` = κ_l α_l/κ_f con la α del momento de
+la llamada (αⁿ; una fase bajo `ALPHA_CUTOFF` no emite ni absorbe, B4-13) y la
+energía lo usa tal cual para absorción y emisión. Con α^{n+1} del SIMPLE en la
+energía la absorción cerraba (Σw = 1) pero la emisión no: κ_f 4σ[(w^{n+1} −
+wⁿ) T⁴] V dt de energía creada en cada paso con fusión (el 1 % radiativo de
+`melt_forced`: −1.2e5 J → +51 J). El arco (`S_arc`) conserva el reparto por
+α^{n+1} (`rad_weight`): su presupuesto cierra por construcción.
 
 ---
 
@@ -432,7 +439,17 @@ mismo barrido en todos los ranks): la escoria asciende hasta el tope del baño
 o desciende cuando el material de abajo desaparece, nunca entra a celdas
 llenas de chatarra, y `α_sl = m_sl/(ρ_sl V)` (A14); el gas que crea o destruye al reescribir
 α_g se audita en masa y energía de inventario (`m_gas_volfix`,
-`E_gas_volfix`; auditoría 4, M4-13). Intercambio escoria–fluido exacto de dos
+`E_gas_volfix`; auditoría 4, M4-13), **y el gas creado no trae especies** (Y
+diluida por α_old/α_new como en el volfix; auditoría 5, M5-5: antes creaba O
+y C de la nada). Lo mismo valen la carga de cesta y el ECS, que destruyen gas
+al cargar chatarra (M5-4: `cold_bucket2` atribuía a la EOS 10.4 de 12.5 kg).
+Las especies que salen con el gas destruido van a `m_vf_O2/CO/CO2`, y con
+ellas y `m_dil_*` el balance elemental de O y C cierra con escoria
+(`check_chem --slag`, 1e-11 en `slag_chem_test`; la identidad usa la ρ_g del
+código, `/restart/rho_gas`). El CO de una reducción nacida en una celda de
+escoria sin gas (el solver de especies descartaría la fuente) sube hasta la
+primera celda con gas (pasadas Jacobi con halos; no se activa en los bancos).
+Intercambio escoria–fluido exacto de dos
 nodos (exponencial), en dos pasadas. **Con el gas, consistente con su
 inventario logarítmico** (M4-13): la energía del gas ideal a p fija es
 C_g ln(T/T_ref) con C_g = α ρ_ref T_ref c_p V (P0 + p)/P0 (la masa la fija la
@@ -463,7 +480,12 @@ se omite si alguna de las dos celdas tiene chatarra (α_s ≥ 2e-2). Con
 interfase nítida ninguna celda tiene las dos fases, por eso el acople es de
 cara y no de celda (antes: |∇α_l| central, que pulsaba con la posición del
 nivel). Antes de N-A1 no existía: el gas a 300 K sobre el baño a 1850 K
-quedaba a 300 K. Banco: `bath_test_cold`.
+quedaba a 300 K. Banco: `bath_test_cold`. **El lazo de caras va en dos
+barridos por paridad de la cara global con halos de T frescos antes de cada
+uno** (auditoría 5, M5-2): así los dos ranks de una frontera de bloque en z
+evalúan la misma q (el lazo por celda y un Gauss–Seidel en k dejaban halos
+rancios: `melt_forced` n1 frente a n7 difería 3.3e-8 en α_s; ahora 6e-11) y
+dentro de un barrido ninguna celda toca dos caras (dos nodos exactos).
 
 ```
 gas–sólido:      h_gs = (k_mol/d)(2 + 1.1 Pr^⅓ Re^0.6) [Wakao], k_mol = μ c_p / 0.7;
