@@ -77,7 +77,7 @@ contains
         real(dp) :: P_total, P_rad_arc, P_conv, P_elec_flow
         real(dp) :: x_elec, y_elec, x_cell, y_cell, dist
         real(dp) :: r2, sigma_r, gw
-        real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol, wsc, wba, wvo, wexp
+        real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol, wsc, wba, wvo, wexp, frac_surf
         logical  :: found_scrap, owned, any_liq, found_bath, surf_found
         integer  :: kg_bath_any   ! capa del bano bajo la punta aunque la superficie sea chatarra (B4-14)
         ! (El tope de 2 K por paso al solido se sustituyo por el tope de estado
@@ -171,7 +171,10 @@ contains
                     end do
                 end do
                 if (wvo <= SMALL) cycle
-                if (.not. surf_found .and. wsc + wba >= ARC_SURF_FRAC * wvo) then
+                ! (M6-5) umbral en ESPESOR equivalente: wvo/dz es el area
+                ! ponderada de la capa, asi que material/area >= ARC_SURF_H
+                frac_surf = ARC_SURF_H / max(m%zf_global(kg) - m%zf_global(kg-1), SMALL)
+                if (.not. surf_found .and. wsc + wba >= frac_surf * wvo) then
                     surf_found = .true.
                     if (wsc >= wba) then
                         kg_scrap = kg; found_scrap = .true.
@@ -182,7 +185,7 @@ contains
                         exit ksurf
                     end if
                 end if
-                if (wba >= ARC_SURF_FRAC * wvo) then
+                if (wba >= frac_surf * wvo) then
                     kg_bath_any = kg
                     exit ksurf
                 end if

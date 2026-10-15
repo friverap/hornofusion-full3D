@@ -343,7 +343,9 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   que `ALPHA_FLOW_CUTOFF` a propósito.
 - **Auditoría 5 (14-oct-2026), lo que cambió de convención**: (A5-1) la
   superficie bajo el arco, chatarra O baño, se decide en UN solo barrido por
-  contenido ponderado (`ksurf`, `ARC_SURF_FRAC` 5 %); nunca volver a una
+  contenido ponderado (`ksurf`; umbral en ESPESOR equivalente `ARC_SURF_H`
+  0.014 m desde M6-5, nunca en fraccion del volumen de la capa: dependia de
+  dz y en produccion bastaban ~13 kg para recibir P_elec); nunca volver a una
   búsqueda aparte del baño por celda. (M5-1) la DO guarda su reparto por fase
   (`sh%w_rad_l`, αⁿ) y la energía resta la emisión con ESE peso: con α^{n+1}
   se creaba energía en cada paso con fusión (melt_forced 1 %). (M5-2) el lazo

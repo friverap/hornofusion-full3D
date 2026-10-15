@@ -115,10 +115,15 @@ module mod_constants
     ! mismo valor que ALPHA_BED, concepto distinto (una celda del borde del
     ! crater con 1 % de chatarra ve fotones)
     real(dp), parameter :: ALPHA_ARC_RECV = 1.0e-2_dp
-    ! Fraccion del volumen ponderado por la gaussiana del arco (hasta 4 sigma)
-    ! que una capa necesita en chatarra + bano para ser la SUPERFICIE bajo
-    ! la punta (M4-7); la misma para la capa del bano (A5-1).
-    real(dp), parameter :: ARC_SURF_FRAC = 0.05_dp
+    ! ESPESOR EQUIVALENTE de material [m] que una capa necesita (chatarra +
+    ! bano, ponderados por la gaussiana del arco hasta 4 sigma, divididos por
+    ! el area ponderada) para ser la SUPERFICIE bajo la punta (M4-7, A5-1).
+    ! (auditoria 6, M6-5) antes era una FRACCION del volumen de la capa (5 %):
+    ! dependia de dz y con la malla de produccion (dz 0.054 m) bastaban ~13 kg
+    ! de liquido ponderado para recibir P_elec (5.5 MW). 0.014 m es el 5 % de
+    ! la celda de los bancos (dz 0.28 m): los bancos no cambian y la masa
+    ! minima (~67 kg ponderados con sigma = 0.45 m) ya no depende de la malla.
+    real(dp), parameter :: ARC_SURF_H = 0.014_dp
     ! Cota física de velocidad del ACERO líquido [m/s]. El acero en el
     ! horno se mueve a O(1) m/s (plumas, EBT ~5-7 m/s); 20 m/s es 3x el
     ! máximo físico. Sin la cota, gotas apenas sobre ALPHA_FLOW_CUTOFF
