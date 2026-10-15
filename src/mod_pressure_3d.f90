@@ -273,6 +273,10 @@ contains
                         ! fila: E1b -cerrar la valvula, NEGATIVO en B1- por la
                         ! puerta de atras)
                         src = src * fsat_cell(i, j, k)
+                        ! (auditoria 5, B5-9) la demanda que juzga el venteo
+                        ! incluye el ACARREO del paso anterior (misma demanda
+                        ! que plantea la fuente; antes solo la termica)
+                        src = abs(src + ws_cc(i,j,k) / cfg%dt)
                         src = min(src, COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt)
                         if (src <= 0.0_dp) cycle
                         cg = 0.0_dp
@@ -456,11 +460,23 @@ contains
         if (cfg%gas_compressibility .and. cfg%solve_multiphase) then
         block
             real(dp) :: src, cap, dvol, dcl, fsat
-            ws_cc_new = 0.0_dp
+            ! (auditoria 5, B5-9) el acarreo de una celda que no esta en el
+            ! acople se CONSERVA (antes se perdia sin rastro al salir de act_g
+            ! por F2.13/F2.31); las celdas OUTLET (Dirichlet p' = 0, techo bajo
+            ! los electrodos) no plantean demanda ni acarrean (B5-7: el tope
+            ! actuaba cada paso en la columna de salida y el acarreo acumulado
+            ! iba al snapshot)
+            ws_cc_new = ws_cc
             do k = kstart, kend
                 do j = jstart, jend
                     do i = istart, iend
                         if (m%cell_type(i,j,k) == 0) cycle
+                        if (at_zmax .and. k == kend) then
+                            if (any(m%is_electrode(i,j,k,:))) then
+                                ws_cc_new(i,j,k) = 0.0_dp
+                                cycle
+                            end if
+                        end if
                         if (.not. act_g(i,j,k)) cycle
                         ! El gas RESIDUAL de un poro SATURADO (alpha_g en el
                         ! piso ALPHA_PORE_GAS, liquido en el cap) es un canal
@@ -546,6 +562,11 @@ contains
                         aS(i,j,k) = 0.0_dp; aN(i,j,k) = 0.0_dp
                         aB(i,j,k) = 0.0_dp; aT(i,j,k) = 0.0_dp
                         aP(i,j,k) = 1.0_dp; Su(i,j,k) = 0.0_dp
+                        ! (B5-9) la fila sellada no evacua su demanda: el
+                        ! acarreo previo se conserva (la demanda nueva del
+                        ! paso se replantea contra Tg_end)
+                        if (cfg%gas_compressibility .and. cfg%solve_multiphase .and. sealed(i,j,k)) &
+                            ws_cc_new(i,j,k) = ws_cc(i,j,k)
                     else
                         ! Compliance: ver nota de PP_COMPLIANCE arriba
                         aP(i,j,k) = (aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + &
