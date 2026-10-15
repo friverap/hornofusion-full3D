@@ -45,7 +45,16 @@ contains
         ! cambian alpha_s sin actualizar el gas -> Sum(alpha) quedaba en 0.5
         ! en celdas vaciadas. El gas absorbe/cede el volumen sobrante.
         ! (M4-4) con sh: el gas creado no trae especies
-        call enforce_volume_constraint(liq, gas, sol, slag, m, cfg, sh)
+        ! (auditoria 6, N-M4) con transporte de dos fluidos el fundido de
+        ! ESTE paso entra a alpha_l en el SIMPLE (mdot): el volumen que deja
+        ! el solido es del LIQUIDO pendiente, no del gas. Antes el volfix lo
+        ! rellenaba con gas (registrado como creado, m_gas_volfix) y el
+        ! transporte lo destruia por complemento sin registro: era casi todo
+        ! el residuo de mass_gas (bath_fill 13.4 de 18.5 kg, bed_drain 30.2
+        ! de 31.7, melt_forced 10.5 de 14.1; medido con una sonda por celda).
+        ! La rama sin flujo aplica el liquido aqui mismo (sin cambio).
+        call enforce_volume_constraint(liq, gas, sol, slag, m, cfg, sh, &
+            pending_melt = (cfg%solve_flow .and. cfg%solve_multiphase), dt = dt)
 
     end subroutine update_solid_premelt
 
@@ -65,9 +74,14 @@ contains
     end subroutine update_solid_postenergy
 
     !---------------------------------------------------------------------------
-    subroutine enforce_volume_constraint(liq, gas, sol, slag, m, cfg, sh)
+    subroutine enforce_volume_constraint(liq, gas, sol, slag, m, cfg, sh, pending_melt, dt)
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
+        ! (auditoria 6, N-M4) cuenta como ocupado el volumen del liquido que
+        ! la fusion/congelacion de este paso (sol%mdot, kg/s) le pasara en el
+        ! transporte de alpha
+        logical,  intent(in), optional :: pending_melt
+        real(dp), intent(in), optional :: dt
         type(slag_t),  intent(in)    :: slag
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
@@ -80,15 +94,24 @@ contains
         type(shared_t), intent(inout), optional :: sh
 
         integer :: i, j, k
-        real(dp) :: a_new, dmg, fdil, deg, pc
+        real(dp) :: a_new, dmg, fdil, deg, pc, a_pend
+        logical  :: use_pend
 
         dmg = 0.0_dp; deg = 0.0_dp
+        use_pend = .false.
+        if (present(pending_melt) .and. present(dt)) use_pend = pending_melt
         do k = 1, m%nz
             do j = 1, m%ntheta
                 do i = 1, m%nr
                     if (m%cell_type(i,j,k) == 0) cycle
+                    a_pend = 0.0_dp
+                    ! solo FUSION (mdot > 0): con la congelacion el aplastamiento
+                    ! del gas por el solido que crece se conserva (medido: con el
+                    ! pendiente negativo bath_freeze subia de 97 a 202 kPa; el gas
+                    ! aplastado bajo el umbral sacaba esas celdas del acople)
+                    if (use_pend) a_pend = max(sol%mdot(i,j,k), 0.0_dp) * dt / (liq%rho(i,j,k) * m%vol(i,j,k))
                     a_new = max(0.0_dp, 1.0_dp &
-                        - sol%alpha_s(i,j,k) - liq%alpha(i,j,k) &
+                        - sol%alpha_s(i,j,k) - liq%alpha(i,j,k) - a_pend &
                         - slag%alpha_sl(i,j,k))
                     ! masa de gas creada/destruida (auditoria, bajos: antes
                     ! sin columna; la masa del gas la fija la EOS)

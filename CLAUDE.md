@@ -594,11 +594,18 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
 - **Libro de MASA del gas (auditoría 4, A4-6)**: columnas `m_gas_out`
   (venteo neto a las celdas outlet con los flujos conservativos `ws_Fg`) y
   `m_gas_rxn`; identidad `mass_gas`: Δm_gas = −venteo + volfix + reacciones +
-  (lo que la EOS reescribe). Ese residuo es la no conservación del modelo
-  low-Mach (gas fuera del acople por F2.13/F2.31/fsat, `COMP_SRC_CAP`, lazo
-  externo): medido 2–37 % del presupuesto de masa del gas en los bancos de
-  dos fluidos (bed_drain 0.37, bath_fill 0.36; golden v92; 79 % en bed_flood,
-  76 % en la mezcla y 128 % en melt_forced, xfail con causa). `E_conv_gas − E_out_conv` es, en
+  (lo que la EOS reescribe). **N-M4, auditoría 6**: medido con una sonda de
+  balance por celda, casi todo el residuo era el gas FANTASMA del volfix de
+  la fusión antes del SIMPLE (el volumen que deja el sólido es del líquido
+  pendiente `mdot`, que el transporte añade en el SIMPLE; el volfix lo
+  rellenaba con gas registrado como creado y el transporte lo destruía por
+  complemento sin registro). `enforce_volume_constraint(pending_melt)` lo
+  reserva al líquido (solo al FUNDIR: con el pendiente de la congelación
+  bath_freeze pasaba de 97 a 202 kPa). Y la cota `COMP_SRC_CAP` sobre el gas
+  propio recortaba la contracción del gas que atraviesa los poros (M6-1).
+  Residuo ahora: bed_drain 1.8 %, cold 3.5 %, bath_fill 10 %, arc_melt 13 %,
+  bed_flood 23 %, melt_forced 32 %; lo que queda es la congelación
+  (bath_freeze 12 %), el lazo externo truncado y el gas fuera del acople. `E_conv_gas − E_out_conv` es, en
   forma T, la entalpía de esa masa: el «defecto convectivo» del gas no es
   numérico. Gate `mgtol` 0.5 (regresiones); el juez es B1 (N-M4 abierto).
 - **Identidad de energía POR PASO (A4-4)**: además de la acumulada, cada paso
