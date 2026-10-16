@@ -673,7 +673,7 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   (auditoría 9, M9-6)**: el Jacobi del factor es MONÓTONO desde 1 (siempre
   sobreadmite) y en un baño LLENO al que el Poisson pide meter líquido (lecho
   que drena encima) converge geométricamente lento (1.4 %/barrido en la
-  llamada más lenta medida, pocket_rise_dt10 paso 48; 7–12 % en otras) y agota
+  llamada más lenta medida, pocket_rise_dt10 paso 48, banco de la línea main; 7–12 % en otras) y agota
   `N_LIM_MAX`; el exceso que deja lo mueve el derrame (`m_spill`, auditado y
   conservativo; cuenta MASA POR SALTO, así que una cadena de relevo de L celdas suma L veces la masa: cota superior del error, no la masa movida): ESE es el error, no `dlim`. **Con escoria (A11-2, CERRADO oct-2026)**: la interfaz de escoria corta el relevo, pero el exceso que queda bajo ella ya no va al clip: la escoria CEDE (entra en su celda y `slag_buoyancy` la sube; arc_slag 10 s: clip 3.7 kg → 1.7e-9). El diagnóstico `[LIM]` estima la
   distancia al punto fijo (`dist_est` ≈ dlim r/(1−r)). Probado y NO adoptado:
