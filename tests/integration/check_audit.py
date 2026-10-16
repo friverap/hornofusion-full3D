@@ -23,6 +23,9 @@ Chequeos (ids para xfail, prefijo 'audit:'):
                    el doble conteo por fase lo desvían.
   mass_liq       : |dm_liq - (m_melted - m_resolid - m_alpha_clip)| <= 0.5 %
                    (se omite con PASS informativo si no hubo fusión)
+  alpha_clip_bounded : (solo con --clip-abs-max) |m_alpha_clip| <= techo
+                   absoluto en kg; techo no enmascarado de un alpha_clip en
+                   xfail (auditoria 15, M15-4)
 
 Uso: check_audit.py RUNDIR [--config CFG] [--xfail a,b] [--etol 0.01]
                       [--htol 1e-4] [--arctol 1e-3]
@@ -95,6 +98,10 @@ def main():
     # recorte de alpha (M3-5): fraccion maxima del fundido que puede perderse
     # por el clip auditado (medido 0 en dos fluidos; 3.5e-3 en la mezcla, xfail)
     ap.add_argument("--ctol", type=float, default=1e-6)
+    # (auditoria 15, M15-4) techo ABSOLUTO del clip [kg] para los casos cuyo
+    # alpha_clip esta en xfail: el xfail tapa la cota estricta, este check no
+    # (sin el, una regresion del derrame a toneladas seguia diciendo XFAIL)
+    ap.add_argument("--clip-abs-max", type=float, default=None)
     # centinelas (M3-9): P_HYDRO_CAP y U_GAS_MAX nunca se tocan en regimen sano
     ap.add_argument("--p-cap", type=float, default=2.0e6)
     ap.add_argument("--u-gas-cap", type=float, default=300.0)
@@ -361,6 +368,9 @@ def main():
     chk.report("alpha_clip", abs(m_clip) <= args.ctol * max(abs(m_melt), 1.0),
                f"clip auditado {m_clip:.3e} kg sobre fundido {m_melt:.3e} kg "
                f"(max {args.ctol} relativo)")
+    if args.clip_abs_max is not None:
+        chk.report("alpha_clip_bounded", abs(m_clip) <= args.clip_abs_max,
+                   f"clip auditado {m_clip:.3e} kg (techo {args.clip_abs_max:.1e} kg)")
 
     # -- mass_sol (M3-6): inventario del solido ---------------------------
     # dm_sol = cargas + ECS - fundido + resolid - C oxidado (m_resid_closed es

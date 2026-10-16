@@ -168,6 +168,8 @@ audit_extra_args() {
     case $1 in
         arc_noscrap) echo "--min-liq-arc 0.6" ;;
         outer_conv)  echo "--etol 1e-4" ;;   # lazo convergido (N-A6)
+        # (auditoria 15, M15-4) alpha_clip en xfail: techo ~3x lo medido (8.7e-5 kg)
+        arc_slag)    echo "--clip-abs-max 3e-4" ;;
         *)           echo "" ;;
     esac
 }
