@@ -20,9 +20,11 @@ audit es siempre el piso y no veia la bolsa.)
   pocket_mono     la bolsa solo se DESPRESURIZA: r(t) nunca sube mas de
                   0.5 kPa entre snapshots (medido: 20.0 -> 0.006 kPa, mayor
                   repunte +0.007). Atrapa un repunte
-  pocket_gate     r <= 10 kPa antes de t = 0.09 s (medido 8.2 kPa en 0.07):
-                  atrapa una MESETA o un retraso de >= ~25 ms (con release
-                  sola pasaba un retraso de 30 ms)
+  pocket_gate     ENVOLVENTE de tiempos: r baja de 15 / 10 / 5 / 2 kPa antes
+                  de 0.08 / 0.09 / 0.10 / 0.11 s (medido 0.06 / 0.07 / 0.08 /
+                  0.09): una meseta o retencion por encima de 1 kPa que dure
+                  mas de ~20-30 ms falla en algun nivel (con una sola puerta
+                  en 10 kPa pasaba una meseta de 8 kPa de 50 ms; auditoria 11)
   pocket_release  r(t) baja de 1 kPa y se queda ahi antes de t = 0.13 s
                   (medido 0.10 s): atrapa una despresurizacion retrasada
   pocket_retain   r(t) <= 1 kPa para t >= 0.13 s (medido <= 0.08 kPa) y
@@ -33,7 +35,9 @@ audit es siempre el piso y no veia la bolsa.)
                   44.7: cota de REGRESION del artefacto del lazo truncado)
   pocket_complete el ultimo snapshot esta en t_final
   pocket_dt       el dt real de la corrida (columna dt del audit) es el
-                  esperado: el reinicio toma el dt del SNAPSHOT
+                  esperado Y el del config: el reinicio toma el dt del
+                  SNAPSHOT, asi que un dt distinto en el config seria una
+                  clave inerte (auditoria 11)
 Requiere snapshots frecuentes (output_freq 2 en pocket_rise.dat).
 """
 import argparse, csv, glob, os, sys
@@ -90,10 +94,14 @@ for i in range(len(rows)):
         t_rel = rows[i][0]; break
 chk.report("pocket_release", t_rel is not None and t_rel <= 0.13 + 1e-9,
            f"la retencion queda bajo 1 kPa desde t = {t_rel if t_rel is not None else float('nan'):.3f} s (max 0.13 s)")
-early = [q for q in rows if 0.0 < q[0] <= 0.09 + 1e-9]
-t_gate = next((q[0] for q in early if q[2] <= 10.0e3), None)
-chk.report("pocket_gate", t_gate is not None,
-           f"la retencion baja de 10 kPa en t = {t_gate if t_gate is not None else float('nan'):.3f} s (max 0.09 s)")
+GATES = ((15.0e3, 0.08), (10.0e3, 0.09), (5.0e3, 0.10), (2.0e3, 0.11))
+gate_ok = True; gate_msg = []
+for lvl, tmax in GATES:
+    tl = next((q[0] for q in rows[1:] if q[2] <= lvl), None)
+    ok_l = tl is not None and tl <= tmax + 1e-9
+    gate_ok = gate_ok and ok_l
+    gate_msg.append(f"{lvl/1e3:.0f} kPa en {tl if tl is not None else float('nan'):.3f} s (max {tmax:.2f})")
+chk.report("pocket_gate", gate_ok, "envolvente de la retencion: " + "; ".join(gate_msg))
 late = [q for q in rows if q[0] >= 0.13 - 1e-9]
 rmax = max(q[2] for q in late) if late else float("nan")
 rlow = min(q[3] for q in rows[1:])
@@ -117,6 +125,7 @@ if "t_final" in cfgd:
                f"ultimo snapshot en t = {rows[-1][0]:.4f} s (t_final {tf:g})")
 if a.dt is not None:
     dts = [float(r["dt"]) for r in au[1:]]
-    chk.report("pocket_dt", all(abs(x - a.dt) <= 1e-9 * a.dt for x in dts),
-               f"dt de la corrida {min(dts):.4g}..{max(dts):.4g} s (esperado {a.dt:g})")
+    cdt = float(cfgd["dt"]) if "dt" in cfgd else a.dt
+    chk.report("pocket_dt", all(abs(x - a.dt) <= 1e-9 * a.dt for x in dts) and abs(cdt - a.dt) <= 1e-9 * a.dt,
+               f"dt de la corrida {min(dts):.4g}..{max(dts):.4g} s (esperado {a.dt:g}; config {cdt:g})")
 chk.exit()

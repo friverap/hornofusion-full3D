@@ -725,9 +725,12 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   el lecho que produce el lazo externo truncado a 5 iteraciones (con 20
   desaparece); la cota de 60 m/s es de regresión. El juez mide la presión de
   la bolsa DIRECTAMENTE frente a la capa de encima conectada al gas
-  (`max|p|` es siempre el piso): sin repuntes de más de 0.5 kPa, bajo 10 kPa
-  antes de 0.09 s (medido 0.07), bajo 1 kPa antes de 0.13 s (medido 0.10) y
-  ±1 kPa después; dt real comprobado. La
+  (`max|p|` es siempre el piso): sin repuntes de más de 0.5 kPa; ENVOLVENTE
+  de tiempos (bajo 15/10/5/2/1 kPa antes de 0.08/0.09/0.10/0.11/0.13 s;
+  medido 0.06/0.07/0.08/0.09/0.10): una meseta por encima de 1 kPa de más de
+  ~20–30 ms falla, y también un drenaje un 35 % más lento (si un cambio del
+  modelo lo justifica, remedir); ≤ 1 kPa desde 0.13 s y ≥ −1 kPa siempre; dt
+  real = esperado = el del config (el reinicio toma el del snapshot). La
   «retención de 0.25–0.3 s» medida en la auditoría 6 era el estado construido
   con la presión del snapshot de origen, NO el modelo; la opción
   `pc_bed_gas_pocket` que se añadió para quitarla se RETIRÓ (con el estado
