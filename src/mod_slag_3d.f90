@@ -496,7 +496,7 @@ contains
         type(shared_t), intent(in), optional :: sh
 
         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: Cs, Cf, hA, f, Q, Cg, Tg, Ts, pc
+        real(dp) :: Cs, Cf, Cb, hA, f, Q, Cg, Tg, Ts, pc
         real(dp), allocatable :: qdown(:,:,:)
 
         if (m%is_parallel) then
@@ -516,8 +516,20 @@ contains
                     if (m%cell_type(i,j,k) == 0) cycle
                     if (slag%m_sl(i,j,k) <= SMALL_SL) cycle
                     Cs = slag%m_sl(i,j,k) * cfg%cp_slag
-                    ! bano: propia celda o la de abajo
-                    if (liq%alpha(i,j,k) > SMALL_SL) then
+                    ! bano: propia celda o la de abajo, la de MAYOR capacidad
+                    ! (A13-1, oct-2026): con la escoria en su propia capa la
+                    ! celda guarda una traza de liquido y el acople iba a esa
+                    ! traza (10-30 J por paso en arc_slag frente a 2.3e5 J del
+                    ! arco), nunca al bano de abajo
+                    Cf = 0.0_dp
+                    if (liq%alpha(i,j,k) > SMALL_SL) Cf = liq%alpha(i,j,k) * liq%rho(i,j,k) &
+                        * liq%cp(i,j,k) * m%vol(i,j,k)
+                    Cb = 0.0_dp
+                    if (m%cell_type(i,j,k-1) /= 0) then
+                        if (liq%alpha(i,j,k-1) > SMALL_SL) Cb = liq%alpha(i,j,k-1) &
+                            * liq%rho(i,j,k-1) * liq%cp(i,j,k-1) * m%vol(i,j,k-1)
+                    end if
+                    if (Cf > 0.0_dp .and. Cf >= Cb) then
                         Cf = liq%alpha(i,j,k) * liq%rho(i,j,k) * liq%cp(i,j,k) * m%vol(i,j,k)
                         hA = cfg%h_contact_sl * m%Az(i,j,k-1)
                         f = 1.0_dp - exp(-dt * hA * (1.0_dp / Cs + 1.0_dp / Cf))
@@ -525,7 +537,7 @@ contains
                         slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
                         liq%T(i,j,k) = liq%T(i,j,k) - Q / Cf
                         call audit_add(AUD_SLAG_LIQ, Q)
-                    else if (m%cell_type(i,j,k-1) /= 0 .and. liq%alpha(i,j,k-1) > SMALL_SL) then
+                    else if (Cb > 0.0_dp) then
                         Cf = liq%alpha(i,j,k-1) * liq%rho(i,j,k-1) * liq%cp(i,j,k-1) * m%vol(i,j,k-1)
                         hA = cfg%h_contact_sl * m%Az(i,j,k-1)
                         f = 1.0_dp - exp(-dt * hA * (1.0_dp / Cs + 1.0_dp / Cf))

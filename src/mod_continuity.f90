@@ -553,6 +553,51 @@ contains
             end do
             call mpi_exchange_halos_3d(liq%alpha, m%topo)
         end do
+        !-------------------------------------------------------------------
+        ! (A11-2 con escoria / A13-1, oct-2026) la ESCORIA CEDE al acero: el
+        ! exceso que queda bajo una interfaz de escoria (ni la cascada ni el
+        ! relevo la cruzan, M9-4) entra en la celda de escoria de encima en
+        ! vez de ir al clip, ocupando el volumen de la escoria; el recorte
+        ! final ya no corta acero por la escoria y slag_buoyancy, al final del
+        ! paso, sube la escoria desplazada (rehace la columna sobre el hueco
+        ! liq_cap - alpha_l) y restituye la suma de fracciones. El acero nunca
+        ! queda encima de la escoria. Sin escoria (alpha_sl < ALPHA_CUTOFF en
+        ! k+1) no actua: identico. Medido en arc_slag 10 s: el clip crecia de
+        ! 0.03 a 1 kg/s.
+        !-------------------------------------------------------------------
+        ws_lim = 0.0_dp
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (m%cell_type(i,j,k+1) == 0) cycle
+                    if (alpha_slag(i,j,k+1) < ALPHA_CUTOFF) cycle
+                    if (alpha_slag(i,j,k) >= ALPHA_CUTOFF) cycle   ! cede su propia escoria
+                    give = liq%alpha(i,j,k) - (1.0_dp - sol%alpha_s(i,j,k) - alpha_slag(i,j,k))
+                    if (give <= 1.0e-15_dp) cycle
+                    room_up = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k+1) - liq%alpha(i,j,k+1)) &
+                              * m%vol(i,j,k+1) / m%vol(i,j,k)
+                    ws_lim(i,j,k) = min(give, room_up)
+                end do
+            end do
+        end do
+        call mpi_exchange_halos_3d(ws_lim, m%topo)
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    give = ws_lim(i,j,k)
+                    liq%alpha(i,j,k) = liq%alpha(i,j,k) - give
+                    if (m%cell_type(i,j,k-1) /= 0) liq%alpha(i,j,k) = liq%alpha(i,j,k) &
+                        + ws_lim(i,j,k-1) * m%vol(i,j,k-1) / m%vol(i,j,k)
+                    if (give > 0.0_dp) then
+                        ws_Fz(i,j,k) = ws_Fz(i,j,k) + give * liq%rho(i,j,k) * m%vol(i,j,k) / cfg%dt
+                        spill_call = spill_call + give * liq%rho(i,j,k) * m%vol(i,j,k)
+                    end if
+                end do
+            end do
+        end do
+        call mpi_exchange_halos_3d(liq%alpha, m%topo)
         call mpi_exchange_halos_3d(ws_Fz, m%topo)
         call audit_step_delta(AUD_SPILL_MASS, spill_call, spill_step_prev, spill_step_id)
 
@@ -571,8 +616,12 @@ contains
                     ! (el recorte final usa el hueco FISICO, no el de poro: el gas
                     ! residual solo limita la ENTRADA y dirige el derrame; el
                     ! liquido ya presente nunca se borra)
+                    ! (A11-2 con escoria) la escoria cede: con escoria en la
+                    ! celda el tope es el hueco sin ella (slag_buoyancy la
+                    ! sube al final del paso)
                     liq%alpha(i,j,k) = max(0.0_dp, &
-                        min(1.0_dp - sol%alpha_s(i,j,k) - alpha_slag(i,j,k), &
+                        min(1.0_dp - sol%alpha_s(i,j,k) - merge(0.0_dp, alpha_slag(i,j,k), &
+                                alpha_slag(i,j,k) >= ALPHA_CUTOFF), &
                             liq%alpha(i,j,k)))
                     clip_call = clip_call + &
                         (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k)

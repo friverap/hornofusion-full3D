@@ -25,7 +25,9 @@
 !      ws_Fz de la cara superior lleva la masa derramada (energía).
 !   5-9. Celda LLENA sobre la sobrellena (auditorias 8-9): de liquido, el
 !      exceso la atraviesa (5; encadenado por dos celdas, 9); de escoria,
-!      de costra solida o la interfaz acero|escoria, nunca (6-8, M9-4);
+!      de costra solida, nunca (7); de escoria o la interfaz acero|escoria
+!      (6, 8), el acero NUNCA queda encima: la escoria CEDE (el exceso entra en
+!      su celda, sin clip; slag_buoyancy la sube al final del paso, A11-2);
 !      tampoco escoria DENTRO del lecho por su gas de poro (10, auditoria 15);
 !      una escoria TRAZA en el lecho no corta la cascada (11); la interfaz
 !      acero+escoria dentro del lecho no se cruza (12).
@@ -268,6 +270,28 @@ contains
             if (abs(liq%alpha(3,4,3) - 1.0_dp) > 1.0e-12_dp .or. abs(liq%alpha(3,4,4) - a4_exp) > 1.0e-12_dp) then
                 print '(A,3F10.6)', '   FAIL caso 5: el exceso no atraveso la celda llena de liquido: ', &
                     liq%alpha(3,4,3), liq%alpha(3,4,4), a4_exp
+                ok = .false.
+            end if
+        else if (asl3 >= ALPHA_CUTOFF) then
+            ! (A11-2 con escoria) la ESCORIA CEDE: el exceso entra en la celda
+            ! de escoria (slag_buoyancy la sube al final del paso), nunca
+            ! encima de ella, y sin clip
+            ! el exceso sobre el hueco FISICO de k=2 (0.2: el poro de k=2 se
+            ! queda con su acero, como en el recorte, que usa el hueco fisico)
+            a4_exp = al3 + 0.2_dp * mesh%vol(3,4,2) / mesh%vol(3,4,3)
+            if (liq%alpha(3,4,4) /= 0.0_dp) then
+                print '(A,I2,A,ES12.4)', '   FAIL caso ', icase, ': acero ENCIMA de la escoria: a_l(k=4) = ', &
+                    liq%alpha(3,4,4)
+                ok = .false.
+            end if
+            if (abs(m1 - m0) > 1.0e-12_dp * m0) then
+                print '(A,I2,A,ES10.3)', '   FAIL caso ', icase, ': el exceso fue al clip bajo la escoria, err = ', &
+                    (m1 - m0) / m0
+                ok = .false.
+            end if
+            if (abs(liq%alpha(3,4,3) - a4_exp) > 1.0e-12_dp) then
+                print '(A,I2,A,2F10.6)', '   FAIL caso ', icase, ': la celda de escoria no recibio el exceso: ', &
+                    liq%alpha(3,4,3), a4_exp
                 ok = .false.
             end if
         else

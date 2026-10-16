@@ -96,7 +96,7 @@ program eaf_3d_simulator
 
     ! Species transport old-timestep arrays
     real(dp), allocatable :: Y_CO_old(:,:,:), Y_CO2_old(:,:,:), Y_O2_old(:,:,:)
-    real(dp), allocatable :: alpha_sg(:,:,:), alpha_lg(:,:,:), S_gas_net(:,:,:)
+    real(dp), allocatable :: alpha_sg(:,:,:), alpha_lg(:,:,:), S_gas_net(:,:,:), alsl_g(:,:,:)
     real(dp) :: res_Y_CO, res_Y_CO2, res_Y_O2
 
     ! Config and input files
@@ -379,8 +379,23 @@ program eaf_3d_simulator
                 allocate(alpha_lg(mesh%nr_g, mesh%nth_g, mesh%nz_g))
             call gather_global_field(liq%alpha, alpha_lg, mesh)
             call distribute_arc_heat(elec, sh, sol, mesh, cfg, alpha_sg, N_ELECTRODES, alpha_lg)
-            call distribute_arc_radiation_mc(elec, sh, sol, mesh, cfg, alpha_sg, &
-                                             alpha_lg, N_ELECTRODES, step)
+            ! (M12-1arc, A13-1, oct-2026) el arco ABRE una cavidad en la
+            ! escoria: P_elec y P_conv van al metal bajo ella (alpha_l), pero
+            ! la RADIACION del arco la intercepta la escoria que lo rodea
+            ! (apantallamiento): los rayos del MC ven alpha_l + alpha_sl y
+            ! slag_intercept_arc pasa a E_sl la parte de la escoria por su
+            ! kappa. Hacer de la escoria superficie de TODO el arco se probo
+            ! (se llevaba ~43 MW en arc_slag, +72 K/s en su celda): no fisico.
+            if (cfg%solve_slag) then
+                if (.not. allocated(alsl_g)) allocate(alsl_g(mesh%nr_g, mesh%nth_g, mesh%nz_g))
+                call gather_global_field(slag%alpha_sl, alsl_g, mesh)
+                alsl_g = alpha_lg + alsl_g
+                call distribute_arc_radiation_mc(elec, sh, sol, mesh, cfg, alpha_sg, &
+                                                 alsl_g, N_ELECTRODES, step)
+            else
+                call distribute_arc_radiation_mc(elec, sh, sol, mesh, cfg, alpha_sg, &
+                                                 alpha_lg, N_ELECTRODES, step)
+            end if
             ! (mod_arc_impingement retirado en C4.4: unidades N/m4 en vez
             ! de N/m3 y magnitud ~0.2 N/m3 despreciable; la depresión del
             ! baño por el jet requiere búsqueda global de superficie —

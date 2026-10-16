@@ -101,9 +101,13 @@ contains
                     sh%kappa_f(i,j,k) = KAPPA_GAS_ABS * max(gas%alpha(i,j,k), 0.0_dp) &
                                       + KAPPA_LIQ_ABS * max(liq%alpha(i,j,k), 0.0_dp)
                     ks_a = KAPPA_SOLID_ABS * sol%alpha_s(i,j,k)
-                    ! Espuma (E2.6): absorbe/emite con T_sl; su absorción
-                    ! se deposita en E_sl (ver abajo)
-                    kf_a = KAPPA_FOAM_ABS * slag%alpha_foam(i,j,k)
+                    ! Espuma (E2.6) y escoria DENSA (A13-1, oct-2026: sin
+                    ! ella la escoria no tenia salida radiativa y bajo el arco
+                    ! se sobrecalentaba miles de K): absorben/emiten con T_sl;
+                    ! su absorcion se deposita en E_sl (ver abajo)
+                    kf_a = KAPPA_FOAM_ABS * slag%alpha_foam(i,j,k) &
+                         + KAPPA_SLAG_ABS * merge(slag%alpha_sl(i,j,k), 0.0_dp, &
+                                                  slag%m_sl(i,j,k) > 1.0e-6_dp)
                     kmix(i,j,k) = sh%kappa_f(i,j,k) + ks_a + kf_a
 
                     ! Reparto de la emision fluida por fase: por ABSORCION
@@ -318,7 +322,8 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     if (slag%m_sl(i,j,k) <= 1.0e-6_dp) cycle
-                    kf_a = KAPPA_FOAM_ABS * slag%alpha_foam(i,j,k)
+                    kf_a = KAPPA_FOAM_ABS * slag%alpha_foam(i,j,k) &
+                         + KAPPA_SLAG_ABS * slag%alpha_sl(i,j,k)
                     if (kf_a <= SMALL) cycle
                     block
                         real(dp) :: E0, E_new, fval, fprime
