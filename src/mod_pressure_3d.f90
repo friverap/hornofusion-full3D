@@ -274,7 +274,10 @@ contains
             ! gas es el EQUIVALENTE de la eliminacion, que lleva el transitorio
             ! del LIQUIDO: se recalcula con la MISMA formula de pea2 y los dos
             ! transitorios a DT_MOB_REF. Con dt = DT_MOB_REF, identico bit a bit.
-            fdt = cfg%dt / DT_MOB_REF - 1.0_dp
+            ! (auditoria 13) referencia min(dt, DT_MOB_REF): solo se desplaza
+            ! con dt > dt_ref; con dt < dt_ref el juicio es el real (desplazarlo
+            ! a 2 ms lo volvia MAS laxo que el Poisson: cota a la mitad)
+            fdt = cfg%dt / min(cfg%dt, DT_MOB_REF) - 1.0_dp
             allocate(aRr, aRt, aRz, mold=gas%aP_ur)
             aRr = gas%aP_ur; aRt = gas%aP_uth; aRz = gas%aP_uz
             if (fdt /= 0.0_dp) then
@@ -337,7 +340,7 @@ contains
                         ! emitido: se escala por dt_ref/dt (identico a 2 ms).
                         ! (M11-1pv) la cota de la demanda tambien a DT_MOB_REF:
                         ! el juicio es del estado, no del paso
-                        src = min(src, COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / DT_MOB_REF)
+                        src = min(src, COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / min(cfg%dt, DT_MOB_REF))
                         if (src <= 0.0_dp) cycle
                         cg = 0.0_dp
                         dloc = gas%alpha(i,j,k) * m%vol(i,j,k)

@@ -269,7 +269,9 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   acople (Hilfer 1998 medido con la conductancia, no con la movilidad de
   F2.16). Si su fila se queda sin caras, F2.29 la vuelve pared. **La
   conductancia y la cota de la demanda del test se evalúan a `DT_MOB_REF`
-  (auditoría 11, M11-1pv)**, como la movilidad de F2.16: el transitorio del
+  (auditoría 11, M11-1pv; con min(dt, DT_MOB_REF) desde la auditoría 13: con
+  dt < 2 ms el desplazamiento lo volvía más laxo que el Poisson)**, como la
+  movilidad de F2.16: el transitorio del
   momento por celda (`ws_trg`, `ws_trl`) y, en las celdas PEA, el aP
   equivalente recalculado con la fórmula de `pea2` y los transitorios de ambas
   fases a 2 ms (`pea_ref`; aP previos, KV y α guardados en
@@ -565,8 +567,9 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   celda es fluido del acople P-V sólo si PERCOLA hasta el freeboard por
   celdas cuyo gas puede moverse (movilidad = transitorio/(transitorio +
   Ergun) > GAS_MOB_MIN; distribución bimodal medida). **El transitorio usa
-  el paso de REFERENCIA fijo `DT_MOB_REF` = 2 ms (el dt de B1), nunca el dt de
-  la corrida (auditoría 8, M8-2)**: con dt ≥ ~6.5 ms el gas de piso de una
+  min(dt, `DT_MOB_REF`) con `DT_MOB_REF` = 2 ms (el dt de B1): nunca un paso
+  MAYOR que el de calibración (auditoría 8, M8-2; con dt < 2 ms, el real,
+  auditoría 13)**: con dt ≥ ~6.5 ms el gas de piso de una
   capa saturada (ε_g = 0.015) caía bajo el umbral y la bolsa bajo el lecho
   inundado quedaba pared (pocket_rise a 10 ms: gas a 131 m/s). La
   clasificación es del estado, no del integrador (`test_gas_percolation`). Es criterio de CAMINO,

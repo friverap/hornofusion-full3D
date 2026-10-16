@@ -795,7 +795,11 @@ contains
                     if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
                     ! (M8-2) paso de referencia fijo: la movilidad es del
                     ! estado, no del dt de la corrida
-                    tr = gas%alpha(i,j,k) * gas%rho(i,j,k) / DT_MOB_REF
+                    ! (auditoria 13) el paso del juicio es min(dt, DT_MOB_REF):
+                    ! nunca mayor que el de calibracion (con dt grande el gas de
+                    ! piso de una capa saturada quedaba inmovil: M8-2), y con
+                    ! dt < 2 ms el real (el regimen de B1 tal como se calibro)
+                    tr = gas%alpha(i,j,k) * gas%rho(i,j,k) / min(cfg%dt, DT_MOB_REF)
                     mob = tr / max(tr + max(drag_gas(i,j,k), 0.0_dp), SMALL)
                     if (mob > GAS_MOB_MIN) mob_loc(i,j,k) = 1
                 end do
