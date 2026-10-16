@@ -399,15 +399,28 @@ contains
                     x_n(i,j,:,:) = x_g(i,j,:,:)
                     cycle
                 end if
-                ! superficie: celda activa mas alta con bano continuo o lecho;
-                ! sin material, la celda activa mas baja
+                ! soporte: la escoria (liquida) FLOTA SOBRE EL BANO: celda
+                ! activa mas alta con bano continuo, y se infiltra en los poros
+                ! de la chatarra a ese nivel (hueco liq_cap - alpha_l). Solo
+                ! sin bano se apoya en la cima del lecho; sin material, la celda
+                ! activa mas baja. (oct-2026, dirigida del modelo M4: con
+                ! 'bano O lecho' la cesta 2 cargada sobre bano con escoria la
+                ! subia de golpe metros, a la cima de la carga nueva.)
                 ks = -1
                 do k = m%nz_g, 1, -1
                     if (m%cell_type_global(i,j,k) == 0) cycle
-                    if (al_g(i,j,k) >= ALPHA_LIQ_CONT .or. as_g(i,j,k) >= ALPHA_BED) then
+                    if (al_g(i,j,k) >= ALPHA_LIQ_CONT) then
                         ks = k; exit
                     end if
                 end do
+                if (ks < 0) then
+                    do k = m%nz_g, 1, -1
+                        if (m%cell_type_global(i,j,k) == 0) cycle
+                        if (as_g(i,j,k) >= ALPHA_BED) then
+                            ks = k; exit
+                        end if
+                    end do
+                end if
                 if (ks < 0) then
                     do k = 1, m%nz_g
                         if (m%cell_type_global(i,j,k) /= 0) then
