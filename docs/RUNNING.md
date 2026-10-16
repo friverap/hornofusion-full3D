@@ -312,7 +312,7 @@ la de bloques más cúbicos.
 > ~8–10 días (`docs/PLAN_D_acople_implicito_alpha_p.md`, D6). La malla de
 > producción tiene 8× celdas, el doble de pasos por segundo simulado y 1.4×
 > el tiempo simulado: del orden de **180–225 días** a 14 ranks (8–10 d × 8 × 2 × 1.4); con 48 ranks,
-> si el escalamiento fuera ideal, del orden de 1–2 meses. Un job de 48 h es un
+> si el escalamiento fuera ideal, del orden de ~2 meses. Un job de 48 h es un
 > SEGMENTO (~1–2 % de la colada): encadenar con `restart_file`. Antes de
 > comprometer cómputo, medir el costo por paso con una corrida de ~100 pasos y
 > validar el régimen con un B1 nuevo (bloqueado 2 de la auditoría 13).

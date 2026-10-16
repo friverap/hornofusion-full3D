@@ -27,7 +27,8 @@
 !      exceso la atraviesa (5; encadenado por dos celdas, 9); de escoria,
 !      de costra solida o la interfaz acero|escoria, nunca (6-8, M9-4);
 !      tampoco escoria DENTRO del lecho por su gas de poro (10, auditoria 15);
-!      una escoria TRAZA en el lecho no corta la cascada (11).
+!      una escoria TRAZA en el lecho no corta la cascada (11); la interfaz
+!      acero+escoria dentro del lecho no se cruza (12).
 !===============================================================================
 program test_alpha_limiter
     use mod_constants
@@ -205,6 +206,11 @@ program test_alpha_limiter
     !    subir el exceso por el poro sin clip (un tope liq_cap con umbral
     !    ALPHA_CUTOFF lo mandaba al clip)
     call spill_case(11, 0.5_dp, liq_cap(0.5_dp, 1.0e-4_dp), 1.0e-4_dp)
+    ! 12 (auditoria dirigida 17): INTERFAZ acero+escoria dentro del lecho, la
+    !    celda que deja slag_buoyancy (a_s 0.5, a_l 0.3, escoria hasta liq_cap):
+    !    la reserva proporcional al llenado dejaba poro abierto (0.009) y el
+    !    acero subia sobre la escoria; no debe cruzar
+    call spill_case(12, 0.5_dp, 0.3_dp, liq_cap(0.5_dp, 0.0_dp) - 0.3_dp)
 
     if (ok) then
         print '(A)', ' PASS test_alpha_limiter'

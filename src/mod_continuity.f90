@@ -462,8 +462,8 @@ contains
                                   - alpha_slag(i,j,k+1) - liq%alpha(i,j,k+1)) &
                                   * m%vol(i,j,k+1) / m%vol(i,j,k)
                         ! (auditoria 15) con ESCORIA arriba, dentro del lecho,
-                        ! se reserva el gas de poro en proporcion al llenado de
-                        ! escoria: la escoria llena hasta liq_cap y deja libre
+                        ! se reserva el gas de poro (completo desde a_sl >=
+                        ! ALPHA_FLOW_CUTOFF, rampa lineal por debajo): la escoria llena hasta liq_cap y deja libre
                         ! ALPHA_PORE_GAS; con el hueco fisico la cascada metia
                         ! acero en ese poro y la celda (liq_cap 0) lo cedia
                         ! arriba: el acero cruzaba la escoria (M9-4). Celda
@@ -474,8 +474,11 @@ contains
                         ! del lecho no hay poro reservado: identico.
                         if (alpha_slag(i,j,k+1) > 0.0_dp .and. pore_floor_on .and. &
                             sol%alpha_s(i,j,k+1) >= ALPHA_BED) then
-                            fslag = min(1.0_dp, alpha_slag(i,j,k+1) / max(1.0_dp - &
-                                    sol%alpha_s(i,j,k+1) - ALPHA_PORE_GAS, SMALL))
+                            ! rampa ABSOLUTA (dirigida 17): la proporcional al
+                            ! llenado dejaba poro abierto en la interfaz
+                            ! acero+escoria (caso 12) y era singular en costras
+                            ! con a_s > 1 - ALPHA_PORE_GAS
+                            fslag = min(1.0_dp, alpha_slag(i,j,k+1) / ALPHA_FLOW_CUTOFF)
                             room_up = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k+1) &
                                       - alpha_slag(i,j,k+1) - liq%alpha(i,j,k+1) &
                                       - ALPHA_PORE_GAS * fslag) * m%vol(i,j,k+1) / m%vol(i,j,k)
