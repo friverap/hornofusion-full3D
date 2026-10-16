@@ -683,11 +683,21 @@ contains
                     vfrac = cfg%layer_vfrac(n)
                     cycle
                 end if
-                take_bulk = min(mass_rem / (cfg%rho_steel * vfrac), bulk_avail)
-                mass_take = take_bulk * cfg%rho_steel * vfrac
+                ! (auditoria 15, A15-1) si la capa se agota dentro del nivel
+                ! se toma su masa EXACTA: con take*rho*vfrac el residuo podia
+                ! salir +1 ulp, repetirse hasta un subnormal con take = 0 y
+                ! colgar el do while (sin mensaje; ~3 % de las masas)
+                take_bulk = mass_rem / (cfg%rho_steel * vfrac)
+                if (take_bulk < bulk_avail) then
+                    mass_take = mass_rem
+                    mass_rem  = 0.0_dp
+                else
+                    take_bulk = bulk_avail
+                    mass_take = take_bulk * cfg%rho_steel * vfrac
+                    mass_rem  = mass_rem - mass_take
+                end if
                 mass_level = mass_level + mass_take
                 bulk_avail = bulk_avail - take_bulk
-                mass_rem   = mass_rem - mass_take
                 if (mass_take > best_mass) then
                     best_mass  = mass_take
                     best_layer = n
