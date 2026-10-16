@@ -17,8 +17,9 @@
         "solve_slag": false,
         "solve_species": true,
         "audit_freq": 5,
-        "output_freq": 2500,
-        "cfl_max": 1.0
+        "output_freq": 25000,
+        "cfl_max": 1.0,
+        "monitor_freq": 500
       }
     }
   ]

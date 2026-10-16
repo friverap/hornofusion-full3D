@@ -12,7 +12,8 @@
 #   - Radiación DO (Discrete Ordinates)
 #   - Química: C + ½O₂ → CO (Maahs) + combustión secundaria CO → CO₂
 #   - Transporte de especies CO / CO₂
-#   - Escoria con modelo termico (DO, acople con bano, cede al acero)
+#   - Escoria: modelo termico listo (DO, acople con bano, cede al acero) pero
+#     APAGADA en esta colada: sin talon ni adiciones no hay escoria que formar
 #   - Buoyancy de Boussinesq
 #
 # MALLA: 60 × 120 × 84 = 604,800 celdas
@@ -155,7 +156,7 @@ arc_w     = 30.0
 # interfaz la desplaza; slag_buoyancy la sube). Bancos: arc_slag (10 s: T_sl
 # bajo T_l, clip ~0) y arc_melt_slag (escoria sobre lecho que funde).
 # k_slag no tiene efecto (aviso del parser). B1 (Ugarte) sigue sin escoria.
-solve_slag   = true
+solve_slag   = false
 rho_slag     = 2800.0
 cp_slag      = 1200.0
 # k_slag sin efecto en el modelo (retirado: el parser avisa)
@@ -164,7 +165,11 @@ h_contact_sl = 1000.0
 # 3.3 t de escoria a 300 K sobre la chatarra fria (alpha_sl 0.47 en la cima
 # del lecho, ~91 % de la radiacion del MC) es un estado no fisico que ningun
 # banco cubre. La escoria inicial va con el talon (heel_mass > 0: se coloca a
-# heel_T); esta colada arranca sin talon -> sin escoria inicial.
+# heel_T); esta colada arranca sin talon -> sin escoria inicial. Y sin
+# escoria inicial NO hay via que la cree (la oxidacion a FeO esta acotada por
+# la escoria existente; las adiciones se descartan con aviso): por eso
+# solve_slag false (dirigida de 147fad5). Para una colada CON escoria: talon
+# (heel_mass, heel_T) y m_slag_init > 0, y solve_slag true.
 m_slag_init  = 0.0
 
 # ============================================================

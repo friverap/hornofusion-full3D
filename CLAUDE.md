@@ -763,9 +763,12 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   chatarra). `test_slag_float` casos 1–6. Medido en arc_slag 10 s:
   T_sl máx siempre bajo T_l máx (la escoria sigue al baño), clip 3.7 kg →
   1.7e-9. Bancos `arc_slag` y `arc_melt_slag` (escoria sobre lecho que
-  funde, `check_slag_bed.py`). `config_production_full` tiene el modelo
-  activo (`solve_slag true`) pero SIN escoria inicial: sin talón no hay escoria
-  líquida al arrancar en frío (auditoría 17, M17-1: 3.3 t a 300 K sobre la
+  funde, `check_slag_bed.py`). `config_production_full` corre con
+  `solve_slag false`: sin talón no hay escoria líquida al arrancar en frío, y
+  sin escoria inicial no hay vía que la cree (la oxidación a FeO se acota por
+  la escoria existente; las adiciones se descartan con aviso `[SLAG] AVISO`;
+  dirigida de 147fad5). Para una colada con escoria: talón + `m_slag_init` > 0
+  + `solve_slag true`. Antes: escoria inicial a 300 K sobre la chatarra fría (auditoría 17, M17-1: 3.3 t a 300 K sobre la
   chatarra fría se llevaba ~91 % del MC en la cima del lecho, régimen que ningún
   banco cubre); con talón (`heel_mass` > 0) la escoria inicial va a `heel_T`.
   B1 (Ugarte) sin escoria. `slag_buoyancy` recoloca con REMAPEO LAGRANGIANO
@@ -776,7 +779,7 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   restricción de volumen del Poisson. Con la escoria llenando el hueco de la
   celda de la superficie del baño (sin gas), el limitador la ve llena y el
   Poisson pide caudal: el baño bajo la escoria se acelera sin tope (arc_slag
-  10 s: u_liq 1.2 m/s, vol_lim 0.1 m³; sin escoria 0.11 m/s). Probado y
+  10 s: u_liq 1.25 m/s, vol_lim 0.1 m³; sin escoria 0.11 m/s). Probado y
   RECHAZADO: cerrar la cara en el Poisson (u_liq 25 m/s, gas 300), ceder la
   escoria en el limitador (todo o solo la interfaz: el gas a 300 m/s por la
   creación/destrucción de gas de slag_buoyancy fuera del Poisson) y dejar libre

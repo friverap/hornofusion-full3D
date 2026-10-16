@@ -12,7 +12,7 @@ module mod_slag_3d
     use mod_constants
     use mod_types_3d
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_allreduce_sum, mpi_exchange_halos_3d
-    use mod_parallel_utils, only: gather_global_field, global_to_local
+    use mod_parallel_utils, only: gather_global_field, global_to_local, should_print
     use mod_audit, only: audit_add, audit_gas_destroyed, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT, AUD_SLAG_TCLIP, &
                          AUD_SLAG_GAS, AUD_SLAG_LIQ, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
                          gas_inventory_cell, gas_heat_capacity_ref, gas_log_exchange
@@ -289,6 +289,7 @@ contains
 
         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
         real(dp) :: msl_loc, msl_glob, w, dm_cal, dm_c, dm_cell, de
+        logical, save :: warned_noslag = .false.
 
         if (mdot_cal <= 0.0_dp .and. mdot_cinj <= 0.0_dp) return
 
@@ -316,7 +317,16 @@ contains
         else
             msl_glob = msl_loc
         end if
-        if (msl_glob <= SMALL_SL) return   ! sin capa donde depositar
+        if (msl_glob <= SMALL_SL) then   ! sin capa donde depositar
+            ! (auditoria dirigida de 147fad5) aviso UNA vez: sin escoria (sin
+            ! talon ni escoria inicial) la adicion se descarta y la escoria
+            ! nunca llega a formarse (no hay via que la cree desde cero)
+            if (.not. warned_noslag .and. should_print(m)) print '(A,ES10.3,A)', &
+                ' [SLAG] AVISO: adicion de ', (mdot_cal + mdot_cinj) * dt, &
+                ' kg descartada: no hay escoria donde depositarla (m_slag_init 0 sin talon)'
+            warned_noslag = .true.
+            return
+        end if
 
         dm_cal = mdot_cal  * dt
         dm_c   = mdot_cinj * dt
