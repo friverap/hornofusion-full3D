@@ -96,7 +96,7 @@ program eaf_3d_simulator
 
     ! Species transport old-timestep arrays
     real(dp), allocatable :: Y_CO_old(:,:,:), Y_CO2_old(:,:,:), Y_O2_old(:,:,:)
-    real(dp), allocatable :: alpha_sg(:,:,:), alpha_lg(:,:,:), S_gas_net(:,:,:), alsl_g(:,:,:)
+    real(dp), allocatable :: alpha_sg(:,:,:), alpha_lg(:,:,:), S_gas_net(:,:,:), alsl_g(:,:,:), S_arc_mc(:,:,:)
     real(dp) :: res_Y_CO, res_Y_CO2, res_Y_O2
 
     ! Config and input files
@@ -390,8 +390,11 @@ program eaf_3d_simulator
                 if (.not. allocated(alsl_g)) allocate(alsl_g(mesh%nr_g, mesh%nth_g, mesh%nz_g))
                 call gather_global_field(slag%alpha_sl, alsl_g, mesh)
                 alsl_g = alpha_lg + alsl_g
+                if (.not. allocated(S_arc_mc)) allocate(S_arc_mc, mold=sh%S_arc)
+                S_arc_mc = sh%S_arc
                 call distribute_arc_radiation_mc(elec, sh, sol, mesh, cfg, alpha_sg, &
                                                  alsl_g, N_ELECTRODES, step)
+                S_arc_mc = sh%S_arc - S_arc_mc   ! lo que deposito el MC
             else
                 call distribute_arc_radiation_mc(elec, sh, sol, mesh, cfg, alpha_sg, &
                                                  alpha_lg, N_ELECTRODES, step)
@@ -405,7 +408,7 @@ program eaf_3d_simulator
             ! La escoria intercepta su fracción de S_arc AHORA (antes de que
             ! las ecuaciones de energía lo consuman; C1.6b)
             if (cfg%solve_slag) then
-                call slag_intercept_arc(slag, liq, gas, sh, mesh, cfg)
+                call slag_intercept_arc(slag, liq, gas, sh, mesh, cfg, S_arc_mc)
             end if
         end if
         call timer_stop(T_ARC)

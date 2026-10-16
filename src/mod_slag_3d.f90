@@ -197,7 +197,7 @@ contains
     ! al final del paso, cuando los fluidos ya habían absorbido el 100% de
     ! S_arc (y éste se regenera al paso siguiente): la escoria creaba energía.
     !---------------------------------------------------------------------------
-    subroutine slag_intercept_arc(slag, liq, gas, sh, m, cfg)
+    subroutine slag_intercept_arc(slag, liq, gas, sh, m, cfg, S_rad)
         type(slag_t),  intent(inout) :: slag
         ! fluidos de la celda: el reparto es por ABSORCION (auditoria, bajos;
         ! F2.30): w = (k_sl a_sl + k_f a_foam)/(... + k_l a_l + k_g a_g), el
@@ -207,9 +207,16 @@ contains
         type(shared_t),intent(inout) :: sh
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
+        ! (oct-2026, dirigida del modelo termico M1) la parte RADIATIVA del
+        ! S_arc (la que deposito el MC): solo ella la intercepta la escoria.
+        ! P_elec y P_conv van al metal por la cavidad del arco aunque la
+        ! celda sea mixta (antes la escoria se llevaba su fraccion kappa de
+        ! TODO el S_arc: hasta el 30 % del arco en arc_slag). Sin el
+        ! argumento, todo el S_arc (comportamiento anterior).
+        real(dp), intent(in), optional :: S_rad(-1:,-1:,-1:)
 
         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: dE, ksl, kfl, w
+        real(dp) :: dE, ksl, kfl, w, sa
 
         if (m%is_parallel) then
             istart = m%topo%istart; iend = m%topo%iend
@@ -233,9 +240,11 @@ contains
                     kfl = KAPPA_LIQ_ABS * max(liq%alpha(i,j,k), 0.0_dp) &
                         + KAPPA_GAS_ABS * max(gas%alpha(i,j,k), 0.0_dp)
                     w = ksl / (ksl + kfl + SMALL)
-                    dE = sh%S_arc(i,j,k) * m%vol(i,j,k) * cfg%dt * w
+                    sa = sh%S_arc(i,j,k)
+                    if (present(S_rad)) sa = min(max(S_rad(i,j,k), 0.0_dp), sh%S_arc(i,j,k))
+                    dE = sa * w * m%vol(i,j,k) * cfg%dt
                     slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + dE
-                    sh%S_arc(i,j,k)  = sh%S_arc(i,j,k) * (1.0_dp - w)
+                    sh%S_arc(i,j,k)  = sh%S_arc(i,j,k) - sa * w
                     call audit_add(AUD_SLAG_INTERCEPT, dE)
 
                     call slag_T_from_E(slag, i, j, k, cfg)

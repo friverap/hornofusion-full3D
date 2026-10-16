@@ -670,7 +670,7 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   que drena encima) converge geométricamente lento (1.4 %/barrido en la
   llamada más lenta medida, pocket_rise_dt10 paso 48; 7–12 % en otras) y agota
   `N_LIM_MAX`; el exceso que deja lo mueve el derrame (`m_spill`, auditado y
-  conservativo; cuenta MASA POR SALTO, así que una cadena de relevo de L celdas suma L veces la masa: cota superior del error, no la masa movida): ESE es el error, no `dlim`. **Con escoria sigue abierto**: `slag_buoyancy` llena con escoria el hueco de la celda más alta del baño, esa interfaz corta el relevo y todo sobrellenado interior del baño va al clip auditado (A11-2; medido en arc_slag ~1.5e-2 kg/s, 4e-4 del baño en 7200 s, M13-1; producción corre sin escoria). El diagnóstico `[LIM]` estima la
+  conservativo; cuenta MASA POR SALTO, así que una cadena de relevo de L celdas suma L veces la masa: cota superior del error, no la masa movida): ESE es el error, no `dlim`. **Con escoria (A11-2, CERRADO oct-2026)**: la interfaz de escoria corta el relevo, pero el exceso que queda bajo ella ya no va al clip: la escoria CEDE (entra en su celda y `slag_buoyancy` la sube; arc_slag 10 s: clip 3.7 kg → 1.7e-9). El diagnóstico `[LIM]` estima la
   distancia al punto fijo (`dist_est` ≈ dlim r/(1−r)). Probado y NO adoptado:
   el hueco con signo (bath_freeze: derrame 10.4 → 2.1 t, pero volumen
   bloqueado +58 % y gas recreado 11.5 → 16.9 %: agranda el desfase α–p). No
@@ -728,7 +728,11 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   celda: 10–30 J/paso); (3) el arco abre CAVIDAD: `ksurf`/P_elec/P_conv usan
   solo α_l (metal bajo la escoria), pero los rayos del MC ven α_l + α_sl
   (apantallamiento) y `slag_intercept_arc` pasa a E_sl la parte de la escoria
-  por su κ. La escoria como superficie de TODO el arco se probó dos veces y
+  por su κ SOLO del depósito del MC (`S_arc_mc`, la diferencia de S_arc antes
+  y después del MC): P_elec/P_conv no se interceptan aunque la celda sea
+  mixta (antes la escoria se llevaba hasta el 30 % del arco; arc_slag 2 s:
+  49 → 4.6 MJ interceptados). El P_rad DIRECTO (no MC) lo deposita el modelo
+  en la superficie (baño/chatarra), no en la escoria. La escoria como superficie de TODO el arco se probó dos veces y
   NO es física (se lleva ~43 MW, +72 K/s en su celda). (4) La escoria CEDE al
   acero (A11-2): el exceso bajo una interfaz de escoria entra en su celda
   (el recorte final no corta acero por la escoria) y `slag_buoyancy` la sube

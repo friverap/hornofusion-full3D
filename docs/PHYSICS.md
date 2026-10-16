@@ -471,7 +471,8 @@ el baño**: dos nodos exactos con h = `h_contact_sl` sobre A_z, con el
 reservorio de MAYOR capacidad (el líquido de la celda o el de la de abajo). (3)
 **Arco**: el arco abre cavidad: P_elec y P_conv van al metal (la superficie
 del arco usa α_l); la radiación del arco (Monte Carlo) ve α_l + α_sl y la
-parte de la escoria pasa a E_sl por su κ (apantallamiento). (4) **La escoria
+parte de la escoria de ESE depósito pasa a E_sl por su κ (apantallamiento);
+P_elec/P_conv nunca se interceptan, aunque la celda sea mixta. (4) **La escoria
 cede al acero**: el exceso de acero bajo una interfaz de escoria entra en su
 celda y la flotación sube la escoria al final del paso (masa de ambas
 exacta). Bancos `arc_slag` (10 s: T_sl máx bajo T_l máx; clip ~0) y
