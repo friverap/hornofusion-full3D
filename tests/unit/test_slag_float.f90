@@ -12,6 +12,8 @@
 ! exacta, toda la escoria por debajo de z_bano + 0.5 m (sin escoria en la
 ! cima del lecho) y sum alpha <= 1.
 ! Caso 2: sin bano (lecho seco solo): la escoria se apoya en la cima del lecho.
+! Caso 3: un charco encaramado no la arrastra. Caso 4: bano dentro de un lecho
+! denso (alpha_l < 0.3): la escoria flota a su nivel.
 !===============================================================================
 program test_slag_float
     use mod_constants
@@ -71,6 +73,31 @@ program test_slag_float
         print '(A,2F8.3)', '   FAIL caso 2: sin bano la escoria no se apoya en la cima del lecho: ', z_hi, z_bed
         ok = .false.
     end if
+
+    ! ---- caso 3 (dirigida M1-M4, Medio 3a): charco ENCARAMADO (alpha_l 0.45
+    !      en una celda del lecho seco a ~2 m): no arrastra la escoria
+    liq%alpha = 0.0_dp; sol%alpha_s = 0.0_dp
+    do k = 1, nz
+        if (mesh%z(k) < 1.1_dp) then
+            liq%alpha(:,:,k) = 1.0_dp
+        else if (mesh%z(k) < 2.5_dp) then
+            sol%alpha_s(:,:,k) = 0.5_dp
+            if (abs(mesh%z(k) - 2.0_dp) < 0.5_dp * (mesh%zf(k) - mesh%zf(k-1))) liq%alpha(:,:,k) = 0.45_dp
+        end if
+    end do
+    call put_slag_on_top(3000.0_dp)
+    call run_and_check(3, z_bath + 0.5_dp)
+
+    ! ---- caso 4 (Medio 3b): bano DENTRO de un lecho denso (phi 0.8 desde el
+    !      piso hasta 2.5 m, poros llenos de acero hasta 1.1 m: alpha_l 0.185
+    !      < 0.3): la escoria flota a nivel del bano, no en la cima del lecho
+    liq%alpha = 0.0_dp; sol%alpha_s = 0.0_dp
+    do k = 1, nz
+        if (mesh%z(k) < 2.5_dp) sol%alpha_s(:,:,k) = 0.8_dp
+        if (mesh%z(k) < 1.1_dp) liq%alpha(:,:,k) = liq_cap(0.8_dp, 0.0_dp)
+    end do
+    call put_slag_on_top(500.0_dp)
+    call run_and_check(4, z_bath + 0.6_dp)
 
     if (ok) then
         print '(A)', ' PASS test_slag_float (la escoria flota sobre el bano dentro de los poros; sin bano, sobre el lecho)'

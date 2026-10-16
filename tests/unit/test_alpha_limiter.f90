@@ -31,6 +31,8 @@
 !      tampoco escoria DENTRO del lecho por su gas de poro (10, auditoria 15);
 !      una escoria TRAZA en el lecho no corta la cascada (11); la interfaz
 !      acero+escoria dentro del lecho no se cruza (12).
+!  13. Acero encima de una celda de escoria del lecho con velocidad hacia
+!      abajo: baja a ella (la escoria cede).
 !===============================================================================
 program test_alpha_limiter
     use mod_constants
@@ -184,6 +186,33 @@ program test_alpha_limiter
         ok = .false.
     end if
 
+    ! ---- caso 13 (dirigida M1-M4, Medio 4): acero que FUNDE ENCIMA de una
+    ! celda llena de escoria (lecho, poros llenos de escoria a nivel del
+    ! bano) baja hacia ella: la escoria cede (antes el limitador admitia
+    ! liq_cap(a_s, a_sl) - a_l = 0 y el acero quedaba ENCIMA de la escoria)
+    liq%ur = 0.0_dp; liq%uth = 0.0_dp; liq%uz = -0.5_dp
+    sol%mdot = 0.0_dp; sol%alpha_s = 0.0_dp; slag%alpha_sl = 0.0_dp
+    liq%alpha = 0.0_dp
+    sol%alpha_s(3,4,1) = 1.0_dp
+    sol%alpha_s(3,4,2) = 0.5_dp; slag%alpha_sl(3,4,2) = liq_cap(0.5_dp, 0.0_dp)
+    sol%alpha_s(3,4,3) = 0.5_dp; liq%alpha(3,4,3) = 0.3_dp
+    a_old = liq%alpha
+    m0 = liquid_mass()
+    call solve_volume_fraction(liq, gas, sol, slag%alpha_sl, a_old, mesh, cfg)
+    m1 = liquid_mass()
+    if (abs(m1 - m0) > 1.0e-12_dp * m0) then
+        print '(A,ES10.3)', '   FAIL caso 13: masa no conservada, err = ', (m1 - m0) / m0
+        ok = .false.
+    end if
+    if (liq%alpha(3,4,2) <= 1.0e-6_dp) then
+        print '(A,F10.6)', '   FAIL caso 13: el acero no bajo a la celda de escoria: a_l(k=2) = ', liq%alpha(3,4,2)
+        ok = .false.
+    end if
+    if (liq%alpha(3,4,2) > liq_cap(0.5_dp, 0.0_dp) + 1.0e-12_dp) then
+        print '(A,F10.6)', '   FAIL caso 13: la celda de escoria sobre su liq_cap sin escoria: ', liq%alpha(3,4,2)
+        ok = .false.
+    end if
+
     ! ---- casos 5-7 (auditorias 8-9): el derrame y una celda LLENA encima ----
     ! k=2 sobrellena (a_s 0.2, a_l 1.0) y k=3 llena por completo; k=4 vacia.
     ! 5: k=3 llena de LIQUIDO -> el exceso la atraviesa (relevo) y llega a k=4
@@ -276,9 +305,11 @@ contains
             ! (A11-2 con escoria) la ESCORIA CEDE: el exceso entra en la celda
             ! de escoria (slag_buoyancy la sube al final del paso), nunca
             ! encima de ella, y sin clip
-            ! el exceso sobre el hueco FISICO de k=2 (0.2: el poro de k=2 se
-            ! queda con su acero, como en el recorte, que usa el hueco fisico)
-            a4_exp = al3 + 0.2_dp * mesh%vol(3,4,2) / mesh%vol(3,4,3)
+            ! la cascada le pasa el exceso de k=2 sobre su liq_cap (0.215; la
+            ! escoria no ocupa hueco del acero) hasta el liq_cap de la celda
+            ! de escoria sin escoria (en el lecho, con su gas de poro)
+            a4_exp = min(al3 + (1.0_dp - liq_cap(0.2_dp, 0.0_dp)) * mesh%vol(3,4,2) / mesh%vol(3,4,3), &
+                         liq_cap(as3, 0.0_dp))
             if (liq%alpha(3,4,4) /= 0.0_dp) then
                 print '(A,I2,A,ES12.4)', '   FAIL caso ', icase, ': acero ENCIMA de la escoria: a_l(k=4) = ', &
                     liq%alpha(3,4,4)

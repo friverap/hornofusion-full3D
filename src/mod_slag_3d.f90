@@ -241,7 +241,13 @@ contains
                         + KAPPA_GAS_ABS * max(gas%alpha(i,j,k), 0.0_dp)
                     w = ksl / (ksl + kfl + SMALL)
                     sa = sh%S_arc(i,j,k)
-                    if (present(S_rad)) sa = min(max(S_rad(i,j,k), 0.0_dp), sh%S_arc(i,j,k))
+                    ! (dirigida M1-M4, Medio 1) P_elec/P_conv van al METAL por
+                    ! la cavidad SOLO si la celda tiene bano continuo; en una
+                    ! celda sin el (poros de chatarra llenos de escoria) la
+                    ! escoria se lleva su parte kappa de todo el S_arc: si no,
+                    ! el gas de poro (alpha_g 0.015) lo recibia entero
+                    if (present(S_rad) .and. liq%alpha(i,j,k) >= ALPHA_LIQ_CONT) &
+                        sa = min(max(S_rad(i,j,k), 0.0_dp), sh%S_arc(i,j,k))
                     dE = sa * w * m%vol(i,j,k) * cfg%dt
                     slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + dE
                     sh%S_arc(i,j,k)  = sh%S_arc(i,j,k) - sa * w
@@ -399,18 +405,24 @@ contains
                     x_n(i,j,:,:) = x_g(i,j,:,:)
                     cycle
                 end if
-                ! soporte: la escoria (liquida) FLOTA SOBRE EL BANO: celda
-                ! activa mas alta con bano continuo, y se infiltra en los poros
-                ! de la chatarra a ese nivel (hueco liq_cap - alpha_l). Solo
+                ! soporte: la escoria (liquida) FLOTA SOBRE EL BANO y se
+                ! infiltra en los poros de la chatarra a ese nivel (hueco
+                ! liq_cap - alpha_l). El bano es la columna de celdas SATURADAS
+                ! de acero CONTIGUA desde el fondo (alpha_l >= la mitad de su
+                ! liq_cap): un charco encaramado (fusion en sitio, pelicula que
+                ! drena) no la arrastra, y un bano dentro de un lecho denso
+                ! (liq_cap < 0.3) si se detecta (dirigida M1-M4, Medio 3). Solo
                 ! sin bano se apoya en la cima del lecho; sin material, la celda
-                ! activa mas baja. (oct-2026, dirigida del modelo M4: con
-                ! 'bano O lecho' la cesta 2 cargada sobre bano con escoria la
-                ! subia de golpe metros, a la cima de la carga nueva.)
+                ! activa mas baja. (oct-2026, M4: con 'bano O lecho' la cesta 2
+                ! cargada sobre bano con escoria la subia metros.)
                 ks = -1
-                do k = m%nz_g, 1, -1
+                do k = 1, m%nz_g
                     if (m%cell_type_global(i,j,k) == 0) cycle
-                    if (al_g(i,j,k) >= ALPHA_LIQ_CONT) then
-                        ks = k; exit
+                    if (al_g(i,j,k) >= max(ALPHA_FLOW_CUTOFF, &
+                            0.5_dp * liq_cap(as_g(i,j,k), 0.0_dp))) then
+                        ks = k
+                    else
+                        exit
                     end if
                 end do
                 if (ks < 0) then

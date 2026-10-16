@@ -323,7 +323,7 @@ contains
                             ! bloqueado +58 % (0.74 -> 1.17 m3) y gas recreado
                             ! por la EOS 11.5 -> 16.9 %: agranda el desfase
                             ! alpha-p (vol_lim, la familia de B1). No adoptado.
-                            room = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k), alpha_slag(i,j,k)) &
+                            room = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k), slag_vs_steel(alpha_slag(i,j,k))) &
                                    - liq%alpha(i,j,k)) * &
                                    liq%rho(i,j,k) * m%vol(i,j,k) / dt_sub &
                                    + outflow - sol%mdot(i,j,k)
@@ -444,7 +444,7 @@ contains
                     do i = istart, iend
                         ws_lim(i,j,k) = 0.0_dp
                         if (m%cell_type(i,j,k) == 0) cycle
-                        cap = liq_cap(sol%alpha_s(i,j,k), alpha_slag(i,j,k))
+                        cap = liq_cap(sol%alpha_s(i,j,k), slag_vs_steel(alpha_slag(i,j,k)))
                         give = liq%alpha(i,j,k) - cap
                         if (give <= 1.0e-15_dp) cycle
                         exc = max(exc, give)
@@ -459,7 +459,7 @@ contains
                         ! celdas en cap (face_open) el derrame es el unico
                         ! camino y tiene que empujar a traves de la columna.
                         room_up = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k+1) &
-                                  - alpha_slag(i,j,k+1) - liq%alpha(i,j,k+1)) &
+                                  - slag_vs_steel(alpha_slag(i,j,k+1)) - liq%alpha(i,j,k+1)) &
                                   * m%vol(i,j,k+1) / m%vol(i,j,k)
                         ! (auditoria 15) con ESCORIA arriba, dentro del lecho,
                         ! se reserva el gas de poro (completo desde a_sl >=
@@ -480,8 +480,11 @@ contains
                             ! acero+escoria (caso 12) y era singular en costras
                             ! con a_s > 1 - ALPHA_PORE_GAS
                             fslag = min(1.0_dp, alpha_slag(i,j,k+1) / ALPHA_FLOW_CUTOFF)
+                            ! la escoria CEDE (no ocupa hueco del acero), pero
+                            ! su gas de poro se reserva: el acero entra en la
+                            ! celda de escoria hasta su liq_cap, nunca la cruza
                             room_up = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k+1) &
-                                      - alpha_slag(i,j,k+1) - liq%alpha(i,j,k+1) &
+                                      - slag_vs_steel(alpha_slag(i,j,k+1)) - liq%alpha(i,j,k+1) &
                                       - ALPHA_PORE_GAS * fslag) * m%vol(i,j,k+1) / m%vol(i,j,k)
                         end if
                         ws_lim(i,j,k) = min(give, room_up)

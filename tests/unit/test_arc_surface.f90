@@ -27,7 +27,7 @@ program test_arc_surface
     type(slag_t)   :: slag
     type(shared_t) :: sh
     type(electrode_t) :: elec(1)
-    real(dp), allocatable :: asg(:,:,:), alg(:,:,:)
+    real(dp), allocatable :: asg(:,:,:), alg(:,:,:), slg(:,:,:)
     integer, parameter :: K = 20
     real(dp) :: P, e_k, e_film, e_tot, wvo, wba, wsc, gw, r2, sig, xe, ye, x, y, dzk
     integer :: i, j, kk
@@ -46,6 +46,7 @@ program test_arc_surface
     ok = .true.
 
     allocate(asg(mesh%nr_g, mesh%nth_g, mesh%nz_g), alg(mesh%nr_g, mesh%nth_g, mesh%nz_g))
+    allocate(slg(mesh%nr_g, mesh%nth_g, mesh%nz_g))
     asg = 0.0_dp; alg = 0.0_dp
     alg(:,:,1:K) = 1.0_dp
     do j = 1, mesh%nth_g
@@ -182,6 +183,11 @@ program test_arc_surface
     !    lecho MAS denso pero no compactado (0.8): la regla del charco no actua
     !    (phi_abajo < 0.9) -> CHATARRA (M4-8)
     call layer_case(10, 0.40_dp, 0.60_dp, .false., .true., phib=0.80_dp)
+    ! 11 (dirigida M1-M4, Medio 2): el charco del caso 8 con ESCORIA en el
+    !    hueco (alpha_s 0.5, alpha_l 0.35, alpha_sl 0.135, como la deja
+    !    slag_buoyancy): la saturacion cuenta la escoria -> BANO (sin ella,
+    !    alpha_l 0.35 < 0.9 x 0.5 y la regla no actuaba)
+    call layer_case(11, 0.35_dp, 0.50_dp, .false., .false., phib=0.95_dp, sl=0.135_dp)
 
     if (ok) then
         print '(A)', ' PASS test_arc_surface (pelicula no es superficie; crater, pelicula sobre chatarra y lecho inundado son chatarra; bano con chatarra sumergida es bano)'
@@ -194,7 +200,7 @@ contains
     ! capa K+1 con liquido al y chatarra as (film: al en 1/3 de las celdas y
     ! as en las otras 2/3; si no, ambos en todas); bano lleno en 1..K.
     ! want_scrap: superficie esperada (chatarra o bano)
-    subroutine layer_case(icase, al, as, film, want_scrap, every, phib)
+    subroutine layer_case(icase, al, as, film, want_scrap, every, phib, sl)
         integer, intent(in)  :: icase
         real(dp), intent(in) :: al, as
         logical, intent(in)  :: film, want_scrap
@@ -203,6 +209,8 @@ contains
         integer, intent(in), optional :: every
         ! (opcional) la capa K es un LECHO inundado de fraccion phib (no bano)
         real(dp), intent(in), optional :: phib
+        ! (opcional) escoria alpha_sl en la capa K+1 (se pasa al arco)
+        real(dp), intent(in), optional :: sl
         real(dp) :: e_up_, e_k_, e_tot_, e0
         integer  :: ii, jj, k3
         asg = 0.0_dp; alg = 0.0_dp
@@ -257,7 +265,14 @@ contains
             '  wba/wvo/frac_surf = ', wba / wvo / (ARC_SURF_H / dzk), '  suma = ', &
             wsc / wvo / ARC_SURF_FRAC_S + wba / wvo / (ARC_SURF_H / dzk)
         sh%S_arc = 0.0_dp
-        call distribute_arc_heat(elec, sh, sol, mesh, cfg, asg, 1, alg)
+        slg = 0.0_dp
+        if (present(sl)) then
+            slg(:,:,K+1) = sl
+            where (mesh%cell_type_global == 0) slg = 0.0_dp
+            call distribute_arc_heat(elec, sh, sol, mesh, cfg, asg, 1, alg, slg)
+        else
+            call distribute_arc_heat(elec, sh, sol, mesh, cfg, asg, 1, alg)
+        end if
         e_up_ = 0.0_dp; e_k_ = 0.0_dp; e_tot_ = (sum(sol%E_s) - e0) / cfg%dt
         do k3 = 1, mesh%nz
             do jj = 1, mesh%ntheta

@@ -378,7 +378,13 @@ program eaf_3d_simulator
             if (.not. allocated(alpha_lg)) &
                 allocate(alpha_lg(mesh%nr_g, mesh%nth_g, mesh%nz_g))
             call gather_global_field(liq%alpha, alpha_lg, mesh)
-            call distribute_arc_heat(elec, sh, sol, mesh, cfg, alpha_sg, N_ELECTRODES, alpha_lg)
+            if (cfg%solve_slag) then
+                if (.not. allocated(alsl_g)) allocate(alsl_g(mesh%nr_g, mesh%nth_g, mesh%nz_g))
+                call gather_global_field(slag%alpha_sl, alsl_g, mesh)
+                call distribute_arc_heat(elec, sh, sol, mesh, cfg, alpha_sg, N_ELECTRODES, alpha_lg, alsl_g)
+            else
+                call distribute_arc_heat(elec, sh, sol, mesh, cfg, alpha_sg, N_ELECTRODES, alpha_lg)
+            end if
             ! (M12-1arc, A13-1, oct-2026) el arco ABRE una cavidad en la
             ! escoria: P_elec y P_conv van al metal bajo ella (alpha_l), pero
             ! la RADIACION del arco la intercepta la escoria que lo rodea
@@ -387,8 +393,6 @@ program eaf_3d_simulator
             ! kappa. Hacer de la escoria superficie de TODO el arco se probo
             ! (se llevaba ~43 MW en arc_slag, +72 K/s en su celda): no fisico.
             if (cfg%solve_slag) then
-                if (.not. allocated(alsl_g)) allocate(alsl_g(mesh%nr_g, mesh%nth_g, mesh%nz_g))
-                call gather_global_field(slag%alpha_sl, alsl_g, mesh)
                 alsl_g = alpha_lg + alsl_g
                 if (.not. allocated(S_arc_mc)) allocate(S_arc_mc, mold=sh%S_arc)
                 S_arc_mc = sh%S_arc

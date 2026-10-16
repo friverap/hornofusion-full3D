@@ -104,7 +104,7 @@ contains
         !  necesita el arrastre de Ergun del gas para la percolacion, F2.16)
         ! Hueco de poro del liquido en el lecho (F2.8; ver ws_liq_room)
         where (sol%alpha_s >= ALPHA_BED)
-            ws_liq_room = liq_cap(sol%alpha_s, slag%alpha_sl) - liq%alpha
+            ws_liq_room = liq_cap(sol%alpha_s, slag_vs_steel(slag%alpha_sl)) - liq%alpha
         elsewhere
             ws_liq_room = 1.0_dp
         end where
@@ -462,7 +462,7 @@ contains
                 ! recien transportada; las mascaras de CARA (ws_bedl_f) siguen
                 ! fijas por iteracion externa a proposito (A4-1)
                 where (sol%alpha_s >= ALPHA_BED)
-                    ws_liq_room = liq_cap(sol%alpha_s, slag%alpha_sl) - liq%alpha
+                    ws_liq_room = liq_cap(sol%alpha_s, slag_vs_steel(slag%alpha_sl)) - liq%alpha
                 elsewhere
                     ws_liq_room = 1.0_dp
                 end where

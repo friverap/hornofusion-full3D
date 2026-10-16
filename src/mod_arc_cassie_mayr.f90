@@ -61,7 +61,7 @@ contains
     ! serial run, so the totals are bit-identical regardless of the MPI
     ! decomposition.  Deposits are then applied only to locally-owned cells.
     !---------------------------------------------------------------------------
-    subroutine distribute_arc_heat(elec, sh, sol, m, cfg, alpha_sg, n_elec, alpha_lg)
+    subroutine distribute_arc_heat(elec, sh, sol, m, cfg, alpha_sg, n_elec, alpha_lg, alpha_slg)
         type(electrode_t), intent(inout) :: elec(:)
         type(shared_t), intent(inout)   :: sh
         type(solid_t), intent(inout)    :: sol
@@ -72,6 +72,10 @@ contains
         integer, intent(in)             :: n_elec
         ! alpha_l GLOBAL (N-A2): P_elec va al baño bajo el electrodo
         real(dp), intent(in)            :: alpha_lg(:,:,:)
+        ! (opcional) alpha_sl GLOBAL: solo para la SATURACION de la regla del
+        ! charco (la escoria rellena el hueco de la capa del charco; dirigida
+        ! M1-M4, Medio 2). La superficie y P_elec siguen con alpha_l.
+        real(dp), intent(in), optional  :: alpha_slg(:,:,:)
 
         integer  :: e, ig, jg, kg, il, jl, kl, kg_tip, kg_scrap, kc_lo, kc_hi, kg_bath, kr_lo, kr_hi
         real(dp) :: P_total, P_rad_arc, P_conv, P_elec_flow
@@ -170,6 +174,7 @@ contains
                         if (alpha_sg(ig,jg,kg) > ALPHA_SCRAP_SURF) wsc = wsc + gw * alpha_sg(ig,jg,kg)
                         if (alpha_lg(ig,jg,kg) >= ALPHA_LIQ_CONT) wba = wba + gw * alpha_lg(ig,jg,kg)
                         wlk = wlk + gw * alpha_lg(ig,jg,kg)
+                        if (present(alpha_slg)) wlk = wlk + gw * alpha_slg(ig,jg,kg)
                     end do
                 end do
                 if (wvo <= SMALL) cycle
@@ -225,6 +230,7 @@ contains
                                     if (alpha_sg(ig,jg,kg-1) > ALPHA_SCRAP_SURF) &
                                         wsb = wsb + gw * alpha_sg(ig,jg,kg-1)
                                     wlb = wlb + gw * alpha_lg(ig,jg,kg-1)
+                                    if (present(alpha_slg)) wlb = wlb + gw * alpha_slg(ig,jg,kg-1)
                                 end do
                             end do
                             if (wvb > SMALL) then

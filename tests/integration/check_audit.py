@@ -30,7 +30,7 @@ Chequeos (ids para xfail, prefijo 'audit:'):
 Uso: check_audit.py RUNDIR [--config CFG] [--xfail a,b] [--etol 0.01]
                       [--htol 1e-4] [--arctol 1e-3]
 """
-import argparse
+import argparse, math
 import csv
 import os
 import sys
@@ -133,6 +133,19 @@ def main():
     # (auditoria 4, B4-24) el LIBRO del gas (E_gas_abs) existe cuando se
     # resuelve la energia del gas: solve_energy con flujo de dos fluidos (o
     # mezcla). Lo decide el config; sin --config, los datos (audits viejos).
+    # (oct-2026) el redondeo de la SUMA del inventario crece como sqrt(N) eps
+    # (caminata aleatoria sobre N celdas): con la malla fina de arc_slag
+    # (18432 celdas) 1e-14 quedaba por debajo de su propio ruido (n1: 5e-9 kg
+    # sobre 2.7e5, sin derrame ni clip, m_liq oscilando +-3e-9 por paso). La
+    # tolerancia de redondeo es max(--mtol-inv, sqrt(N) eps).
+    mtol_inv = args.mtol_inv
+    if args.config:
+        _c = read_config(args.config)
+        try:
+            _n = float(_c.get("nr", 18)) * float(_c.get("ntheta", 36)) * float(_c.get("nz", 24))
+            mtol_inv = max(mtol_inv, math.sqrt(_n) * 2.22e-16)
+        except (TypeError, ValueError):
+            pass
     if args.config:
         cfgd = read_config(args.config)
         gas_book = (cfg_bool(cfgd, "solve_energy") and cfg_bool(cfgd, "solve_flow")
@@ -358,7 +371,7 @@ def main():
     err = abs(dm_l - expected) / denom
     # (M5-7) permitido = mtol x denom + mtol_inv x inventario (redondeo)
     inv_l = max(abs(first["m_liq"]), abs(last["m_liq"]))
-    tol_l = args.mtol + args.mtol_inv * inv_l / denom
+    tol_l = args.mtol + mtol_inv * inv_l / denom
     chk.report("mass_liq", err <= tol_l,
                f"dm_liq={dm_l:.4e} vs fundido-resolid-clip="
                f"{expected:.4e} kg (fundido={m_melt:.3e}, "
@@ -385,7 +398,7 @@ def main():
         # (B4-22) siempre, absoluta contra 1 kg si no hay movimiento
         err_s = abs(dm_s - exp_s) / max(den_s, 1.0)
         inv_s = max(abs(first["m_sol"]), abs(last["m_sol"]))
-        tol_s = args.mtol + args.mtol_inv * inv_s / max(den_s, 1.0)
+        tol_s = args.mtol + mtol_inv * inv_s / max(den_s, 1.0)
         chk.report("mass_sol", err_s <= tol_s,
                    f"dm_sol={dm_s:.4e} vs cargas+ECS-fundido+resolid-Cox="
                    f"{exp_s:.4e} kg, err rel={err_s:.3e} (max {tol_s:.3e})")
