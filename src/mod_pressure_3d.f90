@@ -900,19 +900,11 @@ contains
         pure function pea_ref(apl0, apg0, ii, jj, kk, fd) result(ar)
             real(dp), intent(in) :: apl0, apg0, fd
             integer, intent(in)  :: ii, jj, kk
-            real(dp) :: ar, apl, apg, kv, det, ng, al_, ag_
-            apl = apl0 + ws_trl(ii,jj,kk) * fd
-            apg = apg0 + ws_trg(ii,jj,kk) * fd
-            ar = apg
-            kv = ws_pea_kv(ii,jj,kk)
-            if (apl <= SMALL .or. apg <= SMALL) return
-            det = apl * apg - kv * kv
-            if (det <= SMALL) return
-            ! las alpha de la ELIMINACION (con n_pc_max > 1 el transporte de alpha
-            ! las cambia entre pasadas)
-            al_ = ws_pea_al(ii,jj,kk); ag_ = ws_pea_ag(ii,jj,kk)
-            ng = ag_ * apl + kv * al_
-            if (al_ * apg + kv * ag_ > SMALL .and. ng > SMALL) ar = ag_ * det / ng
+            real(dp) :: ar, dummy
+            ! (A12-T3) la MISMA funcion que pea2, con los transitorios de las
+            ! dos fases desplazados a DT_MOB_REF y las alpha de la eliminacion
+            call pea_coeffs(apl0 + ws_trl(ii,jj,kk) * fd, apg0 + ws_trg(ii,jj,kk) * fd, &
+                            ws_pea_kv(ii,jj,kk), ws_pea_al(ii,jj,kk), ws_pea_ag(ii,jj,kk), dummy, ar)
         end function pea_ref
 
         ! (auditoria 4, A4-2; B4-9/B4-12) Peso de la demanda de volumen del

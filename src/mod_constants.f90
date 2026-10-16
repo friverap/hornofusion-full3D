@@ -366,6 +366,31 @@ contains
 
     ! Fraccion de liquido que cabe en la celda (F2.7): hueco menos el gas
     ! residual de poro en el lecho
+    !---------------------------------------------------------------------------
+    ! (auditoria 12, A12-T3) aP EQUIVALENTES de la eliminacion parcial (PEA,
+    ! F2.2 / M30): del sistema a_l u_l - KV u_g = ..., a_g u_g - KV u_l = ...,
+    ! la respuesta de cada fase a la presion es d_q = V(alpha_q a_o + KV
+    ! alpha_o)/det, y el Poisson recibe aP_eq = alpha_q V/d_q. UNA definicion:
+    ! la usan pea2 (mod_multiphase) y el test de venteo de F2.31
+    ! (mod_pressure_3d, con los transitorios a DT_MOB_REF). Sin cambio si algun
+    ! aP o det no es positivo, o si los denominadores se anulan.
+    !---------------------------------------------------------------------------
+    pure subroutine pea_coeffs(apl, apg, kv, al, ag, apl_eq, apg_eq)
+        real(dp), intent(in)  :: apl, apg, kv, al, ag
+        real(dp), intent(out) :: apl_eq, apg_eq
+        real(dp) :: det, nl, ng
+        apl_eq = apl; apg_eq = apg
+        if (apl <= SMALL .or. apg <= SMALL) return
+        det = apl * apg - kv * kv
+        if (det <= SMALL) return
+        nl = al * apg + kv * ag
+        ng = ag * apl + kv * al
+        if (nl > SMALL .and. ng > SMALL) then
+            apl_eq = al * det / nl
+            apg_eq = ag * det / ng
+        end if
+    end subroutine pea_coeffs
+
     pure elemental function liq_cap(as, asl) result(c)
         real(dp), intent(in) :: as, asl
         real(dp) :: c

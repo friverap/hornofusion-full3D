@@ -722,7 +722,7 @@ contains
         subroutine pea2(ul, ug, apl, apg, KV, ug_used, ul_used)
             real(dp), intent(inout) :: ul, ug, apl, apg
             real(dp), intent(in)    :: KV, ug_used, ul_used
-            real(dp) :: Hl, Hg, det, nl, ng
+            real(dp) :: Hl, Hg, det
             if (apl <= SMALL .or. apg <= SMALL) return
             det = apl * apg - KV * KV
             if (det <= SMALL) return
@@ -730,13 +730,9 @@ contains
             Hg = apg * ug - KV * ul_used
             ul = (apg * Hl + KV * Hg) / det
             ug = (apl * Hg + KV * Hl) / det
-            nl = al * apg + KV * ag
-            ng = ag * apl + KV * al
-            if (nl > SMALL .and. ng > SMALL) then
-                Hl = al * det / nl
-                Hg = ag * det / ng
-                apl = Hl; apg = Hg
-            end if
+            ! (A12-T3) aP equivalentes: una sola definicion (mod_constants)
+            call pea_coeffs(apl, apg, KV, al, ag, Hl, Hg)
+            apl = Hl; apg = Hg
         end subroutine pea2
     end subroutine partial_elimination
 
