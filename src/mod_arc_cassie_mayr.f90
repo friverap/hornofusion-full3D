@@ -78,7 +78,7 @@ contains
         real(dp) :: x_elec, y_elec, x_cell, y_cell, dist
         real(dp) :: r2, sigma_r, gw
         real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol, wsc, wba, wvo, wexp, frac_surf
-        logical  :: found_scrap, owned, any_liq, found_bath, surf_found
+        logical  :: found_scrap, owned, any_liq, found_bath, surf_found, is_scrap
         integer  :: kg_bath_any   ! capa del bano bajo la punta aunque la superficie sea chatarra (B4-14)
         ! (El tope de 2 K por paso al solido se sustituyo por el tope de estado
         ! solid_arc_room: auditoria 12-oct-2026, M13.)
@@ -181,7 +181,28 @@ contains
                 if (.not. surf_found .and. &
                     wsc / ARC_SURF_FRAC_S + wba / frac_surf >= wvo) then
                     surf_found = .true.
-                    if (wsc >= wba) then
+                    ! (auditoria 8, M8-1) QUIEN es la superficie:
+                    !  - el BANO pasa su umbral PROPIO de espesor: la fraccion
+                    !    cruda, si la chatarra tambien pasa el suyo (bano con
+                    !    chatarra sumergida = bano, M3-3; lecho inundado con
+                    !    mas chatarra que liquido = chatarra, M4-8); una traza
+                    !    de chatarra bajo su umbral no le gana a un bano que si
+                    !    pasa (en mallas gruesas, frac_surf < 0.05, la cruda
+                    !    sola rompia la monotonia);
+                    !  - si no: el mas cercano a su umbral (escala normalizada:
+                    !    una pelicula mas fina que ARC_SURF_H sobre chatarra
+                    !    suelta = chatarra; una traza de chatarra frente a una
+                    !    pelicula casi en su umbral = bano).
+                    ! La cruda sola dejaba a la pelicula fina sobre chatarra
+                    ! suelta como superficie; la normalizada en todos los
+                    ! casos hacia depender de la malla al bano con chatarra
+                    ! sumergida (0.05 dz/0.014).
+                    if (wba >= frac_surf * wvo) then
+                        is_scrap = wsc >= wba .and. wsc >= ARC_SURF_FRAC_S * wvo
+                    else
+                        is_scrap = wsc / ARC_SURF_FRAC_S >= wba / frac_surf
+                    end if
+                    if (is_scrap) then
                         kg_scrap = kg; found_scrap = .true.
                     else
                         ! superficie de bano: P_conv y P_elec a esta capa

@@ -29,7 +29,7 @@ program test_arc_surface
     type(electrode_t) :: elec(1)
     real(dp), allocatable :: asg(:,:,:), alg(:,:,:)
     integer, parameter :: K = 20
-    real(dp) :: P, e_k, e_film, e_tot, wvo, wba, gw, r2, sig, xe, ye, x, y, dzk
+    real(dp) :: P, e_k, e_film, e_tot, wvo, wba, wsc, gw, r2, sig, xe, ye, x, y, dzk
     integer :: i, j, kk
     logical :: ok
 
@@ -143,14 +143,126 @@ program test_arc_surface
     if (abs(e_tot - P) > 1.0e-12_dp * P + 1.0e-15_dp * e_film / cfg%dt) &
         call fail('crater: presupuesto del arco (rel)', (e_tot - P) / P)
 
+    ! --- casos 3-5 (auditoria 8, M8-1): QUIEN es la superficie. Discriminante:
+    ! con superficie de CHATARRA, P_conv (y P_elec) van a la columna
+    ! kg_scrap..kg_tip y las capas por encima de K+1 reciben; con superficie
+    ! de BANO todo va a la capa K+1.
+    ! 3: pelicula (alpha_l 0.31 en 1/3) bajo su umbral de espesor + chatarra
+    !    suelta (alpha_s 0.06 en 2/3): el bano NO pasa su umbral propio ->
+    !    CHATARRA (la comparacion cruda wsc >= wba la daba por bano: M8-1)
+    call layer_case(3, 0.31_dp, 0.06_dp, .true., .true.)
+    ! 4: bano con chatarra SUMERGIDA (alpha_l 0.75, alpha_s 0.20 en todas):
+    !    el bano pasa su umbral y pesa mas -> BANO (M3-3; guarda de M9-3)
+    call layer_case(4, 0.75_dp, 0.20_dp, .false., .false.)
+    ! 5: lecho INUNDADO (alpha_s 0.55, alpha_l 0.43 en todas): los dos pasan
+    !    su umbral y la chatarra pesa mas -> CHATARRA (M4-8)
+    call layer_case(5, 0.43_dp, 0.55_dp, .false., .true.)
+    ! 6: SOLO la chatarra pasa su umbral (pelicula 0.31 en 1/3 bajo su umbral,
+    !    chatarra 0.09 en 2/3: wsc ~0.06 >= 0.05) aunque el bano crudo pese
+    !    mas -> CHATARRA (rama normalizada, como el 3, con la chatarra sobre
+    !    su umbral)
+    call layer_case(6, 0.31_dp, 0.09_dp, .true., .true.)
+    ! 7: NINGUNO pasa su umbral y la chatarra es una TRAZA: pelicula gruesa
+    !    (alpha_l 0.32 en 3 de cada 4 celdas: casi en su umbral) y chatarra
+    !    0.10 en 1 de cada 6: la capa es superficie (suma 1.33) y la
+    !    normalizada da 0.34 frente a 0.99 -> BANO
+    !    (auditoria dirigida de M8-1: con 'chatarra si el bano no pasa' una
+    !    traza decidia la superficie)
+    call layer_case(7, 0.32_dp, 0.10_dp, .false., .false., 6)
+
     if (ok) then
-        print '(A)', ' PASS test_arc_surface (malla fina: una pelicula delgada no es superficie; un crater con chatarra si)'
+        print '(A)', ' PASS test_arc_surface (pelicula no es superficie; crater, pelicula sobre chatarra y lecho inundado son chatarra; bano con chatarra sumergida es bano)'
     else
         print '(A)', ' FAIL test_arc_surface'
         stop 1
     end if
     call mpi_finalize_topology(mesh%topo)
 contains
+    ! capa K+1 con liquido al y chatarra as (film: al en 1/3 de las celdas y
+    ! as en las otras 2/3; si no, ambos en todas); bano lleno en 1..K.
+    ! want_scrap: superficie esperada (chatarra o bano)
+    subroutine layer_case(icase, al, as, film, want_scrap, every)
+        integer, intent(in)  :: icase
+        real(dp), intent(in) :: al, as
+        logical, intent(in)  :: film, want_scrap
+        ! (opcional) chatarra solo en 1 de cada 'every' celdas y liquido en 3
+        ! de cada 4 (las de chatarra, sin liquido)
+        integer, intent(in), optional :: every
+        real(dp) :: e_up_, e_k_, e_tot_, e0
+        integer  :: ii, jj, k3
+        asg = 0.0_dp; alg = 0.0_dp
+        alg(:,:,1:K) = 1.0_dp
+        do jj = 1, mesh%nth_g
+            do ii = 1, mesh%nr_g
+                if (film) then
+                    if (mod(ii + jj, 3) == 0) then
+                        alg(ii,jj,K+1) = al
+                    else
+                        asg(ii,jj,K+1) = as
+                    end if
+                else if (present(every)) then
+                    if (mod(ii + jj, 4) /= 0) alg(ii,jj,K+1) = al
+                    if (mod(ii + jj, every) == 0) asg(ii,jj,K+1) = as
+                else
+                    alg(ii,jj,K+1) = al; asg(ii,jj,K+1) = as
+                end if
+            end do
+        end do
+        where (mesh%cell_type_global == 0) alg = 0.0_dp
+        where (mesh%cell_type_global == 0) asg = 0.0_dp
+        sol%alpha_s = 0.0_dp; sol%m_s = 0.0_dp; sol%E_s = 0.0_dp
+        do k3 = 1, mesh%nz
+            do jj = 1, mesh%ntheta
+                do ii = 1, mesh%nr
+                    sol%alpha_s(ii,jj,k3) = asg(ii,jj,k3)
+                    sol%m_s(ii,jj,k3) = asg(ii,jj,k3) * cfg%rho_steel * mesh%vol(ii,jj,k3)
+                    sol%T_s(ii,jj,k3) = 1500.0_dp
+                    sol%E_s(ii,jj,k3) = sol%m_s(ii,jj,k3) * solid_enthalpy(1500.0_dp, cfg)
+                end do
+            end do
+        end do
+        e0 = sum(sol%E_s)
+        wvo = 0.0_dp; wba = 0.0_dp; wsc = 0.0_dp
+        do jj = 1, mesh%nth_g
+            do ii = 1, mesh%nr_g
+                if (mesh%cell_type_global(ii,jj,K+1) == 0) cycle
+                x = mesh%r_global(ii) * cos(mesh%theta_global(jj)); y = mesh%r_global(ii) * sin(mesh%theta_global(jj))
+                r2 = ((x - xe)**2 + (y - ye)**2) / sig**2
+                if (r2 >= 16.0_dp) cycle
+                gw = exp(-r2) * mesh%vol_global(ii,jj,K+1)
+                wvo = wvo + gw
+                if (asg(ii,jj,K+1) > ALPHA_SCRAP_SURF) wsc = wsc + gw * asg(ii,jj,K+1)
+                if (alg(ii,jj,K+1) >= ALPHA_LIQ_CONT) wba = wba + gw * alg(ii,jj,K+1)
+            end do
+        end do
+        print '(A,I0,A,F7.4,A,F7.4,A,F7.4)', '   caso ', icase, ': wsc/wvo/0.05 = ', wsc / wvo / ARC_SURF_FRAC_S, &
+            '  wba/wvo/frac_surf = ', wba / wvo / (ARC_SURF_H / dzk), '  suma = ', &
+            wsc / wvo / ARC_SURF_FRAC_S + wba / wvo / (ARC_SURF_H / dzk)
+        sh%S_arc = 0.0_dp
+        call distribute_arc_heat(elec, sh, sol, mesh, cfg, asg, 1, alg)
+        e_up_ = 0.0_dp; e_k_ = 0.0_dp; e_tot_ = (sum(sol%E_s) - e0) / cfg%dt
+        do k3 = 1, mesh%nz
+            do jj = 1, mesh%ntheta
+                do ii = 1, mesh%nr
+                    e_tot_ = e_tot_ + sh%S_arc(ii,jj,k3) * mesh%vol(ii,jj,k3)
+                    if (k3 >= K + 2) e_up_ = e_up_ + sh%S_arc(ii,jj,k3) * mesh%vol(ii,jj,k3)
+                    if (k3 <= K) e_k_ = e_k_ + sh%S_arc(ii,jj,k3) * mesh%vol(ii,jj,k3)
+                end do
+            end do
+        end do
+        print '(A,I0,A,ES11.3,A,ES11.3,A,L1)', '   caso ', icase, ': columna sobre K+1 ', e_up_, &
+            '  bano enterrado ', e_k_, '  esperado chatarra=', want_scrap
+        if (wsc / wvo / ARC_SURF_FRAC_S + wba / wvo / (ARC_SURF_H / dzk) < 1.0_dp) &
+            call fail('el caso no hace superficie a la capa K+1 (mal construido)', 0.0_dp)
+        if (want_scrap .and. e_up_ <= 0.0_dp) call fail('superficie de bano donde debia ser chatarra (W columna)', e_up_)
+        if (.not. want_scrap .and. e_up_ /= 0.0_dp) call fail('superficie de chatarra donde debia ser bano (W columna)', e_up_)
+        if (e_k_ /= 0.0_dp) call fail('potencia a la capa del bano enterrado (W)', e_k_)
+        ! tolerancia: 1e-12 de P mas el redondeo de restar el inventario de E_s
+        ! (suma de ~1e3 celdas: ~1e-13 relativo con la capa densa del caso 5)
+        if (abs(e_tot_ - P) > 1.0e-12_dp * P + 1.0e-13_dp * e0 / cfg%dt) &
+            call fail('presupuesto del arco (rel)', (e_tot_ - P) / P)
+    end subroutine layer_case
+
     subroutine fail(msg, v)
         character(len=*), intent(in) :: msg
         real(dp), intent(in) :: v
