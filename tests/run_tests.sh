@@ -148,6 +148,40 @@ run_restart_case() {
         $PY $INT/compare_audit.py "$dir" "$src" --from-step "$st" --rtol $rtol $( [ "$np" = "$npb" ] || echo --decomp )
 }
 
+# run_wallstop_case <base> <np>  (auditoria 16, M16-I2)
+#   Corre <base> con wall_time_max diminuto: debe parar tras el primer paso
+#   con [WALL] y escribir un snapshot reanudable; el reinicio desde el hasta
+#   t_final debe ser BIT A BIT con la continua tests/out/<base>_n<np>
+#   (campos y audit.csv). Es la receta por segmentos de produccion.
+run_wallstop_case() {
+    local base=$1 np=$2
+    local src=$OUT/${base}_n${np}
+    local d1=$OUT/restart/${base}_wallstop_n${np}
+    local d2=$OUT/restart/${base}_wallresume_n${np}
+    rm -rf "$d1" "$d2" && mkdir -p "$d1" "$d2"
+    cp "$CFG/$base.dat" "$d1/config.dat"
+    printf '\noutput_dir = %s\nwall_time_max = 1.0e-9\n' "$d1" >> "$d1/config.dat"
+    echo "== parada por reloj $base -n $np"
+    if ! mpirun -n "$np" "$BIN" "$d1/config.dat" > "$d1/run.log" 2>&1 \
+       || ! grep -q '\[WALL\]' "$d1/run.log"; then
+        echo "FAIL: wall_time_max no detuvo $base (ver $d1/run.log)"
+        tail -5 "$d1/run.log"; note_fail; return 1
+    fi
+    local snap
+    snap=$(printf '%s/eaf3d_%08d.h5' "$d1" 1)
+    [ -f "$snap" ] || { echo "FAIL: la parada por reloj no escribio $snap"; note_fail; return 1; }
+    cp "$CFG/$base.dat" "$d2/config.dat"
+    printf '\noutput_dir = %s\nrestart_file = %s\n' "$d2" "$snap" >> "$d2/config.dat"
+    if ! mpirun -n "$np" "$BIN" "$d2/config.dat" > "$d2/run.log" 2>&1; then
+        echo "FAIL: la reanudacion tras la parada por reloj fallo (ver $d2/run.log)"
+        tail -5 "$d2/run.log"; note_fail; return 1
+    fi
+    run_script "wallstop_${base}_n${np}" \
+        $PY $INT/compare_decomposition.py "$d2" "$src" --rtol 1e-12
+    run_script "wallstop_audit_${base}_n${np}" \
+        $PY $INT/compare_audit.py "$d2" "$src" --from-step 1 --rtol 1e-12
+}
+
 # audit_xfail_prefix <base> -> prefijo de xfail del audit propio del caso
 audit_xfail_prefix() {
     case $1 in
@@ -510,6 +544,8 @@ full | rebaseline)
     run_restart_case cold_10step 8 12 5
     # (A4-7) reinicio a MITAD de la fusion progresiva (paso 100 de 200)
     run_restart_case arc_melt 4 4 100
+    # (auditoria 16, M16-I2) parada por tiempo de reloj + reanudacion
+    run_wallstop_case cold_10step 8
 
     if [ "$MODE" = "rebaseline" ]; then
         # (auditoria 4, B4-23) el golden solo se regenera con la matriz LIMPIA:

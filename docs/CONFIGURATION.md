@@ -381,6 +381,7 @@ Defaults de `config_set_defaults` (`mod_config_3d.f90`), que es la verdad.
 
 | Clave | Default | Significado |
 |---|---|---|
+| `wall_time_max` | 0 | tiempo de RELOJ máximo [s]; al alcanzarlo se escribe un snapshot reanudable (cierra el intervalo del audit) y se sale limpio; 0 = sin límite. Para segmentos de producción (auditoría 16, M16-I2) |
 | `audit_freq` | 1 | cada cuántos pasos se escribe `audit.csv`; 0 apaga el audit (sin `audit.csv`, los checkers no corren). Con freq > 1 cada snapshot y el último paso escriben además su línea (el intervalo nunca queda a medias, B4-4); los gates exigen 1 (a freq > 1 la cuadratura de P_arc mete ~4 %) |
 | `cfl_max` | 2.0 | CFL máximo del dt adaptativo (azimutal con `dth_len = max(r dθ, dr)`) |
 | `iph_dt_safety` | 0.5 | dt ≤ safety · τ_iph (acople interfase; evita el equilibrio espurio T_gas = T_sol) |

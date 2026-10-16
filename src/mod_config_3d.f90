@@ -146,6 +146,7 @@ contains
         cfg%output_freq  = 100
         cfg%monitor_freq = 10
         cfg%audit_freq   = 1
+        cfg%wall_time_max = 0.0_dp
         cfg%output_dir   = 'output'
         cfg%restart_file = ''
 
@@ -368,6 +369,7 @@ contains
         case ('output_freq');  call parse_int(val, key, cfg%output_freq)
         case ('monitor_freq'); call parse_int(val, key, cfg%monitor_freq)
         case ('audit_freq');   call parse_int(val, key, cfg%audit_freq)
+        case ('wall_time_max'); call parse_real(val, key, cfg%wall_time_max)
         case ('output_dir');   cfg%output_dir = trim(val)
         case ('restart_file'); cfg%restart_file = trim(val)
         ! Bucket timing
@@ -547,6 +549,7 @@ contains
                      'requires R_elec > 0 and R_pcd + R_elec < R_shell', ok)
         if (cfg%adaptive_dt) call require(cfg%dt >= cfg%dt_min .and. cfg%dt <= cfg%dt_max, &
                      'requires dt_min <= dt <= dt_max (adaptive_dt)', ok)
+        call require(cfg%wall_time_max >= 0.0_dp, 'wall_time_max must be >= 0 (0 = off)', ok)
         call require(cfg%do_quadrature == 4 .or. cfg%do_quadrature == 6 &
                      .or. cfg%do_quadrature == 8, &
                      'do_quadrature must be 4, 6 or 8', ok)

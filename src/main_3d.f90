@@ -79,6 +79,10 @@ program eaf_3d_simulator
     logical  :: last_step = .false., audit_written = .false.
     integer  :: step, outer, e
     integer  :: step_start   ! paso del estado inicial (0 o el del snapshot; B4-5)
+    ! (auditoria 16, M16-I2) parada por tiempo de reloj
+    integer(8) :: wall_c0, wall_c, wall_rate
+    real(dp)   :: wall_loc, wall_glob
+    logical    :: wall_stop = .false.
 
     ! Coeficiente de drag de Ergun (implícito en aP; C1.4)
     real(dp), allocatable :: drag_coef(:,:,:)
@@ -282,6 +286,7 @@ program eaf_3d_simulator
         print *, ''
     end if
 
+    call system_clock(wall_c0, wall_rate)
     time_loop: do while (time < cfg%t_final)
 
         ! El ultimo paso termina EXACTAMENTE en t_final (auditoria, bajos: el
@@ -683,6 +688,20 @@ program eaf_3d_simulator
             call phase_exchange_halos(liq, mesh)
             call phase_exchange_halos(gas, mesh)
         end if
+        ! (auditoria 16, M16-I2) parada por tiempo de reloj: decision GLOBAL
+        ! (max entre ranks) ANTES del audit, para que este paso cierre el
+        ! intervalo del audit como cualquier snapshot (B4-4); el snapshot lo
+        ! escribe la finalizacion (dt nominal adaptado, reanudable)
+        if (cfg%wall_time_max > 0.0_dp .and. .not. last_step) then
+            call system_clock(wall_c)
+            wall_loc = real(wall_c - wall_c0, dp) / real(max(wall_rate, 1_8), dp)
+            if (mesh%is_parallel) then
+                call mpi_allreduce_max(wall_loc, wall_glob, mesh%topo)
+            else
+                wall_glob = wall_loc
+            end if
+            wall_stop = (wall_glob >= cfg%wall_time_max)
+        end if
         call timer_start(T_IO)
         ! (auditoria 4, B4-4) todo SNAPSHOT (output_freq y el final de la
         ! corrida) cierra ademas el intervalo del audit: con audit_freq > 1 el
@@ -691,7 +710,7 @@ program eaf_3d_simulator
         ! cero) lo perdia. Con audit_freq = 1 no cambia nada.
         if (cfg%audit_freq > 0) then
             if (mod(step, cfg%audit_freq) == 0 .or. mod(step, cfg%output_freq) == 0 &
-                .or. last_step) then
+                .or. last_step .or. wall_stop) then
                 call audit_write_step(liq, gas, sol, slag, sh, elec, mesh, &
                                       cfg, step, time)
                 audit_written = .true.
@@ -763,6 +782,13 @@ program eaf_3d_simulator
         
         if (should_print(mesh)) then
             !print '(A,I0,A,F8.2)', ' [DEBUG] Completed step ', step, ' t=', time
+        end if
+
+        if (wall_stop) then
+            if (should_print(mesh)) print '(A,F12.1,A,I0,A,F12.4,A)', &
+                ' [WALL] wall_time_max alcanzado (', wall_glob, ' s): snapshot en el paso ', &
+                step, ' (t = ', time, ' s); reanudar con restart_file'
+            exit time_loop
         end if
 
     end do time_loop

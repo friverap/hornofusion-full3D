@@ -101,6 +101,9 @@ module mod_types_3d
         ! Output
         integer :: output_freq, monitor_freq
         integer :: audit_freq   ! frecuencia de audit.csv (pasos); 0 = off
+        ! (auditoria 16, M16-I2) tiempo de RELOJ maximo [s]: al alcanzarlo se
+        ! escribe un snapshot reanudable y se sale limpio; 0 = sin limite
+        real(dp) :: wall_time_max
         integer :: n_beams      ! rayos MC por electrodo por paso; 0 = MC off
         character(len=256) :: output_dir
         ! Reinicio desde snapshot HDF5 ('' = arranque frio)

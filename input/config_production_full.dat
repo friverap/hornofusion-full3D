@@ -180,3 +180,6 @@ output_freq  = 50000
 monitor_freq = 500
 audit_freq   = 5
 output_dir   = output_prod2
+# (auditoria 16, M16-I2) por segmentos: wall_time_max un poco por debajo del
+# limite del job (p. ej. 169200 = 47 h); 0 = sin limite. Ver docs/RUNNING.md
+wall_time_max = 0

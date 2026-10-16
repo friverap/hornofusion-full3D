@@ -308,11 +308,18 @@ la de bloques más cúbicos.
 
 > **Costo (auditoría 15, M15-5; ESTIMACIÓN, sin medir en esta malla).** En el
 > régimen actual el paso queda en `dt_min` = 1 ms: ~7.2e6 pasos para 7200 s.
-> Referencia del repo: B1 en malla media (30×60×42), 5040 s a ~2 ms, 14 ranks,
-> ~8–10 días (`docs/PLAN_D_acople_implicito_alpha_p.md`, D6). La malla de
+> Base (ESTIMACIÓN de plan, D6 nunca se ejecutó): B1 en malla media
+> (30×60×42), 5040 s a ~2 ms, 14 ranks, ~8–10 días
+> (`docs/PLAN_D_acople_implicito_alpha_p.md`, D6). La malla de
 > producción tiene 8× celdas, el doble de pasos por segundo simulado y 1.4×
 > el tiempo simulado: del orden de **180–225 días** a 14 ranks (8–10 d × 8 × 2 × 1.4); con 48 ranks,
 > si el escalamiento fuera ideal, del orden de ~2 meses. Un job de 48 h es un
-> SEGMENTO (~1–2 % de la colada): encadenar con `restart_file`. Antes de
+> SEGMENTO (~1–2 % de la colada): poner `wall_time_max` un poco por debajo
+> del límite del job (p. ej. 47 h = 169200 s): al alcanzarlo la corrida
+> escribe un snapshot reanudable y sale limpia (auditoría 16, M16-I2; sin él
+> se perdía lo calculado tras el último `output_freq`). El segmento siguiente
+> lleva `restart_file = <output_dir>/eaf3d_<paso>.h5` (el último que escribió;
+> el mensaje `[WALL]` da el paso) y el MISMO resto del config; el reinicio es
+> bit a bit con la corrida continua (test `wallstop_cold_10step_n8`). Antes de
 > comprometer cómputo, medir el costo por paso con una corrida de ~100 pasos y
 > validar el régimen con un B1 nuevo (bloqueado 2 de la auditoría 13).
