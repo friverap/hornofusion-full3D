@@ -617,7 +617,19 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   contabilizado POR PASO: la última iteración externa, no la suma de las
   5 — `audit_step_delta`). Nunca reintroducir un recorte silencioso de α:
   toda restricción de volumen se resuelve moviendo masa, no borrándola.
-  Test: `test_alpha_limiter` (4 casos).
+  Test: `test_alpha_limiter` (casos 1-9). **Convergencia del limitador
+  (auditoría 9, M9-6)**: el Jacobi del factor es MONÓTONO desde 1 (siempre
+  sobreadmite) y en un baño LLENO al que el Poisson pide meter líquido (lecho
+  que drena encima) converge geométricamente lento (1.4 %/barrido en la
+  llamada más lenta medida, pocket_rise_dt10 paso 48; 7–12 % en otras) y agota
+  `N_LIM_MAX`; el exceso que deja lo mueve el derrame (`m_spill`, auditado y
+  conservativo): ESE es el error, no `dlim`. El diagnóstico `[LIM]` estima la
+  distancia al punto fijo (`dist_est` ≈ dlim r/(1−r)). Probado y NO adoptado:
+  el hueco con signo (bath_freeze: derrame 10.4 → 2.1 t, pero volumen
+  bloqueado +58 % y gas recreado 11.5 → 16.9 %: agranda el desfase α–p). No
+  acelerar con extrapolación ni arranque en caliente: el mapa tiene familias
+  de puntos fijos en lazos que conservan caudal. El origen es el desacople
+  α–p (Plan D); magnitud en B1 sin medir.
 - **Residuales del lazo externo**: se computan con el ITERADO ENTRANTE
   (el campo que queda en pie), jamás con el recién resuelto post-TDMA
   (siempre ~0: declaraba convergencia en 1 outer y perdía (1−α_T) de las

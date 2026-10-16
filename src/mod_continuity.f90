@@ -89,6 +89,7 @@ contains
         integer :: ilim, ipass, n_it_max
         real(dp) :: inflow, outflow, room, dlim, dlim_glob, clip_call, clipE_call
         real(dp) :: dlim_exit, cap, exc, room_up, give, exc_glob, spill_call
+        real(dp) :: dlim_prev, dist_est, dist_exit
         real(dp) :: exc0_glob
         real(dp) :: vol_dalpha, vol_lim, vol_unl
         real(dp), allocatable :: a_in(:,:,:), in_tot(:,:,:), in_ok(:,:,:)
@@ -251,7 +252,7 @@ contains
 
         call ensure_workspace(m)
         ws_Fr = 0.0_dp; ws_Fth = 0.0_dp; ws_Fz = 0.0_dp
-        n_it_max = 0; dlim_exit = 0.0_dp
+        n_it_max = 0; dlim_exit = 0.0_dp; dist_exit = 0.0_dp
         ! Arrays de cara COMPLETOS a cero (halos incluidos): los halos de
         ! frontera FÍSICA (eje i=0, piso k=0) los leen cell_in_out/eff_flux
         ! y nadie los escribe (no hay rank vecino que los intercambie).
@@ -308,12 +309,20 @@ contains
             !     porque la salida de una celda es la entrada (limitada) de
             !     su vecina; el residuo va al clip auditado.
             ws_lim = 1.0_dp
+            dlim_prev = huge(1.0_dp)
             do ilim = 1, N_LIM_MAX
                 do k = kstart, kend
                     do j = jstart, jend
                         do i = istart, iend
                             if (m%cell_type(i,j,k) == 0) cycle
                             call cell_in_out(i, j, k, inflow, outflow)
+                            ! (auditoria 9, M9-6) max(0, .) A PROPOSITO: el hueco
+                            ! con signo (una celda sobre su cap solo admite lo
+                            ! que le sale menos su exceso) se midio en
+                            ! bath_freeze: derrame 10.4 -> 2.1 t pero volumen
+                            ! bloqueado +58 % (0.74 -> 1.17 m3) y gas recreado
+                            ! por la EOS 11.5 -> 16.9 %: agranda el desfase
+                            ! alpha-p (vol_lim, la familia de B1). No adoptado.
                             room = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k), alpha_slag(i,j,k)) &
                                    - liq%alpha(i,j,k)) * &
                                    liq%rho(i,j,k) * m%vol(i,j,k) / dt_sub &
@@ -336,9 +345,23 @@ contains
                     dlim_glob = dlim
                 end if
                 if (dlim_glob < 1.0e-12_dp) exit
+                if (ilim < N_LIM_MAX) dlim_prev = dlim_glob
             end do
             n_it_max  = max(n_it_max, min(ilim, N_LIM_MAX))
             dlim_exit = max(dlim_exit, dlim_glob)
+            ! (auditoria 9, M9-6) la iteracion es MONOTONA desde s = 1 (siempre
+            ! sobreadmite): dlim es el cambio entre barridos, no la distancia
+            ! al punto fijo. Con convergencia geometrica de razon r la
+            ! distancia es ~dlim r/(1 - r) (diagnostico; el exceso que deja lo
+            ! mueve el derrame y lo audita m_spill)
+            if (ilim > N_LIM_MAX .and. dlim_prev < huge(1.0_dp)) then
+                if (dlim_glob < dlim_prev) then
+                    dist_est = dlim_glob * (dlim_glob / dlim_prev) / (1.0_dp - dlim_glob / dlim_prev)
+                else
+                    dist_est = 1.0_dp
+                end if
+                dist_exit = max(dist_exit, min(dist_est, 1.0_dp))
+            end if
             ! D1: entrada de liquido que el limitador BLOQUEA (el Poisson la
             ! pidio); D2.2: agregado por celda de lo pedido y lo que cupo
             do k = kstart, kend
@@ -548,10 +571,10 @@ contains
         ! del punto fijo, dlim al salir, exceso maximo antes del derrame,
         ! masa derramada y recortada en esta llamada (locales al rank 0)
         if (should_print(m) .and. mod(probe_current_step(), 250) == 0 .and. &
-            (spill_call > 1.0e-3_dp .or. clip_call > 1.0e-3_dp)) then
-            print '(A,I0,A,I0,A,ES9.2,A,ES9.2,A,ES10.3,A,ES10.3)', &
+            (spill_call > 1.0e-3_dp .or. clip_call > 1.0e-3_dp .or. n_it_max >= N_LIM_MAX)) then
+            print '(A,I0,A,I0,A,ES9.2,A,ES9.2,A,ES9.2,A,ES10.3,A,ES10.3)', &
                 '   [LIM] paso ', probe_current_step(), ' it_max=', n_it_max, &
-                ' dlim_exit=', dlim_exit, ' exc0=', exc0_glob, &
+                ' dlim_exit=', dlim_exit, ' dist_est=', dist_exit, ' exc0=', exc0_glob, &
                 ' derramado=', spill_call, ' recortado=', clip_call
         end if
 
