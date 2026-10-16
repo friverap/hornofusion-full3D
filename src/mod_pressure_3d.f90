@@ -97,6 +97,7 @@ contains
                                           residual)
         use mod_workspace, only: ensure_workspace, own_weight_face, liq_own_weight, mix_cell_weight, &
                                  liq_cont_fallback, bed_rel_face, ws_cc, ws_cc_new, ws_cc_drop, ws_qin_cap, ws_qin_step, ws_p_n, aW => ws_aW, &
+            ws_trg, ws_trl, ws_pea_kv, ws_pea_al, ws_pea_ag, ws_peal_r, ws_peal_th, ws_peal_z, ws_peag_r, ws_peag_th, ws_peag_z, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
@@ -261,9 +262,42 @@ contains
             .and. .not. cfg%pc_gas_spring) then
         block
             real(dp), parameter :: P_VENT = 5.0e3_dp
-            real(dp) :: cg, src, dloc
+            real(dp) :: cg, src, dloc, fdt
             logical, allocatable :: keep(:,:,:)
+            real(dp), allocatable :: aRr(:,:,:), aRt(:,:,:), aRz(:,:,:)
             allocate(keep, mold=act_g); keep = act_g
+            ! (auditoria 11, M11-1pv) la conductancia del test se evalua con el
+            ! transitorio del momento a DT_MOB_REF (como la movilidad de F2.16,
+            ! M8-2): con el del dt de la corrida crecia ~ dt donde la inercia
+            ! pesa (5x a 10 ms frente a 2 ms; 250x al dt de produccion) y la
+            ! clasificacion dependia del integrador. En las celdas PEA el aP del
+            ! gas es el EQUIVALENTE de la eliminacion, que lleva el transitorio
+            ! del LIQUIDO: se recalcula con la MISMA formula de pea2 y los dos
+            ! transitorios a DT_MOB_REF. Con dt = DT_MOB_REF, identico bit a bit.
+            fdt = cfg%dt / DT_MOB_REF - 1.0_dp
+            allocate(aRr, aRt, aRz, mold=gas%aP_ur)
+            aRr = gas%aP_ur; aRt = gas%aP_uth; aRz = gas%aP_uz
+            if (fdt /= 0.0_dp) then
+                do k = kstart, kend
+                    do j = jstart, jend
+                        do i = istart, iend
+                            if (m%cell_type(i,j,k) == 0) cycle
+                            if (ws_pea_kv(i,j,k) > 0.0_dp) then
+                                aRr(i,j,k) = pea_ref(ws_peal_r(i,j,k), ws_peag_r(i,j,k), i, j, k, fdt)
+                                aRt(i,j,k) = pea_ref(ws_peal_th(i,j,k), ws_peag_th(i,j,k), i, j, k, fdt)
+                                aRz(i,j,k) = pea_ref(ws_peal_z(i,j,k), ws_peag_z(i,j,k), i, j, k, fdt)
+                            else
+                                aRr(i,j,k) = gas%aP_ur(i,j,k) + ws_trg(i,j,k) * fdt
+                                aRt(i,j,k) = gas%aP_uth(i,j,k) + ws_trg(i,j,k) * fdt
+                                aRz(i,j,k) = gas%aP_uz(i,j,k) + ws_trg(i,j,k) * fdt
+                            end if
+                        end do
+                    end do
+                end do
+                call mpi_exchange_halos_3d(aRr, m%topo)
+                call mpi_exchange_halos_3d(aRt, m%topo)
+                call mpi_exchange_halos_3d(aRz, m%topo)
+            end if
             do k = kstart, kend
                 do j = jstart, jend
                     jm = j - 1; jp = j + 1
@@ -293,34 +327,36 @@ contains
                                   + (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) &
                                     * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL) &
                                   + ws_cc(i,j,k) / cfg%dt)
-                        src = min(src, COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / cfg%dt)
+                        ! (M11-1pv) la cota de la demanda tambien a DT_MOB_REF:
+                        ! el juicio es del estado, no del paso
+                        src = min(src, COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / DT_MOB_REF)
                         if (src <= 0.0_dp) cycle
                         cg = 0.0_dp
                         dloc = gas%alpha(i,j,k) * m%vol(i,j,k)
-                        if (link(act_g, i-1, j, k)) cg = cg + gcond(dloc/max(gas%aP_ur(i,j,k),SMALL), &
-                            gas%alpha(i-1,j,k)*m%vol(i-1,j,k)/max(gas%aP_ur(i-1,j,k),SMALL), &
+                        if (link(act_g, i-1, j, k)) cg = cg + gcond(dloc/max(aRr(i,j,k),SMALL), &
+                            gas%alpha(i-1,j,k)*m%vol(i-1,j,k)/max(aRr(i-1,j,k),SMALL), &
                             gas%alpha(i,j,k), gas%alpha(i-1,j,k), m%Ar(i-1,j,k), m%r(i)-m%r(i-1))
-                        if (link(act_g, i+1, j, k)) cg = cg + gcond(dloc/max(gas%aP_ur(i,j,k),SMALL), &
-                            gas%alpha(i+1,j,k)*m%vol(i+1,j,k)/max(gas%aP_ur(i+1,j,k),SMALL), &
+                        if (link(act_g, i+1, j, k)) cg = cg + gcond(dloc/max(aRr(i,j,k),SMALL), &
+                            gas%alpha(i+1,j,k)*m%vol(i+1,j,k)/max(aRr(i+1,j,k),SMALL), &
                             gas%alpha(i,j,k), gas%alpha(i+1,j,k), m%Ar(i,j,k), m%r(i+1)-m%r(i))
-                        if (link(act_g, i, jm, k)) cg = cg + gcond(dloc/max(gas%aP_uth(i,j,k),SMALL), &
-                            gas%alpha(i,jm,k)*m%vol(i,jm,k)/max(gas%aP_uth(i,jm,k),SMALL), &
+                        if (link(act_g, i, jm, k)) cg = cg + gcond(dloc/max(aRt(i,j,k),SMALL), &
+                            gas%alpha(i,jm,k)*m%vol(i,jm,k)/max(aRt(i,jm,k),SMALL), &
                             gas%alpha(i,j,k), gas%alpha(i,jm,k), m%Ath(i,j,k), m%r(i)*(m%theta(j)-m%theta(jm)))
-                        if (link(act_g, i, jp, k)) cg = cg + gcond(dloc/max(gas%aP_uth(i,j,k),SMALL), &
-                            gas%alpha(i,jp,k)*m%vol(i,jp,k)/max(gas%aP_uth(i,jp,k),SMALL), &
+                        if (link(act_g, i, jp, k)) cg = cg + gcond(dloc/max(aRt(i,j,k),SMALL), &
+                            gas%alpha(i,jp,k)*m%vol(i,jp,k)/max(aRt(i,jp,k),SMALL), &
                             gas%alpha(i,j,k), gas%alpha(i,jp,k), m%Ath(i,j,k), m%r(i)*(m%theta(jp)-m%theta(j)))
-                        if (link(act_g, i, j, k-1)) cg = cg + gcond(dloc/max(gas%aP_uz(i,j,k),SMALL), &
-                            gas%alpha(i,j,k-1)*m%vol(i,j,k-1)/max(gas%aP_uz(i,j,k-1),SMALL), &
+                        if (link(act_g, i, j, k-1)) cg = cg + gcond(dloc/max(aRz(i,j,k),SMALL), &
+                            gas%alpha(i,j,k-1)*m%vol(i,j,k-1)/max(aRz(i,j,k-1),SMALL), &
                             gas%alpha(i,j,k), gas%alpha(i,j,k-1), m%Az(i,j,k-1), m%z(k)-m%z(k-1))
-                        if (link(act_g, i, j, k+1)) cg = cg + gcond(dloc/max(gas%aP_uz(i,j,k),SMALL), &
-                            gas%alpha(i,j,k+1)*m%vol(i,j,k+1)/max(gas%aP_uz(i,j,k+1),SMALL), &
+                        if (link(act_g, i, j, k+1)) cg = cg + gcond(dloc/max(aRz(i,j,k),SMALL), &
+                            gas%alpha(i,j,k+1)*m%vol(i,j,k+1)/max(aRz(i,j,k+1),SMALL), &
                             gas%alpha(i,j,k), gas%alpha(i,j,k+1), m%Az(i,j,k), m%z(k+1)-m%z(k))
                         if (cg * P_VENT < src) keep(i,j,k) = .false.
                     end do
                 end do
             end do
             act_g = keep
-            deallocate(keep)
+            deallocate(keep, aRr, aRt, aRz)
             call exchange_logical_halos_p(act_g)
         end block
         end if
@@ -832,6 +868,27 @@ contains
         if (allocated(p_g)) deallocate(p_g, gpr_g, gpth_g, gpz_g)
 
     contains
+
+        ! (M11-1pv) aP equivalente del gas tras la eliminacion parcial (pea2 de
+        ! mod_multiphase, MISMA formula y orden de operaciones) con los
+        ! transitorios de ambas fases desplazados a DT_MOB_REF
+        pure function pea_ref(apl0, apg0, ii, jj, kk, fd) result(ar)
+            real(dp), intent(in) :: apl0, apg0, fd
+            integer, intent(in)  :: ii, jj, kk
+            real(dp) :: ar, apl, apg, kv, det, ng, al_, ag_
+            apl = apl0 + ws_trl(ii,jj,kk) * fd
+            apg = apg0 + ws_trg(ii,jj,kk) * fd
+            ar = apg
+            kv = ws_pea_kv(ii,jj,kk)
+            if (apl <= SMALL .or. apg <= SMALL) return
+            det = apl * apg - kv * kv
+            if (det <= SMALL) return
+            ! las alpha de la ELIMINACION (con n_pc_max > 1 el transporte de alpha
+            ! las cambia entre pasadas)
+            al_ = ws_pea_al(ii,jj,kk); ag_ = ws_pea_ag(ii,jj,kk)
+            ng = ag_ * apl + kv * al_
+            if (al_ * apg + kv * ag_ > SMALL .and. ng > SMALL) ar = ag_ * det / ng
+        end function pea_ref
 
         ! (auditoria 4, A4-2; B4-9/B4-12) Peso de la demanda de volumen del
         ! gas de una celda del lecho: 1 con hueco de poro >= ALPHA_PORE_GAS, 0

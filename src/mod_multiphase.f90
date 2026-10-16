@@ -26,7 +26,8 @@ module mod_multiphase
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bedg_f, gas_face_mask, ws_bub, ws_bub_f, ws_bed_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
                              ws_liq_room, ws_liq_room_valid, &
                              ws_liq_fr, ws_liq_fth, ws_liq_fz, &
-                             ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, ws_Tsrc
+                             ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, ws_Tsrc, &
+                             ws_pea_kv, ws_pea_al, ws_pea_ag, ws_peal_r, ws_peal_th, ws_peal_z, ws_peag_r, ws_peag_th, ws_peag_z
     implicit none
 
 contains
@@ -683,6 +684,9 @@ contains
         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
         real(dp) :: KV, al, ag
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        ! (M11-1pv) aP de cada fase ANTES de la eliminacion, para que F2.31 la
+        ! reevalue con los transitorios a DT_MOB_REF
+        ws_pea_kv = 0.0_dp
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
@@ -692,6 +696,10 @@ contains
                     KV = Kexch(i,j,k) * m%vol(i,j,k)
                     if (KV <= SMALL) cycle
                     al = liq%alpha(i,j,k); ag = gas%alpha(i,j,k)
+                    ws_pea_kv(i,j,k) = KV; ws_pea_al(i,j,k) = al; ws_pea_ag(i,j,k) = ag
+                    ws_peal_r(i,j,k) = liq%aP_ur(i,j,k);  ws_peag_r(i,j,k) = gas%aP_ur(i,j,k)
+                    ws_peal_th(i,j,k) = liq%aP_uth(i,j,k); ws_peag_th(i,j,k) = gas%aP_uth(i,j,k)
+                    ws_peal_z(i,j,k) = liq%aP_uz(i,j,k);  ws_peag_z(i,j,k) = gas%aP_uz(i,j,k)
                     call pea2(liq%ur(i,j,k),  gas%ur(i,j,k),  liq%aP_ur(i,j,k),  gas%aP_ur(i,j,k),  KV, ug_r(i,j,k),  ul_r(i,j,k))
                     call pea2(liq%uth(i,j,k), gas%uth(i,j,k), liq%aP_uth(i,j,k), gas%aP_uth(i,j,k), KV, ug_th(i,j,k), ul_th(i,j,k))
                     call pea2(liq%uz(i,j,k),  gas%uz(i,j,k),  liq%aP_uz(i,j,k),  gas%aP_uz(i,j,k),  KV, ug_z(i,j,k),  ul_z(i,j,k))
