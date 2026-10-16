@@ -450,9 +450,9 @@ full | rebaseline)
     run_script "bed_bath_rest" \
         $PY $INT/check_bedbath.py "$OUT/bed_bath_rest_n4" --xfail "$(xfail_ids bed_bath_rest)"
     run_script "pocket_rise" \
-        $PY $INT/check_pocket.py "$OUT/pocket_rise_n4" --xfail "$(xfail_ids pocket_rise)"
+        $PY $INT/check_pocket.py "$OUT/pocket_rise_n4" --dt 0.005 --xfail "$(xfail_ids pocket_rise)"
     run_script "pocket_rise_dt10" \
-        $PY $INT/check_pocket.py "$OUT/pocket_rise_dt10_n4" --prefix pocket_dt10 \
+        $PY $INT/check_pocket.py "$OUT/pocket_rise_dt10_n4" --prefix pocket_dt10 --dt 0.01 \
         --xfail "$(xfail_ids pocket_rise_dt10)"
     run_script "arc_melt" \
         $PY $INT/check_arcmelt.py "$OUT/arc_melt_n4" --xfail "$(xfail_ids arc_melt)"

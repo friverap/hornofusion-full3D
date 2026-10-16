@@ -732,10 +732,12 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   lecho (la presión del piso baja ~20 kPa, físico) y la bolsa se
   despresuriza y ventea por los huecos de los electrodos (gas ~30 m/s). El
   banco corre con `max_outer` = 20 (con 5 el desfase α–p ventea gas
-  fantasma: 45 m/s) y el juez mide el EXCESO de presión sobre la
-  hidrostática de la estratificación vigente (`max|p|` es siempre el piso y no
-  veía la bolsa: la bolsa tapada de M8-2 da +11.8 kPa), el cierre de masa del
-  gas y el máximo del gas en TODA la corrida. La
+  fantasma: 45 m/s). El juez (auditoría 9, M9-1) mide la presión de la bolsa
+  DIRECTAMENTE frente a la capa de encima conectada al gas (±1 kPa desde
+  t = 0.10 s; sana −6..+12 Pa, tapada +31.8 kPa): ni `max|p|` (siempre el
+  piso) ni el exceso sobre la hidrostática (cae al drenar y deja 13–20 kPa de
+  holgura) veían una retención. Además, el cierre de masa del gas, el máximo
+  del gas en TODA la corrida y el dt real de la corrida. La
   «retención de 0.25–0.3 s» medida en la auditoría 6 era el estado construido
   con la presión del snapshot de origen, NO el modelo; la opción
   `pc_bed_gas_pocket` que se añadió para quitarla se RETIRÓ (con el estado
