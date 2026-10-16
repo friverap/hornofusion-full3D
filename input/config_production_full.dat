@@ -160,7 +160,12 @@ rho_slag     = 2800.0
 cp_slag      = 1200.0
 # k_slag sin efecto en el modelo (retirado: el parser avisa)
 h_contact_sl = 1000.0
-m_slag_init  = 3300.0
+# (auditoria 17, M17-1) sin TALON no hay escoria liquida al arrancar en frio:
+# 3.3 t de escoria a 300 K sobre la chatarra fria (alpha_sl 0.47 en la cima
+# del lecho, ~91 % de la radiacion del MC) es un estado no fisico que ningun
+# banco cubre. La escoria inicial va con el talon (heel_mass > 0: se coloca a
+# heel_T); esta colada arranca sin talon -> sin escoria inicial.
+m_slag_init  = 0.0
 
 # ============================================================
 # TRANSPORTE DE ESPECIES CO / CO₂

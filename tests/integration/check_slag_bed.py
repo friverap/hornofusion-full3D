@@ -8,6 +8,8 @@
                    escoria se sobrecalentaba miles de K bajo el arco: A13-1;
                    medido 1626 K frente a 1808 K del bano)
   slag_bed_mass    la masa de escoria se conserva (audit m_slag, rel --mtol)
+  slag_bed_volfix  (con --volfix-max) |m_gas_volfix| acumulado [kg] <= techo
+                   (gas que la recolocacion de la escoria crea o destruye)
   slag_bed_jumps   (con --max-jumps) columnas cuyo SOPORTE de la escoria (acero
                    saturado mas alto, la regla de slag_buoyancy) salta >= 2
                    celdas entre snapshots consecutivos <= --max-jumps (vigila la
@@ -29,6 +31,7 @@ def main():
     ap.add_argument("--dT", type=float, default=300.0)
     ap.add_argument("--mtol", type=float, default=1e-12)
     ap.add_argument("--max-jumps", type=int, default=None)
+    ap.add_argument("--volfix-max", type=float, default=None)
     ap.add_argument("--xfail", default="")
     a = ap.parse_args()
     chk = Checker(parse_xfail_arg(a.xfail))
@@ -74,6 +77,10 @@ def main():
         chk.report("slag_bed_jumps", n_jump <= a.max_jumps,
                    f"{n_jump} saltos del soporte >= 2 celdas entre snapshots (max {a.max_jumps})")
     rows = list(csv.DictReader(open(os.path.join(a.rundir, "audit.csv"))))
+    if a.volfix_max is not None and "m_gas_volfix" in rows[0]:
+        vf = sum(abs(float(r["m_gas_volfix"])) for r in rows[1:])
+        chk.report("slag_bed_volfix", vf <= a.volfix_max,
+                   f"|m_gas_volfix| acumulado {vf:.3e} kg (techo {a.volfix_max:.1e})")
     m0 = float(rows[0]["m_slag"]); m1 = float(rows[-1]["m_slag"])
     chk.report("slag_bed_mass", abs(m1 - m0) <= a.mtol * max(abs(m0), 1.0),
                f"m_slag {m0:.6f} -> {m1:.6f} kg (rel {abs(m1 - m0) / max(abs(m0), 1.0):.2e})")

@@ -202,7 +202,8 @@ audit_extra_args() {
     case $1 in
         arc_noscrap) echo "--min-liq-arc 0.6" ;;
         outer_conv)  echo "--etol 1e-4" ;;   # lazo convergido (N-A6)
-        # (auditoria 15, M15-4) alpha_clip en xfail: techo ~3x lo medido (8.7e-5 kg)
+        # (auditoria 15, M15-4) techo absoluto del clip (el xfail se retiro al
+        # ceder la escoria; queda como guarda: medido ~1e-11 kg)
         arc_slag)    echo "--clip-abs-max 3e-4" ;;
         *)           echo "" ;;
     esac
@@ -502,11 +503,13 @@ full | rebaseline)
     run_script "arc_melt" \
         $PY $INT/check_arcmelt.py "$OUT/arc_melt_n4" --xfail "$(xfail_ids arc_melt)"
     run_script "arc_slag_bed" \
-        $PY $INT/check_slag_bed.py "$OUT/arc_slag_n4" --xfail "$(xfail_ids arc_slag)"
+        $PY $INT/check_slag_bed.py "$OUT/arc_slag_n4" --volfix-max 0.06 --xfail "$(xfail_ids arc_slag)"
     run_script "arc_melt_slag_heel" \
-        $PY $INT/check_slag_bed.py "$OUT/arc_melt_slag_heel_n4" --max-jumps 0 --xfail "$(xfail_ids arc_melt_slag_heel)"
+        $PY $INT/check_slag_bed.py "$OUT/arc_melt_slag_heel_n4" --max-jumps 0 \
+        --asl-min 1e-3 --al-min 0.05 --volfix-max 0.15 --xfail "$(xfail_ids arc_melt_slag_heel)"
     run_script "arc_melt_slag" \
-        $PY $INT/check_slag_bed.py "$OUT/arc_melt_slag_n4" --xfail "$(xfail_ids arc_melt_slag)"
+        $PY $INT/check_slag_bed.py "$OUT/arc_melt_slag_n4" \
+        --asl-min 1e-3 --al-min 0.05 --volfix-max 0.6 --xfail "$(xfail_ids arc_melt_slag)"
     # Auditoria de energia/masa/arco en TODA corrida de la matriz (auditoria
     # 2, N-C3: antes 13 de 26 no se auditaban; bath_freeze fallaba con err 1)
     # (auditoria 4, B4-21) invariantes en TODA corrida de la matriz (antes

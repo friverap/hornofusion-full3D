@@ -756,13 +756,33 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   limitador la cuenta); se acumula hasta saturar y entonces la escoria se
   recoloca sobre él; un charco encaramado saturado también la sostiene.
   Medido en `arc_melt_slag_heel` (talón + lecho + escoria + fusión, 6 s): 0
-  saltos del soporte, |volfix| 0.05 kg. `test_slag_float` casos 1–6. Medido en arc_slag 10 s:
+  saltos del soporte, |volfix| 0.05 kg y una PELÍCULA de acero sobre la
+  escoria de α_l ≤ 0.016 en hasta 94/288 columnas (auditoría 17, M17-I1: el
+  «0 columnas» de 7b3224f salía de un gate que con α_sl ≤ 0.014 no evaluaba
+  ninguna; `check_slag_bed --asl-min 1e-3 --al-min 0.05` en los bancos con
+  chatarra). `test_slag_float` casos 1–6. Medido en arc_slag 10 s:
   T_sl máx siempre bajo T_l máx (la escoria sigue al baño), clip 3.7 kg →
   1.7e-9. Bancos `arc_slag` y `arc_melt_slag` (escoria sobre lecho que
-  funde, `check_slag_bed.py`). `config_production_full` corre CON escoria;
-  B1 (Ugarte) sin ella. Sin modelar: conducción en la escoria (`k_slag` sin
-  efecto: el transporte entre capas de escoria lo hace la DO, espesor óptico
-  ~5 por celda) y transporte lateral de la escoria.
+  funde, `check_slag_bed.py`). `config_production_full` tiene el modelo
+  activo (`solve_slag true`) pero SIN escoria inicial: sin talón no hay escoria
+  líquida al arrancar en frío (auditoría 17, M17-1: 3.3 t a 300 K sobre la
+  chatarra fría se llevaba ~91 % del MC en la cima del lecho, régimen que ningún
+  banco cubre); con talón (`heel_mass` > 0) la escoria inicial va a `heel_T`.
+  B1 (Ugarte) sin escoria. `slag_buoyancy` recoloca con REMAPEO LAGRANGIANO
+  (cada parcela conserva su entalpía y composición; antes la media de columna
+  daba conductividad vertical infinita, M17-arc1): el transporte entre capas
+  de escoria lo hace la DO (espesor óptico ~5 por celda; `k_slag` sin efecto).
+  **ABIERTO (M17-PV1, desarrollo de modelo)**: la escoria NO está en la
+  restricción de volumen del Poisson. Con la escoria llenando el hueco de la
+  celda de la superficie del baño (sin gas), el limitador la ve llena y el
+  Poisson pide caudal: el baño bajo la escoria se acelera sin tope (arc_slag
+  10 s: u_liq 1.2 m/s, vol_lim 0.1 m³; sin escoria 0.11 m/s). Probado y
+  RECHAZADO: cerrar la cara en el Poisson (u_liq 25 m/s, gas 300), ceder la
+  escoria en el limitador (todo o solo la interfaz: el gas a 300 m/s por la
+  creación/destrucción de gas de slag_buoyancy fuera del Poisson) y dejar libre
+  la celda de la superficie (gas 300, p 1.4 MPa). Ruta: meter α_sl y su cambio
+  por paso en la restricción de volumen del Poisson. No afecta a producción
+  (sin escoria inicial) ni a B1. Sin modelar: transporte lateral.
 - **Régimen de PASO válido del modelo de dos fluidos (auditoría 12, M12-2)**:
   dt de unos pocos ms con CFL ≤ 1 (los parámetros de B1: dt_0 2 ms, dt_min
   1 ms, cfl_max 1). Con pasos fijos ≥ 50 ms, o con el antiguo dt_0 0.5 s /

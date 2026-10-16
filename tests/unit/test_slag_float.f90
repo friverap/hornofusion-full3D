@@ -17,7 +17,8 @@
 ! su nivel. Caso 5: fondo del lecho seco bajo el bano: flota sobre el bano.
 ! Caso 6: fundido saturado ENCIMA de la escoria (inversion): la escoria se
 ! recoloca sobre el. (Un charco encaramado SI la sostiene: la escoria no
-! atraviesa acero.)
+! atraviesa acero.) Caso 7: dos capas quietas conservan su T (remapeo
+! lagrangiano, M17-arc1).
 !===============================================================================
 program test_slag_float
     use mod_constants
@@ -36,7 +37,7 @@ program test_slag_float
     type(slag_t)   :: slag
     type(shared_t) :: sh
     real(dp) :: m0, m1, z_hi, z_bath, z_bed, over
-    integer  :: i, j, k, nr, nth, nz
+    integer  :: i, j, k, nr, nth, nz, kb
     logical  :: ok
 
     call config_set_defaults(cfg)
@@ -140,6 +141,50 @@ program test_slag_float
             ok = .false.
         end if
     end do
+
+    ! ---- caso 7 (auditoria 17, M17-arc1): dos capas de escoria QUIETAS a
+    !      distinta T (1700 K abajo, 1900 K arriba) sobre el bano: el remapeo
+    !      lagrangiano conserva la T de cada capa (antes, la media de columna)
+    liq%alpha = 0.0_dp; sol%alpha_s = 0.0_dp
+    slag%m_sl = 0.0_dp; slag%E_sl = 0.0_dp; slag%alpha_sl = 0.0_dp; slag%m_X = 0.0_dp
+    kb = 0
+    do k = 1, nz
+        if (mesh%z(k) < 1.1_dp) then
+            liq%alpha(:,:,k) = 1.0_dp; kb = k
+        end if
+    end do
+    do j = 1, nth
+        do i = 1, nr
+            if (mesh%cell_type(i,j,kb+1) == 0 .or. mesh%cell_type(i,j,kb+2) == 0) cycle
+            slag%m_sl(i,j,kb+1) = cfg%rho_slag * mesh%vol(i,j,kb+1)
+            slag%E_sl(i,j,kb+1) = slag%m_sl(i,j,kb+1) * cfg%cp_slag * 1700.0_dp
+            slag%m_sl(i,j,kb+2) = 0.5_dp * cfg%rho_slag * mesh%vol(i,j,kb+2)
+            slag%E_sl(i,j,kb+2) = slag%m_sl(i,j,kb+2) * cfg%cp_slag * 1900.0_dp
+        end do
+    end do
+    slag%alpha_sl = slag%m_sl / (cfg%rho_slag * max(mesh%vol, 1.0e-30_dp))
+    gas%alpha = max(0.0_dp, 1.0_dp - liq%alpha - sol%alpha_s - slag%alpha_sl)
+    where (mesh%cell_type == 0) gas%alpha = 0.0_dp
+    m0 = sum(slag%E_sl(1:nr,1:nth,1:nz))
+    call slag_buoyancy(slag, liq, gas, sol, mesh, cfg, sh)
+    m1 = sum(slag%E_sl(1:nr,1:nth,1:nz))
+    do j = 1, nth
+        do i = 1, nr
+            if (slag%m_sl(i,j,kb+2) <= 0.0_dp) cycle
+            if (abs(slag%T_sl(i,j,kb+1) - 1700.0_dp) > 1.0e-6_dp .or. &
+                abs(slag%T_sl(i,j,kb+2) - 1900.0_dp) > 1.0e-6_dp) then
+                print '(A,2F10.3)', '   FAIL caso 7: la escoria quieta no conserva la T de sus capas: ', &
+                    slag%T_sl(i,j,kb+1), slag%T_sl(i,j,kb+2)
+                ok = .false.
+                exit
+            end if
+        end do
+        if (.not. ok) exit
+    end do
+    if (abs(m1 - m0) > 1.0e-12_dp * abs(m0)) then
+        print '(A,ES10.3)', '   FAIL caso 7: energia de la escoria no conservada: ', (m1 - m0) / m0
+        ok = .false.
+    end if
 
     if (ok) then
         print '(A)', ' PASS test_slag_float (la escoria flota sobre el bano dentro de los poros; sin bano, sobre el lecho)'

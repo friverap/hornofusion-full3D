@@ -55,8 +55,14 @@ contains
         real(dp) :: k_top_real, k_top_real_global
         real(dp) :: avail_vol, alpha_add, vol_target
         real(dp) :: vol_local, vol_global, scale_fac
+        ! (auditoria 17, M17-1) la escoria inicial es la de la colada anterior:
+        ! con talon, a la T del talon (antes a T_initial: 300 K sobre la
+        ! chatarra fria en produccion); sin talon, a T_initial
+        real(dp) :: T_sl0
 
         ! Loop bounds
+        T_sl0 = cfg%T_initial
+        if (cfg%heel_mass > 0.0_dp) T_sl0 = cfg%heel_T
         if (m%is_parallel) then
             istart = m%topo%istart; iend = m%topo%iend
             jstart = m%topo%jstart; jend = m%topo%jend
@@ -121,8 +127,8 @@ contains
                     alpha_add = avail_vol / m%vol(i, j, k_local)
                     slag%alpha_sl(i, j, k_local) = alpha_add
                     slag%m_sl(i, j, k_local)     = cfg%rho_slag * avail_vol
-                    slag%T_sl(i, j, k_local)     = cfg%T_initial
-                    slag%E_sl(i, j, k_local)     = slag%m_sl(i, j, k_local) * cfg%cp_slag * cfg%T_initial
+                    slag%T_sl(i, j, k_local)     = T_sl0
+                    slag%E_sl(i, j, k_local)     = slag%m_sl(i, j, k_local) * cfg%cp_slag * T_sl0
                     gas%alpha(i, j, k_local)     = max(0.0_dp, gas%alpha(i, j, k_local) - alpha_add)
                     vol_local = vol_local + avail_vol
                 end do
@@ -159,7 +165,7 @@ contains
                         slag%m_sl(i, j, k_local)     = cfg%rho_slag * slag%alpha_sl(i, j, k_local) &
                                                         * m%vol(i, j, k_local)
                         slag%E_sl(i, j, k_local)     = slag%m_sl(i, j, k_local) * cfg%cp_slag &
-                                                        * cfg%T_initial
+                                                        * T_sl0
                         gas%alpha(i, j, k_local)     = max(0.0_dp, gas%alpha(i, j, k_local) &
                                                             - slag%alpha_sl(i, j, k_local))
                     end do
@@ -376,7 +382,8 @@ contains
 
         integer  :: i, j, k, c, ks, kk, il, jl, kl
         logical  :: owned
-        real(dp) :: Mcol, Ecol, Xcol(N_SLAG_COMP), vneed, room, dv, f
+        real(dp) :: Mcol, Ecol, Xcol(N_SLAG_COMP), vneed, room, dv, f, mrem, mneed, dm
+        integer  :: kold, klast
         real(dp) :: ag_new, dmg, deg, pc
         real(dp), allocatable :: ms_g(:,:,:), es_g(:,:,:), as_g(:,:,:), al_g(:,:,:)
         real(dp), allocatable :: x_g(:,:,:,:), ms_n(:,:,:), es_n(:,:,:), x_n(:,:,:,:)
@@ -449,7 +456,18 @@ contains
                     end do
                 end if
                 if (ks < 0) cycle
+                ! (auditoria 17, M17-arc1) REMAPEO LAGRANGIANO: la masa de la
+                ! pila vieja, de abajo arriba, llena la pila nueva de abajo
+                ! arriba y cada parcela lleva SU entalpia y composicion. Antes
+                ! cada celda recibia la fraccion de la entalpia MEDIA de la
+                ! columna: la escoria quedaba a una sola T en cada paso
+                ! (conductividad vertical infinita; arc_slag: |T(k18)-T(k19)|
+                ! <= 0.03 K y la capa superior emitia a la T de la interfaz).
+                ! Si la escoria no se mueve, cada celda conserva su E. Masa,
+                ! energia y componentes de la columna exactos (el resto de
+                ! redondeo va a la ultima celda llenada).
                 vneed = Mcol / cfg%rho_slag
+                kold = 0; mrem = 0.0_dp; klast = -1
                 do kk = ks, m%nz_g
                     if (vneed <= 0.0_dp) exit
                     if (m%cell_type_global(i,j,kk) == 0) cycle
@@ -459,12 +477,36 @@ contains
                     if (kk == m%nz_g) room = vneed           ! techo: lo que no cupo queda aqui
                     dv = min(vneed, room)
                     if (dv <= 0.0_dp) cycle
-                    f = dv / (Mcol / cfg%rho_slag)
-                    ms_n(i,j,kk) = ms_n(i,j,kk) + f * Mcol
-                    es_n(i,j,kk) = es_n(i,j,kk) + f * Ecol
-                    x_n(i,j,kk,:) = x_n(i,j,kk,:) + f * Xcol
+                    mneed = dv * cfg%rho_slag
+                    klast = kk
+                    do while (mneed > 0.0_dp)
+                        if (mrem <= 0.0_dp) then
+                            ! siguiente parcela vieja (de abajo arriba)
+                            do kold = kold + 1, m%nz_g
+                                if (m%cell_type_global(i,j,kold) == 0) cycle
+                                if (ms_g(i,j,kold) > 0.0_dp) exit
+                            end do
+                            if (kold > m%nz_g) exit
+                            mrem = ms_g(i,j,kold)
+                        end if
+                        dm = min(mneed, mrem)
+                        ms_n(i,j,kk) = ms_n(i,j,kk) + dm
+                        es_n(i,j,kk) = es_n(i,j,kk) + dm * es_g(i,j,kold) / ms_g(i,j,kold)
+                        x_n(i,j,kk,:) = x_n(i,j,kk,:) + dm * x_g(i,j,kold,:) / ms_g(i,j,kold)
+                        mrem = mrem - dm; mneed = mneed - dm
+                    end do
                     vneed = vneed - dv
                 end do
+                ! cierre exacto: lo que quede de la pila vieja (redondeo de
+                ! dv*rho frente a la masa) va a la ultima celda llenada, y la
+                ! energia/componentes se ajustan al total de la columna
+                if (klast > 0) then
+                    ms_n(i,j,klast) = ms_n(i,j,klast) + (Mcol - sum(ms_n(i,j,:)))
+                    es_n(i,j,klast) = es_n(i,j,klast) + (Ecol - sum(es_n(i,j,:)))
+                    do c = 1, N_SLAG_COMP
+                        x_n(i,j,klast,c) = x_n(i,j,klast,c) + (Xcol(c) - sum(x_n(i,j,:,c)))
+                    end do
+                end if
             end do
         end do
 
