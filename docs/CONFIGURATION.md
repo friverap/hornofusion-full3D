@@ -109,11 +109,13 @@ valida al arrancar). Tabla completa en `docs/RUNNING.md` §3.
 
 ### Recomendaciones
 
-- **Test regresión:** `dt = 0.5`, `t_final = 5.0`, `adaptive_dt = false`
-- **Bore-in:** `dt = 5.0`, `t_final = 300.0` (electrodos tardan ~200 s en bajar)
+- **Regresión:** `make test-quick` / `make test-full` (los configs legados de
+  `input/` con `dt` 0.1–5 s están en el régimen roto, auditoría 15, M15-1).
+- **Bore-in:** `config_300s_borein.dat` es la PLANTILLA de las campañas
+  (`campaigns/b1_ugarte.json` fija dt 2 ms); sola aborta (dt 5 > dt_max 1).
 - **Producción (auditorías 12-13):** los parámetros de paso de B1: `dt = 0.002`, `dt_min = 0.001`, `dt_max = 0.01`, `max_outer = 5`, `cfl_max = 1.0`, `adaptive_dt = true`. El modelo de dos fluidos se rompe con pasos ≥ 50 ms (y con el antiguo `dt = 0.5`, `dt_min = 0.01`). En la práctica el lazo externo no converge en `max_outer` y el paso queda en `dt_min`: ~7e6 pasos para 7200 s; dimensionar `output_freq` (≥ 50000) y `audit_freq` en consecuencia.
 
-El tiempo de bore-in es `(H_total - H_bowl) / BORE_IN_SPEED = (4.5 - 0.6) / 0.01 ≈ 390 s`.  
+El tiempo de bore-in: el electrodo baja ~2 m a 0.01 m/s, ≈ 200 s.  
 El cubo 2 se carga en `t = t_bucket2_charge = 2100 s`.
 
 ---
@@ -369,7 +371,7 @@ Si el archivo no existe, se usa la receta por defecto:
 |------|-------------|-------------|-----------|---------------|
 | Test (10 pasos) | 1 | 1 | 10 | 10 |
 | Bore-in (60 pasos) | 5 | 1 | 12 | 60 |
-| Producción (10080 pasos) | 200 | 20 | ~50 | ~504 |
+| Producción (~7.2e6 pasos en dt_min) | 50000 | 500 | ~140 (~250 MB c/u, ~35 GB) | ~14 000 |
 
 ---
 
@@ -414,92 +416,16 @@ Defaults de `config_set_defaults` (`mod_config_3d.f90`), que es la verdad.
 | `slag_x_feo_init` / `slag_x_cao_init` / `slag_x_sio2_init` / `slag_x_mgo_init` | 0.25 / 0.35 / 0.16 / 0.08 | composición inicial de la escoria |
 | `slag_eta_feo` | 0.3 | rendimiento de la oxidación Fe → FeO con el O₂ remanente |
 
-## Ejemplo completo: config de producción
+## Config de producción
 
-```ini
-# config_production_full.dat
-# ============================================================
-# MALLA
-# ============================================================
-nr      = 60
-ntheta  = 120
-nz      = 84
-stretch_r = 1.5
-stretch_z = 1.5
+La referencia es el propio `input/config_production_full.dat` (su cabecera
+explica cada parámetro de paso, costo y salida). No se copia aquí: el ejemplo
+que había divergió del archivo (dt_max 0.02 y max_outer 10 frente a 0.01 y 5;
+auditoría 16, M16-I1) y usaba varias claves por línea con `;`, que el parser
+NO separa. Valores clave: `dt 0.002`, `dt_min 0.001`, `dt_max 0.01`,
+`cfl_max 1.0`, `max_outer 5`, `solve_slag false`, `output_freq 50000`,
+`monitor_freq 500`, `audit_freq 5`, `output_dir output_prod2`.
 
-# ============================================================
-# GEOMETRÍA
-# ============================================================
-R_shell  = 3.80
-H_total  = 4.50
-H_bowl   = 0.60
-R_bowl   = 2.50
-R_pcd    = 0.85
-R_elec   = 0.30
-
-# ============================================================
-# TIEMPO
-# ============================================================
-dt           = 0.002
-dt_min       = 0.001
-dt_max       = 0.02
-cfl_max      = 1.0
-t_final      = 7200.0
-adaptive_dt  = true
-
-# ============================================================
-# SIMPLE
-# ============================================================
-max_outer     = 10
-max_inner_mom = 5
-max_inner_pres= 50
-alpha_u = 0.3;  alpha_p = 0.7;  alpha_T = 0.7
-alpha_k = 0.5;  alpha_eps = 0.5
-
-# ============================================================
-# MATERIAL
-# ============================================================
-rho_steel = 7500.0;  T_solidus = 1600.0;  T_liquidus = 1809.0
-cp_s = 400.0;  cp_l = 696.4;  h_fusion = 247000.0
-k_s = 35.0;  k_l = 30.0
-T_initial = 300.0;  T_ambient = 300.0
-
-# ============================================================
-# FÍSICA
-# ============================================================
-solve_flow = true;  solve_energy = true;  solve_melting = true
-solve_turb = true;  solve_radiation = true;  solve_chemistry = true
-solve_arc = true;  solve_multiphase = true
-
-# ============================================================
-# ARCO
-# ============================================================
-frac_rad = 0.50;  frac_conv = 0.30;  frac_elec = 0.20
-arc_w = 30.0
-
-# ============================================================
-# ESCORIA
-# ============================================================
-solve_slag = false   # auditoria 13 (A13-1): sin salida termica bajo el arco
-rho_slag = 2800.0;  cp_slag = 1200.0;  k_slag = 1.5
-h_contact_sl = 1000.0;  m_slag_init = 3300.0
-
-# ============================================================
-# ESPECIES
-# ============================================================
-solve_species = true
-Sc_t_species = 0.7
-
-# ============================================================
-# CARGA
-# ============================================================
-t_bucket2_charge = 2100.0
-
-# ============================================================
-# SALIDA
-# ============================================================
-output_freq = 50000;  monitor_freq = 500;  audit_freq = 5;  output_dir = output_prod2
-```
 
 ## Sondas de diagnóstico (desactivadas por defecto)
 
