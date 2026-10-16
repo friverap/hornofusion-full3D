@@ -135,6 +135,13 @@ module mod_workspace
     ! aP de cada fase ANTES de la eliminacion y K V (ws_pea_kv > 0 marca la
     ! celda). Los escriben solve_momentum_3d / partial_elimination en cada
     ! iteracion externa; no son estado del reinicio.
+    ! (auditoria 12, M12-E1) HISTERESIS del test de venteo de F2.31 dentro del
+    ! paso (solo con dt >= 2 DT_MOB_REF): una celda excluida en una llamada del
+    ! paso queda excluida el resto del paso (la clasificacion parpadeaba entre iteraciones: bath_fill paso 50
+    ! excluia 0, 0, 144, 240, 288 celdas y el lazo no convergia). Se reinicia
+    ! al entrar a cada paso: no es estado del reinicio.
+    logical, allocatable :: ws_f231_excl(:,:,:)
+    integer, save :: ws_f231_step = -1
     real(dp), allocatable :: ws_trg(:,:,:), ws_trl(:,:,:), ws_pea_kv(:,:,:), ws_pea_al(:,:,:), ws_pea_ag(:,:,:)
     real(dp), allocatable :: ws_peal_r(:,:,:), ws_peal_th(:,:,:), ws_peal_z(:,:,:)
     real(dp), allocatable :: ws_peag_r(:,:,:), ws_peag_th(:,:,:), ws_peag_z(:,:,:)
@@ -373,6 +380,9 @@ contains
         allocate(ws_lim_step, mold=ws_aW); ws_lim_step = 1.0_dp
         allocate(ws_cc, ws_cc_new, ws_cc_drop, ws_qin_cap, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
         ws_qin_cap = 0.0_dp
+        allocate(ws_f231_excl(lbound(ws_aW,1):ubound(ws_aW,1), lbound(ws_aW,2):ubound(ws_aW,2), &
+                              lbound(ws_aW,3):ubound(ws_aW,3)))
+        ws_f231_excl = .false.
         allocate(ws_trg, ws_trl, ws_pea_kv, ws_pea_al, ws_pea_ag, ws_peal_r, ws_peal_th, ws_peal_z, &
                  ws_peag_r, ws_peag_th, ws_peag_z, mold=ws_aW)
         ws_trg = 0.0_dp; ws_trl = 0.0_dp; ws_pea_kv = 0.0_dp; ws_pea_al = 0.0_dp; ws_pea_ag = 0.0_dp

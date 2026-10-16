@@ -275,8 +275,16 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   fases a 2 ms (`pea_ref`; aP previos, KV y α guardados en
   `partial_elimination`). Con el dt de la corrida la conductancia crecía ∝ dt
   (5× a 10 ms, 250× a dt de producción) y el juicio dependía del integrador.
-  Con dt = 2 ms es idéntico bit a bit; con dt mayor el error solo puede ir
-  hacia excluir de más. Residuo: el acarreo `ws_cc/dt` sigue con el dt real.
+  Con dt = 2 ms es idéntico bit a bit. El acarreo `ws_cc/dt` se juzga
+  escalado por min(1, dt_ref/dt) (auditoría 12, M12-1: existe por la cota
+  estrecha de la FUENTE y a dt grande hacía parpadear la celda paso a paso;
+  puede subestimar el acarreo de reacciones: el error ya no es solo hacia
+  excluir de más). **Histéresis dentro del paso (M12-E1) solo con dt ≥ 2
+  DT_MOB_REF**: excluida una vez, excluida el resto del paso (el juicio
+  desplazado parpadeaba entre iteraciones externas: bath_fill a 10 ms, energía
+  por paso 0.94 → 0.26 de lo permitido); en el régimen de B1 (~1–3 ms) no se
+  aplica: sacaría del acople todo el paso a celdas excluidas en un iterado
+  intermedio, el mecanismo del muro, y no hay juez de B1 disponible.
 - **FUERZA VERTICAL BALANCEADA POR CARAS (13-oct-2026, `liq_balanced_force`,
   default on)**: líquido continuo y gas ven la presión REDUCIDA de la mezcla,
   media de caras de `(p_N − p_P)/δz + W_f` (`liq_weight_f`/`cell_w`), con W_f

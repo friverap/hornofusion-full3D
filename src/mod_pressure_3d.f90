@@ -97,7 +97,7 @@ contains
                                           residual)
         use mod_workspace, only: ensure_workspace, own_weight_face, liq_own_weight, mix_cell_weight, &
                                  liq_cont_fallback, bed_rel_face, ws_cc, ws_cc_new, ws_cc_drop, ws_qin_cap, ws_qin_step, ws_p_n, aW => ws_aW, &
-            ws_trg, ws_trl, ws_pea_kv, ws_pea_al, ws_pea_ag, ws_peal_r, ws_peal_th, ws_peal_z, ws_peag_r, ws_peag_th, ws_peag_z, &
+            ws_trg, ws_trl, ws_f231_excl, ws_f231_step, ws_pea_kv, ws_pea_al, ws_pea_ag, ws_peal_r, ws_peal_th, ws_peal_z, ws_peag_r, ws_peag_th, ws_peag_z, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
@@ -326,7 +326,14 @@ contains
                                              - gas%rho(i,j,k)) &
                                   + (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) &
                                     * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL) &
-                                  + ws_cc(i,j,k) / cfg%dt)
+                                  + ws_cc(i,j,k) / cfg%dt * min(1.0_dp, DT_MOB_REF / cfg%dt))
+                        ! (auditoria 12, M12-1) el ACARREO existe porque la cota
+                        ! de la FUENTE (0.2 alpha V/dt) es mas estrecha que la
+                        ! del test a DT_MOB_REF; contarlo entero a dt grande
+                        ! hacia parpadear la celda paso a paso (sale, se
+                        ! descarta el acarreo, vuelve, lo acumula). En el
+                        ! estado de referencia (dt_ref) ese volumen se habria
+                        ! emitido: se escala por dt_ref/dt (identico a 2 ms).
                         ! (M11-1pv) la cota de la demanda tambien a DT_MOB_REF:
                         ! el juicio es del estado, no del paso
                         src = min(src, COMP_SRC_CAP * gas%alpha(i,j,k) * m%vol(i,j,k) / DT_MOB_REF)
@@ -355,6 +362,24 @@ contains
                     end do
                 end do
             end do
+            ! (M12-E1) histeresis dentro del paso: excluida una vez (en
+            ! cualquier llamada del paso, incluidas las pasadas n_pc_max),
+            ! excluida hasta el paso siguiente. SOLO con dt >= 2 DT_MOB_REF: el
+            ! parpadeo que corrige lo induce el juicio desplazado a dt_ref
+            ! (bath_fill a 10 ms: 0,0,144,240,288 celdas por iteracion; energia
+            ! por paso 0.94 -> 0.26 de lo permitido). En el regimen de B1
+            ! (dt ~1-3 ms) la clasificacion queda como se calibro: la
+            ! histeresis alli saca del acople todo el paso a celdas excluidas en
+            ! un iterado intermedio (el mecanismo del muro de B1) y no hay juez
+            ! de B1 con que validarlo.
+            if (cfg%dt >= 2.0_dp * DT_MOB_REF) then
+                if (probe_current_step() /= ws_f231_step) then
+                    ws_f231_excl = .false.
+                    ws_f231_step = probe_current_step()
+                end if
+                ws_f231_excl = ws_f231_excl .or. (act_g .and. .not. keep)
+                keep = keep .and. .not. ws_f231_excl
+            end if
             act_g = keep
             deallocate(keep, aRr, aRt, aRz)
             call exchange_logical_halos_p(act_g)
