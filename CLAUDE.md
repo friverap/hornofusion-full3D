@@ -750,8 +750,13 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   búsqueda (un barrido contiguo desde el fondo metía la escoria en la bolsa de
   pocket_rise); un charco encaramado SÍ la sostiene; la inversión acero sobre
   escoria se deshace cuando el fundido satura. Sin acero, la cima del lecho
-  (nunca la cima de una cesta cargada sobre baño, M4). `test_slag_float`
-  casos 1–6. Medido en arc_slag 10 s:
+  (la cesta cargada sobre baño ya no la arrastra, M4, salvo que una celda de
+  la cesta llegue a saturarse de fundido). LÍMITE (dirigida de 00e249e, S): el
+  fundido que llega DESDE ARRIBA no atraviesa la escoria por advección (el
+  limitador la cuenta); se acumula hasta saturar y entonces la escoria se
+  recoloca sobre él; un charco encaramado saturado también la sostiene.
+  Medido en `arc_melt_slag_heel` (talón + lecho + escoria + fusión, 6 s): 0
+  saltos del soporte, |volfix| 0.05 kg. `test_slag_float` casos 1–6. Medido en arc_slag 10 s:
   T_sl máx siempre bajo T_l máx (la escoria sigue al baño), clip 3.7 kg →
   1.7e-9. Bancos `arc_slag` y `arc_melt_slag` (escoria sobre lecho que
   funde, `check_slag_bed.py`). `config_production_full` corre CON escoria;

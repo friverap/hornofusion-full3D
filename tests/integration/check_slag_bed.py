@@ -8,6 +8,10 @@
                    escoria se sobrecalentaba miles de K bajo el arco: A13-1;
                    medido 1626 K frente a 1808 K del bano)
   slag_bed_mass    la masa de escoria se conserva (audit m_slag, rel --mtol)
+  slag_bed_jumps   (con --max-jumps) columnas cuyo SOPORTE de la escoria (acero
+                   saturado mas alto, la regla de slag_buoyancy) salta >= 2
+                   celdas entre snapshots consecutivos <= --max-jumps (vigila la
+                   oscilacion de la escoria con creacion/destruccion de gas)
 Uso: check_slag_bed.py RUNDIR [--xfail ids]
 """
 import argparse, csv, glob, os, sys
@@ -24,12 +28,14 @@ def main():
     ap.add_argument("--asl-min", type=float, default=0.1)
     ap.add_argument("--dT", type=float, default=300.0)
     ap.add_argument("--mtol", type=float, default=1e-12)
+    ap.add_argument("--max-jumps", type=int, default=None)
     ap.add_argument("--xfail", default="")
     a = ap.parse_args()
     chk = Checker(parse_xfail_arg(a.xfail))
     print(f"[slag_bed] {a.rundir}")
     snaps = sorted(glob.glob(os.path.join(a.rundir, "eaf3d_*.h5")))
     n_bad = 0; worst = 0.0; Tsl = 0.0; Tref = 0.0
+    n_jump = 0; ks_prev = None
     for f in snaps:
         with h5py.File(f, "r") as h:
             fl = h["fields"]
@@ -45,6 +51,14 @@ def main():
                 above = al[ks.max() + 1:, j, i]
                 if above.size and above.max() > a.al_min:
                     n_bad += 1; worst = max(worst, float(above.max()))
+        if als is not None:
+            cap = np.maximum(np.where(als >= 1e-2, 1.0 - als - 0.015, 1.0 - als), 0.0)
+            sat = al >= np.minimum(0.3, np.maximum(0.01, 0.5 * cap))
+            idx = np.arange(nz)[:, None, None]
+            ks = np.where(sat.any(axis=0), np.max(np.where(sat, idx, -1), axis=0), -1)
+            if ks_prev is not None:
+                n_jump += int((np.abs(ks - ks_prev) >= 2).sum())
+            ks_prev = ks
         m = asl > 1e-3
         if m.any():
             Tsl = max(Tsl, float(T_sl[m].max()))
@@ -56,6 +70,9 @@ def main():
                f"{n_bad} columnas-snapshot con acero encima de la escoria (max alpha_l {worst:.3e}; {len(snaps)} snapshots)")
     chk.report("slag_bed_T", Tsl <= Tref + a.dT,
                f"T_sl max {Tsl:.0f} K frente a max(T_l, T_s) {Tref:.0f} K + {a.dT:.0f}")
+    if a.max_jumps is not None:
+        chk.report("slag_bed_jumps", n_jump <= a.max_jumps,
+                   f"{n_jump} saltos del soporte >= 2 celdas entre snapshots (max {a.max_jumps})")
     rows = list(csv.DictReader(open(os.path.join(a.rundir, "audit.csv"))))
     m0 = float(rows[0]["m_slag"]); m1 = float(rows[-1]["m_slag"])
     chk.report("slag_bed_mass", abs(m1 - m0) <= a.mtol * max(abs(m0), 1.0),

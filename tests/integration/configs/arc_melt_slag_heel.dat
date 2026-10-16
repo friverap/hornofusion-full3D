@@ -1,0 +1,33 @@
+# Banco arc_melt_slag_heel (oct-2026, dirigida de 00e249e): arc_melt_slag CON
+# talon de bano (60 t) bajo el lecho: escoria + lecho que funde + bano dentro del
+# lecho. Vigila el soporte de la escoria (acero saturado mas alto): sin saltos
+# de >= 2 celdas entre snapshots (cada 10 pasos), sin acero sobre la escoria,
+# volfix acotado. Medido a 6 s: 0 saltos, |volfix| 0.05 kg, u_gas 99 m/s.
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+dt = 0.01
+t_final = 2.0
+adaptive_dt = false
+T_initial = 1550.0
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = false
+solve_radiation = true
+solve_chemistry = false
+solve_arc = true
+solve_multiphase = true
+alpha_p = 0.3
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 200
+audit_freq = 1
+output_freq = 10
+monitor_freq = 50
+solve_slag = true
+m_slag_init = 500.0
+heel_mass = 60000.0
+heel_T = 1850.0

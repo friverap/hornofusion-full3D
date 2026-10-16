@@ -419,6 +419,8 @@ full | rebaseline)
     # (oct-2026) escoria sobre un lecho que funde: modelo termico de la
     # escoria y la escoria que cede al acero (auditorias dirigidas 17-18)
     run_case arc_melt_slag 4
+    # (oct-2026) con talon de bano bajo el lecho: soporte de la escoria
+    run_case arc_melt_slag_heel 4
 
 
     run_script "decomposition_cold_n1" \
@@ -501,6 +503,8 @@ full | rebaseline)
         $PY $INT/check_arcmelt.py "$OUT/arc_melt_n4" --xfail "$(xfail_ids arc_melt)"
     run_script "arc_slag_bed" \
         $PY $INT/check_slag_bed.py "$OUT/arc_slag_n4" --xfail "$(xfail_ids arc_slag)"
+    run_script "arc_melt_slag_heel" \
+        $PY $INT/check_slag_bed.py "$OUT/arc_melt_slag_heel_n4" --max-jumps 0 --xfail "$(xfail_ids arc_melt_slag_heel)"
     run_script "arc_melt_slag" \
         $PY $INT/check_slag_bed.py "$OUT/arc_melt_slag_n4" --xfail "$(xfail_ids arc_melt_slag)"
     # Auditoria de energia/masa/arco en TODA corrida de la matriz (auditoria

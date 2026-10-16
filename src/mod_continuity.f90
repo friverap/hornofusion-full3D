@@ -570,8 +570,9 @@ contains
         ! vez de ir al clip, ocupando el volumen de la escoria; el recorte
         ! final ya no corta acero por la escoria y slag_buoyancy, al final del
         ! paso, sube la escoria desplazada (rehace la columna sobre el hueco
-        ! liq_cap - alpha_l) y restituye la suma de fracciones. El acero nunca
-        ! queda encima de la escoria. Sin escoria (alpha_sl < ALPHA_CUTOFF en
+        ! liq_cap - alpha_l) y restituye la suma de fracciones. (El fundido que
+        ! llega desde ARRIBA no la cruza aqui: se acumula hasta saturar y
+        ! slag_buoyancy recoloca la escoria sobre el.) Sin escoria (alpha_sl < ALPHA_CUTOFF en
         ! k+1) no actua: identico. Medido en arc_slag 10 s: el clip crecia de
         ! 0.03 a 1 kg/s.
         !-------------------------------------------------------------------

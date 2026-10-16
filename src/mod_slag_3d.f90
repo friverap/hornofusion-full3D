@@ -242,7 +242,8 @@ contains
                     w = ksl / (ksl + kfl + SMALL)
                     sa = sh%S_arc(i,j,k)
                     ! (dirigida M1-M4, Medio 1) P_elec/P_conv van al METAL por
-                    ! la cavidad SOLO si la celda tiene bano continuo; en una
+                    ! la cavidad si la celda tiene bano continuo (rampa 0.2-0.4
+                    ! en alpha_l); en una
                     ! celda sin el (poros de chatarra llenos de escoria) la
                     ! escoria se lleva su parte kappa de todo el S_arc: si no,
                     ! el gas de poro (alpha_g 0.015) lo recibia entero
