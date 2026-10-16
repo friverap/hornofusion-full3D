@@ -388,7 +388,12 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   no plantean demanda ni acarrean. (M6-1) La cota `COMP_SRC_CAP` es el 20 %
   del gas que ATRAVIESA la celda en el paso (propio + entrante), no del
   propio: en un poro con caudal pasante la contracción del gas caliente que
-  entra vale 1.2–1.6 × el gas propio por paso.
+  entra vale 1.2–1.6 × el gas propio por paso. (M7-5) El caudal entrante de
+  la cota (`ws_qin_cap`) se CONGELA en la primera llamada del paso (la cota
+  no depende del iterado `u*` de cada iteración externa) y solo cuenta caras
+  con gas RESUELTO (α_g ≥ ALPHA_CUTOFF) en las dos celdas: nunca acumularlo
+  antes de esa guardia ni con la α de cara simétrica (caudal fantasma ½α_P u
+  A desde vecinas con gas evanescente de `ws_gas_reach`).
   (B5-1/2) el nodo líquido de la cara es continuo por `ws_liq_cont` y el área
   lleva la rampa (1 − fbed). (B5-4) la rama de UNA fase (flujo sin dos
   fluidos) es legada: `oneflow_test` la vigila con xfail con causa (corriente
