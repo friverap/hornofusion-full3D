@@ -323,7 +323,14 @@ contains
                             ! bloqueado +58 % (0.74 -> 1.17 m3) y gas recreado
                             ! por la EOS 11.5 -> 16.9 %: agranda el desfase
                             ! alpha-p (vol_lim, la familia de B1). No adoptado.
-                            room = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k), slag_vs_steel(alpha_slag(i,j,k))) &
+                            ! (la escoria NO cede aqui: dejar entrar por advencion
+                            ! el acero del bano en la capa de escoria bombeaba el
+                            ! gas -arc_slag: u_gas a la cota de 300 m/s en 5 s-;
+                            ! la cede solo el derrame del sobrellenado, y la
+                            ! inversion acero sobre escoria la deshace
+                            ! slag_buoyancy, que apoya la escoria en el acero
+                            ! saturado mas alto)
+                            room = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k), alpha_slag(i,j,k)) &
                                    - liq%alpha(i,j,k)) * &
                                    liq%rho(i,j,k) * m%vol(i,j,k) / dt_sub &
                                    + outflow - sol%mdot(i,j,k)

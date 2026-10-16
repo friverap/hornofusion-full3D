@@ -216,7 +216,7 @@ contains
         real(dp), intent(in), optional :: S_rad(-1:,-1:,-1:)
 
         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: dE, ksl, kfl, w, sa
+        real(dp) :: dE, ksl, kfl, w, sa, fb
 
         if (m%is_parallel) then
             istart = m%topo%istart; iend = m%topo%iend
@@ -246,8 +246,13 @@ contains
                     ! celda sin el (poros de chatarra llenos de escoria) la
                     ! escoria se lleva su parte kappa de todo el S_arc: si no,
                     ! el gas de poro (alpha_g 0.015) lo recibia entero
-                    if (present(S_rad) .and. liq%alpha(i,j,k) >= ALPHA_LIQ_CONT) &
+                    ! rampa 0.2-0.4 en alpha_l (la de M4-7), no un corte duro
+                    ! en ALPHA_LIQ_CONT (dirigida de 126c426, bajo 1)
+                    if (present(S_rad)) then
+                        fb = min(1.0_dp, max(0.0_dp, (liq%alpha(i,j,k) - 0.2_dp) / 0.2_dp))
                         sa = min(max(S_rad(i,j,k), 0.0_dp), sh%S_arc(i,j,k))
+                        sa = sa + (1.0_dp - fb) * (sh%S_arc(i,j,k) - sa)
+                    end if
                     dE = sa * w * m%vol(i,j,k) * cfg%dt
                     slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + dE
                     sh%S_arc(i,j,k)  = sh%S_arc(i,j,k) - sa * w
@@ -405,24 +410,26 @@ contains
                     x_n(i,j,:,:) = x_g(i,j,:,:)
                     cycle
                 end if
-                ! soporte: la escoria (liquida) FLOTA SOBRE EL BANO y se
-                ! infiltra en los poros de la chatarra a ese nivel (hueco
-                ! liq_cap - alpha_l). El bano es la columna de celdas SATURADAS
-                ! de acero CONTIGUA desde el fondo (alpha_l >= la mitad de su
-                ! liq_cap): un charco encaramado (fusion en sitio, pelicula que
-                ! drena) no la arrastra, y un bano dentro de un lecho denso
-                ! (liq_cap < 0.3) si se detecta (dirigida M1-M4, Medio 3). Solo
-                ! sin bano se apoya en la cima del lecho; sin material, la celda
-                ! activa mas baja. (oct-2026, M4: con 'bano O lecho' la cesta 2
-                ! cargada sobre bano con escoria la subia metros.)
+                ! soporte: la escoria (liquida) descansa sobre el ACERO
+                ! SATURADO MAS ALTO de la columna y se infiltra en los poros
+                ! de la chatarra a ese nivel (hueco liq_cap - alpha_l).
+                ! Saturada = alpha_l >= min(ALPHA_LIQ_CONT, max(ALPHA_FLOW_CUTOFF,
+                ! liq_cap/2)): fuera del lecho es la regla clasica (0.3); en un
+                ! lecho denso (liq_cap < 0.3) es relativa a su hueco (el bano
+                ! si se detecta, dirigida M1-M4 Medio 3b). Una bolsa de gas o un
+                ! fondo seco bajo el acero NO cortan la busqueda (dirigida de
+                ! 126c426, Medio 1: el barrido contiguo desde el fondo metia la
+                ! escoria DEBAJO de la capa saturada de pocket_rise). Un charco
+                ! encaramado tambien la sostiene: la escoria no atraviesa acero.
+                ! Solo sin acero se apoya en la cima del lecho (M4: con 'bano O
+                ! lecho' la cesta 2 sobre bano con escoria la subia metros);
+                ! sin material, la celda activa mas baja.
                 ks = -1
-                do k = 1, m%nz_g
+                do k = m%nz_g, 1, -1
                     if (m%cell_type_global(i,j,k) == 0) cycle
-                    if (al_g(i,j,k) >= max(ALPHA_FLOW_CUTOFF, &
-                            0.5_dp * liq_cap(as_g(i,j,k), 0.0_dp))) then
-                        ks = k
-                    else
-                        exit
+                    if (al_g(i,j,k) >= min(ALPHA_LIQ_CONT, max(ALPHA_FLOW_CUTOFF, &
+                            0.5_dp * liq_cap(as_g(i,j,k), 0.0_dp)))) then
+                        ks = k; exit
                     end if
                 end do
                 if (ks < 0) then

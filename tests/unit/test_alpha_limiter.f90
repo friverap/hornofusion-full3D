@@ -31,8 +31,6 @@
 !      tampoco escoria DENTRO del lecho por su gas de poro (10, auditoria 15);
 !      una escoria TRAZA en el lecho no corta la cascada (11); la interfaz
 !      acero+escoria dentro del lecho no se cruza (12).
-!  13. Acero encima de una celda de escoria del lecho con velocidad hacia
-!      abajo: baja a ella (la escoria cede).
 !===============================================================================
 program test_alpha_limiter
     use mod_constants
@@ -183,33 +181,6 @@ program test_alpha_limiter
     F_expected = (1.0_dp - liq_cap(0.2_dp, 0.0_dp)) * liq%rho(3,4,2) * mesh%vol(3,4,2) / cfg%dt
     if (abs(ws_Fz(3,4,2) - F_expected) > 1.0e-9_dp * F_expected) then
         print '(A,2ES12.4)', '   FAIL caso 4: ws_Fz no lleva el derrame: ', ws_Fz(3,4,2), F_expected
-        ok = .false.
-    end if
-
-    ! ---- caso 13 (dirigida M1-M4, Medio 4): acero que FUNDE ENCIMA de una
-    ! celda llena de escoria (lecho, poros llenos de escoria a nivel del
-    ! bano) baja hacia ella: la escoria cede (antes el limitador admitia
-    ! liq_cap(a_s, a_sl) - a_l = 0 y el acero quedaba ENCIMA de la escoria)
-    liq%ur = 0.0_dp; liq%uth = 0.0_dp; liq%uz = -0.5_dp
-    sol%mdot = 0.0_dp; sol%alpha_s = 0.0_dp; slag%alpha_sl = 0.0_dp
-    liq%alpha = 0.0_dp
-    sol%alpha_s(3,4,1) = 1.0_dp
-    sol%alpha_s(3,4,2) = 0.5_dp; slag%alpha_sl(3,4,2) = liq_cap(0.5_dp, 0.0_dp)
-    sol%alpha_s(3,4,3) = 0.5_dp; liq%alpha(3,4,3) = 0.3_dp
-    a_old = liq%alpha
-    m0 = liquid_mass()
-    call solve_volume_fraction(liq, gas, sol, slag%alpha_sl, a_old, mesh, cfg)
-    m1 = liquid_mass()
-    if (abs(m1 - m0) > 1.0e-12_dp * m0) then
-        print '(A,ES10.3)', '   FAIL caso 13: masa no conservada, err = ', (m1 - m0) / m0
-        ok = .false.
-    end if
-    if (liq%alpha(3,4,2) <= 1.0e-6_dp) then
-        print '(A,F10.6)', '   FAIL caso 13: el acero no bajo a la celda de escoria: a_l(k=2) = ', liq%alpha(3,4,2)
-        ok = .false.
-    end if
-    if (liq%alpha(3,4,2) > liq_cap(0.5_dp, 0.0_dp) + 1.0e-12_dp) then
-        print '(A,F10.6)', '   FAIL caso 13: la celda de escoria sobre su liq_cap sin escoria: ', liq%alpha(3,4,2)
         ok = .false.
     end if
 

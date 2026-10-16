@@ -739,9 +739,19 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   49 → 4.6 MJ interceptados). El P_rad DIRECTO (no MC) lo deposita el modelo
   en la superficie (baño/chatarra), no en la escoria. La escoria como superficie de TODO el arco se probó dos veces y
   NO es física (se lleva ~43 MW, +72 K/s en su celda). (4) La escoria CEDE al
-  acero (A11-2): el exceso bajo una interfaz de escoria entra en su celda
-  (el recorte final no corta acero por la escoria) y `slag_buoyancy` la sube
-  al final del paso; el acero nunca queda encima. Medido en arc_slag 10 s:
+  acero en el DERRAME del sobrellenado (A11-2; `slag_vs_steel`): el exceso
+  bajo una interfaz de escoria entra en su celda (el recorte final no corta
+  acero por la escoria) y `slag_buoyancy` la sube al final del paso. NO en el
+  limitador ni en el Poisson: dejar entrar por advección el acero del baño en
+  la capa de escoria BOMBEABA el gas (arc_slag: u_gas a la cota de 300 m/s en
+  5 s; bisecado). (5) Soporte de la escoria (`slag_buoyancy`): el acero
+  SATURADO MÁS ALTO de la columna (α_l ≥ min(0.3, max(0.01, liq_cap/2)):
+  relativo en lechos densos); una bolsa de gas o un fondo seco no cortan la
+  búsqueda (un barrido contiguo desde el fondo metía la escoria en la bolsa de
+  pocket_rise); un charco encaramado SÍ la sostiene; la inversión acero sobre
+  escoria se deshace cuando el fundido satura. Sin acero, la cima del lecho
+  (nunca la cima de una cesta cargada sobre baño, M4). `test_slag_float`
+  casos 1–6. Medido en arc_slag 10 s:
   T_sl máx siempre bajo T_l máx (la escoria sigue al baño), clip 3.7 kg →
   1.7e-9. Bancos `arc_slag` y `arc_melt_slag` (escoria sobre lecho que
   funde, `check_slag_bed.py`). `config_production_full` corre CON escoria;

@@ -12,8 +12,12 @@
 ! exacta, toda la escoria por debajo de z_bano + 0.5 m (sin escoria en la
 ! cima del lecho) y sum alpha <= 1.
 ! Caso 2: sin bano (lecho seco solo): la escoria se apoya en la cima del lecho.
-! Caso 3: un charco encaramado no la arrastra. Caso 4: bano dentro de un lecho
-! denso (alpha_l < 0.3): la escoria flota a su nivel.
+! Caso 3: capa saturada sobre una bolsa de gas: la escoria va encima, nunca
+! en la bolsa. Caso 4: bano dentro de un lecho denso (alpha_l < 0.3): flota a
+! su nivel. Caso 5: fondo del lecho seco bajo el bano: flota sobre el bano.
+! Caso 6: fundido saturado ENCIMA de la escoria (inversion): la escoria se
+! recoloca sobre el. (Un charco encaramado SI la sostiene: la escoria no
+! atraviesa acero.)
 !===============================================================================
 program test_slag_float
     use mod_constants
@@ -74,19 +78,36 @@ program test_slag_float
         ok = .false.
     end if
 
-    ! ---- caso 3 (dirigida M1-M4, Medio 3a): charco ENCARAMADO (alpha_l 0.45
-    !      en una celda del lecho seco a ~2 m): no arrastra la escoria
+    ! ---- caso 3 (dirigida de 126c426, Medio 1): bano (< 0.9 m), BOLSA de gas
+    !      en el lecho (0.9-1.2 m) y capa SATURADA de acero (1.2-1.6 m), como
+    !      pocket_rise: la
+    !      escoria va encima de la capa, nunca dentro de la bolsa
     liq%alpha = 0.0_dp; sol%alpha_s = 0.0_dp
     do k = 1, nz
-        if (mesh%z(k) < 1.1_dp) then
-            liq%alpha(:,:,k) = 1.0_dp
-        else if (mesh%z(k) < 2.5_dp) then
-            sol%alpha_s(:,:,k) = 0.5_dp
-            if (abs(mesh%z(k) - 2.0_dp) < 0.5_dp * (mesh%zf(k) - mesh%zf(k-1))) liq%alpha(:,:,k) = 0.45_dp
+        if (mesh%z(k) < 2.5_dp) sol%alpha_s(:,:,k) = 0.5_dp
+        if (mesh%z(k) < 0.9_dp) liq%alpha(:,:,k) = liq_cap(0.5_dp, 0.0_dp)   ! bano bajo la bolsa
+        if (mesh%z(k) > 1.2_dp .and. mesh%z(k) < 1.6_dp) liq%alpha(:,:,k) = liq_cap(0.5_dp, 0.0_dp)
+    end do
+    call put_slag_on_top(500.0_dp)
+    call slag_buoyancy(slag, liq, gas, sol, mesh, cfg, sh)
+    do k = 1, nz
+        if (mesh%z(k) < 1.6_dp .and. any(slag%m_sl(1:nr,1:nth,k) > 0.0_dp .and. &
+                                          mesh%cell_type(1:nr,1:nth,k) /= 0)) then
+            print '(A,F8.3)', '   FAIL caso 3: escoria en la bolsa/bajo la capa saturada, z = ', mesh%z(k)
+            ok = .false.
         end if
     end do
-    call put_slag_on_top(3000.0_dp)
-    call run_and_check(3, z_bath + 0.5_dp)
+
+    ! ---- caso 5 (dirigida de 126c426, Medio 1): FONDO del lecho seco (una
+    !      celda de chatarra sin acero en el piso) y bano encima hasta 1.1 m:
+    !      la escoria flota sobre el bano, no en la cima del lecho (bed_drain)
+    liq%alpha = 0.0_dp; sol%alpha_s = 0.0_dp
+    do k = 1, nz
+        if (mesh%z(k) < 2.5_dp) sol%alpha_s(:,:,k) = 0.5_dp
+        if (mesh%z(k) < 1.1_dp .and. k > 2) liq%alpha(:,:,k) = liq_cap(0.5_dp, 0.0_dp)
+    end do
+    call put_slag_on_top(500.0_dp)
+    call run_and_check(5, z_bath + 0.6_dp)
 
     ! ---- caso 4 (Medio 3b): bano DENTRO de un lecho denso (phi 0.8 desde el
     !      piso hasta 2.5 m, poros llenos de acero hasta 1.1 m: alpha_l 0.185
@@ -98,6 +119,27 @@ program test_slag_float
     end do
     call put_slag_on_top(500.0_dp)
     call run_and_check(4, z_bath + 0.6_dp)
+
+    ! ---- caso 6 (dirigida M1-M4, Medio 4): INVERSION acero sobre escoria
+    !      (fundido de la cesta 2 que satura los poros ENCIMA de la escoria, a
+    !      1.6-2.0 m, con la escoria en los poros a nivel del bano 1.1-1.6 m):
+    !      slag_buoyancy apoya la escoria en el acero saturado MAS ALTO -> la
+    !      escoria queda por encima del fundido (no queda acero encima)
+    liq%alpha = 0.0_dp; sol%alpha_s = 0.0_dp
+    do k = 1, nz
+        if (mesh%z(k) < 2.5_dp) sol%alpha_s(:,:,k) = 0.5_dp
+        if (mesh%z(k) < 1.1_dp) liq%alpha(:,:,k) = liq_cap(0.5_dp, 0.0_dp)
+        if (mesh%z(k) > 1.6_dp .and. mesh%z(k) < 2.0_dp) liq%alpha(:,:,k) = liq_cap(0.5_dp, 0.0_dp)
+    end do
+    call put_slag_on_top(500.0_dp)
+    call slag_buoyancy(slag, liq, gas, sol, mesh, cfg, sh)
+    do k = 1, nz
+        if (mesh%z(k) < 2.0_dp .and. any(slag%m_sl(1:nr,1:nth,k) > 0.0_dp .and. &
+                                          mesh%cell_type(1:nr,1:nth,k) /= 0)) then
+            print '(A,F8.3)', '   FAIL caso 6: escoria bajo el fundido saturado (inversion), z = ', mesh%z(k)
+            ok = .false.
+        end if
+    end do
 
     if (ok) then
         print '(A)', ' PASS test_slag_float (la escoria flota sobre el bano dentro de los poros; sin bano, sobre el lecho)'

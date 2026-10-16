@@ -392,11 +392,12 @@ contains
         end if
     end subroutine pea_coeffs
 
-    ! (oct-2026, A11-2 / dirigida M1-M4 Medio 4) La ESCORIA CEDE AL ACERO: para
-    ! el hueco del acero (limitador, derrame, hueco de poro del Poisson) una
-    ! escoria resuelta (>= ALPHA_CUTOFF) no ocupa volumen; el acero la desplaza
-    ! y slag_buoyancy la recoloca sobre el bano al final del paso. Una traza
-    ! (< ALPHA_CUTOFF) cuenta como antes.
+    ! (oct-2026, A11-2) La ESCORIA CEDE AL ACERO en el DERRAME del sobrellenado
+    ! (cap y hueco de la cascada): una escoria resuelta (>= ALPHA_CUTOFF) no
+    ! ocupa volumen del acero; slag_buoyancy la recoloca sobre el acero al
+    ! final del paso. NO en el limitador ni en el Poisson: dejar entrar por
+    ! advencion el acero del bano en la capa de escoria bombeaba el gas
+    ! (arc_slag: u_gas a 300 m/s en 5 s). Una traza (< ALPHA_CUTOFF) cuenta.
     pure elemental function slag_vs_steel(asl) result(a)
         real(dp), intent(in) :: asl
         real(dp) :: a
