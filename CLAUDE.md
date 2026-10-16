@@ -374,7 +374,19 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   normalizada: película más fina que `ARC_SURF_H` sobre chatarra suelta =
   chatarra; traza de chatarra frente a película casi en su umbral = baño).
   Ni la cruda sola (película fina pasaba por baño) ni la normalizada sola (el
-  baño con chatarra sumergida dependía de la malla); nunca volver a una
+  baño con chatarra sumergida dependía de la malla). **LÍMITE DEL MODELO
+  (auditoría 11, M11-1arc/M11-2arc)**: con fracciones promediadas por capa la
+  clasificación NO puede ser independiente de la malla. Un charco h sobre un
+  lecho inundado φ da en su capa α_s = φ(dz−h)/dz y α_l = 1 − α_s: idéntico a
+  un lecho inundado a ras con φ' = α_s (M4-8 lo clasifica chatarra, la verdad
+  es baño); ninguna función de (α_s, α_l, dz) de UNA capa acierta los dos. Y
+  el filtro por celda α_l ≥ 0.3 sube el umbral efectivo del baño a
+  max(14 mm, 0.3 dz). Converge solo con dz ≪ espesor del charco. Tres reglas
+  de una capa (M8-1 normalizada, M9-3, la vigente) solo movieron el problema
+  de sitio: NO intentar otra. Lo único que puede mejorarlo es mirar la capa de
+  abajo (candidato C2 de la auditoría 11: exceso de líquido con la
+  composición de la capa inferior; falla con chatarra seca que asoma en malla
+  gruesa y cambia A3-4/A5-1), y solo con el juez de B1; nunca volver a una
   búsqueda aparte del baño por celda. (M5-1) la DO guarda su reparto por fase
   (`sh%w_rad_l`, αⁿ) y la energía resta la emisión con ESE peso: con α^{n+1}
   se creaba energía en cada paso con fusión (melt_forced 1 %). (M5-2) el lazo
