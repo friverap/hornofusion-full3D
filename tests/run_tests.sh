@@ -153,6 +153,7 @@ audit_xfail_prefix() {
     case $1 in
         cold_10step)   echo audit_cold ;;
         arc_noscrap)   echo audit_arcnoscrap ;;
+        arc_slag)      echo audit_arcslag ;;
         noflow_energy) echo audit_noflow ;;
         bed_flood)     echo audit_bedflood ;;
         bath_fill_mix) echo audit_mix ;;
@@ -344,6 +345,8 @@ full | rebaseline)
     run_case bed_flood 4
     # Arco sin chatarra (auditoria 12-oct, C1): respaldo de P_rad
     run_case arc_noscrap 4
+    # (auditoria 12, M12-1arc) arco sobre escoria en su propia capa (malla fina)
+    run_case arc_slag 4
     # Cesta 2 durante la corrida (auditoria A5): carga aditiva y auditada
     run_case cold_bucket2 4
     # Drenaje del lecho con la fuerza balanceada (auditoria 2, N-C1)

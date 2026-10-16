@@ -116,3 +116,8 @@ audit_oneflow:energy_balance_step
 # la presion y rho_gas del snapshot de origen; con la hidrostatica y la EOS
 # coherentes pasa (0.44: el gas de poro fuera del acople sigue a la presion
 # mientras el fondo se reajusta, familia N-M4).
+# arc_slag (auditoria 12): con escoria en su propia capa (malla fina) la
+# interfaz llena de escoria corta el relevo del derrame y el exceso del
+# limitador bajo ella va al clip auditado (A11-2 con escoria): 8.7e-5 kg en
+# 5e-5 kg en 0.05 s, 2e-10 del bano. Mecanismo abierto (mover escoria en el relevo).
+audit_arcslag:alpha_clip

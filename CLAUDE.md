@@ -383,18 +383,21 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   chatarra; traza de chatarra frente a película casi en su umbral = baño).
   Ni la cruda sola (película fina pasaba por baño) ni la normalizada sola (el
   baño con chatarra sumergida dependía de la malla). **LÍMITE DEL MODELO
-  (auditoría 11, M11-1arc/M11-2arc)**: con fracciones promediadas por capa la
-  clasificación NO puede ser independiente de la malla. Un charco h sobre un
-  lecho inundado φ da en su capa α_s = φ(dz−h)/dz y α_l = 1 − α_s: idéntico a
-  un lecho inundado a ras con φ' = α_s (M4-8 lo clasifica chatarra, la verdad
-  es baño); ninguna función de (α_s, α_l, dz) de UNA capa acierta los dos. Y
-  el filtro por celda α_l ≥ 0.3 sube el umbral efectivo del baño a
-  max(14 mm, 0.3 dz). Converge solo con dz ≪ espesor del charco. Tres reglas
-  de una capa (M8-1 normalizada, M9-3, la vigente) solo movieron el problema
-  de sitio: NO intentar otra. Lo único que puede mejorarlo es mirar la capa de
-  abajo (candidato C2 de la auditoría 11: exceso de líquido con la
-  composición de la capa inferior; falla con chatarra seca que asoma en malla
-  gruesa y cambia A3-4/A5-1), y solo con el juez de B1; nunca volver a una
+  (auditorías 11-12, M11-1arc/M11-2arc/M12-2arc)**: con fracciones
+  promediadas por capa, un charco h sobre un lecho inundado φ da en su capa
+  α_s = φ(dz−h)/dz y α_l ≈ 1 − α_s, indistinguible de un lecho inundado a ras
+  con φ' = α_s. La regla de los dos umbrales (fracción cruda) lo clasifica
+  chatarra solo si α_s ≥ α_l, así que la ambigüedad existe solo con φ > 0.5 y
+  para h ≤ dz(1 − 0.5/φ). Con φ de la receta (0.45–0.55): banda de 4.5 mm en
+  la malla de producción (dz 0.049) y 7.6 mm en la media (B1), POR DEBAJO de
+  `ARC_SURF_H` (14 mm: ahí una película sobre chatarra es chatarra por la
+  propia regla), así que en producción y en B1 no hay error; solo en las
+  mallas gruesas de los bancos (dz > 0.154 m; nz 16 da 25 mm). El filtro por
+  celda α_l ≥ 0.3 sube el umbral efectivo del baño a max(14 mm, 0.3 dz): 15 mm
+  en producción (nulo), 84 mm en los bancos. No intentar otra regla de UNA
+  capa (tres intentos solo movieron la frontera); si hiciera falta, mirar la
+  capa de abajo (exceso de líquido con la composición inferior), con efecto
+  solo en mallas gruesas; nunca volver a una
   búsqueda aparte del baño por celda. (M5-1) la DO guarda su reparto por fase
   (`sh%w_rad_l`, αⁿ) y la energía resta la emisión con ESE peso: con α^{n+1}
   se creaba energía en cada paso con fusión (melt_forced 1 %). (M5-2) el lazo
@@ -707,6 +710,17 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
 - **Orden del paso**: fusión+colapso ANTES del lazo SIMPLE
   (update_solid_premelt); interfase DESPUÉS de los solves de energía
   (update_solid_postenergy) — moverla antes duplica el calor.
+- **El arco NO ve la escoria (límite vigente, auditoría 12, M12-1arc)**:
+  `ksurf` y el impacto del MC usan solo α_l; en la malla de producción la
+  escoria (~6 cm) ocupa su propia capa, el arco la salta y deposita en el baño
+  de debajo (la escoria solo intercepta lo de su celda; el reparto tiende a cero
+  al refinar). Hacerla superficie (α_l + α_sl) se probó y NO se adoptó: la
+  escoria se lleva casi todo el arco y no tiene salida de calor (no emite en la
+  DO, sin transporte lateral, acople con el baño de cientos de J por paso,
+  ninguno con la chatarra; la escoria en los poros del lecho se volvía
+  superficie durante la perforación): miles de K en decenas de segundos.
+  Requiere ANTES un modelo térmico de la escoria (emisión de la escoria densa,
+  acople escoria–chatarra y escoria–baño). Banco `arc_slag` (nz 64, 10 t).
 - **Régimen de PASO válido del modelo de dos fluidos (auditoría 12, M12-2)**:
   dt de unos pocos ms con CFL ≤ 1 (los parámetros de B1: dt_0 2 ms, dt_min
   1 ms, cfl_max 1). Con pasos fijos ≥ 50 ms, o con el antiguo dt_0 0.5 s /
