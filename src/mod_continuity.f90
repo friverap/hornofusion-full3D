@@ -88,7 +88,7 @@ contains
         integer, parameter :: N_SPILL_MAX = 128   ! >= nz de produccion (84): la cascada avanza una celda por pasada
         integer :: ilim, ipass, n_it_max
         real(dp) :: inflow, outflow, room, dlim, dlim_glob, clip_call, clipE_call
-        real(dp) :: dlim_exit, cap, exc, room_up, give, exc_glob, spill_call
+        real(dp) :: dlim_exit, cap, exc, room_up, give, exc_glob, spill_call, fslag
         real(dp) :: dlim_prev, dist_est, dist_exit
         real(dp) :: exc0_glob
         real(dp) :: vol_dalpha, vol_lim, vol_unl
@@ -461,17 +461,25 @@ contains
                         room_up = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k+1) &
                                   - alpha_slag(i,j,k+1) - liq%alpha(i,j,k+1)) &
                                   * m%vol(i,j,k+1) / m%vol(i,j,k)
-                        ! (auditoria 15) con ESCORIA arriba el tope es su
-                        ! liq_cap, no el hueco fisico: dentro del lecho la
-                        ! escoria llena hasta liq_cap y deja libre el gas de
-                        ! poro; con el hueco fisico la cascada metia acero en
-                        ! ese poro y la celda (liq_cap 0) lo cedia arriba: el
-                        ! acero cruzaba la escoria (M9-4). Fuera del lecho
-                        ! liq_cap ES el hueco fisico: identico.
-                        if (alpha_slag(i,j,k+1) >= ALPHA_CUTOFF) &
-                            room_up = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k+1), &
-                                      alpha_slag(i,j,k+1)) - liq%alpha(i,j,k+1)) &
-                                      * m%vol(i,j,k+1) / m%vol(i,j,k)
+                        ! (auditoria 15) con ESCORIA arriba, dentro del lecho,
+                        ! se reserva el gas de poro en proporcion al llenado de
+                        ! escoria: la escoria llena hasta liq_cap y deja libre
+                        ! ALPHA_PORE_GAS; con el hueco fisico la cascada metia
+                        ! acero en ese poro y la celda (liq_cap 0) lo cedia
+                        ! arriba: el acero cruzaba la escoria (M9-4). Celda
+                        ! llena de escoria: tope liq_cap; escoria traza: el
+                        ! hueco fisico de F2.8 (un tope liq_cap con umbral
+                        ! ALPHA_CUTOFF mandaba al clip la cascada del lecho
+                        ! por 1e-6 de escoria, auditoria dirigida 16). Fuera
+                        ! del lecho no hay poro reservado: identico.
+                        if (alpha_slag(i,j,k+1) > 0.0_dp .and. pore_floor_on .and. &
+                            sol%alpha_s(i,j,k+1) >= ALPHA_BED) then
+                            fslag = min(1.0_dp, alpha_slag(i,j,k+1) / max(1.0_dp - &
+                                    sol%alpha_s(i,j,k+1) - ALPHA_PORE_GAS, SMALL))
+                            room_up = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k+1) &
+                                      - alpha_slag(i,j,k+1) - liq%alpha(i,j,k+1) &
+                                      - ALPHA_PORE_GAS * fslag) * m%vol(i,j,k+1) / m%vol(i,j,k)
+                        end if
                         ws_lim(i,j,k) = min(give, room_up)
                         ! (auditoria 8) una celda de arriba LLENA DE LIQUIDO no
                         ! bloquea: recibe el exceso y lo cede en la pasada

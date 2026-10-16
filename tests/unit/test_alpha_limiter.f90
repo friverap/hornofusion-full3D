@@ -26,7 +26,8 @@
 !   5-9. Celda LLENA sobre la sobrellena (auditorias 8-9): de liquido, el
 !      exceso la atraviesa (5; encadenado por dos celdas, 9); de escoria,
 !      de costra solida o la interfaz acero|escoria, nunca (6-8, M9-4);
-!      tampoco escoria DENTRO del lecho por su gas de poro (10, auditoria 15).
+!      tampoco escoria DENTRO del lecho por su gas de poro (10, auditoria 15);
+!      una escoria TRAZA en el lecho no corta la cascada (11).
 !===============================================================================
 program test_alpha_limiter
     use mod_constants
@@ -199,6 +200,11 @@ program test_alpha_limiter
     !    el hueco FISICO y llenaba ese 0.015 de acero, que la celda (liq_cap 0)
     !    cedia arriba: el acero cruzaba la escoria por el poro (M9-4 roto)
     call spill_case(10, 0.5_dp, 0.0_dp, liq_cap(0.5_dp, 0.0_dp))
+    ! 11 (auditoria dirigida 16): k=3 lecho con ESCORIA TRAZA (1e-4) y acero
+    !    en su liq_cap: la escoria no es una capa, la cascada de F2.8 debe
+    !    subir el exceso por el poro sin clip (un tope liq_cap con umbral
+    !    ALPHA_CUTOFF lo mandaba al clip)
+    call spill_case(11, 0.5_dp, liq_cap(0.5_dp, 1.0e-4_dp), 1.0e-4_dp)
 
     if (ok) then
         print '(A)', ' PASS test_alpha_limiter'
@@ -236,6 +242,15 @@ contains
                 .or. abs(liq%alpha(3,4,5) - a4_exp) > 1.0e-12_dp) then
                 print '(A,4F10.6)', '   FAIL caso 9: el exceso no atraveso las dos celdas llenas: ', &
                     liq%alpha(3,4,3), liq%alpha(3,4,4), liq%alpha(3,4,5), a4_exp
+                ok = .false.
+            end if
+        else if (icase == 11) then
+            if (abs(m1 - m0) > 1.0e-12_dp * m0) then
+                print '(A,ES10.3)', '   FAIL caso 11: el exceso fue al clip con escoria traza, err = ', (m1 - m0) / m0
+                ok = .false.
+            end if
+            if (liq%alpha(3,4,4) <= 0.0_dp) then
+                print '(A)', '   FAIL caso 11: el exceso no subio por el poro con escoria traza'
                 ok = .false.
             end if
         else if (icase == 5) then
