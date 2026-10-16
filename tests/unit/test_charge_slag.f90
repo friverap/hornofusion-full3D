@@ -31,7 +31,7 @@ program test_charge_slag
     type(solid_t)  :: sol
     type(slag_t)   :: slag
     type(shared_t) :: sh
-    real(dp), allocatable :: al(:,:,:), asl(:,:,:)
+    real(dp), allocatable :: al(:,:,:), asl(:,:,:), ms0(:,:,:)
     real(dp) :: over, m_added, z_slag_top, z_scrap_low
     integer  :: i, j, k, nr, nth, nz, iu, ks
     logical  :: ok
@@ -111,21 +111,27 @@ program test_charge_slag
     where (mesh%cell_type == 0)
         sol%alpha_s = 0.0_dp; sol%m_s = 0.0_dp; sol%E_s = 0.0_dp; gas%alpha = 0.0_dp
     end where
-    m_added = sum(sol%m_s(1:nr,1:nth,1:nz))
+    allocate(ms0, mold=sol%m_s); ms0 = sol%m_s
     call charge_scrap(sol, gas, mesh, cfg, 2, sh)
-    z_scrap_low = huge(1.0_dp); over = 0.0_dp
-    do k = ks + 5, nz
+    ! (auditoria 12, A12-T2) la chatarra NUEVA se localiza en TODO el dominio
+    ! (donde aumento m_s), no solo por encima del lecho: una carga dentro del
+    ! lecho tambien debe fallar
+    z_scrap_low = huge(1.0_dp); over = 0.0_dp; m_added = 0.0_dp
+    do k = 1, nz
         do j = 1, nth
             do i = 1, nr
                 if (mesh%cell_type(i,j,k) == 0) cycle
-                if (sol%m_s(i,j,k) > 0.0_dp) z_scrap_low = min(z_scrap_low, mesh%zf(k-1))
+                if (sol%m_s(i,j,k) > ms0(i,j,k) * (1.0_dp + 1.0e-12_dp) + 1.0e-12_dp) &
+                    z_scrap_low = min(z_scrap_low, mesh%zf(k-1))
+                m_added = m_added + sol%m_s(i,j,k) - ms0(i,j,k)
+                over = max(over, sol%alpha_s(i,j,k) + al(i,j,k) + asl(i,j,k) - 1.0_dp)
             end do
         end do
     end do
-    m_added = sum(sol%m_s(1:nr,1:nth,1:nz)) - m_added
-    print '(A,F9.3,A,F6.3,A,F6.3)', '   lecho sobre el bano: masa cargada ', m_added, ' kg  base de la carga ', &
-        z_scrap_low, ' m  cima del lecho ', mesh%zf(ks + 4)
-    if (abs(m_added - 3000.0_dp) > 1.0e-9_dp * 3000.0_dp .or. z_scrap_low < mesh%zf(ks + 4) - 1.0e-12_dp) then
+    print '(A,F9.3,A,F6.3,A,F6.3,A,ES10.3)', '   lecho sobre el bano: masa cargada ', m_added, ' kg  base de la carga ', &
+        z_scrap_low, ' m  cima del lecho ', mesh%zf(ks + 4), '  sobrellenado ', over
+    if (abs(m_added - 3000.0_dp) > 1.0e-9_dp * 3000.0_dp .or. z_scrap_low < mesh%zf(ks + 4) - 1.0e-12_dp &
+        .or. over > 1.0e-12_dp) then
         print '(A)', '   FAIL con lecho de la cesta 1 sobre el bano, la carga no va sobre el lecho'
         ok = .false.
     end if
