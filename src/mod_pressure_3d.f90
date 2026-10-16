@@ -96,7 +96,7 @@ contains
     subroutine solve_pressure_correction(liq, gas, gas_T_ref, sh, m, cfg, &
                                           residual)
         use mod_workspace, only: ensure_workspace, own_weight_face, liq_own_weight, mix_cell_weight, &
-                                 liq_cont_fallback, bed_rel_face, ws_cc, ws_cc_new, ws_cc_drop, ws_qin_cap, ws_qin_step, ws_p_n, aW => ws_aW, &
+                                 liq_cont_fallback, bed_rel_face, ws_cc, ws_cc_new, ws_cc_drop, ws_qin_cap, ws_qin_step, ws_aPtr_g, ws_p_n, aW => ws_aW, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
             aT => ws_aT, aP => ws_aP, Su => ws_Su, ws_liq_cont, ws_liq_cont_valid, &
             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_Fc_valid, &
@@ -242,7 +242,9 @@ contains
         ag_eff = gas%alpha
 
         ! F2.31 (oct-2026): el gas de una celda es fluido del acople solo si
-        ! su conductancia REAL en esta ecuacion de presion puede ventear su
+        ! su conductancia en esta ecuacion de presion (con el transitorio del
+        ! momento evaluado a DT_MOB_REF, auditoria 9 M9-5: la clasificacion
+        ! no depende del dt de la corrida) puede ventear su
         ! propia demanda de compresibilidad con menos de P_VENT. Es el
         ! criterio de Hilfer (Phys. Rev. E 58 (1998) 2090: la subfase
         ! conectada es "the region inside of which an external applied
@@ -261,9 +263,22 @@ contains
             .and. .not. cfg%pc_gas_spring) then
         block
             real(dp), parameter :: P_VENT = 5.0e3_dp
-            real(dp) :: cg, src, dloc
+            real(dp) :: cg, src, dloc, fdt
             logical, allocatable :: keep(:,:,:)
+            real(dp), allocatable :: aRr(:,:,:), aRt(:,:,:), aRz(:,:,:)
             allocate(keep, mold=act_g); keep = act_g
+            ! (auditoria 9, M9-5) conductancia con el transitorio del momento
+            ! del gas evaluado con DT_MOB_REF (como la movilidad de F2.16,
+            ! M8-2): con el del dt de la corrida, en celdas de inercia
+            ! comparable al arrastre la conductancia crecia con dt (5x a
+            ! 10 ms frente a 2 ms) y el test dependia del integrador. Forma
+            ! aP + tr (dt/dt_ref - 1): exacta (bit a bit) con dt = dt_ref.
+            call mpi_exchange_halos_3d(ws_aPtr_g, m%topo)
+            fdt = cfg%dt / DT_MOB_REF - 1.0_dp
+            allocate(aRr, aRt, aRz, mold=gas%aP_ur)
+            aRr = gas%aP_ur + ws_aPtr_g * fdt
+            aRt = gas%aP_uth + ws_aPtr_g * fdt
+            aRz = gas%aP_uz + ws_aPtr_g * fdt
             do k = kstart, kend
                 do j = jstart, jend
                     jm = j - 1; jp = j + 1
@@ -297,30 +312,30 @@ contains
                         if (src <= 0.0_dp) cycle
                         cg = 0.0_dp
                         dloc = gas%alpha(i,j,k) * m%vol(i,j,k)
-                        if (link(act_g, i-1, j, k)) cg = cg + gcond(dloc/max(gas%aP_ur(i,j,k),SMALL), &
-                            gas%alpha(i-1,j,k)*m%vol(i-1,j,k)/max(gas%aP_ur(i-1,j,k),SMALL), &
+                        if (link(act_g, i-1, j, k)) cg = cg + gcond(dloc/max(aRr(i,j,k),SMALL), &
+                            gas%alpha(i-1,j,k)*m%vol(i-1,j,k)/max(aRr(i-1,j,k),SMALL), &
                             gas%alpha(i,j,k), gas%alpha(i-1,j,k), m%Ar(i-1,j,k), m%r(i)-m%r(i-1))
-                        if (link(act_g, i+1, j, k)) cg = cg + gcond(dloc/max(gas%aP_ur(i,j,k),SMALL), &
-                            gas%alpha(i+1,j,k)*m%vol(i+1,j,k)/max(gas%aP_ur(i+1,j,k),SMALL), &
+                        if (link(act_g, i+1, j, k)) cg = cg + gcond(dloc/max(aRr(i,j,k),SMALL), &
+                            gas%alpha(i+1,j,k)*m%vol(i+1,j,k)/max(aRr(i+1,j,k),SMALL), &
                             gas%alpha(i,j,k), gas%alpha(i+1,j,k), m%Ar(i,j,k), m%r(i+1)-m%r(i))
-                        if (link(act_g, i, jm, k)) cg = cg + gcond(dloc/max(gas%aP_uth(i,j,k),SMALL), &
-                            gas%alpha(i,jm,k)*m%vol(i,jm,k)/max(gas%aP_uth(i,jm,k),SMALL), &
+                        if (link(act_g, i, jm, k)) cg = cg + gcond(dloc/max(aRt(i,j,k),SMALL), &
+                            gas%alpha(i,jm,k)*m%vol(i,jm,k)/max(aRt(i,jm,k),SMALL), &
                             gas%alpha(i,j,k), gas%alpha(i,jm,k), m%Ath(i,j,k), m%r(i)*(m%theta(j)-m%theta(jm)))
-                        if (link(act_g, i, jp, k)) cg = cg + gcond(dloc/max(gas%aP_uth(i,j,k),SMALL), &
-                            gas%alpha(i,jp,k)*m%vol(i,jp,k)/max(gas%aP_uth(i,jp,k),SMALL), &
+                        if (link(act_g, i, jp, k)) cg = cg + gcond(dloc/max(aRt(i,j,k),SMALL), &
+                            gas%alpha(i,jp,k)*m%vol(i,jp,k)/max(aRt(i,jp,k),SMALL), &
                             gas%alpha(i,j,k), gas%alpha(i,jp,k), m%Ath(i,j,k), m%r(i)*(m%theta(jp)-m%theta(j)))
-                        if (link(act_g, i, j, k-1)) cg = cg + gcond(dloc/max(gas%aP_uz(i,j,k),SMALL), &
-                            gas%alpha(i,j,k-1)*m%vol(i,j,k-1)/max(gas%aP_uz(i,j,k-1),SMALL), &
+                        if (link(act_g, i, j, k-1)) cg = cg + gcond(dloc/max(aRz(i,j,k),SMALL), &
+                            gas%alpha(i,j,k-1)*m%vol(i,j,k-1)/max(aRz(i,j,k-1),SMALL), &
                             gas%alpha(i,j,k), gas%alpha(i,j,k-1), m%Az(i,j,k-1), m%z(k)-m%z(k-1))
-                        if (link(act_g, i, j, k+1)) cg = cg + gcond(dloc/max(gas%aP_uz(i,j,k),SMALL), &
-                            gas%alpha(i,j,k+1)*m%vol(i,j,k+1)/max(gas%aP_uz(i,j,k+1),SMALL), &
+                        if (link(act_g, i, j, k+1)) cg = cg + gcond(dloc/max(aRz(i,j,k),SMALL), &
+                            gas%alpha(i,j,k+1)*m%vol(i,j,k+1)/max(aRz(i,j,k+1),SMALL), &
                             gas%alpha(i,j,k), gas%alpha(i,j,k+1), m%Az(i,j,k), m%z(k+1)-m%z(k))
                         if (cg * P_VENT < src) keep(i,j,k) = .false.
                     end do
                 end do
             end do
             act_g = keep
-            deallocate(keep)
+            deallocate(keep, aRr, aRt, aRz)
             call exchange_logical_halos_p(act_g)
         end block
         end if

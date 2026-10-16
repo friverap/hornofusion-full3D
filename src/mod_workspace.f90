@@ -129,6 +129,12 @@ module mod_workspace
     ! cota de compresibilidad no depende asi del iterado (diseno original de
     ! COMP_SRC_CAP). Se reconstruye al entrar a cada paso: no es estado.
     real(dp), allocatable :: ws_qin_cap(:,:,:)
+    ! (auditoria 9, M9-5) termino TRANSITORIO del aP del momento del gas
+    ! (max(alpha^n, APM) rho^n V/dt o su forma evanescente), por celda: F2.31
+    ! lo reevalua con DT_MOB_REF para que el test de venteo no dependa del dt
+    ! de la corrida. Lo escribe solve_momentum_3d (gas) en cada llamada (0 en
+    ! las celdas que no ensambla); no es estado del reinicio.
+    real(dp), allocatable :: ws_aPtr_g(:,:,:)
     integer, save :: ws_qin_step = -1
     ! Presion manometrica al INICIO del paso (auditoria M25): referencia
     ! p^n de la densidad rho(P0 + p^n, T^n) en la fuente de compresibilidad.
@@ -362,8 +368,8 @@ contains
         allocate(ws_aE, ws_aS, ws_aN, ws_aB, ws_aT, ws_aP, ws_Su, mold=ws_aW)
         allocate(ws_Fr, ws_Fth, ws_Fz, ws_Mr, ws_Mth, ws_Mz, ws_lim, mold=ws_aW)
         allocate(ws_lim_step, mold=ws_aW); ws_lim_step = 1.0_dp
-        allocate(ws_cc, ws_cc_new, ws_cc_drop, ws_qin_cap, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
-        ws_qin_cap = 0.0_dp
+        allocate(ws_cc, ws_cc_new, ws_cc_drop, ws_qin_cap, ws_aPtr_g, mold=ws_aW); ws_cc = 0.0_dp; ws_cc_new = 0.0_dp
+        ws_qin_cap = 0.0_dp; ws_aPtr_g = 0.0_dp
         ws_cc_drop = 0.0_dp
         allocate(ws_p_n, mold=ws_aW); ws_p_n = 0.0_dp
         allocate(ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bedg_f, mold=ws_aW)

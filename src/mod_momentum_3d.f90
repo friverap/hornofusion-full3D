@@ -85,7 +85,7 @@ contains
                                          alpha_old, rho_old, mdot_m)
         use mod_workspace, only: ensure_workspace, own_weight_face, ws_liq_cont, ws_liq_cont_valid, &
                                  liq_own_weight, mix_cell_weight, liq_cont_fallback, bed_rel_face, &
-            ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, &
+            ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, ws_aPtr_g, &
             ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bed_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
@@ -133,9 +133,10 @@ contains
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
         lbf_m = cfg%liq_balanced_force .and. .not. cfg%pc_fs_liquid_gradient
-
         ! Allocate coefficient arrays (with same dimensions as fields)
         call ensure_workspace(m)
+        ! (M9-5) transitorio del gas para F2.31: 0 donde no se ensambla
+        if (is_gas) ws_aPtr_g = 0.0_dp
         allocate(pf, mold=sh%p)
         pf = sh%p   ! (F2.3: la superficie libre se trata en gas_pgrad_z, no en p)
 
@@ -209,6 +210,8 @@ contains
                         aP(i,j,k) = max(alpha_q(i,j,k), ALPHA_PHASE_MIN) &
                                     * ph%rho(i,j,k) * vol / cfg%dt &
                                     + (drag_coef(i,j,k) + Kexch(i,j,k)) * vol
+                        if (is_gas) ws_aPtr_g(i,j,k) = max(alpha_q(i,j,k), ALPHA_PHASE_MIN) &
+                                    * ph%rho(i,j,k) * vol / cfg%dt
                         Su(i,j,k) = aP(i,j,k) * vel_other(i,j,k)
                         cycle
                     end if
@@ -487,6 +490,7 @@ contains
                     Su(i,j,k) = Su(i,j,k) + Kexch(i,j,k) * vel_other(i,j,k) * vol
 
                     ! Forma ACOTADA de Patankar (sin dF; ver mod_energy)
+                    if (is_gas) ws_aPtr_g(i,j,k) = rho_vol_dt
                     aP(i,j,k) = aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + aN(i,j,k) &
                                + aB(i,j,k) + aT(i,j,k) + rho_vol_dt &
                                + drag_coef(i,j,k) * vol + aP_extra &

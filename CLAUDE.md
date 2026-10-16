@@ -258,7 +258,13 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   celda `act_g` cuya conductancia de gas en el Poisson (`α_f d_f A/δ`) no
   evacúa su demanda de compresibilidad con menos de `P_VENT` (5 kPa) sale del
   acople (Hilfer 1998 medido con la conductancia, no con la movilidad de
-  F2.16). Si su fila se queda sin caras, F2.29 la vuelve pared.
+  F2.16). Si su fila se queda sin caras, F2.29 la vuelve pared. **La
+  conductancia del test lleva el transitorio del momento evaluado a
+  `DT_MOB_REF` (auditoría 9, M9-5; `ws_aPtr_g`)**, como la movilidad de F2.16:
+  con el del dt de la corrida, en celdas de inercia comparable al arrastre
+  crecía ∝ dt. Medido: en bath_fill la exclusión casi no depende del dt (las
+  celdas excluidas son de Ergun). Residuo abierto: la cota de la demanda
+  `COMP_SRC_CAP·αV/dt` sigue dependiendo del dt (tope numérico).
 - **FUERZA VERTICAL BALANCEADA POR CARAS (13-oct-2026, `liq_balanced_force`,
   default on)**: líquido continuo y gas ven la presión REDUCIDA de la mezcla,
   media de caras de `(p_N − p_P)/δz + W_f` (`liq_weight_f`/`cell_w`), con W_f
