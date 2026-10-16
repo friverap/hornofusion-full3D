@@ -717,7 +717,17 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   `pocket_rise` (bolsa de gas bajo la capa 8 saturada; estado construido por
   `make_pocket_init.py` con presión HIDROSTÁTICA de la nueva estratificación y
   `rho_gas` de la EOS). Con los defaults el gas sube a contracorriente desde
-  el primer paso, sin ráfaga (gas ≤ 8 m/s en los 5 primeros pasos). La
+  el primer paso. El estado hidrostático NO es punto fijo (auditoría 8,
+  M8-3): la capa saturada drena por Darcy y su peso pasa al arrastre del
+  lecho (la presión del piso baja ~20 kPa, físico) y la bolsa se
+  despresuriza y ventea por los huecos de los electrodos. El pico de gas del
+  audit (45 m/s) NO es ese venteo: es un modo par-impar del freeboard sobre
+  el lecho que produce el lazo externo truncado a 5 iteraciones (con 20
+  desaparece); la cota de 60 m/s es de regresión. El juez mide la presión de
+  la bolsa DIRECTAMENTE frente a la capa de encima conectada al gas
+  (`max|p|` es siempre el piso): sin repuntes de más de 0.5 kPa, bajo 10 kPa
+  antes de 0.09 s (medido 0.07), bajo 1 kPa antes de 0.13 s (medido 0.10) y
+  ±1 kPa después; dt real comprobado. La
   «retención de 0.25–0.3 s» medida en la auditoría 6 era el estado construido
   con la presión del snapshot de origen, NO el modelo; la opción
   `pc_bed_gas_pocket` que se añadió para quitarla se RETIRÓ (con el estado
