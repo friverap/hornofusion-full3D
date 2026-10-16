@@ -111,7 +111,7 @@ valida al arrancar). Tabla completa en `docs/RUNNING.md` §3.
 
 - **Test regresión:** `dt = 0.5`, `t_final = 5.0`, `adaptive_dt = false`
 - **Bore-in:** `dt = 5.0`, `t_final = 300.0` (electrodos tardan ~200 s en bajar)
-- **Producción:** `dt = 0.5`, `dt_max = 2.0`, `t_final = 5040.0`, `adaptive_dt = true`
+- **Producción (auditorías 12-13):** los parámetros de paso de B1: `dt = 0.002`, `dt_min = 0.001`, `dt_max = 0.02`, `cfl_max = 1.0`, `adaptive_dt = true`. El modelo de dos fluidos se rompe con pasos ≥ 50 ms (y con el antiguo `dt = 0.5`, `dt_min = 0.01`). En la práctica el lazo externo no converge en `max_outer` y el paso queda en `dt_min`: ~7e6 pasos para 7200 s; dimensionar `output_freq` (≥ 50000) y `audit_freq` en consecuencia.
 
 El tiempo de bore-in es `(H_total - H_bowl) / BORE_IN_SPEED = (4.5 - 0.6) / 0.01 ≈ 390 s`.  
 El cubo 2 se carga en `t = t_bucket2_charge = 2100 s`.
@@ -440,10 +440,11 @@ R_elec   = 0.30
 # ============================================================
 # TIEMPO
 # ============================================================
-dt           = 0.5
-dt_min       = 0.01
-dt_max       = 2.0
-t_final      = 5040.0
+dt           = 0.002
+dt_min       = 0.001
+dt_max       = 0.02
+cfl_max      = 1.0
+t_final      = 7200.0
 adaptive_dt  = true
 
 # ============================================================

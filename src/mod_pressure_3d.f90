@@ -327,9 +327,10 @@ contains
                                   + (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) &
                                     * m%vol(i,j,k) / max(gas%rho(i,j,k), SMALL) &
                                   + ws_cc(i,j,k) / cfg%dt * min(1.0_dp, DT_MOB_REF / cfg%dt))
-                        ! (auditoria 12, M12-1) el ACARREO existe porque la cota
-                        ! de la FUENTE (0.2 alpha V/dt) es mas estrecha que la
-                        ! del test a DT_MOB_REF; contarlo entero a dt grande
+                        ! (auditoria 12, M12-1) con dt > dt_ref el ACARREO existe
+                        ! porque la cota de la FUENTE (0.2 alpha V/dt) es mas
+                        ! estrecha que la del test a DT_MOB_REF (con dt < dt_ref
+                        ! es al reves y el factor vale 1); contarlo entero a dt grande
                         ! hacia parpadear la celda paso a paso (sale, se
                         ! descarta el acarreo, vuelve, lo acumula). En el
                         ! estado de referencia (dt_ref) ese volumen se habria

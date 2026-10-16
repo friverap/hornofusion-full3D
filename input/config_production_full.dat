@@ -22,13 +22,19 @@
 #    8 procs (MacBook):             mpirun -n  8  → descomposición 1×4×2
 #   16 procs (cluster):             mpirun -n 16  → descomposición 1×4×4
 #
-# TIEMPO TOTAL: 5040 s (tap-to-tap completo)
+# TIEMPO TOTAL: t_final 7200 s (tap-to-tap de referencia: 5040 s)
 #   dt_0 = 2 ms, adaptativo (CFL <= 1) entre 1 ms y 1 s: los parametros de
-#   B1 (v34), los unicos validados con el modelo de dos fluidos. Con los
+#   B1 (v34), los unicos validados con el modelo de dos fluidos (B1 corrio con
+#   el codigo anterior a M8-2/M11/M12 y SIN escoria). dt_max 20 ms: el mayor
+#   paso fijo validado (cold_bucket2); con pasos >= 50 ms el modelo se rompe.
+#   En los bancos el lazo externo no converge en max_outer y el control de
+#   paso queda en dt_min (auditoria 13): contar con ~7e6 pasos. Con los
 #   antiguos (dt_0 0.5 s, dt_min 10 ms) bath_test y bath_fill se rompen en
 #   los primeros pasos (auditoria 12, M12-2). Del orden de 10^6 pasos.
 #
-# OUTPUT: ~50 snapshots HDF5 × ~120 MB ≈ 6 GB  (output_prod2/)
+# OUTPUT: con dt 1-2 ms son ~4-7e6 pasos: output_freq 50000 da ~70-140
+#   snapshots HDF5 x ~120 MB (~8-17 GB); audit cada 5 pasos y monitor cada
+#   500 (los de B1). Con el output_freq 200 anterior: ~4 TB (auditoria 13).
 #
 # RUN:
 #   mkdir -p output_prod2
@@ -66,7 +72,7 @@ R_elec   = 0.30
 # estado de la auditoria 8: es previo)
 dt           = 0.002
 dt_min       = 0.001
-dt_max       = 1.0
+dt_max       = 0.02
 cfl_max      = 1.0
 t_final      = 7200.0
 adaptive_dt  = true
@@ -134,7 +140,12 @@ arc_w     = 30.0
 # ============================================================
 # ESCORIA (capa de escoria encima del scrap)
 # ============================================================
-solve_slag   = true
+# (auditoria 13, A13-1) escoria DESACTIVADA, como en B1: la escoria de la
+# celda de la cima del bano recibe 25-70 % del arco y no tiene salida de calor
+# (no emite en la DO, sin transporte lateral, acople con el bano de decenas de
+# J por paso, ninguno con la chatarra): +1000 K en 25-40 s. Reactivar solo
+# con un modelo termico de la escoria.
+solve_slag   = false
 rho_slag     = 2800.0
 cp_slag      = 1200.0
 k_slag       = 1.5
@@ -158,6 +169,7 @@ t_bucket2_charge = 2100.0
 #   → ~50 archivos HDF5 × ~120 MB ≈ 6 GB total
 #   monitor_freq=20  → línea de monitor cada 20 pasos = 10 s simulados
 # ============================================================
-output_freq  = 200
-monitor_freq = 1
+output_freq  = 50000
+monitor_freq = 500
+audit_freq   = 5
 output_dir   = output_prod2

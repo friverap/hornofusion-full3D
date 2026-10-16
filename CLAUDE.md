@@ -388,13 +388,13 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   α_s = φ(dz−h)/dz y α_l ≈ 1 − α_s, indistinguible de un lecho inundado a ras
   con φ' = α_s. La regla de los dos umbrales (fracción cruda) lo clasifica
   chatarra solo si α_s ≥ α_l, así que la ambigüedad existe solo con φ > 0.5 y
-  para h ≤ dz(1 − 0.5/φ). Con φ de la receta (0.45–0.55): banda de 4.5 mm en
-  la malla de producción (dz 0.049) y 7.6 mm en la media (B1), POR DEBAJO de
-  `ARC_SURF_H` (14 mm: ahí una película sobre chatarra es chatarra por la
-  propia regla), así que en producción y en B1 no hay error; solo en las
-  mallas gruesas de los bancos (dz > 0.154 m; nz 16 da 25 mm). El filtro por
-  celda α_l ≥ 0.3 sube el umbral efectivo del baño a max(14 mm, 0.3 dz): 15 mm
-  en producción (nulo), 84 mm en los bancos. No intentar otra regla de UNA
+  para h ≤ dz(1 − 0.5/φ). Con φ de la receta (0.45–0.55) la banda queda bajo
+  `ARC_SURF_H` en producción (4.5 mm) y en B1 (7–11.5 mm); pero con chatarra
+  COMPACTADA (α_s > 0.9, 762 celdas en B1 a 300 s) la banda es 0.44 dz: 17–28
+  mm en producción y 34–56 mm en B1, POR ENCIMA de `ARC_SURF_H`: ahí el error
+  existe también en producción (auditoría 13). El filtro por celda α_l ≥ 0.3
+  sube el umbral efectivo del baño a max(14 mm, 0.3 dz): 11–19 mm en
+  producción, 23–38 mm en B1, 84 mm en los bancos. No intentar otra regla de UNA
   capa (tres intentos solo movieron la frontera); si hiciera falta, mirar la
   capa de abajo (exceso de líquido con la composición inferior), con efecto
   solo en mallas gruesas; nunca volver a una
@@ -710,24 +710,28 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
 - **Orden del paso**: fusión+colapso ANTES del lazo SIMPLE
   (update_solid_premelt); interfase DESPUÉS de los solves de energía
   (update_solid_postenergy) — moverla antes duplica el calor.
-- **El arco NO ve la escoria (límite vigente, auditoría 12, M12-1arc)**:
-  `ksurf` y el impacto del MC usan solo α_l; en la malla de producción la
-  escoria (~6 cm) ocupa su propia capa, el arco la salta y deposita en el baño
-  de debajo (la escoria solo intercepta lo de su celda; el reparto tiende a cero
-  al refinar). Hacerla superficie (α_l + α_sl) se probó y NO se adoptó: la
-  escoria se lleva casi todo el arco y no tiene salida de calor (no emite en la
-  DO, sin transporte lateral, acople con el baño de cientos de J por paso,
-  ninguno con la chatarra; la escoria en los poros del lecho se volvía
-  superficie durante la perforación): miles de K en decenas de segundos.
-  Requiere ANTES un modelo térmico de la escoria (emisión de la escoria densa,
-  acople escoria–chatarra y escoria–baño). Banco `arc_slag` (nz 64, 10 t).
+- **Arco y ESCORIA: sin modelo térmico de la escoria (auditorías 12-13,
+  M12-1arc / A13-1, ABIERTO)**: `ksurf` y el MC usan solo α_l. La escoria en
+  su PROPIA capa (malla de producción) la salta el arco; la de la celda MIXTA
+  de la cima del baño (donde `slag_buoyancy` llena el hueco) recibe por
+  `slag_intercept_arc` del 25 al 70 % del depósito de superficie (arc_slag:
+  0.94 de ~2.2 MJ) y NO tiene salida de calor (no emite en la DO, sin
+  transporte lateral, acople con el baño de decenas de J por paso, ninguno con
+  la chatarra): +1000 K en 25–40 s en producción. Por eso
+  `config_production_full` corre SIN escoria (como B1). Hacer de la escoria
+  superficie (α_l + α_sl) se probó y empeora (casi todo el arco a la escoria).
+  Requiere un modelo térmico de la escoria (emisión de la escoria densa,
+  acople escoria–chatarra y escoria–baño, P_elec al metal). Banco `arc_slag`.
 - **Régimen de PASO válido del modelo de dos fluidos (auditoría 12, M12-2)**:
   dt de unos pocos ms con CFL ≤ 1 (los parámetros de B1: dt_0 2 ms, dt_min
   1 ms, cfl_max 1). Con pasos fijos ≥ 50 ms, o con el antiguo dt_0 0.5 s /
   dt_min 10 ms de `config_production_full`, bath_test y bath_fill se rompen
   en los primeros pasos (presión en P_HYDRO_CAP, líquido a 14–31 m/s; también
   en el estado de la auditoría 8: es previo). `config_production_full` usa
-  ahora los de B1; `bath_fill_adapt` ejerce el control de paso con flujo.
+  ahora los de B1 con `dt_max` 20 ms. OJO (auditoría 13): en los bancos el
+  lazo externo no converge en `max_outer`, `adapt_timestep` parte el paso y lo
+  deja en `dt_min` (1 ms); `bath_fill_adapt` cubre ESE régimen, no el
+  crecimiento del paso ni el cruce de 4 ms de la histéresis de F2.31.
 - **CFL azimutal**: `dth_len = max(r·dθ, dr)` — el anillo del eje no
   gobierna el dt (esquema implícito; escala advectiva ≥ ancho radial).
 - **Coeficientes de ensamblado**: los 8 arrays (aW..aT, aP, Su) viven en
