@@ -78,6 +78,18 @@ $(TARGET): $(OBJS)
 $(OBJDIR)/%.o: $(SRCDIR)/%.f90
 	$(FC) $(FFLAGS) -c -o $@ $< -J$(OBJDIR)
 
+# (auditoria 15, M15-2) sello de los flags: `make opt` y `make` escriben en el
+# mismo obj/ y bin/; sin el sello, `make test-full` tras `make opt` corria el
+# gate (y test-rebaseline regeneraba el golden) con -O3 y sin -fcheck=bounds.
+# El sello solo se reescribe si los flags cambian: entonces todo recompila.
+FLAGSTAMP = $(OBJDIR)/.fflags
+.PHONY: FORCE
+FORCE:
+$(FLAGSTAMP): FORCE
+	@mkdir -p $(OBJDIR)
+	@echo '$(FC) $(FFLAGS)' | cmp -s - $@ || echo '$(FC) $(FFLAGS)' > $@
+$(OBJS): $(FLAGSTAMP)
+
 # Module dependencies (ORDER MATTERS!)
 # mod_mpi_topology first (only needs constants)
 $(OBJDIR)/mod_mpi_topology.o: $(OBJDIR)/mod_constants.o
