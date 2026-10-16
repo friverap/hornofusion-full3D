@@ -78,7 +78,7 @@ contains
         real(dp) :: x_elec, y_elec, x_cell, y_cell, dist
         real(dp) :: r2, sigma_r, gw
         real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol, wsc, wba, wvo, wexp, frac_surf
-        real(dp) :: wsb, wlb, wvb, phib, h_pud
+        real(dp) :: wsb, wlb, wvb, phib, h_pud, wlk
         logical  :: found_scrap, owned, any_liq, found_bath, surf_found, is_scrap
         integer  :: kg_bath_any   ! capa del bano bajo la punta aunque la superficie sea chatarra (B4-14)
         ! (El tope de 2 K por paso al solido se sustituyo por el tope de estado
@@ -153,7 +153,7 @@ contains
             ! primera capa con > 5 % de bano ponderado, y nunca por debajo de
             ! la superficie de chatarra (B5-5: un bano enterrado no ve fotones).
             ksurf: do kg = kg_tip, 1, -1
-                wsc = 0.0_dp; wba = 0.0_dp; wvo = 0.0_dp
+                wsc = 0.0_dp; wba = 0.0_dp; wvo = 0.0_dp; wlk = 0.0_dp
                 do jg = 1, m%nth_g
                     do ig = 1, m%nr_g
                         if (m%cell_type_global(ig,jg,kg) == 0) cycle
@@ -169,6 +169,7 @@ contains
                         wvo = wvo + gw
                         if (alpha_sg(ig,jg,kg) > ALPHA_SCRAP_SURF) wsc = wsc + gw * alpha_sg(ig,jg,kg)
                         if (alpha_lg(ig,jg,kg) >= ALPHA_LIQ_CONT) wba = wba + gw * alpha_lg(ig,jg,kg)
+                        wlk = wlk + gw * alpha_lg(ig,jg,kg)
                     end do
                 end do
                 if (wvo <= SMALL) cycle
@@ -228,9 +229,16 @@ contains
                             end do
                             if (wvb > SMALL) then
                                 phib = wsb / wvb
-                                ! lecho de abajo mas denso y con el poro al menos
-                                ! medio lleno de liquido (inundado)
-                                if (phib > wsc / wvo .and. wlb >= 0.5_dp * (wvb - wsb)) then
+                                ! lecho de abajo COMPACTADO (phi >= 0.9: el caso
+                                ! documentado, auditoria 13) e inundado, y la capa
+                                ! saturada de liquido (charco + lecho inundado).
+                                ! LIMITE: un lecho mas suelto inundado A RAS sobre
+                                ! uno compactado da las mismas fracciones (no es
+                                ! identificable por capas); con phi_abajo < 0.9
+                                ! la regla no actua (dirigida del modelo, M2)
+                                if (phib >= 0.9_dp .and. phib > wsc / wvo .and. &
+                                    wlb >= 0.5_dp * (wvb - wsb) .and. &
+                                    wlk >= 0.9_dp * (wvo - wsc)) then
                                     h_pud = (m%zf_global(kg) - m%zf_global(kg-1)) &
                                             * (1.0_dp - (wsc / wvo) / phib)
                                     if (h_pud >= ARC_SURF_H) is_scrap = .false.

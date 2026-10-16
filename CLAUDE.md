@@ -397,9 +397,14 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   existe también en producción (auditoría 13). El filtro por celda α_l ≥ 0.3
   sube el umbral efectivo del baño a max(14 mm, 0.3 dz): 14–19 mm en
   producción, 23–38 mm en B1, 84 mm en los bancos. No intentar otra regla de UNA
-  capa (tres intentos solo movieron la frontera); si hiciera falta, mirar la
-  capa de abajo (exceso de líquido con la composición inferior), con efecto
-  solo en mallas gruesas; nunca volver a una
+  capa (tres intentos solo movieron la frontera). **Capa de abajo (oct-2026,
+  b255fc1 + dirigida M2)**: si la capa de abajo es un lecho COMPACTADO
+  (φ ≥ 0.9) inundado, la capa está saturada de líquido y el charco implícito
+  h = dz(1 − α_s/φ_abajo) ≥ `ARC_SURF_H`, la superficie es el BAÑO (casos 8–10
+  de `test_arc_surface`). LÍMITE que queda (no identificable por capas): un
+  lecho más suelto inundado A RAS sobre uno compactado da las mismas
+  fracciones y se clasifica como baño; con φ_abajo < 0.9 la regla no actúa.
+  Su efecto en producción lo juzga el B1 nuevo. Nunca volver a una
   búsqueda aparte del baño por celda. (M5-1) la DO guarda su reparto por fase
   (`sh%w_rad_l`, αⁿ) y la energía resta la emisión con ESE peso: con α^{n+1}
   se creaba energía en cada paso con fusión (melt_forced 1 %). (M5-2) el lazo

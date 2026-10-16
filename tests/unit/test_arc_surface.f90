@@ -178,6 +178,10 @@ program test_arc_surface
     ! 9: lecho inundado A RAS (alpha_s 0.6 en K+1 sobre el mismo lecho 0.6 en
     !    K): charco implicito 0 -> CHATARRA (como el 5)
     call layer_case(9, 0.40_dp, 0.60_dp, .false., .true., phib=0.60_dp)
+    ! 10 (dirigida del modelo, M2): lecho SUELTO inundado a ras (0.6) sobre un
+    !    lecho MAS denso pero no compactado (0.8): la regla del charco no actua
+    !    (phi_abajo < 0.9) -> CHATARRA (M4-8)
+    call layer_case(10, 0.40_dp, 0.60_dp, .false., .true., phib=0.80_dp)
 
     if (ok) then
         print '(A)', ' PASS test_arc_surface (pelicula no es superficie; crater, pelicula sobre chatarra y lecho inundado son chatarra; bano con chatarra sumergida es bano)'
