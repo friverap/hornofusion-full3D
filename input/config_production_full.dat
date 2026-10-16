@@ -36,7 +36,7 @@
 #   Diferencia con B1: max_inner_pres 50 / max_inner_mom 5 (B1: 20 / 3, los de
 #   config_300s_borein); mas iteraciones internas, mismo regimen de paso.
 #
-# COSTO (auditoria 15, M15-5, estimacion): ~100-200 dias a 14 ranks en el
+# COSTO (auditoria 15, M15-5, estimacion): ~180-225 dias a 14 ranks en el
 #   regimen actual (paso en dt_min); ver docs/RUNNING.md. Correr por segmentos.
 #
 # OUTPUT: con dt 1-2 ms son ~4-7e6 pasos: output_freq 50000 da ~70-140

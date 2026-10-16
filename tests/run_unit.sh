@@ -15,7 +15,9 @@ is_xfail() { grep -qx "unit:$1" "$XFAIL_LIST" 2>/dev/null; }
 for t in tests/bin/*; do
     [ -x "$t" ] || continue
     name=$(basename "$t")
-    if "$t" > "tests/bin/$name.log" 2>&1; then
+    # (auditoria dirigida 16, B2) tope de tiempo: un cuelgue (A15-1) falla el
+    # gate en vez de colgarlo (SIGALRM -> codigo 142)
+    if perl -e 'alarm shift; exec @ARGV' "${UNIT_TIMEOUT:-300}" "$t" > "tests/bin/$name.log" 2>&1; then
         if is_xfail "$name"; then
             echo "XPASS unit:$name (quitar de tests/xfail.list)"
         else
