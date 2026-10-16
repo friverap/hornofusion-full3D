@@ -1,6 +1,7 @@
 !===============================================================================
 ! test_gas_percolation.f90 - La percolacion del gas (F2.16) no depende del dt
-! de la corrida (auditoria 8, M8-2).
+! de la corrida para dt >= DT_MOB_REF (auditoria 8, M8-2; por debajo el
+! juicio usa el dt real, auditoria 13).
 !
 ! Columna (singleton MPI): capas 1-4 BOLSA de lecho seco (alpha_s 0.5,
 ! alpha_g 0.5); capa 5 SATURADA (alpha_s 0.5, alpha_l 0.485, gas de piso
@@ -108,7 +109,7 @@ program test_gas_percolation
     end if
 
     if (ok) then
-        print '(A)', ' PASS test_gas_percolation (la bolsa percola por el gas de piso; mascara independiente del dt)'
+        print '(A)', ' PASS test_gas_percolation (la bolsa percola por el gas de piso; mascara independiente del dt >= 2 ms)'
     else
         print '(A)', ' FAIL test_gas_percolation'
         stop 1

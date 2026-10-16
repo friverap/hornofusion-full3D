@@ -12,7 +12,8 @@
 #   - Radiación DO (Discrete Ordinates)
 #   - Química: C + ½O₂ → CO (Maahs) + combustión secundaria CO → CO₂
 #   - Transporte de especies CO / CO₂
-#   - Escoria (pseudo-fase con flotabilidad)
+#   - Escoria: APAGADA (solve_slag false, auditoria 13 A13-1: sin salida
+#     termica bajo el arco)
 #   - Buoyancy de Boussinesq
 #
 # MALLA: 60 × 120 × 84 = 604,800 celdas
@@ -23,18 +24,21 @@
 #   16 procs (cluster):             mpirun -n 16  → descomposición 1×4×4
 #
 # TIEMPO TOTAL: t_final 7200 s (tap-to-tap de referencia: 5040 s)
-#   dt_0 = 2 ms, adaptativo (CFL <= 1) entre 1 ms y 1 s: los parametros de
-#   B1 (v34), los unicos validados con el modelo de dos fluidos (B1 corrio con
-#   el codigo anterior a M8-2/M11/M12 y SIN escoria). dt_max 20 ms: el mayor
-#   paso fijo validado (cold_bucket2); con pasos >= 50 ms el modelo se rompe.
-#   En los bancos el lazo externo no converge en max_outer y el control de
-#   paso queda en dt_min (auditoria 13): contar con ~7e6 pasos. Con los
-#   antiguos (dt_0 0.5 s, dt_min 10 ms) bath_test y bath_fill se rompen en
-#   los primeros pasos (auditoria 12, M12-2). Del orden de 10^6 pasos.
+#   dt_0 = 2 ms, adaptativo (CFL <= 1) entre 1 ms y 10 ms, max_outer 5: los
+#   parametros de B1 (v34), los unicos validados con el modelo de dos fluidos
+#   (B1 corrio con el codigo anterior a M8-2/M11/M12 y SIN escoria). dt_max
+#   10 ms: el mayor paso fijo validado CON BANO (bath_test, bath_fill); con
+#   pasos >= 50 ms el modelo se rompe y la banda 10-50 ms con bano no la
+#   cubre ningun banco. En los bancos el lazo externo no converge en
+#   max_outer (5) y el control de paso queda en dt_min (auditoria 13):
+#   contar con ~7e6 pasos. Con los antiguos (dt_0 0.5 s, dt_min 10 ms)
+#   bath_test y bath_fill se rompen en los primeros pasos (auditoria 12).
 #
 # OUTPUT: con dt 1-2 ms son ~4-7e6 pasos: output_freq 50000 da ~70-140
-#   snapshots HDF5 x ~120 MB (~8-17 GB); audit cada 5 pasos y monitor cada
-#   500 (los de B1). Con el output_freq 200 anterior: ~4 TB (auditoria 13).
+#   snapshots HDF5 x ~250 MB (~417 B/celda medido; ~18-35 GB); audit.csv
+#   cada 5 pasos ~1.4e6 filas (~2.7 GB); monitor cada 500. Con
+#   audit_freq > 1 check_audit.py trata energy_balance y arc_budget como
+#   INFORMATIVOS: el audit de produccion no es un gate.
 #
 # RUN:
 #   mkdir -p output_prod2
@@ -72,7 +76,7 @@ R_elec   = 0.30
 # estado de la auditoria 8: es previo)
 dt           = 0.002
 dt_min       = 0.001
-dt_max       = 0.02
+dt_max       = 0.01
 cfl_max      = 1.0
 t_final      = 7200.0
 adaptive_dt  = true
@@ -80,7 +84,7 @@ adaptive_dt  = true
 # ============================================================
 # ALGORITMO SIMPLE
 # ============================================================
-max_outer     = 10
+max_outer     = 5
 max_inner_mom = 5
 max_inner_pres= 50
 
@@ -165,9 +169,7 @@ t_bucket2_charge = 2100.0
 
 # ============================================================
 # SALIDA
-#   output_freq=200 → snapshot cada 200 pasos × 0.5 s = 100 s simulados
-#   → ~50 archivos HDF5 × ~120 MB ≈ 6 GB total
-#   monitor_freq=20  → línea de monitor cada 20 pasos = 10 s simulados
+#   ver la cabecera (OUTPUT): dimensionado para ~7e6 pasos de 1 ms
 # ============================================================
 output_freq  = 50000
 monitor_freq = 500

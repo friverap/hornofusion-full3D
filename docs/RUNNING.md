@@ -144,11 +144,11 @@ Verificar que `bore_in_done` pasa a `.true.` en los 3 electrodos.
 
 ---
 
-### C) Corrida de producción completa (5040 s tap-to-tap)
+### C) Corrida de producción completa (t_final 7200 s; tap-to-tap de referencia 5040 s)
 
 ```bash
 # Asegurar directorio de salida
-mkdir -p output_prod
+mkdir -p output_prod2
 
 # Compilar en modo optimizado (recomendado para runs largos)
 make clean && make opt
@@ -159,10 +159,10 @@ mpirun -n 12 ./bin/eaf3d_mpi input/config_production_full.dat 2>&1 | tee run_pro
 
 El flag `2>&1 | tee` guarda stdout+stderr al mismo tiempo que muestra en pantalla.
 
-**Progreso:** monitorear `output_prod/monitor.log` en tiempo real:
+**Progreso:** monitorear `output_prod2/monitor.log` en tiempo real:
 
 ```bash
-tail -f output_prod/monitor.log
+tail -f output_prod2/monitor.log
 ```
 
 Formato de cada línea del monitor:
@@ -197,7 +197,7 @@ son minutos). Detalles y reconstrucción de snapshots antiguos en
 ## 5. Estructura de directorios de salida
 
 ```
-output_prod/
+output_prod2/
 ├── monitor.log                   Línea por paso: tiempo, masa sólida, residuales
 ├── eaf3d_00000200.h5            Snapshot t=100 s
 ├── eaf3d_00000400.h5            Snapshot t=200 s
@@ -239,13 +239,13 @@ solve_species    = false   # desactiva transporte CO/CO₂
 
 ```bash
 # Listar campos en el primer snapshot
-h5ls -r output_prod/eaf3d_00000200.h5
+h5ls -r output_prod2/eaf3d_00000200.h5
 
 # Ver metadatos (tiempo, pasos, procs)
-h5dump -g /metadata output_prod/eaf3d_00000200.h5
+h5dump -g /metadata output_prod2/eaf3d_00000200.h5
 
 # Verificar dimensiones de un campo
-h5ls output_prod/eaf3d_00000200.h5/fields/T_gas
+h5ls output_prod2/eaf3d_00000200.h5/fields/T_gas
 # → Dataset {84, 120, 60}  (nz × nth × nr)
 ```
 
@@ -308,7 +308,7 @@ export OMPI_MCA_verbose=1
 module load gcc/12 openmpi/4 hdf5-parallel/1.14
 
 cd $SLURM_SUBMIT_DIR
-mkdir -p output_prod
+mkdir -p output_prod2
 
 srun ./bin/eaf3d_mpi input/config_production_full.dat 2>&1 | tee run_production.log
 ```

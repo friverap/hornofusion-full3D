@@ -395,7 +395,7 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   COMPACTADA (α_s > 0.9, 762 celdas en B1 a 300 s) la banda es 0.44 dz: 17–28
   mm en producción y 34–56 mm en B1, POR ENCIMA de `ARC_SURF_H`: ahí el error
   existe también en producción (auditoría 13). El filtro por celda α_l ≥ 0.3
-  sube el umbral efectivo del baño a max(14 mm, 0.3 dz): 11–19 mm en
+  sube el umbral efectivo del baño a max(14 mm, 0.3 dz): 14–19 mm en
   producción, 23–38 mm en B1, 84 mm en los bancos. No intentar otra regla de UNA
   capa (tres intentos solo movieron la frontera); si hiciera falta, mirar la
   capa de abajo (exceso de líquido con la composición inferior), con efecto
@@ -731,7 +731,7 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   dt_min 10 ms de `config_production_full`, bath_test y bath_fill se rompen
   en los primeros pasos (presión en P_HYDRO_CAP, líquido a 14–31 m/s; también
   en el estado de la auditoría 8: es previo). `config_production_full` usa
-  ahora los de B1 con `dt_max` 20 ms. OJO (auditoría 13): en los bancos el
+  ahora los de B1 (`max_outer` 5) con `dt_max` 10 ms (mayor paso fijo validado con baño). OJO (auditoría 13): en los bancos el
   lazo externo no converge en `max_outer`, `adapt_timestep` parte el paso y lo
   deja en `dt_min` (1 ms); `bath_fill_adapt` cubre ESE régimen, no el
   crecimiento del paso ni el cruce de 4 ms de la histéresis de F2.31.

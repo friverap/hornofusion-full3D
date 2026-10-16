@@ -754,7 +754,7 @@ contains
     ! vecina que si tenia movilidad local):
     !   - movil: gas activo cuyo arrastre de Ergun no domina su inercia,
     !     mob = (alpha_g rho_g/dt_ref)/(alpha_g rho_g/dt_ref + drag) >
-    !     GAS_MOB_MIN, con dt_ref = DT_MOB_REF FIJO (M8-2);
+    !     GAS_MOB_MIN, con dt_ref = min(dt, DT_MOB_REF) (M8-2, auditoria 13);
     !   - percola: conectada al FREEBOARD (plano superior) por un camino de
     !     celdas moviles a traves de caras (theta periodico, r sin eje).
     ! Barrido global sobre el campo reunido (patron invariante a la
@@ -793,8 +793,6 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
-                    ! (M8-2) paso de referencia fijo: la movilidad es del
-                    ! estado, no del dt de la corrida
                     ! (auditoria 13) el paso del juicio es min(dt, DT_MOB_REF):
                     ! nunca mayor que el de calibracion (con dt grande el gas de
                     ! piso de una capa saturada quedaba inmovil: M8-2), y con

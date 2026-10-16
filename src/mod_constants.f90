@@ -295,7 +295,8 @@ module mod_constants
     ! menos del 12 %.
     real(dp), parameter :: GAS_MOB_MIN = 1.0e-2_dp
     ! (auditoria 8, M8-2) La inercia de la movilidad se evalua con un paso de
-    ! REFERENCIA fijo, no con el dt de la corrida: con alpha_g rho_g/dt la
+    ! REFERENCIA, min(dt, DT_MOB_REF) desde la auditoria 13 (fijo para
+    ! dt >= 2 ms, el dt real por debajo): con alpha_g rho_g/dt la
     ! clasificacion dependia del integrador. El gas de piso de una capa
     ! saturada (eps_g = 0.015, la via de F2.7) tenia movilidad por debajo del
     ! umbral con dt >= ~6.5 ms y la bolsa bajo el lecho inundado quedaba pared
