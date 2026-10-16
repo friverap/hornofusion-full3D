@@ -291,7 +291,7 @@ export OMPI_MCA_verbose=1
 #SBATCH --job-name=eaf3d_prod
 #SBATCH --ntasks=48
 #SBATCH --cpus-per-task=1
-#SBATCH --time=48:00:00
+#SBATCH --time=48:00:00   # SEGMENTO: la colada completa no cabe (ver abajo); reanudar con restart_file
 #SBATCH --mem=96G
 
 module load gcc/12 openmpi/4 hdf5-parallel/1.14
@@ -302,5 +302,17 @@ mkdir -p output_prod2
 srun ./bin/eaf3d_mpi input/config_production_full.dat 2>&1 | tee run_production.log
 ```
 
-Para 48 procs en la malla 60×120×84: descomposición 1×6×8 (ntheta/6=20, nz/8=~10.5 — NO exacto).  
-Usar en cambio 1×8×6 (ntheta/8=15, nz/6=14 — EXACTO). Total: 48 procs ✓.
+La descomposición NO se elige a mano: `factorize_3d` (`src/mod_mpi_topology.f90`)
+prueba todas las factorizaciones de `nprocs` con `npth | ntheta` y se queda con
+la de bloques más cúbicos.
+
+> **Costo (auditoría 15, M15-5; ESTIMACIÓN, sin medir en esta malla).** En el
+> régimen actual el paso queda en `dt_min` = 1 ms: ~7.2e6 pasos para 7200 s.
+> Referencia del repo: B1 en malla media (30×60×42), 5040 s a ~2 ms, 14 ranks,
+> ~8–10 días (`docs/PLAN_D_acople_implicito_alpha_p.md`, D6). La malla de
+> producción tiene 8× celdas, el doble de pasos por segundo simulado y 1.4×
+> el tiempo simulado: del orden de **100–200 días** a 14 ranks; con 48 ranks,
+> si el escalamiento fuera ideal, del orden de 1–2 meses. Un job de 48 h es un
+> SEGMENTO (~1–2 % de la colada): encadenar con `restart_file`. Antes de
+> comprometer cómputo, medir el costo por paso con una corrida de ~100 pasos y
+> validar el régimen con un B1 nuevo (bloqueado 2 de la auditoría 13).
