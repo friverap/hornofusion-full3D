@@ -466,9 +466,10 @@ contains
                         ! ALPHA_FLOW_CUTOFF, rampa lineal por debajo): la escoria llena hasta liq_cap y deja libre
                         ! ALPHA_PORE_GAS; con el hueco fisico la cascada metia
                         ! acero en ese poro y la celda (liq_cap 0) lo cedia
-                        ! arriba: el acero cruzaba la escoria (M9-4). Celda
-                        ! llena de escoria: tope liq_cap; escoria traza: el
-                        ! hueco fisico de F2.8 (un tope liq_cap con umbral
+                        ! arriba: el acero cruzaba la escoria (M9-4). Con
+                        ! a_sl >= 1e-2 tope liq_cap (una interfaz llena corta
+                        ! la columna: el exceso de abajo va al clip, como fuera
+                        ! del lecho); con traza ~ el hueco fisico de F2.8 (un tope liq_cap con umbral
                         ! ALPHA_CUTOFF mandaba al clip la cascada del lecho
                         ! por 1e-6 de escoria, auditoria dirigida 16). Fuera
                         ! del lecho no hay poro reservado: identico.

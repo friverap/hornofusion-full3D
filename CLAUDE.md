@@ -652,14 +652,20 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   ALPHA_FLOW_CUTOFF— no corta la cascada: recibe el exceso y lo cede en la
   pasada siguiente (relevo); una celda llena con ESCORIA o una COSTRA sólida
   NUNCA se atraviesa —el acero quedaría sobre la escoria—, auditoría 11 A11-2,
-  traído de main d4800f8/10c8fd5; con escoria arriba la cascada se acota por
-  su `liq_cap`, no por el hueco físico: dentro del lecho el gas de poro de la
-  escoria era un conducto, auditoría 15) y solo lo que no cabe bajo el techo (o
+  traído de main d4800f8/10c8fd5; con escoria arriba DENTRO del lecho la
+  cascada reserva el gas de poro con una rampa absoluta, fslag = min(1,
+  α_sl/ALPHA_FLOW_CUTOFF): desde α_sl ≥ 1e-2 el tope es `liq_cap` (el poro de
+  la escoria era un conducto y el acero la cruzaba), con traza ~ el hueco
+  físico de F2.8 (auditorías 15–17). LIMITE: una interfaz acero+escoria llena
+  en el lecho corta la columna y el exceso de un lecho saturado debajo va al
+  clip (como fuera del lecho, A11-2); hoy ninguna corrida lo toca (escoria
+  sin chatarra o solve_slag false). ANTES de reactivar solve_slag con
+  chatarra: banco de lecho saturado bajo escoria que mida el clip) y solo lo que no cabe bajo el techo (o
   bajo una escoria/costra llena) va al clip auditado (`m_alpha_clip`,
   contabilizado POR PASO: la última iteración externa, no la suma de las
   5 — `audit_step_delta`). Nunca reintroducir un recorte silencioso de α:
   toda restricción de volumen se resuelve moviendo masa, no borrándola.
-  Test: `test_alpha_limiter` (casos 1-10). **Convergencia del limitador
+  Test: `test_alpha_limiter` (casos 1-12). **Convergencia del limitador
   (auditoría 9, M9-6)**: el Jacobi del factor es MONÓTONO desde 1 (siempre
   sobreadmite) y en un baño LLENO al que el Poisson pide meter líquido (lecho
   que drena encima) converge geométricamente lento (1.4 %/barrido en la
