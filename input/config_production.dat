@@ -1,3 +1,12 @@
+# =============================================================================
+# AVISO (auditoria 15, M15-1): config LEGADO. Sus parametros de paso (dt de
+# 0.1-5 s, dt_max 1 s, cfl_max 2 por defecto) son el regimen en el que el
+# modelo de dos fluidos se ROMPE (auditoria 12, M12-2: pasos fijos >= 50 ms;
+# bath_test/bath_fill con presion en P_HYDRO_CAP y liquido a 14-31 m/s).
+# NO usar para resultados. Produccion: input/config_production_full.dat
+# (parametros de B1: dt 2 ms, dt_min 1 ms, dt_max 10 ms, cfl_max 1,
+# max_outer 5). Regresion: make test-quick / make test-full.
+# =============================================================================
 # Production configuration replicating Ugarte et al. (2024) Materials 17(21), 5139
 # Target: 604,800 cells, full tap-to-tap melting stage (5040s)
 

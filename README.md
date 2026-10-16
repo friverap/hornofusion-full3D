@@ -81,11 +81,17 @@ El binario se genera en `bin/eaf3d_mpi`.
 
 ## Ejecución rápida
 
-### Test pequeño (malla 12×24×16)
+### Regresión
 
 ```bash
-mpirun -n 8 ./bin/eaf3d_mpi input/config_small_test.dat
+make test-quick      # por commit
+make test-full       # por lote
 ```
+
+> Los configs legados de `input/` (`config_small_test`, `config_medium`,
+> `config_production`, `config_3d`, ...) usan pasos de 0.1–5 s, el régimen en
+> que el modelo de dos fluidos se rompe (auditoría 12, M12-2). No usarlos
+> para resultados (auditoría 15, M15-1).
 
 ### Corrida de producción (malla 60×120×84, física completa)
 
@@ -138,9 +144,9 @@ hornofusion-full3D/
 
 | Archivo | Malla | Uso |
 |---------|-------|-----|
-| `config_small_test.dat` | 12×24×16 | Humo / regresión rápida |
-| `config_300s_borein.dat` | 18×36×24 | Bore-in con física completa |
-| `config_medium.dat` | 35×70×50 | Pruebas intermedias |
+| `config_small_test.dat` | 12×24×16 | LEGADO: paso roto (M15-1), solo humo de arranque |
+| `config_300s_borein.dat` | 18×36×24 | Plantilla de campañas (`campaigns/*.json` fijan dt); sola aborta |
+| `config_medium.dat` | 35×70×50 | LEGADO: paso roto (M15-1) |
 | `config_production_full.dat` | 60×120×84 | **Producción** (tap-to-tap) |
 
 Toda la física es conmutable por flags `solve_*` sin recompilar; referencia

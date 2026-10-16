@@ -33,6 +33,8 @@
 #   max_outer (5) y el control de paso queda en dt_min (auditoria 13):
 #   contar con ~7e6 pasos. Con los antiguos (dt_0 0.5 s, dt_min 10 ms)
 #   bath_test y bath_fill se rompen en los primeros pasos (auditoria 12).
+#   Diferencia con B1: max_inner_pres 50 / max_inner_mom 5 (B1: 20 / 3, los de
+#   config_300s_borein); mas iteraciones internas, mismo regimen de paso.
 #
 # OUTPUT: con dt 1-2 ms son ~4-7e6 pasos: output_freq 50000 da ~70-140
 #   snapshots HDF5 x ~250 MB (~417 B/celda medido; ~18-35 GB); audit.csv

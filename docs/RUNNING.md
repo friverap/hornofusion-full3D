@@ -105,41 +105,30 @@ bloques más cúbicos. Reglas (auditoría M32, oct-2026):
 
 ## 4. Workflows completos
 
-### A) Test de regresión (10 pasos, ~30 s de tiempo real)
-
-Verifica que toda la física funciona correctamente en malla pequeña.
+### A) Test de regresión
 
 ```bash
-cd full3D
-make clean && make
-
-mpirun -n 8 ./bin/eaf3d_mpi input/config_small_test.dat
-
-# Verificar salida
-h5ls output/eaf3d_00000001.h5/fields
+make test-quick      # por commit (~minutos)
+make test-full       # por lote: matriz completa, invariantes, golden
 ```
 
-Resultado esperado (malla 12×24×16, t_final=5 s, max_outer=5):
-```
- [STEP]        1  t=      0.50  outer=  5  res:   0.0000E+00  0.0000E+00  ~1.0E-02
- ...
- [STEP]       10  t=      5.00  outer=  5  res:   0.0000E+00  0.0000E+00  5.4518E-02
-```
-
-> `res_ur = 0` y `res_cont = 0` son normales cuando el flujo es laminar/estancado.
-> `res_energy ~ 0.05` es aceptable para un arranque en frío con arco activo.
+> (auditoría 15, M15-1) `config_small_test.dat` y los demás configs legados de
+> `input/` usan pasos de 0.1–5 s: el régimen en que el modelo de dos fluidos
+> se rompe (auditoría 12, M12-2). Ya no son la prueba de regresión.
 
 ---
 
-### B) Calibración bore-in (300 s simulados, ~60 pasos)
+### B) Calibración bore-in
 
-Valida el descenso de electrodos y la distribución de calor del arco.
+`config_300s_borein.dat` es la PLANTILLA de las campañas: sola aborta (dt 5.0
+mayor que el `dt_max` por defecto, 1.0). Lanzarla con el runner, que fija los
+parámetros de paso (`campaigns/b1_ugarte.json`: dt 2 ms):
 
 ```bash
-mpirun -n 8 ./bin/eaf3d_mpi input/config_300s_borein.dat
+python3 scripts/run_campaign.py campaigns/b1_ugarte.json   # B1 completo (días); --dry-run solo genera el config
 ```
 
-El bore-in completa en t ≈ 200 s (electrodo desciende 2 m a 0.01 m/s).  
+El bore-in completa en t ≈ 200 s (electrodo desciende 2 m a 0.01 m/s).
 Verificar que `bore_in_done` pasa a `.true.` en los 3 electrodos.
 
 ---

@@ -13,7 +13,7 @@
         "adaptive_dt": true,
         "dt": 0.002,
         "dt_min": 0.001,
-        "dt_max": 1.0,
+        "dt_max": 0.01,
         "solve_slag": false,
         "solve_species": true,
         "audit_freq": 5,
