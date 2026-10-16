@@ -707,6 +707,13 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
 - **Orden del paso**: fusión+colapso ANTES del lazo SIMPLE
   (update_solid_premelt); interfase DESPUÉS de los solves de energía
   (update_solid_postenergy) — moverla antes duplica el calor.
+- **Régimen de PASO válido del modelo de dos fluidos (auditoría 12, M12-2)**:
+  dt de unos pocos ms con CFL ≤ 1 (los parámetros de B1: dt_0 2 ms, dt_min
+  1 ms, cfl_max 1). Con pasos fijos ≥ 50 ms, o con el antiguo dt_0 0.5 s /
+  dt_min 10 ms de `config_production_full`, bath_test y bath_fill se rompen
+  en los primeros pasos (presión en P_HYDRO_CAP, líquido a 14–31 m/s; también
+  en el estado de la auditoría 8: es previo). `config_production_full` usa
+  ahora los de B1; `bath_fill_adapt` ejerce el control de paso con flujo.
 - **CFL azimutal**: `dth_len = max(r·dθ, dr)` — el anillo del eje no
   gobierna el dt (esquema implícito; escala advectiva ≥ ancho radial).
 - **Coeficientes de ensamblado**: los 8 arrays (aW..aT, aP, Su) viven en

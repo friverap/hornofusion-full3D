@@ -331,6 +331,8 @@ full | rebaseline)
     run_case bath_fill 4
     run_case bath_mix 4
     run_case bath_fill_mix 4
+    # (auditoria 12, M12-2) bath_fill con el control de paso adaptativo de produccion
+    run_case bath_fill_adapt 4
     run_case bath_freeze 4
     # Descomposicion del lecho inundado/congelado (auditoria M22: celdas
     # selladas en la frontera entre ranks; antes 9.7 % en alpha_l n1 vs n4)
@@ -427,6 +429,9 @@ full | rebaseline)
     run_script "bath_fill" \
         $PY $INT/check_bath.py "$OUT/bath_fill_n4" --config "$CFG/bath_fill.dat" --fill \
         --xfail "$(xfail_ids bath_fill)"
+    run_script "bath_fill_adapt" \
+        $PY $INT/check_bath.py "$OUT/bath_fill_adapt_n4" --config "$CFG/bath_fill_adapt.dat" --fill \
+        --xfail "$(xfail_ids bath_fill_adapt)"
     # Modelo de MEZCLA (Plan G): baño en reposo y llenado con fusion y arco
     run_script "bath_mix" \
         $PY $INT/check_bath.py "$OUT/bath_mix_n4" --config "$CFG/bath_mix.dat" \

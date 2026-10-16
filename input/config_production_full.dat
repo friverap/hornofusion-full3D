@@ -23,8 +23,10 @@
 #   16 procs (cluster):             mpirun -n 16  → descomposición 1×4×4
 #
 # TIEMPO TOTAL: 5040 s (tap-to-tap completo)
-#   dt_0=0.5 s, adaptativo hasta dt_max=2.0 s
-#   ~ 4,000–10,000 pasos según dt adaptativo
+#   dt_0 = 2 ms, adaptativo (CFL <= 1) entre 1 ms y 1 s: los parametros de
+#   B1 (v34), los unicos validados con el modelo de dos fluidos. Con los
+#   antiguos (dt_0 0.5 s, dt_min 10 ms) bath_test y bath_fill se rompen en
+#   los primeros pasos (auditoria 12, M12-2). Del orden de 10^6 pasos.
 #
 # OUTPUT: ~50 snapshots HDF5 × ~120 MB ≈ 6 GB  (output_prod2/)
 #
@@ -58,9 +60,14 @@ R_elec   = 0.30
 #   Cubo 2 cargado en t=2100 s
 #   Tap-to-tap: 5040 s
 # ============================================================
-dt           = 0.5
-dt_min       = 0.01
-dt_max       = 2.0
+# (auditoria 12, M12-2) parametros de paso de B1: el modelo de dos fluidos
+# no es estable con pasos fijos >= 50 ms ni con dt_0 0.5 s / dt_min 10 ms
+# (bath_test: presion en P_HYDRO_CAP y liquido a 14-31 m/s, tambien en el
+# estado de la auditoria 8: es previo)
+dt           = 0.002
+dt_min       = 0.001
+dt_max       = 1.0
+cfl_max      = 1.0
 t_final      = 7200.0
 adaptive_dt  = true
 

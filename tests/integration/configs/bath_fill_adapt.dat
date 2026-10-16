@@ -1,0 +1,45 @@
+# Banco bath_fill_adapt (auditoria 12, M12-2): bath_fill con el CONTROL DE PASO
+# de produccion (los parametros de B1: dt_0 2 ms, CFL <= 1 entre 1 ms y 1 s).
+# Ningun banco multifase ejercia el dt adaptativo con flujo; con los parametros
+# de paso antiguos de produccion (dt_0 0.5 s, dt_min 10 ms) el modelo se rompe
+# en los primeros pasos (previo). Criterios: check_bath --fill y el audit.
+# Banco rapido del acople P-V en regimen de BANO QUE SE LLENA (Plan C, F0).
+# melt_forced + heel: charco de liquido puro debajo y chatarra a 1815 K
+# (> T_liq) encima que funde desde el primer paso, de modo que el bano crece
+# por arriba — el mecanismo exacto que reventaba B1 (Bug 19). Criterios
+# (check_bath.py --fill): p_max acotada por la escala ferrostatica, gas sin
+# tocar U_GAS_MAX, masa de acero exacta.
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+
+
+heel_mass = 180000.0
+heel_T = 1850.0
+T_initial = 1815.0
+
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = false
+solve_radiation = true
+solve_chemistry = false
+solve_arc = true
+solve_multiphase = true
+
+alpha_p = 0.3
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 200
+
+audit_freq = 1
+output_freq = 10
+monitor_freq = 10
+dt = 0.002
+dt_min = 0.001
+dt_max = 1.0
+cfl_max = 1.0
+adaptive_dt = true
+t_final = 0.5
