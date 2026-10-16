@@ -621,12 +621,29 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   quedan en `ws_Fr/ws_Fth/ws_Fz` (`ws_flux_valid`) y la energía del
   líquido los REUTILIZA: nunca recalcular flujos del líquido en la
   energía si el transporte de α ya los produjo. El exceso residual se
-  DERRAMA hacia arriba (conservativo, columna `m_spill`, entra a `ws_Fz`)
-  y solo lo que no cabe bajo el techo va al clip auditado (`m_alpha_clip`,
+  DERRAMA hacia arriba (conservativo, columna `m_spill`, entra a `ws_Fz`;
+  una celda llena DE LÍQUIDO —sin escoria (α_sl < ALPHA_CUTOFF) y con α_l ≥
+  ALPHA_FLOW_CUTOFF— no corta la cascada: recibe el exceso y lo cede en la
+  pasada siguiente (relevo); una celda llena con ESCORIA o una COSTRA sólida
+  NUNCA se atraviesa —el acero quedaría sobre la escoria—, auditoría 11 A11-2,
+  traído de main d4800f8/10c8fd5) y solo lo que no cabe bajo el techo (o
+  bajo una escoria/costra llena) va al clip auditado (`m_alpha_clip`,
   contabilizado POR PASO: la última iteración externa, no la suma de las
   5 — `audit_step_delta`). Nunca reintroducir un recorte silencioso de α:
   toda restricción de volumen se resuelve moviendo masa, no borrándola.
-  Test: `test_alpha_limiter` (4 casos).
+  Test: `test_alpha_limiter` (casos 1-9). **Convergencia del limitador
+  (auditoría 9, M9-6)**: el Jacobi del factor es MONÓTONO desde 1 (siempre
+  sobreadmite) y en un baño LLENO al que el Poisson pide meter líquido (lecho
+  que drena encima) converge geométricamente lento (1.4 %/barrido en la
+  llamada más lenta medida, pocket_rise_dt10 paso 48; 7–12 % en otras) y agota
+  `N_LIM_MAX`; el exceso que deja lo mueve el derrame (`m_spill`, auditado y
+  conservativo; cuenta MASA POR SALTO, así que una cadena de relevo de L celdas suma L veces la masa: cota superior del error, no la masa movida): ESE es el error, no `dlim`. **Con escoria sigue abierto**: `slag_buoyancy` llena con escoria el hueco de la celda más alta del baño, esa interfaz corta el relevo y todo sobrellenado interior del baño va al clip auditado (A11-2, magnitud en producción sin medir). El diagnóstico `[LIM]` estima la
+  distancia al punto fijo (`dist_est` ≈ dlim r/(1−r)). Probado y NO adoptado:
+  el hueco con signo (bath_freeze: derrame 10.4 → 2.1 t, pero volumen
+  bloqueado +58 % y gas recreado 11.5 → 16.9 %: agranda el desfase α–p). No
+  acelerar con extrapolación ni arranque en caliente: el mapa tiene familias
+  de puntos fijos en lazos que conservan caudal. El origen es el desacople
+  α–p (Plan D); magnitud en B1 sin medir.
 - **Residuales del lazo externo**: se computan con el ITERADO ENTRANTE
   (el campo que queda en pie), jamás con el recién resuelto post-TDMA
   (siempre ~0: declaraba convergencia en 1 outer y perdía (1−α_T) de las
