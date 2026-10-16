@@ -78,6 +78,7 @@ contains
         real(dp) :: x_elec, y_elec, x_cell, y_cell, dist
         real(dp) :: r2, sigma_r, gw
         real(dp) :: total_gw_vol_rad, total_gw_vol_conv, total_vol, wsc, wba, wvo, wexp, frac_surf
+        real(dp) :: wsb, wlb, wvb, phib, h_pud
         logical  :: found_scrap, owned, any_liq, found_bath, surf_found, is_scrap
         integer  :: kg_bath_any   ! capa del bano bajo la punta aunque la superficie sea chatarra (B4-14)
         ! (El tope de 2 K por paso al solido se sustituyo por el tope de estado
@@ -199,6 +200,43 @@ contains
                     ! sumergida (0.05 dz/0.014).
                     if (wba >= frac_surf * wvo) then
                         is_scrap = wsc >= wba .and. wsc >= ARC_SURF_FRAC_S * wvo
+                        ! (limite de una capa, auditorias 11-13) un CHARCO h
+                        ! sobre un lecho inundado de fraccion phi da en su capa
+                        ! alpha_s = phi (dz - h)/dz, indistinguible de un lecho
+                        ! a ras con phi' = alpha_s: con chatarra COMPACTADA
+                        ! (phi > 0.9) la banda ambigua es 0.44 dz, por encima de
+                        ! ARC_SURF_H. Se mira la capa de ABAJO: si es un lecho
+                        ! inundado mas denso, el charco implicito es
+                        ! h = dz (1 - alpha_s/phi_abajo) y, si llega al umbral de
+                        ! espesor del bano, la superficie es el BANO.
+                        if (is_scrap .and. kg > 1) then
+                            wsb = 0.0_dp; wlb = 0.0_dp; wvb = 0.0_dp
+                            do jg = 1, m%nth_g
+                                do ig = 1, m%nr_g
+                                    if (m%cell_type_global(ig,jg,kg-1) == 0) cycle
+                                    x_cell = m%r_global(ig) * cos(m%theta_global(jg))
+                                    y_cell = m%r_global(ig) * sin(m%theta_global(jg))
+                                    dist = sqrt((x_cell - x_elec)**2 + (y_cell - y_elec)**2)
+                                    r2 = dist**2 / (sigma_r**2 + SMALL)
+                                    if (r2 >= 16.0_dp) cycle
+                                    gw = exp(-r2) * m%vol_global(ig,jg,kg-1)
+                                    wvb = wvb + gw
+                                    if (alpha_sg(ig,jg,kg-1) > ALPHA_SCRAP_SURF) &
+                                        wsb = wsb + gw * alpha_sg(ig,jg,kg-1)
+                                    wlb = wlb + gw * alpha_lg(ig,jg,kg-1)
+                                end do
+                            end do
+                            if (wvb > SMALL) then
+                                phib = wsb / wvb
+                                ! lecho de abajo mas denso y con el poro al menos
+                                ! medio lleno de liquido (inundado)
+                                if (phib > wsc / wvo .and. wlb >= 0.5_dp * (wvb - wsb)) then
+                                    h_pud = (m%zf_global(kg) - m%zf_global(kg-1)) &
+                                            * (1.0_dp - (wsc / wvo) / phib)
+                                    if (h_pud >= ARC_SURF_H) is_scrap = .false.
+                                end if
+                            end if
+                        end if
                     else
                         is_scrap = wsc / ARC_SURF_FRAC_S >= wba / frac_surf
                     end if

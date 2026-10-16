@@ -169,6 +169,15 @@ program test_arc_surface
     !    (auditoria dirigida de M8-1: con 'chatarra si el bano no pasa' una
     !    traza decidia la superficie)
     call layer_case(7, 0.32_dp, 0.10_dp, .false., .false., 6)
+    ! 8 (limite de una capa, auditorias 11-13): CHARCO de 0.3 dz sobre un lecho
+    !    COMPACTADO inundado (phi 0.95 en la capa K): K+1 tiene alpha_s 0.665 y
+    !    alpha_l 0.335, que la regla de una capa daba por CHATARRA (0.665 >=
+    !    0.335); mirando la capa de abajo el charco implicito es 0.3 dz >=
+    !    ARC_SURF_H -> BANO
+    call layer_case(8, 0.335_dp, 0.665_dp, .false., .false., phib=0.95_dp)
+    ! 9: lecho inundado A RAS (alpha_s 0.6 en K+1 sobre el mismo lecho 0.6 en
+    !    K): charco implicito 0 -> CHATARRA (como el 5)
+    call layer_case(9, 0.40_dp, 0.60_dp, .false., .true., phib=0.60_dp)
 
     if (ok) then
         print '(A)', ' PASS test_arc_surface (pelicula no es superficie; crater, pelicula sobre chatarra y lecho inundado son chatarra; bano con chatarra sumergida es bano)'
@@ -181,17 +190,22 @@ contains
     ! capa K+1 con liquido al y chatarra as (film: al en 1/3 de las celdas y
     ! as en las otras 2/3; si no, ambos en todas); bano lleno en 1..K.
     ! want_scrap: superficie esperada (chatarra o bano)
-    subroutine layer_case(icase, al, as, film, want_scrap, every)
+    subroutine layer_case(icase, al, as, film, want_scrap, every, phib)
         integer, intent(in)  :: icase
         real(dp), intent(in) :: al, as
         logical, intent(in)  :: film, want_scrap
         ! (opcional) chatarra solo en 1 de cada 'every' celdas y liquido en 3
         ! de cada 4 (las de chatarra, sin liquido)
         integer, intent(in), optional :: every
+        ! (opcional) la capa K es un LECHO inundado de fraccion phib (no bano)
+        real(dp), intent(in), optional :: phib
         real(dp) :: e_up_, e_k_, e_tot_, e0
         integer  :: ii, jj, k3
         asg = 0.0_dp; alg = 0.0_dp
         alg(:,:,1:K) = 1.0_dp
+        if (present(phib)) then
+            asg(:,:,K) = phib; alg(:,:,K) = 1.0_dp - phib
+        end if
         do jj = 1, mesh%nth_g
             do ii = 1, mesh%nr_g
                 if (film) then
