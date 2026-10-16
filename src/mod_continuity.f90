@@ -461,6 +461,17 @@ contains
                         room_up = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k+1) &
                                   - alpha_slag(i,j,k+1) - liq%alpha(i,j,k+1)) &
                                   * m%vol(i,j,k+1) / m%vol(i,j,k)
+                        ! (auditoria 15) con ESCORIA arriba el tope es su
+                        ! liq_cap, no el hueco fisico: dentro del lecho la
+                        ! escoria llena hasta liq_cap y deja libre el gas de
+                        ! poro; con el hueco fisico la cascada metia acero en
+                        ! ese poro y la celda (liq_cap 0) lo cedia arriba: el
+                        ! acero cruzaba la escoria (M9-4). Fuera del lecho
+                        ! liq_cap ES el hueco fisico: identico.
+                        if (alpha_slag(i,j,k+1) >= ALPHA_CUTOFF) &
+                            room_up = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k+1), &
+                                      alpha_slag(i,j,k+1)) - liq%alpha(i,j,k+1)) &
+                                      * m%vol(i,j,k+1) / m%vol(i,j,k)
                         ws_lim(i,j,k) = min(give, room_up)
                         ! (auditoria 8) una celda de arriba LLENA DE LIQUIDO no
                         ! bloquea: recibe el exceso y lo cede en la pasada
@@ -471,7 +482,8 @@ contains
                         ! a traves de LIQUIDO: una celda llena con escoria
                         ! (la escoria llena hasta liq_cap, dentro y fuera del
                         ! lecho; la interfaz acero|escoria queda llena y
-                        ! mixta: con escoria el relevo nunca pasa de ella) o
+                        ! mixta: con escoria ni el relevo ni la cascada pasan
+                        ! de ella, esta ultima por el tope liq_cap) o
                         ! una costra sin liquido NO se atraviesa -- el acero
                         ! quedaba ENCIMA de la escoria y el limitador le
                         ! impedia volver a bajar --; ni una costra con trazas

@@ -652,18 +652,20 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   ALPHA_FLOW_CUTOFF— no corta la cascada: recibe el exceso y lo cede en la
   pasada siguiente (relevo); una celda llena con ESCORIA o una COSTRA sólida
   NUNCA se atraviesa —el acero quedaría sobre la escoria—, auditoría 11 A11-2,
-  traído de main d4800f8/10c8fd5) y solo lo que no cabe bajo el techo (o
+  traído de main d4800f8/10c8fd5; con escoria arriba la cascada se acota por
+  su `liq_cap`, no por el hueco físico: dentro del lecho el gas de poro de la
+  escoria era un conducto, auditoría 15) y solo lo que no cabe bajo el techo (o
   bajo una escoria/costra llena) va al clip auditado (`m_alpha_clip`,
   contabilizado POR PASO: la última iteración externa, no la suma de las
   5 — `audit_step_delta`). Nunca reintroducir un recorte silencioso de α:
   toda restricción de volumen se resuelve moviendo masa, no borrándola.
-  Test: `test_alpha_limiter` (casos 1-9). **Convergencia del limitador
+  Test: `test_alpha_limiter` (casos 1-10). **Convergencia del limitador
   (auditoría 9, M9-6)**: el Jacobi del factor es MONÓTONO desde 1 (siempre
   sobreadmite) y en un baño LLENO al que el Poisson pide meter líquido (lecho
   que drena encima) converge geométricamente lento (1.4 %/barrido en la
   llamada más lenta medida, pocket_rise_dt10 paso 48; 7–12 % en otras) y agota
   `N_LIM_MAX`; el exceso que deja lo mueve el derrame (`m_spill`, auditado y
-  conservativo; cuenta MASA POR SALTO, así que una cadena de relevo de L celdas suma L veces la masa: cota superior del error, no la masa movida): ESE es el error, no `dlim`. **Con escoria sigue abierto**: `slag_buoyancy` llena con escoria el hueco de la celda más alta del baño, esa interfaz corta el relevo y todo sobrellenado interior del baño va al clip auditado (A11-2, magnitud en producción sin medir). El diagnóstico `[LIM]` estima la
+  conservativo; cuenta MASA POR SALTO, así que una cadena de relevo de L celdas suma L veces la masa: cota superior del error, no la masa movida): ESE es el error, no `dlim`. **Con escoria sigue abierto**: `slag_buoyancy` llena con escoria el hueco de la celda más alta del baño, esa interfaz corta el relevo y todo sobrellenado interior del baño va al clip auditado (A11-2; medido en arc_slag ~1.5e-2 kg/s, 4e-4 del baño en 7200 s, M13-1; producción corre sin escoria). El diagnóstico `[LIM]` estima la
   distancia al punto fijo (`dist_est` ≈ dlim r/(1−r)). Probado y NO adoptado:
   el hueco con signo (bath_freeze: derrame 10.4 → 2.1 t, pero volumen
   bloqueado +58 % y gas recreado 11.5 → 16.9 %: agranda el desfase α–p). No

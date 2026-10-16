@@ -25,7 +25,8 @@
 !      ws_Fz de la cara superior lleva la masa derramada (energía).
 !   5-9. Celda LLENA sobre la sobrellena (auditorias 8-9): de liquido, el
 !      exceso la atraviesa (5; encadenado por dos celdas, 9); de escoria,
-!      de costra solida o la interfaz acero|escoria, nunca (6-8, M9-4).
+!      de costra solida o la interfaz acero|escoria, nunca (6-8, M9-4);
+!      tampoco escoria DENTRO del lecho por su gas de poro (10, auditoria 15).
 !===============================================================================
 program test_alpha_limiter
     use mod_constants
@@ -193,6 +194,11 @@ program test_alpha_limiter
     call spill_case(8, 0.0_dp, 0.5_dp, 0.5_dp)
     ! 9: relevo ENCADENADO: k=3 y k=4 llenas de liquido, el exceso llega a k=5
     call spill_case(9, 0.0_dp, 1.0_dp, 0.0_dp)
+    ! 10 (auditoria 15): k=3 ESCORIA DENTRO DEL LECHO (a_s 0.5, escoria en su
+    !    liq_cap: queda el gas de poro ALPHA_PORE_GAS libre). La cascada usaba
+    !    el hueco FISICO y llenaba ese 0.015 de acero, que la celda (liq_cap 0)
+    !    cedia arriba: el acero cruzaba la escoria por el poro (M9-4 roto)
+    call spill_case(10, 0.5_dp, 0.0_dp, liq_cap(0.5_dp, 0.0_dp))
 
     if (ok) then
         print '(A)', ' PASS test_alpha_limiter'
