@@ -383,6 +383,10 @@ full | rebaseline)
     run_case arc_noscrap 4
     # (auditoria 12, M12-1arc) arco sobre escoria en su propia capa (malla fina)
     run_case arc_slag 4
+    # (oct-2026) invarianza MPI de la escoria que cede al acero (la pasada de
+    # cesion y slag_buoyancy): arc_slag es el banco que la ejerce (sin ella
+    # su alpha_clip estricto falla: 9.5e-5 kg)
+    run_case arc_slag 1
     # Cesta 2 durante la corrida (auditoria A5): carga aditiva y auditada
     run_case cold_bucket2 4
     # Drenaje del lecho con la fuerza balanceada (auditoria 2, N-C1)
@@ -495,6 +499,8 @@ full | rebaseline)
         $PY $INT/check_pocket.py "$OUT/pocket_rise_n4" --dt 0.005 --xfail "$(xfail_ids pocket_rise)"
     run_script "arc_melt" \
         $PY $INT/check_arcmelt.py "$OUT/arc_melt_n4" --xfail "$(xfail_ids arc_melt)"
+    run_script "arc_slag_bed" \
+        $PY $INT/check_slag_bed.py "$OUT/arc_slag_n4" --xfail "$(xfail_ids arc_slag)"
     run_script "arc_melt_slag" \
         $PY $INT/check_slag_bed.py "$OUT/arc_melt_slag_n4" --xfail "$(xfail_ids arc_melt_slag)"
     # Auditoria de energia/masa/arco en TODA corrida de la matriz (auditoria
@@ -530,6 +536,9 @@ full | rebaseline)
     # (A4-7) medido 2.4e-8 (n1 frente a n4, golden v92; 2e-9 en A4-7) y 1.4e-13 (B5-19: margen 4x, no 50x)
     run_script "decomposition_bedbath" \
         $PY $INT/compare_decomposition.py "$OUT/bed_bath_rest_n1" "$OUT/bed_bath_rest_n4" --rtol 1e-7
+    # (oct-2026) medido 1.3e-10 (T_gas); Y_* solo donde hay gas
+    run_script "decomposition_arcslag" \
+        $PY $INT/compare_decomposition.py "$OUT/arc_slag_n1" "$OUT/arc_slag_n4" --rtol 1e-9
     run_script "decomposition_arcmelt" \
         $PY $INT/compare_decomposition.py "$OUT/arc_melt_n1" "$OUT/arc_melt_n4" --rtol 1e-11
     # Reinicio desde snapshot: mismo numero de ranks y distinto (lectura por

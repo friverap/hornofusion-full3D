@@ -59,6 +59,14 @@ def main():
 
     for name in sorted(fields_a):
         a, b = fields_a[name], fields_b[name]
+        # (oct-2026) las fracciones de especie del GAS no tienen sentido donde
+        # no hay gas: con escoria que cede al acero una celda queda con
+        # alpha_g 1e-16 en un rank y 0 en otro y la dilucion de slag_buoyancy
+        # pone Y = 0 en una y no en la otra (arc_slag n1/n4: 2 celdas). Se
+        # comparan solo donde alguna de las dos tiene gas resuelto.
+        if name.startswith("Y_") and "alpha_gas" in fields_a:
+            gm = (fields_a["alpha_gas"] >= 1e-6) | (fields_b["alpha_gas"] >= 1e-6)
+            a = np.where(gm, a, 0.0); b = np.where(gm, b, 0.0)
         scale = max(family_scale(name), args.floor)
         err = float(np.max(np.abs(a - b))) / scale
         # (auditoria 4, B4-18) un NaN en cualquiera de las dos corridas es un

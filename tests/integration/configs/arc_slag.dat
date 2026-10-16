@@ -1,15 +1,12 @@
-# Banco arc_slag (auditoria 12, M12-1arc): arc_noscrap en malla FINA (nz 64,
-# dz ~0.07 m) con 10 t de escoria, que ocupa su PROPIA capa sobre el bano, como
-# en la malla de produccion. Cubre el LIMITE vigente: el arco y el MC ven solo
-# alpha_l, saltan la capa de escoria y depositan en el bano de debajo (la
-# escoria intercepta solo lo de su celda: E_slag_intercept 0.94 MJ de ~2.2 MJ).
-# Hacer de la escoria superficie (alpha_l + alpha_sl) se probo y NO se adopto:
-# la escoria se lleva casi todo el arco y no tiene salida de calor (no emite en
-# la DO, sin transporte lateral, acople con el bano de cientos de J por paso):
-# miles de K en decenas de segundos en produccion. Requiere antes un modelo
-# termico de la escoria. alpha_clip es xfail con causa: la interfaz de escoria
-# corta el relevo del derrame (A11-2 con escoria). max_inner_pres 400: con 200
-# el CG no converge en esta malla fina.
+# Banco arc_slag (auditoria 12; modelo termico de la escoria oct-2026):
+# arc_noscrap en malla FINA (nz 64, dz ~0.07 m) con 10 t de escoria en su
+# PROPIA capa sobre el bano, como en la malla de produccion. Ejerce: el arco
+# con cavidad (P_elec/P_conv al metal; la escoria intercepta solo la
+# radiacion del MC), la escoria densa en la DO, su acople con el bano y la
+# escoria que CEDE al acero (el exceso bajo la interfaz entra en su celda:
+# sin la cesion su alpha_clip estricto falla, 9.5e-5 kg). n1 frente a n4:
+# invarianza MPI de la cesion. Medido a 10 s: T_sl max bajo T_l max, clip
+# ~1e-9 kg. max_inner_pres 400: con 200 el CG no converge en esta malla fina.
 nr = 12
 ntheta = 24
 stretch_r = 1.0
