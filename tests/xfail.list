@@ -116,3 +116,13 @@ audit_oneflow:energy_balance_step
 # la presion y rho_gas del snapshot de origen; con la hidrostatica y la EOS
 # coherentes pasa (0.44: el gas de poro fuera del acople sigue a la presion
 # mientras el fondo se reajusta, familia N-M4).
+# pocket_rise_o5 (auditoria 9, M9-2): la bolsa con el lazo externo TRUNCADO de
+# B1 (max_outer 5). El desfase alpha-p ventea gas que la EOS recrea (44 % de lo
+# venteado; 0.9 % con 20 iteraciones): parte dominante del residuo de N-M4
+# fuera de la congelacion. Abierto: decision sobre max_outer en B1.
+# pocket_o5_vent_bound y mass_gas de su audit (--mgtol 0.6) no son xfail:
+# atrapan un empeoramiento. XPASS = el acople alfa-p con 5 iteraciones ya no
+# ventea gas fantasma. Si en cambio B1 pasa a mas iteraciones externas, esta
+# variante deja de representar produccion: subir su max_outer al de B1 (o
+# retirarla) y quitar esta entrada.
+pocket_rise_o5:pocket_o5_vent

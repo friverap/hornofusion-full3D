@@ -1,0 +1,36 @@
+# Banco pocket_rise_o5 (auditoria 9, M9-2): pocket_rise con el lazo externo
+# TRUNCADO de B1 (max_outer = 5). Vigila el venteo fantasma del desfase
+# alpha-p: con 5 iteraciones se ventean 0.92 kg con 0.52 kg de perdida real
+# (la EOS recrea el 44 %) y el gas llega a 45 m/s por los huecos de los
+# electrodos. pocket_o5_vent (20 %) es xfail con causa: un arreglo del
+# acople lo vuelve XPASS; pocket_o5_vent_bound y mass_gas del audit (60 %)
+# atrapan un empeoramiento. pocket_o5_retain mira desde t = 0.12 s: a 0.10 s
+# el lazo truncado aun drena (0.61 kPa). Resto: ver pocket_rise.dat.
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+charge_recipe_file = input/recipe_bed_flood.dat
+dt = 0.005
+t_final = 0.5
+adaptive_dt = false
+heel_mass = 100000.0
+heel_T = 1850.0
+T_initial = 1850.0
+T_ambient = 1850.0
+solve_flow = true
+solve_energy = true
+solve_melting = false
+solve_turb = false
+solve_radiation = false
+solve_chemistry = false
+solve_arc = false
+solve_multiphase = true
+alpha_p = 0.3
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 200
+audit_freq = 1
+output_freq = 2
+monitor_freq = 20

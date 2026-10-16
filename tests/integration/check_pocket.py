@@ -52,6 +52,13 @@ ap.add_argument("--prefix", default="pocket")
 # (auditoria 9, B9-11) el reinicio toma el dt del SNAPSHOT: se comprueba el
 # dt real de la corrida (columna dt del audit)
 ap.add_argument("--dt", type=float, default=None)   # default: el del config.dat de la corrida
+# (auditoria 9, M9-2) cota de REGRESION del cierre de masa del gas para la
+# variante con el lazo externo truncado (pocket_rise_o5): el 20 % es xfail
+# con causa y esta cota atrapa un empeoramiento
+ap.add_argument("--vent-bound", type=float, default=None)
+# inicio de la ventana de pocket_retain (en la variante truncada a 0.10 s aun
+# se mide el RETRASO del drenaje: 0.61 kPa, que cae a la mitad cada 10 ms)
+ap.add_argument("--retain-from", type=float, default=0.10)
 a = ap.parse_args()
 chk = Checker(parse_xfail_arg(a.xfail))
 P = a.prefix
@@ -77,7 +84,7 @@ for fn in sorted(glob.glob(os.path.join(a.rundir, "eaf3d_*.h5"))):
         if ex[act & pk].max() > pk_max:
             pk_max = ex[act & pk].max(); pk_where = t
         rest_max = max(rest_max, ex[act & ~pk].max())
-        if t >= 0.10 - 1e-9:
+        if t >= a.retain_from - 1e-9:
             p9 = p[8][act[8]].mean()
             ret = p[5:7][act[5:7]].max() - p9
             ret_min = min(ret_min, p[5:7][act[5:7]].min() - p9)
@@ -95,10 +102,10 @@ chk.report(f"{P}_excess", pk_max <= 2.0e3,
            f"exceso sobre la hidrostatica en la bolsa (capas 6-7): max {pk_max/1e3:.2f} kPa "
            f"en t = {pk_where:.3f} s (max 2 kPa)")
 if ret_where is None:
-    chk.report(f"{P}_retain", False, "sin snapshots con t >= 0.10 s")
+    chk.report(f"{P}_retain", False, f"sin snapshots con t >= {a.retain_from:g} s")
 else:
     chk.report(f"{P}_retain", ret_max <= 1.0e3 and ret_min >= -1.0e3,
-               f"bolsa frente a la capa 9 (t >= 0.10 s): max {ret_max/1e3:+.3f} kPa en t = {ret_where:.3f} s, "
+               f"bolsa frente a la capa 9 (t >= {a.retain_from:g} s): max {ret_max/1e3:+.3f} kPa en t = {ret_where:.3f} s, "
                f"min {ret_min/1e3:+.3f} kPa (cota +-1 kPa)")
 if "t_final" in cfgd:
     tf = float(cfgd["t_final"])
@@ -117,5 +124,9 @@ if a.dt is not None:
 chk.report(f"{P}_vent", abs(dm + vent) <= 0.2 * max(vent, abs(dm)),
            f"venteo {vent:.3f} kg, dm_gas {dm:.3f} kg: gas creado por la EOS {dm + vent:.3f} kg "
            f"({abs(dm + vent) / max(vent, abs(dm), 1e-30):.1%}, max 20 %)")
+if a.vent_bound is not None:
+    chk.report(f"{P}_vent_bound", abs(dm + vent) <= a.vent_bound * max(vent, abs(dm)),
+               f"gas creado por la EOS {abs(dm + vent) / max(vent, abs(dm), 1e-30):.1%} "
+               f"(cota de regresion {a.vent_bound:.0%})")
 chk.report(f"{P}_gas", ug <= 75.0, f"u_gas_max del audit {ug:.1f} m/s (max 75)")
 chk.exit()

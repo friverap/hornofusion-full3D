@@ -160,6 +160,7 @@ audit_xfail_prefix() {
         oneflow_test)  echo audit_oneflow ;;
         pocket_rise)   echo audit_pocket ;;
         pocket_rise_dt10) echo audit_pocket_dt10 ;;
+        pocket_rise_o5) echo audit_pocket_o5 ;;
         *)             echo "" ;;
     esac
 }
@@ -168,6 +169,9 @@ audit_extra_args() {
     case $1 in
         arc_noscrap) echo "--min-liq-arc 0.6" ;;
         outer_conv)  echo "--etol 1e-4" ;;   # lazo convergido (N-A6)
+        # (auditoria 9, M9-2) el lazo truncado recrea el 44 % del gas: la cota
+        # de regresion de mass_gas es la misma del checker de la bolsa (60 %)
+        pocket_rise_o5) echo "--mgtol 0.6" ;;
         *)           echo "" ;;
     esac
 }
@@ -368,6 +372,8 @@ full | rebaseline)
             # (auditoria 8, M8-2) la misma bolsa con dt = 10 ms: la movilidad
             # de F2.16 no puede depender del dt de la corrida
             run_case_restart_from pocket_rise_dt10 4 "$OUT/pocket_init_dt10.h5"
+            # (auditoria 9, M9-2) la misma bolsa con el lazo truncado de B1
+            run_case_restart_from pocket_rise_o5 4 "$OUT/pocket_init.h5"
         else
             echo "FAIL: make_pocket_init.py no pudo construir el estado de pocket_rise"; note_fail
         fi
@@ -454,6 +460,9 @@ full | rebaseline)
     run_script "pocket_rise_dt10" \
         $PY $INT/check_pocket.py "$OUT/pocket_rise_dt10_n4" --prefix pocket_dt10 --dt 0.01 \
         --xfail "$(xfail_ids pocket_rise_dt10)"
+    run_script "pocket_rise_o5" \
+        $PY $INT/check_pocket.py "$OUT/pocket_rise_o5_n4" --prefix pocket_o5 --dt 0.005 \
+        --vent-bound 0.6 --retain-from 0.12 --xfail "$(xfail_ids pocket_rise_o5)"
     run_script "arc_melt" \
         $PY $INT/check_arcmelt.py "$OUT/arc_melt_n4" --xfail "$(xfail_ids arc_melt)"
     # Auditoria de energia/masa/arco en TODA corrida de la matriz (auditoria
