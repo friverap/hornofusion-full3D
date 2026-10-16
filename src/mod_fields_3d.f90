@@ -574,6 +574,24 @@ contains
                 exit
             end if
         end do
+        ! (auditoria 11, A11-1) la cesta 2 se APOYA sobre el bano y la escoria:
+        ! antes se colocaba sobre la cima del lecho (o H_bowl) aunque hubiera
+        ! bano encima, restando solo gas y confiando en que el derrame del
+        ! transporte de alpha subiera el liquido desplazado; bajo una capa de
+        ! escoria llena el derrame no pasa y el exceso iba al CLIP (replica de
+        ! produccion: 12 t en el paso de carga). Contenido no gas y no solido
+        ! (liquido + escoria) >= ALPHA_LIQ_CONT marca bano o escoria. La cesta
+        ! 1 (arranque con el talon) no cambia.
+        if (bucket > 1) then
+            do k = kend, kstart, -1
+                if (any(m%cell_type(istart:iend,jstart:jend,k) /= 0 .and. &
+                        1.0_dp - gas%alpha(istart:iend,jstart:jend,k) &
+                        - sol%alpha_s(istart:iend,jstart:jend,k) >= ALPHA_LIQ_CONT)) then
+                    z_top = max(z_top, m%zf(k))
+                    exit
+                end if
+            end do
+        end if
         
         ! Global max z_top across all processes
         if (m%is_parallel) then

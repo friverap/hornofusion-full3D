@@ -226,6 +226,15 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   iterado entrante; continuidad = Σ|Su|/Σ|F*| (desbalance de masa), NUNCA
   el residual del CG. Con los antiguos el lazo salía en 1 iteración.
 - **Colapso de chatarra**: una celda con α_l ≥ ALPHA_LIQ_CONT no es hueco.
+- **Carga de la cesta 2 SOBRE el baño y la escoria (auditoría 11, A11-1)**:
+  `charge_scrap` (bucket > 1) toma como cota de carga también la cara superior
+  de la capa más alta con líquido + escoria ≥ ALPHA_LIQ_CONT: la chatarra solo
+  desplaza GAS. Antes se metía en celdas con baño y el exceso dependía del
+  derrame, que no atraviesa una capa de escoria llena: clip de toneladas en el
+  paso de carga (réplica de producción: 12 t). Consecuencia física a vigilar:
+  la cesta 2 empieza sin contacto con el baño (como el ECS y el colapso, que ya
+  apoyan la chatarra sobre el baño); la cesta 1 (talón) no cambia.
+  `test_charge_slag`.
 - **Ergun EFECTIVO del lecho se DESVANECE con el líquido de la celda (F2.28,
   oct-2026)**: `compute_ergun_drag(on_bed=.true.)` multiplica el Ergun del
   lecho de abajo por `1 − α_l`. El charco parcial de F2.15 (α_l ~ 0.3)
