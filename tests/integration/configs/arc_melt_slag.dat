@@ -1,0 +1,34 @@
+# Banco arc_melt_slag (oct-2026): arc_melt (lecho de chatarra, arco, fusion
+# progresiva) CON escoria (500 kg sobre el lecho). Cubre lo que ningun banco
+# combinaba (auditorias dirigidas 17-18): escoria sobre un lecho que funde y se
+# inunda, el modelo termico de la escoria (DO de la escoria densa, acople con
+# el bano, radiacion del arco interceptada) y la escoria que CEDE al acero
+# (el exceso bajo la interfaz no va al clip). Gates: los del audit (masa
+# exacta, clip, energia, arco) y check_slag_bed.py (ninguna columna con acero
+# encima de la escoria; T_sl acotada por la T del bano/solido + margen).
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+dt = 0.01
+t_final = 2.0
+adaptive_dt = false
+T_initial = 1550.0
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = false
+solve_radiation = true
+solve_chemistry = false
+solve_arc = true
+solve_multiphase = true
+alpha_p = 0.3
+max_outer = 5
+max_inner_mom = 3
+max_inner_pres = 200
+audit_freq = 1
+output_freq = 25
+monitor_freq = 50
+solve_slag = true
+m_slag_init = 500.0

@@ -12,8 +12,7 @@
 #   - Radiación DO (Discrete Ordinates)
 #   - Química: C + ½O₂ → CO (Maahs) + combustión secundaria CO → CO₂
 #   - Transporte de especies CO / CO₂
-#   - Escoria: APAGADA (solve_slag false, auditoria 13 A13-1: sin salida
-#     termica bajo el arco)
+#   - Escoria con modelo termico (DO, acople con bano, cede al acero)
 #   - Buoyancy de Boussinesq
 #
 # MALLA: 60 × 120 × 84 = 604,800 celdas
@@ -149,15 +148,17 @@ arc_w     = 30.0
 # ============================================================
 # ESCORIA (capa de escoria encima del scrap)
 # ============================================================
-# (auditoria 13, A13-1) escoria DESACTIVADA, como en B1: la escoria de la
-# celda de la cima del bano recibe 25-70 % del arco y no tiene salida de calor
-# (no emite en la DO, sin transporte lateral, acople con el bano de decenas de
-# J por paso, ninguno con la chatarra): +1000 K en 25-40 s. Reactivar solo
-# con un modelo termico de la escoria.
-solve_slag   = false
+# (oct-2026) escoria REACTIVADA con su modelo termico (A13-1 cerrado): la
+# escoria densa emite/absorbe en la DO, se acopla con el bano de su celda o
+# el de abajo (el mayor), solo intercepta la RADIACION del arco (el arco abre
+# cavidad: P_elec/P_conv al metal) y CEDE al acero (el exceso bajo la
+# interfaz la desplaza; slag_buoyancy la sube). Bancos: arc_slag (10 s: T_sl
+# bajo T_l, clip ~0) y arc_melt_slag (escoria sobre lecho que funde).
+# k_slag no tiene efecto (aviso del parser). B1 (Ugarte) sigue sin escoria.
+solve_slag   = true
 rho_slag     = 2800.0
 cp_slag      = 1200.0
-k_slag       = 1.5
+# k_slag sin efecto en el modelo (retirado: el parser avisa)
 h_contact_sl = 1000.0
 m_slag_init  = 3300.0
 

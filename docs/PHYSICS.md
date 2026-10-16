@@ -461,6 +461,22 @@ escoria a 1800 K. Química FeO/C con conservación elemental (E2). Piso
 T_sl ≥ 300 K con E_sl coherente y la energía inyectada auditada
 (`E_slag_tclip`).
 
+**Modelo térmico (oct-2026; cierra A13-1 / M12-1arc).** Sin él la escoria
+bajo el arco no tenía salida de calor. (1) **Radiación**: la escoria densa es
+un medio opaco de la DO (κ = `KAPPA_SLAG_ABS` α_sl = 100 α_sl 1/m, espesor
+óptico ~5 por celda) que emite a T_sl, como la espuma; su absorción neta va a
+E_sl (Newton puntual, `E_rad_foam`). El transporte entre capas de escoria lo
+hace la propia DO (difusión radiativa); `k_slag` no se usa. (2) **Contacto con
+el baño**: dos nodos exactos con h = `h_contact_sl` sobre A_z, con el
+reservorio de MAYOR capacidad (el líquido de la celda o el de la de abajo). (3)
+**Arco**: el arco abre cavidad: P_elec y P_conv van al metal (la superficie
+del arco usa α_l); la radiación del arco (Monte Carlo) ve α_l + α_sl y la
+parte de la escoria pasa a E_sl por su κ (apantallamiento). (4) **La escoria
+cede al acero**: el exceso de acero bajo una interfaz de escoria entra en su
+celda y la flotación sube la escoria al final del paso (masa de ambas
+exacta). Bancos `arc_slag` (10 s: T_sl máx bajo T_l máx; clip ~0) y
+`arc_melt_slag`.
+
 ---
 
 ## 15. Transferencia de calor interfase

@@ -656,16 +656,15 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   cascada reserva el gas de poro con una rampa absoluta, fslag = min(1,
   α_sl/ALPHA_FLOW_CUTOFF): desde α_sl ≥ 1e-2 el tope es `liq_cap` (el poro de
   la escoria era un conducto y el acero la cruzaba), con traza ~ el hueco
-  físico de F2.8 (auditorías 15–17). LIMITE: una interfaz acero+escoria llena
-  en el lecho corta la columna y el exceso de un lecho saturado debajo va al
-  clip (como fuera del lecho, A11-2); hoy ninguna corrida lo toca (escoria
-  sin chatarra o solve_slag false). ANTES de reactivar solve_slag con
-  chatarra: banco de lecho saturado bajo escoria que mida el clip) y solo lo que no cabe bajo el techo (o
-  bajo una escoria/costra llena) va al clip auditado (`m_alpha_clip`,
+  físico de F2.8 (auditorías 15–17). Lo que la cascada no sube bajo una interfaz
+  de escoria NO va al clip: la escoria CEDE (oct-2026, A11-2): entra en la
+  celda de escoria y `slag_buoyancy` sube la escoria al final del paso;
+  banco `arc_melt_slag`) y solo lo que no cabe bajo el techo (o bajo una
+  costra llena) va al clip auditado (`m_alpha_clip`,
   contabilizado POR PASO: la última iteración externa, no la suma de las
   5 — `audit_step_delta`). Nunca reintroducir un recorte silencioso de α:
   toda restricción de volumen se resuelve moviendo masa, no borrándola.
-  Test: `test_alpha_limiter` (casos 1-12). **Convergencia del limitador
+  Test: `test_alpha_limiter` (casos 1-12; con escoria: el exceso entra en su celda, casos 6/8/10/12). **Convergencia del limitador
   (auditoría 9, M9-6)**: el Jacobi del factor es MONÓTONO desde 1 (siempre
   sobreadmite) y en un baño LLENO al que el Poisson pide meter líquido (lecho
   que drena encima) converge geométricamente lento (1.4 %/barrido en la
@@ -721,18 +720,25 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
 - **Orden del paso**: fusión+colapso ANTES del lazo SIMPLE
   (update_solid_premelt); interfase DESPUÉS de los solves de energía
   (update_solid_postenergy) — moverla antes duplica el calor.
-- **Arco y ESCORIA: sin modelo térmico de la escoria (auditorías 12-13,
-  M12-1arc / A13-1, ABIERTO)**: `ksurf` y el MC usan solo α_l. La escoria en
-  su PROPIA capa (malla de producción) la salta el arco; la de la celda MIXTA
-  de la cima del baño (donde `slag_buoyancy` llena el hueco) recibe por
-  `slag_intercept_arc` del 25 al 70 % del depósito de superficie (arc_slag:
-  0.94 de ~2.2 MJ) y NO tiene salida de calor (no emite en la DO, sin
-  transporte lateral, acople con el baño de decenas de J por paso, ninguno con
-  la chatarra): +1000 K en 25–40 s en producción. Por eso
-  `config_production_full` corre SIN escoria (como B1). Hacer de la escoria
-  superficie (α_l + α_sl) se probó y empeora (casi todo el arco a la escoria).
-  Requiere un modelo térmico de la escoria (emisión de la escoria densa,
-  acople escoria–chatarra y escoria–baño, P_elec al metal). Banco `arc_slag`.
+- **Arco y ESCORIA: modelo térmico de la escoria (oct-2026; cierra M12-1arc
+  / A13-1)**: (1) la escoria DENSA absorbe y emite en la DO
+  (`KAPPA_SLAG_ABS` α_sl, a T_sl, mismo camino que la espuma; depósito en
+  E_sl, `E_rad_foam`); (2) el acople escoria–baño va al reservorio de MAYOR
+  capacidad (su celda o la de abajo; antes a la traza de líquido de su
+  celda: 10–30 J/paso); (3) el arco abre CAVIDAD: `ksurf`/P_elec/P_conv usan
+  solo α_l (metal bajo la escoria), pero los rayos del MC ven α_l + α_sl
+  (apantallamiento) y `slag_intercept_arc` pasa a E_sl la parte de la escoria
+  por su κ. La escoria como superficie de TODO el arco se probó dos veces y
+  NO es física (se lleva ~43 MW, +72 K/s en su celda). (4) La escoria CEDE al
+  acero (A11-2): el exceso bajo una interfaz de escoria entra en su celda
+  (el recorte final no corta acero por la escoria) y `slag_buoyancy` la sube
+  al final del paso; el acero nunca queda encima. Medido en arc_slag 10 s:
+  T_sl máx siempre bajo T_l máx (la escoria sigue al baño), clip 3.7 kg →
+  1.7e-9. Bancos `arc_slag` y `arc_melt_slag` (escoria sobre lecho que
+  funde, `check_slag_bed.py`). `config_production_full` corre CON escoria;
+  B1 (Ugarte) sin ella. Sin modelar: conducción en la escoria (`k_slag` sin
+  efecto: el transporte entre capas de escoria lo hace la DO, espesor óptico
+  ~5 por celda) y transporte lateral de la escoria.
 - **Régimen de PASO válido del modelo de dos fluidos (auditoría 12, M12-2)**:
   dt de unos pocos ms con CFL ≤ 1 (los parámetros de B1: dt_0 2 ms, dt_min
   1 ms, cfl_max 1). Con pasos fijos ≥ 50 ms, o con el antiguo dt_0 0.5 s /

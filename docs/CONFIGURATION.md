@@ -255,7 +255,7 @@ solve_flow = true y solve_multiphase = false (rama de UNA fase, legada)
 n_pc_max > 1          →  aviso [CONFIG] NOTA: la cancelacion del Rhie-Chow
                           no es exacta desde la segunda pasada (B5-8)
 
-solve_slag    = true  →  independiente de los demás flags
+solve_slag    = true  →  la intercepción del arco exige solve_arc y la espuma solve_chemistry
 
 solve_arc     = true  →  activa simultáneamente:
                           - Cassie-Mayr (update_arc_resistance)
@@ -424,7 +424,7 @@ explica cada parámetro de paso, costo y salida). No se copia aquí: el ejemplo
 que había divergió del archivo (dt_max 0.02 y max_outer 10 frente a 0.01 y 5;
 auditoría 16, M16-I1) y usaba varias claves por línea con `;`, que el parser
 NO separa. Valores clave: `dt 0.002`, `dt_min 0.001`, `dt_max 0.01`,
-`cfl_max 1.0`, `max_outer 5`, `solve_slag false`, `output_freq 50000`,
+`cfl_max 1.0`, `max_outer 5`, `solve_slag true` (modelo térmico, oct-2026), `output_freq 50000`,
 `monitor_freq 500`, `audit_freq 5`, `output_dir output_prod2`.
 
 

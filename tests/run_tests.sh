@@ -412,6 +412,9 @@ full | rebaseline)
     fi
     run_case arc_melt 4
     run_case arc_melt 1
+    # (oct-2026) escoria sobre un lecho que funde: modelo termico de la
+    # escoria y la escoria que cede al acero (auditorias dirigidas 17-18)
+    run_case arc_melt_slag 4
 
 
     run_script "decomposition_cold_n1" \
@@ -492,6 +495,8 @@ full | rebaseline)
         $PY $INT/check_pocket.py "$OUT/pocket_rise_n4" --dt 0.005 --xfail "$(xfail_ids pocket_rise)"
     run_script "arc_melt" \
         $PY $INT/check_arcmelt.py "$OUT/arc_melt_n4" --xfail "$(xfail_ids arc_melt)"
+    run_script "arc_melt_slag" \
+        $PY $INT/check_slag_bed.py "$OUT/arc_melt_slag_n4" --xfail "$(xfail_ids arc_melt_slag)"
     # Auditoria de energia/masa/arco en TODA corrida de la matriz (auditoria
     # 2, N-C3: antes 13 de 26 no se auditaban; bath_freeze fallaba con err 1)
     # (auditoria 4, B4-21) invariantes en TODA corrida de la matriz (antes
