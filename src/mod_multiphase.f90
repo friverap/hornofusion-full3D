@@ -749,7 +749,8 @@ contains
     ! celda y al declarar pared a las celdas del piso de poro encerraba a una
     ! vecina que si tenia movilidad local):
     !   - movil: gas activo cuyo arrastre de Ergun no domina su inercia,
-    !     mob = (alpha_g rho_g/dt)/(alpha_g rho_g/dt + drag) > GAS_MOB_MIN;
+    !     mob = (alpha_g rho_g/dt_ref)/(alpha_g rho_g/dt_ref + drag) >
+    !     GAS_MOB_MIN, con dt_ref = DT_MOB_REF FIJO (M8-2);
     !   - percola: conectada al FREEBOARD (plano superior) por un camino de
     !     celdas moviles a traves de caras (theta periodico, r sin eje).
     ! Barrido global sobre el campo reunido (patron invariante a la
@@ -788,7 +789,9 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
-                    tr = gas%alpha(i,j,k) * gas%rho(i,j,k) / cfg%dt
+                    ! (M8-2) paso de referencia fijo: la movilidad es del
+                    ! estado, no del dt de la corrida
+                    tr = gas%alpha(i,j,k) * gas%rho(i,j,k) / DT_MOB_REF
                     mob = tr / max(tr + max(drag_gas(i,j,k), 0.0_dp), SMALL)
                     if (mob > GAS_MOB_MIN) mob_loc(i,j,k) = 1
                 end do

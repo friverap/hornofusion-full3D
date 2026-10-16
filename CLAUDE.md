@@ -516,7 +516,12 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
 - **Gas atrapado = subfase DESCONECTADA (F2.16, sep-2026)**: el gas de una
   celda es fluido del acople P-V sólo si PERCOLA hasta el freeboard por
   celdas cuyo gas puede moverse (movilidad = transitorio/(transitorio +
-  Ergun) > GAS_MOB_MIN; distribución bimodal medida). Es criterio de CAMINO,
+  Ergun) > GAS_MOB_MIN; distribución bimodal medida). **El transitorio usa
+  el paso de REFERENCIA fijo `DT_MOB_REF` = 2 ms (el dt de B1), nunca el dt de
+  la corrida (auditoría 8, M8-2)**: con dt ≥ ~6.5 ms el gas de piso de una
+  capa saturada (ε_g = 0.015) caía bajo el umbral y la bolsa bajo el lecho
+  inundado quedaba pared (pocket_rise a 10 ms: gas a 131 m/s). La
+  clasificación es del estado, no del integrador (`test_gas_percolation`). Es criterio de CAMINO,
   no local: F2.13 lo probaba celda a celda y al declarar pared a las celdas
   del piso de poro encerraba a vecinas con movilidad propia (B1 v33: 1.4 MPa
   a t = 204 s). Hilfer, Phys. Rev. E 58 (1998) 2090: la subfase conectada es
