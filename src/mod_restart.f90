@@ -69,6 +69,7 @@ contains
         real(dp), intent(out)            :: time
 
         integer(HID_T) :: file_id, plist_id, plist_xfer, gid, rid
+        real(dp) :: msl_loc, msl_glob
         integer :: error, rank, c, e, ne
         logical :: has_restart, ex
         real(dp), allocatable :: xdiag(:,:,:), rv(:)
@@ -103,6 +104,9 @@ contains
         call h5gopen_f(file_id, '/fields', gid, error)
         call check_h5(error, 'h5gopen_f: /fields', rank)
         call check_dims(gid, 'alpha_liquid', m, rank)
+        ! (bajo N-B14) y la GEOMETRIA (mismas dimensiones no implican la misma
+        ! malla: R_shell, H_total, estiramientos)
+        call check_coords(file_id, m, rank)
 
         call read_3d_field(gid, 'T_liquid',           liq%T,   m, plist_xfer)
         call read_3d_field(gid, 'alpha_liquid',       liq%alpha, m, plist_xfer)
@@ -134,6 +138,17 @@ contains
             call read_3d_field(rid, 'm_C',     sol%m_C, m, plist_xfer)
             call read_3d_field_int(rid, 'layer_id', sol%layer_id, m, plist_xfer)
             call read_3d_field(rid, 'm_slag',  slag%m_sl, m, plist_xfer)
+            ! (aud. 15, bajo) snapshot con escoria y solve_slag = false: la
+            ! escoria queda congelada (ni transporte ni energia): aviso
+            if (.not. cfg%solve_slag) then
+                msl_loc = sum(slag%m_sl(1:m%nr, 1:m%ntheta, 1:m%nz))
+                msl_glob = msl_loc
+                if (m%is_parallel) call MPI_Allreduce(msl_loc, msl_glob, 1, MPI_DOUBLE_PRECISION, &
+                                                      MPI_SUM, MPI_COMM_WORLD, error)
+                if (msl_glob > 0.0_dp .and. rank == 0) print '(A,ES10.3,A)', &
+                    ' [RESTART] AVISO: el snapshot tiene ', msl_glob, &
+                    ' kg de escoria y solve_slag = false: la escoria queda congelada'
+            end if
             call read_3d_field(rid, 'E_slag',  slag%E_sl, m, plist_xfer)
             do c = 1, N_SLAG_COMP
                 call read_3d_field(rid, trim(XNAME(c)), slag%m_X(:,:,:,c), m, plist_xfer)
@@ -185,6 +200,14 @@ contains
 
             adims(1) = 1
             call read_attr_real(rid, 'dt', cfg%dt, adims)
+            ! (bajo N-B14 / aud. 15) con paso adaptativo el dt del snapshot se
+            ! acota a [dt_min, dt_max] del config (un snapshot de otro regimen
+            ! podia traer un dt fuera de rango sin aviso)
+            if (cfg%adaptive_dt .and. (cfg%dt < cfg%dt_min .or. cfg%dt > cfg%dt_max)) then
+                if (rank == 0) print '(A,ES10.3,A,ES10.3,A,ES10.3,A)', ' [RESTART] AVISO: dt del snapshot ', &
+                    cfg%dt, ' fuera de [', cfg%dt_min, ', ', cfg%dt_max, ']: se acota'
+                cfg%dt = min(max(cfg%dt, cfg%dt_min), cfg%dt_max)
+            end if
             call h5aexists_f(rid, 'm_ecs_pending', ex, error)
             if (ex) call read_attr_real(rid, 'm_ecs_pending', m_ecs_pending, adims)
             ! (M4-2) modelo que escribio el snapshot
@@ -373,6 +396,51 @@ contains
     !---------------------------------------------------------------------------
     ! La malla del snapshot debe ser la del config
     !---------------------------------------------------------------------------
+    subroutine check_coords(fid, m, rank)
+        integer(HID_T), intent(in) :: fid
+        type(mesh_t), intent(in)   :: m
+        integer, intent(in)        :: rank
+        logical :: ex
+        integer :: error
+        integer(HID_T) :: gm
+        call h5lexists_f(fid, '/mesh', ex, error)
+        if (.not. ex) return
+        call h5gopen_f(fid, '/mesh', gm, error)
+        call cmp1(gm, 'r', m%r_global)
+        call cmp1(gm, 'theta', m%theta_global)
+        call cmp1(gm, 'z', m%z_global)
+        call h5gclose_f(gm, error)
+    contains
+        subroutine cmp1(g, name, x)
+            integer(HID_T), intent(in) :: g
+            character(len=*), intent(in) :: name
+            real(dp), intent(in) :: x(:)
+            integer(HID_T) :: did
+            integer(HSIZE_T) :: d1(1)
+            real(dp), allocatable :: buf(:)
+            integer :: err2
+            logical :: e2
+            call h5lexists_f(g, name, e2, err2)
+            if (.not. e2) return
+            allocate(buf(size(x))); d1(1) = size(x)
+            call h5dopen_f(g, name, did, err2)
+            call h5dread_f(did, H5T_NATIVE_DOUBLE, buf, d1, err2)
+            call h5dclose_f(did, err2)
+            if (maxval(abs(buf - x)) > 1.0e-9_dp * max(1.0_dp, maxval(abs(x)))) then
+                if (rank == 0) then
+                    print '(A,A,A,ES10.3)', ' [RESTART] ERROR: coordenadas ', name, &
+                        ' del snapshot distintas de las del config; max dif = ', maxval(abs(buf - x))
+                    flush(6)
+                end if
+                ! todos los ranks lo detectan (coordenadas globales): la barrera
+                ! deja imprimir al rank 0 antes del abort
+                call MPI_Barrier(MPI_COMM_WORLD, err2)
+                call MPI_Abort(MPI_COMM_WORLD, 1, err2)
+            end if
+            deallocate(buf)
+        end subroutine cmp1
+    end subroutine check_coords
+
     subroutine check_dims(gid, name, m, rank)
         integer(HID_T), intent(in)   :: gid
         character(len=*), intent(in) :: name
