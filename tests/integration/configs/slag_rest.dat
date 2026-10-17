@@ -2,7 +2,12 @@
 # (slag_in_volume) en REPOSO, isotermo, sin arco ni radiacion. La escoria es
 # fase del Poisson y del momento: el equilibrio ferrostatico con el salto de
 # densidad acero|escoria debe sostenerse sin corrientes espurias (gate:
-# u_liq y u_gas en el redondeo, sin acero sobre la escoria, masas exactas).
+# u_liq <= 1e-8 y u_gas <= 1e-4 m/s, sin acero sobre la escoria, masas
+# exactas). El gas arranca en equilibrio termico con el baño (T_ambient =
+# heel_T, como bath_test): con 300 K su conveccion fisica (u_gas ~5 m/s)
+# tapaba cualquier corriente espuria (auditoria 18, A18-2). Medido: u_liq
+# ~1e-11, u_gas 4e-6 -> 5e-8; el camino legado da u_liq 5e-4 y u_gas 8.8
+# (el gas fantasma de M17-PV1).
 nr = 12
 ntheta = 24
 stretch_r = 1.0
@@ -13,6 +18,7 @@ charge_bucket1 = false
 heel_mass = 274000.0
 heel_T = 1850.0
 T_initial = 1850.0
+T_ambient = 1850.0
 solve_flow = true
 solve_energy = true
 solve_melting = false

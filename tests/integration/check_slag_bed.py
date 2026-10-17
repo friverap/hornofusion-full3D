@@ -32,6 +32,9 @@ def main():
     ap.add_argument("--mtol", type=float, default=1e-12)
     ap.add_argument("--max-jumps", type=int, default=None)
     ap.add_argument("--volfix-max", type=float, default=None)
+    # (auditoria 18, A18-2) reposo: cotas de u_liq_max / u_gas_max del audit
+    ap.add_argument("--umax-liq", type=float, default=None)
+    ap.add_argument("--umax-gas", type=float, default=None)
     ap.add_argument("--xfail", default="")
     a = ap.parse_args()
     chk = Checker(parse_xfail_arg(a.xfail))
@@ -81,6 +84,14 @@ def main():
         vf = sum(abs(float(r["m_gas_volfix"])) for r in rows[1:])
         chk.report("slag_bed_volfix", vf <= a.volfix_max,
                    f"|m_gas_volfix| acumulado {vf:.3e} kg (techo {a.volfix_max:.1e})")
+    if a.umax_liq is not None:
+        ul = max(float(r["u_liq_max"]) for r in rows[1:])
+        chk.report("slag_rest_uliq", ul <= a.umax_liq,
+                   f"u_liq_max {ul:.3e} m/s (max {a.umax_liq:.1e})")
+    if a.umax_gas is not None:
+        ug = max(float(r["u_gas_max"]) for r in rows[1:])
+        chk.report("slag_rest_ugas", ug <= a.umax_gas,
+                   f"u_gas_max {ug:.3e} m/s (max {a.umax_gas:.1e})")
     m0 = float(rows[0]["m_slag"]); m1 = float(rows[-1]["m_slag"])
     # (Plan H, P6) la escoria condensada recortada (auditada) sale del balance
     sclip = sum(float(r.get("m_slag_clip", 0.0) or 0.0) for r in rows[1:])

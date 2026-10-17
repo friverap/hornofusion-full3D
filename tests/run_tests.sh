@@ -512,7 +512,8 @@ full | rebaseline)
     run_script "arc_slag_bed" \
         $PY $INT/check_slag_bed.py "$OUT/arc_slag_n4" --volfix-max 0.06 --xfail "$(xfail_ids arc_slag)"
     run_script "slag_rest" \
-        $PY $INT/check_slag_bed.py "$OUT/slag_rest_n4" --volfix-max 1e-3 --xfail "$(xfail_ids slag_rest)"
+        $PY $INT/check_slag_bed.py "$OUT/slag_rest_n4" --volfix-max 1e-3 \
+        --umax-liq 1e-8 --umax-gas 1e-4 --xfail "$(xfail_ids slag_rest)"
     run_script "arc_melt_slag_heel" \
         $PY $INT/check_slag_bed.py "$OUT/arc_melt_slag_heel_n4" --max-jumps 0 \
         --asl-min 1e-3 --al-min 0.05 --volfix-max 0.15 --xfail "$(xfail_ids arc_melt_slag_heel)"

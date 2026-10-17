@@ -69,9 +69,11 @@ dentro del paso viajaba sin energia y el reescalado final creaba energia sin
 auditar (1.3e6 J); ahora viajan con asl en cada movimiento (slq_adv).
 (3) gas bajo la escoria -> compactacion en el reordenamiento. (4) hidrostatica
 inicial con el peso de la escoria condensada (paso 1 de slag_rest: 4e-4 ->
-2e-10 m/s). Reposo (slag_rest): el transitorio posterior del gas (u_gas ~5
-m/s, u_liq ~1e-4) es el MISMO que sin escoria en el volumen (xfail bath_rest
-preexistente): el gate u <= 1e-9 se sustituye por "no peor que el legado".
+2e-10 m/s). Reposo (slag_rest): CORREGIDO en la auditoria 18 (A18-2): el
+"transitorio del gas" era la conveccion del gas a 300 K (el banco no fijaba
+T_ambient); en equilibrio termico el reposo condensado queda en u_liq ~1e-11
+y u_gas <= 4e-6 m/s (legado: 5e-4 / 8.8 m/s, el gas fantasma de M17-PV1).
+Gate automatizado: check_slag_bed --umax-liq 1e-8 --umax-gas 1e-4.
 
 ## Estado P5 (2026-10-16)
 Fuentes de escoria (quimica E2.3/E2.4, adiciones) al VOLUMEN DE SU MASA en
