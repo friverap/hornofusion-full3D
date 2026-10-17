@@ -13,6 +13,9 @@
 !      columna oxida MAS que el legado.
 !   3. Celda de interfaz con acero resuelto (4: acero 0.5 + escoria 0.5) bajo
 !      escoria compactada (5) y gas (6+): Fe del acero de la celda 4, O2 de la 6.
+!   4. (dirigida I1, MEDIO-4) el caso 1 con una TRAZA de escoria (1e-4) en la
+!      celda de baño 3 (la que deja el upwind antes del reordenamiento): la
+!      traza no es la interfaz; el FeO va a la escoria resuelta de la 4.
 ! En todos: Fe, O y energia conservados contra el audit (AUD_FE_YIELD,
 ! AUD_SLAG_OX_E) a 1e-12 mas el redondeo de las restas de inventario, y nada
 ! cambia fuera de las tres celdas elegidas.
@@ -80,6 +83,13 @@ program test_slag_ox_column
     call setup(3)
     call put_slag(4, 0.5_dp, 0.5_dp); call put_slag(5, 1.0_dp, 0.0_dp)
     call run_case('caso 3', 6, 6, 4, 4)
+
+    ! --- caso 4: traza de escoria bajo la interfaz ----------------------------
+    call setup(3)
+    call put_slag(3, 1.0e-4_dp, 1.0_dp - 1.0e-4_dp)
+    call put_slag(4, 1.0_dp, 0.0_dp); call put_slag(5, 1.0_dp, 0.0_dp)
+    call put_slag(6, 1.0_dp, 0.0_dp)
+    call run_case('caso 4', 7, 7, 3, 4)
 
     if (ok) then
         print '(A)', ' PASS test_slag_ox_column (O2 sobre la capa, Fe bajo la capa, Fe/O/energia exactos)'

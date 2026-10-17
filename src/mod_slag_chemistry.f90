@@ -487,7 +487,8 @@ contains
     ! (O2 de la celda de escoria, Fe de la de abajo) solo actuaba donde una
     ! celda parcial tocaba el baño y la capa resuelta aislaba el metal del O2
     ! (slag_chem_flow 2.7 -> 0.99 kg). Por columna (i,j), en el tramo de
-    ! escoria MAS BAJO (kb = su celda inferior, kt = la superior):
+    ! escoria RESUELTA (alpha_sl >= ALPHA_FLOW_CUTOFF) MAS BAJO (kb = su celda
+    ! inferior, kt = la superior):
     !   - O2: el remanente del paso del gas de kt mas el de kt+1 (gas libre
     !     encima), cada uno si la celda tiene gas (alpha_g >= ALPHA_CUTOFF);
     !   - Fe: del acero de kb hasta su cota y el resto del baño de kb-1;
@@ -533,7 +534,13 @@ contains
             i0 = 1; j0 = 1; k0 = 1
         end if
 
-        ! ── 1. Tramos de escoria: mascara con halos (los fisicos quedan en 0)
+        ! ── 1. Tramos de escoria RESUELTA (alpha_sl >= ALPHA_FLOW_CUTOFF):
+        ! mascara con halos (los fisicos quedan en 0). (dirigida I1, MEDIO-4) la
+        ! quimica corre antes del reordenamiento del paso: el upwind deja trazas
+        ! de 1e-4..1e-3 en la celda de baño bajo la interfaz y con el umbral
+        ! ALPHA_CUTOFF esa traza era kb (FeO a una masa diminuta y la cota
+        ! termica sobre ella anulaba la oxidacion de la columna). La traza queda
+        ! como parte del acero de kb-1
         allocate(mask, mold=liq%alpha)
         mask = 0.0_dp
         do k = kstart, kend
@@ -541,7 +548,7 @@ contains
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     if (slag%m_sl(i,j,k) > SMALL_SL .and. &
-                        slag%alpha_sl(i,j,k) >= ALPHA_CUTOFF) mask(i,j,k) = 1.0_dp
+                        slag%alpha_sl(i,j,k) >= ALPHA_FLOW_CUTOFF) mask(i,j,k) = 1.0_dp
                 end do
             end do
         end do
