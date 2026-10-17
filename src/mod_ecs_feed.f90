@@ -165,13 +165,18 @@ contains
                         kg = m%topo%kglobal_start + kl - 1
                         if (.not. in_band(ig,jg)) cycle
                         if (m%cell_type(i,jl,kl) == 0 .or. kg < k0_glob(ig,jg)) cycle
-                        bud(ig,jg) = bud(ig,jg) + max(0.0_dp, gas%alpha(i,jl,kl) - ALPHA_PORE_GAS) &
-                                     * m%vol(i,jl,kl)
+                        ! (dirigida general, BAJO-1/2) suma CON SIGNO: el poro
+                        ! se reserva en TODA celda desde la base (una celda de
+                        ! escoria llena que pasa a lecho en esta llamada lo
+                        ! exige) y solo si el piso de poro esta activo
+                        bud(ig,jg) = bud(ig,jg) + (gas%alpha(i,jl,kl) &
+                            - merge(ALPHA_PORE_GAS, 0.0_dp, pore_floor_on)) * m%vol(i,jl,kl)
                     end do
                 end do
             end do
             if (m%is_parallel) call MPI_Allreduce(MPI_IN_PLACE, bud, size(bud), &
                 MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+            bud = max(0.0_dp, bud)
         end if
 
         ! ── 3. Depósito proporcional por niveles ────────────────────────────
