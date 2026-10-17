@@ -1092,10 +1092,11 @@ contains
         end subroutine slag_qden
 
         subroutine slq_halos()
+            ! (auditoria 18, bajo MPI-3) la rebanada de la ultima dimension es
+            ! contigua: se intercambia en el sitio (como slag_exchange_halos con
+            ! m_X), sin las dos copias completas por componente y sub-paso
             do c = 1, size(slq_adv,4)
-                qtmp = slq_adv(:,:,:,c)
-                call mpi_exchange_halos_3d(qtmp, m%topo)
-                slq_adv(:,:,:,c) = qtmp
+                call mpi_exchange_halos_3d(slq_adv(:,:,:,c), m%topo)
             end do
         end subroutine slq_halos
 
