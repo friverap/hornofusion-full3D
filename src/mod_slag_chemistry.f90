@@ -110,6 +110,14 @@ contains
         ! ranks). Con prioridad al bano de abajo la escoria apilada reducia la
         ! mitad (la de arriba se llevaba el hueco de la de abajo).
         real(dp), allocatable :: req_fe(:,:,:), room(:,:,:)
+        ! (auditoria general Plan I, fisica MEDIO-1) alpha_sl de ENTRADA con
+        ! halos: con la escoria condensada el CO solo se queda en una celda
+        ! cuyo gas conecta hacia ARRIBA (sin escoria resuelta encima). El gas
+        ! de poro (ALPHA_PORE_GAS = 0.015 >= ALPHA_FLOW_CUTOFF) de chatarra
+        ! sumergida en la escoria esta aislado: el sort lo compactaba y
+        ! destruia el CO con sus especies. Copia de entrada: el mismo valor en
+        ! la propia celda y en el halo (invariante a la descomposicion)
+        real(dp), allocatable :: asl0(:,:,:)
         real(dp) :: dm_fe_req, o_own, o_below, o_up, b_up, gas_after
         real(dp) :: co_loc, co_tot, inc
         integer  :: npass
@@ -133,6 +141,9 @@ contains
         allocate(fe_in, t_in, co_up, co_new, req_fe, room, mold=fe_out)
         fe_out = 0.0_dp; fe_in = 0.0_dp; t_in = 0.0_dp; co_up = 0.0_dp; co_new = 0.0_dp
         req_fe = 0.0_dp; room = 0.0_dp
+        allocate(asl0, mold=fe_out)
+        asl0 = slag%alpha_sl
+        call mpi_exchange_halos_3d(asl0, m%topo)
         call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
         if (cond) call slag_oxidation_column(slag, liq, liq_old, gas, sh, m, cfg, c0)
@@ -358,6 +369,7 @@ contains
                                 ! NO es perdida: es el termino -Y S_gas de la forma
                                 ! no conservativa de las especies, M14)
                                 if (gas_after < ALPHA_FLOW_CUTOFF) gas_after = 0.0_dp
+                                if (capped(i, j, k)) gas_after = 0.0_dp
                             end if
                             if (gas_after >= ALPHA_CUTOFF) then
                                 sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + &
@@ -439,7 +451,8 @@ contains
                         ! umbral de gas resuelto que la celda propia: el gas de
                         ! ~1e-5 que rellena la reduccion de la celda de arriba
                         ! lo compacta el sort (el CO se destruiria)
-                        if (gas%alpha(i,j,k) >= co_thr .or. (k == kend .and. at_zmax)) then
+                        if ((gas%alpha(i,j,k) >= co_thr .and. .not. (cond .and. capped(i, j, k))) &
+                            .or. (k == kend .and. at_zmax)) then
                             sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + inc / (m%vol(i,j,k) * cfg%dt)
                         else
                             co_new(i,j,k) = inc
@@ -451,9 +464,19 @@ contains
             co_loc = sum(co_up(istart:iend, jstart:jend, kstart:kend))
             call mpi_allreduce_sum(co_loc, co_tot, m%topo)
         end do
-        deallocate(co_up, co_new)
+        deallocate(co_up, co_new, asl0)
 
     contains
+
+        ! (fisica MEDIO-1) el gas de la celda queda bajo escoria RESUELTA (a la
+        ! entrada): no conecta con el gas libre de arriba
+        logical function capped(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            capped = .false.
+            if (kk == kend .and. at_zmax) return
+            if (m%cell_type(ii,jj,kk+1) == 0) return
+            capped = asl0(ii,jj,kk+1) >= ALPHA_FLOW_CUTOFF
+        end function capped
 
         ! Fe que sale del bano a la T del bano: alpha baja en el iterado y en el
         ! ancla temporal, T no cambia (entalpia especifica intacta)

@@ -9,6 +9,11 @@
 !   2. Dos celdas de escoria APILADAS sobre bano lleno: cada una llena primero
 !      su propio hueco y solo el sobrante baja; la de abajo queda llena y su
 !      CO sube, ninguna celda pasa de su hueco (M6-4), conservacion a 1e-12.
+!   3. (auditoria general Plan I, fisica MEDIO-1) escoria CONDENSADA con
+!      chatarra sumergida: celda 5 con escoria 0.5 + chatarra 0.485 + gas de
+!      poro 0.015 (>= ALPHA_FLOW_CUTOFF) bajo escoria llena (6) y gas (7+):
+!      el gas de poro esta aislado (el sort lo compactaria con su CO); todo el
+!      CO de las celdas 5 y 6 sube al gas libre (k >= 7), conservado.
 !===============================================================================
 program test_slag_reduction
     use mod_constants
@@ -51,6 +56,19 @@ program test_slag_reduction
     call put_slag(5, 0.6_dp, 0.395_dp)
     call put_slag(6, 0.6_dp, 0.0_dp)
     call run_case('caso 2', 6)
+
+    ! --- caso 3: chatarra sumergida en escoria condensada ---------------------
+    cfg%solve_slag = .true.
+    if (.not. slag_condensed_on(cfg)) call fail('caso 3: la escoria condensada no esta activa', 0.0_dp)
+    call setup()
+    call put_slag(5, 0.5_dp, 0.0_dp)
+    call put_slag(6, 1.0_dp, 0.0_dp)
+    sol%alpha_s(:,:,5) = 0.485_dp
+    gas%alpha(:,:,5) = 0.015_dp
+    call run_case('caso 3', 6)
+    if (sum(sh%S_CO_src(1:6,1:8,1:6)) /= 0.0_dp) &
+        call fail('caso 3: CO en el gas aislado bajo la escoria (kg/m3/s)', sum(sh%S_CO_src(1:6,1:8,1:6)))
+    cfg%solve_slag = .false.
 
     if (ok) then
         print '(A)', ' PASS test_slag_reduction (CO solo donde queda gas, Sigma alpha <= 1, Fe y CO conservados)'
