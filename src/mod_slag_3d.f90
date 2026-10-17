@@ -607,6 +607,9 @@ contains
                     slag%m_X(il,jl,kl,:) = x_n(i,j,k,:)
                     if (ms_n(i,j,k) > SMALL_SL) then
                         slag%T_sl(il,jl,kl) = es_n(i,j,k) / (ms_n(i,j,k) * cfg%cp_slag)
+                    else
+                        ! (A18-7) la escoria salio de la celda: sin espuma
+                        slag%alpha_foam(il,jl,kl) = 0.0_dp
                     end if
                     ! gas: complemento (compactacion), auditado como el volfix
                     ag_new = max(0.0_dp, 1.0_dp - sol%alpha_s(il,jl,kl) - liq%alpha(il,jl,kl) &
