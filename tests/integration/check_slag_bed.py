@@ -95,6 +95,11 @@ def main():
     m0 = float(rows[0]["m_slag"]); m1 = float(rows[-1]["m_slag"])
     # (Plan H, P6) la escoria condensada recortada (auditada) sale del balance
     sclip = sum(float(r.get("m_slag_clip", 0.0) or 0.0) for r in rows[1:])
+    # (auditoria 18, A18-3) techo del recorte de escoria: 1e-9 del inventario
+    # (medido ~1e-16 kg en arc_slag 10 s); sin el, el balance lo absorbia
+    sabs = sum(abs(float(r.get("m_slag_clip", 0.0) or 0.0)) for r in rows[1:])
+    chk.report("slag_clip_bounded", sabs <= 1e-9 * max(abs(m0), 1.0),
+               f"|m_slag_clip| acumulado {sabs:.3e} kg (max 1e-9 de {m0:.1f} kg)")
     chk.report("slag_bed_mass", abs(m1 - m0 + sclip) <= a.mtol * max(abs(m0), 1.0),
                f"m_slag {m0:.6f} -> {m1:.6f} kg, clip {sclip:.3e} kg (rel {abs(m1 - m0 + sclip) / max(abs(m0), 1.0):.2e})")
     chk.exit()

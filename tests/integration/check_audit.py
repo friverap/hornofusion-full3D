@@ -211,8 +211,12 @@ def main():
     # (E_out_conv es DIAGNÓSTICO: la energía convectada a las celdas
     # outlet queda en su T — el déficit convectivo del hook ya incluye
     # esas caras; restarla doble-contaba: gap medido == E_out_conv.)
+    # (auditoria 18, A18-3) los AJUSTES no fisicos de la escoria (equilibrio
+    # de trazas, recorte) entran a la identidad pero NO ensanchan la
+    # tolerancia y tienen techo propio (abajo, slag_adjust_bounded)
+    NO_SCALE = ("E_slag_tclip", "E_slag_clip")
     S_ext = sum(abs(r.get(k, 0.0)) for r in steps for k in EXT_POS + EXT_NEG
-                if not (per_phase and k == "E_conv_defect"))
+                if not (per_phase and k == "E_conv_defect") and k not in NO_SCALE)
     if per_phase:
         S_ext += sum(abs(r.get("E_conv_gas", 0.0)) for r in steps)
     S_int = sum(abs(r.get(k, 0.0)) for r in steps for k in INTERNAL)
@@ -239,7 +243,7 @@ def main():
                 dEg = b["E_gas"] - a["E_gas"]
             gk = total_E(b) - total_E(a) + dEg - ext(b)
             sx = sum(abs(b.get(c, 0.0)) for c in EXT_POS + EXT_NEG
-                     if not (per_phase and c == "E_conv_defect"))
+                     if not (per_phase and c == "E_conv_defect") and c not in NO_SCALE)
             if per_phase:
                 sx += abs(b.get("E_conv_gas", 0.0))
             sg = sum(abs(b.get(c, 0.0)) for c in GAS)
@@ -260,6 +264,23 @@ def main():
                    f"{S_gas:.3e} + xtol {args.xtol} x S_ext {S_ext:.3e} + htol "
                    f"{args.htol} x S_int {S_int:.3e}), "
                    f"gap/permitido={ratio:.3e}")
+    # (auditoria 18, A18-3) techo POR PASO de los ajustes no fisicos de la
+    # escoria: |E_slag_tclip| + |E_slag_clip| de un paso <= 1e-4 del
+    # inventario de la escoria (medido: arc_melt_slag 6e-6 en el peor paso,
+    # trazas que se extienden por el lecho y toman la T local; arc_slag 10 s
+    # ~1e-9). El caso de 5e11 J en un paso (paso 579, ~20 veces el inventario)
+    # lo habria cerrado la identidad sin este techo
+    if any("E_slag_tclip" in r for r in steps):
+        esl = max(abs(r.get("E_slag", 0.0)) for r in rows)
+        if esl > 0.0:
+            worst_adj, ws = 0.0, 0
+            for r in steps:
+                a_ = abs(r.get("E_slag_tclip", 0.0)) + abs(r.get("E_slag_clip", 0.0))
+                if a_ > worst_adj:
+                    worst_adj, ws = a_, int(r.get("step", 0))
+            chk.report("slag_adjust_bounded", worst_adj <= 1e-4 * esl,
+                       f"peor paso {ws}: |E_slag_tclip| + |E_slag_clip| = {worst_adj:.3e} J "
+                       f"sobre E_slag {esl:.3e} J (max 1e-4 por paso)")
 
     # -- mass_gas (A4-6): libro de MASA del gas ------------------------------
     # d m_gas = -venteo + volfix + reacciones + (lo que la EOS reescribe).

@@ -87,6 +87,10 @@ def main():
     c_consumed = feo_reduced * MW_C / MW_FEO
     # (Plan H, P6) escoria condensada recortada por el acotado del transporte
     sclip = sum(r.get("m_slag_clip", 0.0) for r in steps)
+    # (auditoria 18, A18-3) techo del recorte de escoria (1e-9 del inventario)
+    sabs = sum(abs(r.get("m_slag_clip", 0.0)) for r in steps)
+    chk.report("slag_clip_bounded", sabs <= 1e-9 * max(abs(first["m_slag"]), 1.0),
+               f"|m_slag_clip| acumulado {sabs:.3e} kg (max 1e-9 del inventario)")
     expected_dm_sl = feo_from_yield - feo_reduced - c_consumed + flux - sclip
     err2 = abs(dm_sl - expected_dm_sl) / max(abs(expected_dm_sl), 1.0)
     chk.report("slag_mass", err2 <= 1e-6,
