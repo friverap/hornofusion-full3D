@@ -199,7 +199,10 @@ textos que describen la cesion en el derrame y la recolocacion por
   del acero de kb hasta su cota y el resto del baño de kb−1 (sumas, nunca una
   fuente elegida por umbral: la tasa saltaba ~100 veces), FeO a la escoria de
   kb; mismas cotas; sustituye al estencil local (no contar dos veces el O₂).
-  Test `test_slag_ox_column`. `slag_in_volume = false` recupera la capa
+  Una columna con escoria solo en trazas (< 0.01 en todas sus celdas) no
+  oxida; queda un salto residual (~1.5×) en α_sl(kb) ≈ 0.01 con gas frío
+  (pendiente medir α_sl de la interfaz en slag_chem_flow; si molesta, cota
+  térmica sobre m_sl(kb) + m_sl(kb+1)). Test `test_slag_ox_column`. `slag_in_volume = false` recupera la capa
   legada (con el hueco fantasma de gas F2.21 descrito en el plan). Con el condensado la escoria
   ya tiene transporte LATERAL (antes solo columnas). Sin modelar: viscosidad
   propia de la escoria (P5b opcional).
