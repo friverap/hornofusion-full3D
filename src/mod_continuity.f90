@@ -126,7 +126,7 @@ contains
         integer, parameter :: N_SPILL_MAX = 128   ! >= nz de produccion (84): la cascada avanza una celda por pasada
         integer :: ilim, ipass, n_it_max
         real(dp) :: inflow, outflow, room, dlim, dlim_glob, clip_call, clipE_call
-        real(dp) :: dlim_exit, cap, exc, room_up, give, exc_glob, spill_call, fslag, fsl
+        real(dp) :: dlim_exit, cap, exc, room_up, give, exc_glob, spill_call, fslag, fsl, asl_b, sl_rm, st_rm
         real(dp) :: dlim_prev, dist_est, dist_exit
         real(dp) :: exc0_glob
         real(dp) :: vol_dalpha, vol_lim, vol_unl
@@ -774,6 +774,7 @@ contains
                         min(1.0_dp - sol%alpha_s(i,j,k) - merge(0.0_dp, alpha_slag(i,j,k), &
                                 alpha_slag(i,j,k) >= ALPHA_CUTOFF), &
                             liq%alpha(i,j,k)))
+                    if (adv) asl_b = asl_adv(i,j,k)
                     if (adv) then
                         if (a_pre > 0.0_dp) then
                             asl_adv(i,j,k) = asl_adv(i,j,k) * (liq%alpha(i,j,k) / a_pre)
@@ -787,14 +788,17 @@ contains
                     end if
                     if (adv) then
                         ! (P6, auditoria P4 M1) el recorte del condensado es
-                        ! acero (1 - phi) y escoria (phi, con rho_sl y su E_sl)
-                        clip_call = clip_call + &
-                            (a_pre - liq%alpha(i,j,k)) * (1.0_dp - fsl) * liq%rho(i,j,k) * m%vol(i,j,k)
-                        clipE_call = clipE_call + &
-                            (a_pre - liq%alpha(i,j,k)) * (1.0_dp - fsl) * liq%rho(i,j,k) * m%vol(i,j,k) &
+                        ! acero y escoria; (dirigida A18, B1) cada parte se mide
+                        ! DIRECTAMENTE: escoria quitada = asl antes - despues,
+                        ! acero = el resto (exacto tambien con acero negativo por
+                        ! congelacion, donde phi > 1 y el reparto 1 - phi fallaba)
+                        sl_rm = asl_b - asl_adv(i,j,k)
+                        st_rm = (a_pre - liq%alpha(i,j,k)) - sl_rm
+                        clip_call = clip_call + st_rm * liq%rho(i,j,k) * m%vol(i,j,k)
+                        clipE_call = clipE_call + st_rm * liq%rho(i,j,k) * m%vol(i,j,k) &
                             * (liq%cp(i,j,k) * liq%T(i,j,k) + (cfg%cp_s - cfg%cp_l) &
                                * cfg%T_liquidus + cfg%h_fusion)
-                        vf_sclip_m = vf_sclip_m + (a_pre - liq%alpha(i,j,k)) * fsl * cfg%rho_slag * m%vol(i,j,k)
+                        vf_sclip_m = vf_sclip_m + sl_rm * cfg%rho_slag * m%vol(i,j,k)
                     else
                     clip_call = clip_call + &
                         (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k)
@@ -1126,7 +1130,7 @@ contains
 
         real(dp), allocatable :: ac_old(:,:,:), zero(:,:,:), asl(:,:,:), slq(:,:,:,:), tmp(:,:,:)
         integer  :: i, j, k, c, nx, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: clip_loc, rl, clip_e, E_tr, a_raw, fcl, clip_el, dsteel, dclip_m, dclip_e
+        real(dp) :: clip_loc, rl, clip_e, E_tr, a_raw, fcl, clip_el, dsteel, dclip_m, dclip_e, fcl_x, a_x
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         nx = size(mx_pre,4)
@@ -1174,6 +1178,19 @@ contains
                             * (cfg%cp_l * liq%T(i,j,k) + (cfg%cp_s - cfg%cp_l) * cfg%T_liquidus &
                                + cfg%h_fusion)
                         liq%alpha(i,j,k) = slag%alpha_sl(i,j,k)
+                    end if
+                    ! (dirigida A18, B1) congelacion + desborde en la misma celda:
+                    ! la escoria no pasa del hueco fisico (1 - alpha_s); el exceso
+                    ! es clip de escoria auditado (masa, E_sl y m_X en proporcion)
+                    if (slag%alpha_sl(i,j,k) > 1.0_dp - sol%alpha_s(i,j,k)) then
+                        a_x = slag%alpha_sl(i,j,k)
+                        slag%alpha_sl(i,j,k) = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k))
+                        liq%alpha(i,j,k) = min(liq%alpha(i,j,k), slag%alpha_sl(i,j,k) + &
+                            max(0.0_dp, liq%alpha(i,j,k) - a_x))
+                        ! (la masa la cuenta el acotado de abajo: a_raw - alpha_sl)
+                        fcl_x = slag%alpha_sl(i,j,k) / a_x
+                        clip_el = clip_el + slq(i,j,k,1) * (1.0_dp - fcl_x)
+                        slq(i,j,k,:) = slq(i,j,k,:) * fcl_x
                     end if
                     ! la masa sigue a alpha_sl por construccion; solo el acotado
                     ! de una alpha_sl negativa (redondeo) la recorta: clip de
