@@ -1,27 +1,27 @@
 {
-  "template": "input/config_300s_borein.dat",
-  "outdir": "campaigns/b1",
-  "nprocs": 12,
-  "runs": [
-    {
-      "name": "b1_full_heat",
-      "overrides": {
-        "nr": 30,
-        "ntheta": 60,
-        "nz": 42,
-        "t_final": 5040.0,
-        "adaptive_dt": true,
-        "dt": 0.002,
-        "dt_min": 0.001,
-        "dt_max": 0.01,
-        "solve_slag": false,
-        "solve_species": true,
-        "audit_freq": 5,
-        "output_freq": 25000,
-        "cfl_max": 1.0,
-        "monitor_freq": 500
-      }
-    }
-  ],
-  "binary": "campaigns/bin/eaf3d_b1_f277872_opt"
+ "template": "input/config_300s_borein.dat",
+ "outdir": "campaigns/b1",
+ "nprocs": 12,
+ "runs": [
+  {
+   "name": "b1_full_heat",
+   "overrides": {
+    "nr": 30,
+    "ntheta": 60,
+    "nz": 42,
+    "t_final": 5040.0,
+    "adaptive_dt": true,
+    "dt": 0.002,
+    "dt_min": 0.001,
+    "dt_max": 0.01,
+    "solve_slag": false,
+    "solve_species": true,
+    "audit_freq": 5,
+    "output_freq": 25000,
+    "cfl_max": 1.0,
+    "monitor_freq": 500
+   }
+  }
+ ],
+ "binary": "campaigns/bin/eaf3d_b1_10561b2_opt"
 }
