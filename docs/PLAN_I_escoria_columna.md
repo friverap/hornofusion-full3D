@@ -64,7 +64,7 @@ el gas, auditado como volfix), conservando masa, E_sl y m_X.
   (el harness falla) y el exceso entra al SIMPLE; bit a bit igual cuando cabe.
 
 Tests unitarios: casos condensados de `test_charge_slag` (30 t), `test_ecs_feed`
-(10 t con control legado pendiente; escoria hasta el techo: todo pendiente),
+(2 t con control legado pendiente; escoria hasta el techo: todo pendiente),
 `test_scrap_collapse` y `test_condensed_sort` caso 8 (sobrellenado).
 
 ## Orden y estado

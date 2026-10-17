@@ -24,6 +24,7 @@ program test_scrap_collapse
     use mod_fields_3d
     use mod_melting_3d, only: solid_enthalpy
     use mod_scrap_collapse, only: apply_scrap_collapse
+    use mod_slag_3d, only: slag_condensed_sort
     implicit none
 
     type(config_t) :: cfg
@@ -32,7 +33,7 @@ program test_scrap_collapse
     type(solid_t)  :: sol
     type(slag_t)   :: slag
     type(shared_t) :: sh
-    real(dp) :: M0, E0, C0, M1, E1, C1, amax, err_a, over
+    real(dp) :: M0, E0, C0, M1, E1, C1, amax, err_a, over, msl0, esl0
     integer  :: nr, nth, nz, i, j, k, icase
     logical  :: ok
 
@@ -57,6 +58,7 @@ program test_scrap_collapse
         end if
         sol%alpha_s = 0.0_dp; sol%m_s = 0.0_dp; sol%E_s = 0.0_dp; sol%m_C = 0.0_dp
         sol%layer_id = 0; liq%alpha = 0.0_dp; slag%alpha_sl = 0.0_dp
+        slag%m_sl = 0.0_dp; slag%E_sl = 0.0_dp; slag%m_X = 0.0_dp
         do k = 1, nz
             do j = 1, nth
                 do i = 1, nr
@@ -115,6 +117,35 @@ program test_scrap_collapse
         if (sum(sol%m_s(1:nr,1:nth,1:2)) <= 0.0_dp) then
             print '(A,I2,A)', '   FAIL caso', icase, ': la chatarra no cayo al hueco'
             ok = .false.
+        end if
+        ! (auditoria general Plan I, tests B2) caso 3: el reordenamiento de
+        ! inicio de paso sube la escoria desplazada: Sigma alpha <= 1 con la
+        ! escoria y masa/energia de la escoria exactas
+        if (icase == 3) then
+            slag%m_sl = slag%alpha_sl * cfg%rho_slag * mesh%vol
+            where (mesh%cell_type == 0) slag%m_sl = 0.0_dp
+            slag%m_X(:,:,:,SL_CAO) = 0.5_dp * slag%m_sl
+            slag%T_sl = 1850.0_dp; liq%T = 1850.0_dp
+            slag%E_sl = slag%m_sl * cfg%cp_slag * 1850.0_dp
+            gas%alpha = max(0.0_dp, 1.0_dp - liq%alpha - slag%alpha_sl - sol%alpha_s)
+            where (mesh%cell_type == 0) gas%alpha = 0.0_dp
+            msl0 = sum(slag%m_sl(1:nr,1:nth,1:nz)); esl0 = sum(slag%E_sl(1:nr,1:nth,1:nz))
+            call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh)
+            over = 0.0_dp
+            do k = 1, nz
+                do j = 1, nth
+                    do i = 1, nr
+                        if (mesh%cell_type(i,j,k) == 0) cycle
+                        over = max(over, sol%alpha_s(i,j,k) + liq%alpha(i,j,k) + slag%alpha_sl(i,j,k) - 1.0_dp)
+                    end do
+                end do
+            end do
+            if (over > 1.0e-12_dp .or. abs(sum(slag%m_sl(1:nr,1:nth,1:nz)) - msl0) > 1.0e-12_dp * msl0 .or. &
+                abs(sum(slag%E_sl(1:nr,1:nth,1:nz)) - esl0) > 1.0e-12_dp * esl0) then
+                print '(A,3ES11.3)', '   FAIL caso 3: tras el sort (sobrellenado, dm_sl, dE_sl) = ', over, &
+                    sum(slag%m_sl(1:nr,1:nth,1:nz)) - msl0, sum(slag%E_sl(1:nr,1:nth,1:nz)) - esl0
+                ok = .false.
+            end if
         end if
     end do
 
