@@ -16,6 +16,10 @@
 !   4. (dirigida I1, MEDIO-4) el caso 1 con una TRAZA de escoria (1e-4) en la
 !      celda de baño 3 (la que deja el upwind antes del reordenamiento): la
 !      traza no es la interfaz; el FeO va a la escoria resuelta de la 4.
+!   5. (dirigida I1-b, B-4) interfaz 4 con acero en TRAZA (1e-4) bajo escoria
+!      (5) y gas (6): el Fe agota la cota de la 4 (exacta) y el resto sale del
+!      baño de la 3. En el caso 2 el sumidero de O2 se reparte entre 4 y 5 en
+!      proporcion a su O2 y la columna oxida (O2_4 + O2_5)/O2_4 veces el legado.
 ! En todos: Fe, O y energia conservados contra el audit (AUD_FE_YIELD,
 ! AUD_SLAG_OX_E) a 1e-12 mas el redondeo de las restas de inventario, y nada
 ! cambia fuera de las tres celdas elegidas.
@@ -40,7 +44,8 @@ program test_slag_ox_column
     type(shared_t) :: sh
     real(dp), parameter :: MW_FE = 0.05585_dp, MW_FEO = 0.07185_dp, MW_O2 = 0.032_dp
     integer :: nr, nth, nz
-    real(dp) :: last_dfeo, dfeo_col
+    real(dp) :: last_dfeo, dfeo_col, o2_4, o2_5, ratio_exp, worst
+    integer  :: i, j
     logical :: ok
 
     call config_set_defaults(cfg)
@@ -65,31 +70,68 @@ program test_slag_ox_column
     call setup(3)
     call put_slag(4, 1.0_dp, 0.0_dp); call put_slag(5, 1.0_dp, 0.0_dp)
     call put_slag(6, 1.0_dp, 0.0_dp)
-    call run_case('caso 1', 7, 7, 3, 4)
+    call run_case('caso 1', 7, 7, 3, 3, 4)
     ! --- caso 2: celda parcial con gas propio ---------------------------------
     call setup(3)
     call put_slag(4, 0.5_dp, 0.0_dp)
-    call run_case('caso 2', 4, 5, 3, 4)
+    ! O2 remanente de las celdas 4 y 5 (sin fuentes previas) y cociente esperado
+    o2_4 = 0.0_dp; o2_5 = 0.0_dp
+    do j = 1, nth
+        do i = 1, nr
+            if (mesh%cell_type(i,j,4) == 0) cycle
+            o2_4 = o2_4 + gas%alpha(i,j,4) * gas%rho(i,j,4) * sh%Y_O2(i,j,4) * mesh%vol(i,j,4)
+            o2_5 = o2_5 + gas%alpha(i,j,5) * gas%rho(i,j,5) * sh%Y_O2(i,j,5) * mesh%vol(i,j,5)
+        end do
+    end do
+    ratio_exp = (o2_4 + o2_5) / o2_4
+    call run_case('caso 2', 4, 5, 3, 3, 4)
     dfeo_col = last_dfeo
+    ! reparto del sumidero por columna: S4 V4 / (S5 V5) = O2_4 / O2_5
+    worst = 0.0_dp
+    do j = 1, nth
+        do i = 1, nr
+            if (mesh%cell_type(i,j,4) == 0) cycle
+            worst = max(worst, abs(sh%S_O2_src(i,j,4) * mesh%vol(i,j,4) &
+                * gas%alpha(i,j,5) * gas%rho(i,j,5) * sh%Y_O2(i,j,5) * mesh%vol(i,j,5) &
+                / (sh%S_O2_src(i,j,5) * mesh%vol(i,j,5) &
+                * gas%alpha(i,j,4) * gas%rho(i,j,4) * sh%Y_O2(i,j,4) * mesh%vol(i,j,4)) - 1.0_dp))
+        end do
+    end do
+    if (worst > 1.0e-12_dp) call fail('caso 2: sumidero de O2 no proporcional (rel)', worst)
     ! el mismo caso con el estencil LOCAL (modo legado): solo el O2 de la 4
     cfg%slag_in_volume = .false.
     call setup(3)
     call put_slag(4, 0.5_dp, 0.0_dp)
-    call run_case('caso 2 legado', 4, 4, 3, 4)
-    if (.not. dfeo_col > last_dfeo * (1.0_dp + 1.0e-6_dp)) &
-        call fail('caso 2: la columna no suma el O2 de la celda de encima (kg)', dfeo_col - last_dfeo)
+    call run_case('caso 2 legado', 4, 4, 3, 3, 4)
+    ! sin cotas activas la reaccion es lineal en el O2: cociente exacto
+    if (abs(dfeo_col / last_dfeo - ratio_exp) > 1.0e-10_dp * ratio_exp) &
+        call fail('caso 2: columna/legado /= (O2_4 + O2_5)/O2_4 (rel)', dfeo_col / last_dfeo / ratio_exp - 1.0_dp)
     cfg%slag_in_volume = .true.
     ! --- caso 3: interfaz con acero resuelto ----------------------------------
     call setup(3)
     call put_slag(4, 0.5_dp, 0.5_dp); call put_slag(5, 1.0_dp, 0.0_dp)
-    call run_case('caso 3', 6, 6, 4, 4)
+    call run_case('caso 3', 6, 6, 4, 4, 4)
 
     ! --- caso 4: traza de escoria bajo la interfaz ----------------------------
     call setup(3)
     call put_slag(3, 1.0e-4_dp, 1.0_dp - 1.0e-4_dp)
     call put_slag(4, 1.0_dp, 0.0_dp); call put_slag(5, 1.0_dp, 0.0_dp)
     call put_slag(6, 1.0_dp, 0.0_dp)
-    call run_case('caso 4', 7, 7, 3, 4)
+    call run_case('caso 4', 7, 7, 3, 3, 4)
+    ! --- caso 5: acero en traza en la interfaz ---------------------------------
+    call setup(3)
+    call put_slag(4, 1.0_dp - 1.0e-4_dp, 1.0e-4_dp); call put_slag(5, 1.0_dp, 0.0_dp)
+    call run_case('caso 5', 6, 6, 3, 4, 4)
+    ! la 4 entrega exactamente su cota F_MAX_FE (Delta alpha = 0.005 alpha_l)
+    worst = 0.0_dp
+    do j = 1, nth
+        do i = 1, nr
+            if (mesh%cell_type(i,j,4) == 0) cycle
+            worst = max(worst, abs((1.0e-4_dp - liq%alpha(i,j,4)) / (0.005_dp * 1.0e-4_dp) - 1.0_dp))
+            if (.not. liq%alpha(i,j,3) < 1.0_dp) call fail('caso 5: el resto no salio del baño de la 3', 0.0_dp)
+        end do
+    end do
+    if (worst > 1.0e-9_dp) call fail('caso 5: la 4 no entrego exactamente su cota (rel)', worst)
 
     if (ok) then
         print '(A)', ' PASS test_slag_ox_column (O2 sobre la capa, Fe bajo la capa, Fe/O/energia exactos)'
@@ -132,10 +174,10 @@ contains
         end do
     end subroutine put_slag
 
-    ! ko1..ko2: celdas del O2; ks: celda del Fe; kb: celda que recibe el FeO
-    subroutine run_case(tag, ko1, ko2, ks, kb)
+    ! ko1..ko2: celdas del O2; ks1..ks2: celdas del Fe; kb: recibe el FeO
+    subroutine run_case(tag, ko1, ko2, ks1, ks2, kb)
         character(len=*), intent(in) :: tag
-        integer, intent(in) :: ko1, ko2, ks, kb
+        integer, intent(in) :: ko1, ko2, ks1, ks2, kb
         real(dp), allocatable :: feo0(:,:,:), al0(:,:,:), esl0(:,:,:)
         real(dp) :: c0, dfeo, dfe, do2, de_sl, de_l, aud_fe0, aud_e0, aud_fe, aud_e, e_ref
         ! (dirigida I1, MEDIO-1) escalas del redondeo de las RESTAS de
@@ -170,8 +212,8 @@ contains
                     s_feo = s_feo + feo0(ii,jj,kk)
                     if (kk /= kb .and. slag%m_X(ii,jj,kk,SL_FEO) /= feo0(ii,jj,kk)) &
                         call fail(tag // ': FeO fuera de la celda kb en k', real(kk, dp))
-                    if (kk /= ks .and. liq%alpha(ii,jj,kk) /= al0(ii,jj,kk)) &
-                        call fail(tag // ': Fe sale de otra celda que ks en k', real(kk, dp))
+                    if ((kk < ks1 .or. kk > ks2) .and. liq%alpha(ii,jj,kk) /= al0(ii,jj,kk)) &
+                        call fail(tag // ': Fe sale de otra celda que ks1..ks2 en k', real(kk, dp))
                     if ((kk < ko1 .or. kk > ko2) .and. sh%S_O2_src(ii,jj,kk) /= 0.0_dp) &
                         call fail(tag // ': O2 sale de otra celda que ko1..ko2 en k', real(kk, dp))
                     if (liq_old%alpha(ii,jj,kk) /= liq%alpha(ii,jj,kk)) &
