@@ -205,6 +205,7 @@ audit_extra_args() {
         # (auditoria 15, M15-4) techo absoluto del clip (el xfail se retiro al
         # ceder la escoria; queda como guarda: medido ~1e-11 kg)
         arc_slag)    echo "--clip-abs-max 3e-4" ;;
+        arc_slag_legacy) echo "--clip-abs-max 3e-4" ;;
         *)           echo "" ;;
     esac
 }
@@ -390,6 +391,8 @@ full | rebaseline)
     # el condensado y slag_condensed_sort; decomposition_arcslag n1 frente a
     # n4). Con slag_in_volume = false era la cesion + slag_buoyancy legada
     run_case arc_slag 1
+    # (auditoria 18, A18-9) el camino legado de la escoria sigue soportado
+    run_case arc_slag_legacy 4
     # (Plan H, P4/P7) escoria CONDENSADA (slag_in_volume) en reposo: fase del
     # Poisson y del momento, hidrostatica con su peso, reordenamiento y masa
     run_case slag_rest 4
@@ -511,6 +514,8 @@ full | rebaseline)
         $PY $INT/check_arcmelt.py "$OUT/arc_melt_n4" --xfail "$(xfail_ids arc_melt)"
     run_script "arc_slag_bed" \
         $PY $INT/check_slag_bed.py "$OUT/arc_slag_n4" --volfix-max 0.06 --xfail "$(xfail_ids arc_slag)"
+    run_script "arc_slag_legacy" \
+        $PY $INT/check_slag_bed.py "$OUT/arc_slag_legacy_n4" --volfix-max 0.06 --xfail "$(xfail_ids arc_slag_legacy)"
     run_script "slag_rest" \
         $PY $INT/check_slag_bed.py "$OUT/slag_rest_n4" --volfix-max 1e-3 \
         --umax-liq 1e-8 --umax-gas 1e-4 --xfail "$(xfail_ids slag_rest)"

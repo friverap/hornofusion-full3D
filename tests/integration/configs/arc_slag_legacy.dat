@@ -1,0 +1,34 @@
+# Banco arc_slag_legacy (auditoria 18, A18-9): arc_slag con la escoria en el
+# camino LEGADO (slag_in_volume = false: capa fuera del Poisson, cesion en el
+# derrame, slag_buoyancy cada paso). Tras el Plan H ningun banco lo ejercia.
+nr = 12
+ntheta = 24
+stretch_r = 1.0
+stretch_z = 1.0
+dt = 0.01
+adaptive_dt = false
+charge_bucket1 = false
+heel_mass = 274000.0
+heel_T = 1850.0
+T_initial = 1850.0
+solve_flow = true
+solve_energy = true
+solve_melting = false
+solve_turb = false
+solve_radiation = true
+solve_chemistry = false
+solve_arc = true
+solve_multiphase = true
+alpha_p = 0.7
+max_outer = 10
+max_inner_mom = 3
+max_inner_pres = 400
+audit_freq = 1
+output_freq = 5
+monitor_freq = 5
+
+nz = 64
+solve_slag = true
+m_slag_init = 10000.0
+t_final = 0.05
+slag_in_volume = false
