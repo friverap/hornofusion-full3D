@@ -21,8 +21,9 @@
 ! (8) (Plan I, dirigidas I2 H2/M1) horno SOBRELLENADO: escoria llena hasta el
 !     techo (4-10) y chatarra 0.3 solapada encima (la que atraviesa la
 !     escoria): el condensado no cabe ni hasta el techo; se compacta con el
-!     exceso repartido en proporcion al hueco (ninguna celda pasa de
-!     fover*liq_cap, fover = vcond/capsum de su columna), masa/E exactas.
+!     exceso repartido SOLO en las celdas con chatarra en proporcion a su
+!     hueco (fover = (vcond - hueco sin chatarra)/hueco con chatarra); la
+!     celda de baño sin chatarra (3) queda en su hueco; masa/E exactas.
 !===============================================================================
 program test_condensed_sort
     use mod_constants
@@ -212,7 +213,11 @@ program test_condensed_sort
             vc = 0.0_dp; cs = 0.0_dp
             do k = 3, nz
                 vc = vc + (liq%alpha(i,j,k) + slag%alpha_sl(i,j,k)) * mesh%vol(i,j,k)
-                cs = cs + liq_cap(sol%alpha_s(i,j,k), 0.0_dp) * mesh%vol(i,j,k)
+                if (sol%alpha_s(i,j,k) >= ALPHA_BED) then
+                    cs = cs + liq_cap(sol%alpha_s(i,j,k), 0.0_dp) * mesh%vol(i,j,k)
+                else
+                    vc = vc - liq_cap(sol%alpha_s(i,j,k), 0.0_dp) * mesh%vol(i,j,k)
+                end if
             end do
             fov = vc / cs
             if (.not. fov > 1.0_dp) then
@@ -220,8 +225,13 @@ program test_condensed_sort
                 ok = .false.
             end if
             do k = 3, nz
-                worst = max(worst, (liq%alpha(i,j,k) + slag%alpha_sl(i,j,k)) &
-                    - fov * liq_cap(sol%alpha_s(i,j,k), 0.0_dp))
+                if (sol%alpha_s(i,j,k) >= ALPHA_BED) then
+                    worst = max(worst, (liq%alpha(i,j,k) + slag%alpha_sl(i,j,k)) &
+                        - fov * liq_cap(sol%alpha_s(i,j,k), 0.0_dp))
+                else
+                    worst = max(worst, (liq%alpha(i,j,k) + slag%alpha_sl(i,j,k)) &
+                        - liq_cap(sol%alpha_s(i,j,k), 0.0_dp))
+                end if
             end do
         end do
     end do
