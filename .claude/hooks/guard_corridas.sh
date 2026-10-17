@@ -12,6 +12,7 @@
 # (auditoria 19, M19-2) el JSON va por un archivo temporal, no por argv (un
 # Write de mas de ~1 MB superaba ARG_MAX y el hook dejaba pasar todo)
 tmp=$(mktemp -t guard_corridas.XXXXXX) || exit 0
+trap 'rm -f "$tmp"' EXIT   # (dirigida A19, B7) tambien si el hook se mata
 cat > "$tmp"
 python3 - "$tmp" <<'PY'
 import json, os, re, shlex, subprocess, sys
@@ -81,7 +82,7 @@ if running(SUITE_PAT):
         re.search(r'>\s*\S*run_tests\.sh', cmd) or re.search(r"open\([^)]*run_tests\.sh[^)]*['\"][wa]", cmd)
         or re.search(r'(sed|perl)\s+-i[^;&|]*run_tests\.sh', cmd)
         or re.search(r'(^|[;&|\s])(cp|mv|tee|install)\s[^;&|]*run_tests\.sh', cmd)))
-    git_tree = re.search(r'(^|[;&|(\s])git(\s+-C\s+\S+)?\s+(checkout|switch|stash|reset|rebase|cherry-pick|apply|restore|pull|merge|am)\b', cmd) \
+    git_tree = re.search(r'(^|[;&|(\s])git(\s+-[Cc]\s+\S+)*\s+(checkout|switch|stash|reset|rebase|cherry-pick|apply|restore|pull|merge|am)\b', cmd) \
                or re.search(r'(^|[;&|(\s])patch\s', cmd)
     if writes_rt or git_tree:
         deny(SUITE_MSG)
@@ -90,28 +91,43 @@ if "# permitir-concurrente" in cmd:
     sys.exit(0)
 
 # --- 1-2. simulacion en curso ----------------------------------------------
-hit = False
-for seg in re.split(r'&&|\|\||[;&|()\n]', cmd):
-    seg = seg.strip()
-    if not seg:
-        continue
-    if re.search(r'(^|[^0-9&])>\s*(\./)?bin/', seg):
-        hit = True; break
+# (dirigida A19, M2) tokenizacion con shlex que respeta comillas y separa los
+# operadores (antes se partia por '|' dentro de una cita: grep "a=\|b" ...)
+def segments(c):
     try:
-        tok = shlex.split(seg, comments=True)
+        lex = shlex.shlex(c, posix=True, punctuation_chars=True)
+        lex.whitespace_split = True
+        lex.commenters = '#'
+        toks = list(lex)
     except ValueError:
-        tok = seg.split()
-    # (M19-2) quitar asignaciones VAR=x y prefijos que lanzan otro comando
-    PREFIX = {"nohup", "nice", "time", "env", "caffeinate", "timeout", "exec", "command", "sudo"}
+        return []
+    seg, out = [], []
+    for t in toks:
+        if t and set(t) <= set(';&|()\n'):
+            if seg: out.append(seg)
+            seg = []
+        else:
+            seg.append(t)
+    if seg: out.append(seg)
+    return out
+
+PREFIX = {"nohup", "nice", "time", "env", "caffeinate", "timeout", "exec", "sudo"}
+OPT_WITH_VALUE = {"sudo": {"-u", "-g", "-C"}, "nice": {"-n"}, "env": {"-u"}}
+INTERP = {"python", "python3", "bash", "sh", "zsh"}
+LAUNCH = re.compile(r'(run_campaign\.py|run_tests\.sh|bitwise_check\.sh)$')
+hit = False
+redir_bin = re.search(r'(^|[^0-9&])>\s*(\./)?bin/', cmd)
+for tok in segments(cmd):
     while tok:
         t0 = tok[0].split('/')[-1]
         if re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', tok[0]):
             tok = tok[1:]; continue
         if t0 in PREFIX:
             tok = tok[1:]
-            # opciones del prefijo y sus valores (nice -n 5, timeout 10s, env -i)
             while tok and (tok[0].startswith('-') or re.match(r'^[+-]?[0-9.]+[smhd]?$', tok[0])):
-                tok = tok[1:]
+                o = tok[0]; tok = tok[1:]
+                if o in OPT_WITH_VALUE.get(t0, ()) and tok:
+                    tok = tok[1:]
             continue
         break
     if not tok:
@@ -120,20 +136,21 @@ for seg in re.split(r'&&|\|\||[;&|()\n]', cmd):
     args = tok[1:]
     if exe in ("make", "gmake", "mpirun", "mpiexec"):
         hit = True; break
-    # lanzadores de corridas del repo (runner de campanas, suite, bit a bit)
-    if exe in ("python", "python3", "bash", "sh", "zsh") and args and \
-       re.search(r'(run_campaign\.py|run_tests\.sh|bitwise_check\.sh)$', args[0]):
-        hit = True; break
-    if re.search(r'(run_campaign\.py|run_tests\.sh|bitwise_check\.sh)$', exe):
+    if exe in INTERP:
+        script = next((x for x in args if not x.startswith('-')), "")
+        if LAUNCH.search(script):
+            hit = True; break
+    if LAUNCH.search(exe):
         hit = True; break
     if exe in ("cp", "mv", "install", "ln") and len(tok) > 1 and is_bin(tok[-1]):
         hit = True; break
     if exe == "rm" and any(is_bin(t) for t in tok[1:]):
         hit = True; break
+if redir_bin:
+    hit = True
 if hit:
     r = running(SIM_PAT)
     if r:
         deny(RUN_MSG.format(r))
 sys.exit(0)
 PY
-rm -f "$tmp"
