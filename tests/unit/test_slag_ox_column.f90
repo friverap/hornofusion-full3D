@@ -11,8 +11,9 @@
 !      estencil local; con el modo legado da la MISMA reaccion).
 !   3. Celda de interfaz con acero resuelto (4: acero 0.5 + escoria 0.5) bajo
 !      escoria compactada (5) y gas (6+): Fe del acero de la celda 4, O2 de la 6.
-! En todos: Fe, O y energia conservados a 1e-12 contra el audit (AUD_FE_YIELD,
-! AUD_SLAG_OX_E) y nada cambia fuera de las tres celdas elegidas.
+! En todos: Fe, O y energia conservados contra el audit (AUD_FE_YIELD,
+! AUD_SLAG_OX_E) a 1e-12 mas el redondeo de las restas de inventario, y nada
+! cambia fuera de las tres celdas elegidas.
 !===============================================================================
 program test_slag_ox_column
     use mod_constants
@@ -125,6 +126,10 @@ contains
         integer, intent(in) :: ko, ks, kb
         real(dp), allocatable :: feo0(:,:,:), al0(:,:,:), esl0(:,:,:)
         real(dp) :: c0, dfeo, dfe, do2, de_sl, de_l, aud_fe0, aud_e0, aud_fe, aud_e, e_ref
+        ! (dirigida I1, MEDIO-1) escalas del redondeo de las RESTAS de
+        ! inventario: Delta alpha sobre alpha ~ 1 (ulp(1)/da ~ 1e-12 relativo,
+        ! sistematico entre columnas) y Delta m_X sobre la masa de FeO previa
+        real(dp) :: s_ml, s_hl, s_feo, tol
         integer :: ii, jj, kk
         c0 = liquid_datum_offset(cfg)
         liq_old%alpha = liq%alpha; liq_old%T = liq%T
@@ -136,6 +141,7 @@ contains
         aud_fe = audit_peek(AUD_FE_YIELD) - aud_fe0
         aud_e  = audit_peek(AUD_SLAG_OX_E) - aud_e0
         dfeo = 0.0_dp; dfe = 0.0_dp; do2 = 0.0_dp; de_sl = 0.0_dp; de_l = 0.0_dp; e_ref = 0.0_dp
+        s_ml = 0.0_dp; s_hl = 0.0_dp; s_feo = 0.0_dp
         do kk = 1, nz
             do jj = 1, nth
                 do ii = 1, nr
@@ -146,6 +152,10 @@ contains
                     de_l = de_l - (al0(ii,jj,kk) - liq%alpha(ii,jj,kk)) * liq%rho(ii,jj,kk) &
                          * mesh%vol(ii,jj,kk) * (liq%cp(ii,jj,kk) * liq%T(ii,jj,kk) + c0)
                     e_ref = e_ref + esl0(ii,jj,kk)
+                    s_ml = s_ml + al0(ii,jj,kk) * liq%rho(ii,jj,kk) * mesh%vol(ii,jj,kk)
+                    s_hl = s_hl + al0(ii,jj,kk) * liq%rho(ii,jj,kk) * mesh%vol(ii,jj,kk) &
+                         * abs(liq%cp(ii,jj,kk) * liq%T(ii,jj,kk) + c0)
+                    s_feo = s_feo + feo0(ii,jj,kk)
                     if (kk /= kb .and. slag%m_X(ii,jj,kk,SL_FEO) /= feo0(ii,jj,kk)) &
                         call fail(tag // ': FeO fuera de la celda kb en k', real(kk, dp))
                     if (kk /= ks .and. liq%alpha(ii,jj,kk) /= al0(ii,jj,kk)) &
@@ -158,14 +168,20 @@ contains
             end do
         end do
         if (.not. dfeo > 0.0_dp) call fail(tag // ': no hubo oxidacion', dfeo)
-        if (abs(dfe - dfeo * MW_FE / MW_FEO) > 1.0e-12_dp * dfe) &
-            call fail(tag // ': Fe no conservado (rel)', (dfe - dfeo * MW_FE / MW_FEO) / dfe)
-        if (abs(aud_fe - dfe) > 1.0e-12_dp * dfe) call fail(tag // ': AUD_FE_YIELD (rel)', (aud_fe - dfe) / dfe)
-        if (abs(do2 - dfeo * 0.5_dp * MW_O2 / MW_FEO) > 1.0e-12_dp * do2) &
-            call fail(tag // ': O no conservado (rel)', (do2 - dfeo * 0.5_dp * MW_O2 / MW_FEO) / do2)
+        ! referencia exacta: el Fe auditado (suma directa de los dm_fe); cada
+        ! inventario se compara con su tolerancia de redondeo de la resta
+        tol = 1.0e-12_dp * aud_fe + 4.0_dp * epsilon(1.0_dp) * s_ml
+        if (abs(dfe - aud_fe) > tol) call fail(tag // ': Fe del baño /= AUD_FE_YIELD (kg)', dfe - aud_fe)
+        tol = 1.0e-12_dp * aud_fe + 4.0_dp * epsilon(1.0_dp) * s_feo
+        if (abs(dfeo - aud_fe * MW_FEO / MW_FE) > tol) &
+            call fail(tag // ': FeO formado /= Fe auditado (kg)', dfeo - aud_fe * MW_FEO / MW_FE)
+        ! el sumidero de O2 parte de 0: sin resta de inventario
+        if (abs(do2 - aud_fe * 0.5_dp * MW_O2 / MW_FE) > 1.0e-12_dp * do2) &
+            call fail(tag // ': O no conservado (rel)', (do2 - aud_fe * 0.5_dp * MW_O2 / MW_FE) / do2)
         ! energia: lo que ganan escoria + baño es exactamente el termino de
-        ! reaccion auditado (tolerancia: redondeo de E_sl de la capa)
-        if (abs(de_sl + de_l - aud_e) > 1.0e-12_dp * abs(aud_e) + 1.0e-15_dp * e_ref) &
+        ! reaccion auditado (tolerancia: redondeo de E_sl y de la entalpia del baño)
+        tol = 1.0e-12_dp * abs(aud_e) + 4.0_dp * epsilon(1.0_dp) * (e_ref + s_hl)
+        if (abs(de_sl + de_l - aud_e) > tol) &
             call fail(tag // ': energia vs AUD_SLAG_OX_E (J)', de_sl + de_l - aud_e)
         print '(3A,ES11.3,A)', '   ', tag, ': FeO formado ', dfeo, ' kg'
         last_dfeo = dfeo
