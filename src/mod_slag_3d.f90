@@ -996,6 +996,12 @@ contains
                         slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
                         call audit_add(AUD_SLAG_GAS, Q)
                     else if (slag_condensed_on(cfg) .and. m%cell_type(i,j,k+1) /= 0) then
+                        ! (auditoria 19, ALTO: regresion de 29fd409) solo si esta
+                        ! celda es el TOPE de la escoria (sin escoria resuelta
+                        ! encima): si la de arriba tiene escoria, ESA escoria ya
+                        ! intercambia con su gas y esta, enterrada, no lo toca
+                        ! (doble area, sobrepaso de T_gas y puente acero-gas)
+                      if (slag%alpha_sl(i,j,k+1) < ALPHA_FLOW_CUTOFF) then
                         ! (dirigida de bajos A18, B1) escoria condensada SIN gas
                         ! propio bajo una celda con gas: la superficie de la
                         ! escoria intercambia por su cara superior (antes la cara
@@ -1015,6 +1021,7 @@ contains
                             qup(i,j,k) = Q
                             call audit_add(AUD_SLAG_GAS, Q)
                         end if
+                      end if
                     end if
                     slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / Cs
                 end do
