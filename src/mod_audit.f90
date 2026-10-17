@@ -216,11 +216,13 @@ contains
         real(dp) :: lo, hi, Ts, b2, Fn, Qg, Qs
         integer  :: it
         b2 = 0.0_dp
-        if (present(C2) .and. present(G2)) then
+        ! (bajo B6-12) el segundo nodo existe solo con sus TRES argumentos: con
+        ! C2 y G2 pero sin T2 se leia un opcional ausente
+        if (present(C2) .and. present(G2) .and. present(T2)) then
             if (C2 > 0.0_dp .and. G2 > 0.0_dp) b2 = G2 * dt * C2 / (C2 + G2 * dt)
         end if
         lo = min(Tg, To); hi = max(Tg, To)
-        if (present(T2) .and. b2 > 0.0_dp) then
+        if (b2 > 0.0_dp) then
             lo = min(lo, T2); hi = max(hi, T2)
         end if
         if (hi - lo <= 1.0e-12_dp * hi .or. Cg <= 0.0_dp .or. Co <= 0.0_dp) then
