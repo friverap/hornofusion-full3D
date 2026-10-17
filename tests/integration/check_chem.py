@@ -27,7 +27,7 @@ Uso: check_chem.py RUNDIR --config CFG [--rtol 1e-7] [--slag]
 import argparse, csv, os, sys
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from eafutil import cell_volumes, load_snapshot, read_config, snapshots
+from eafutil import cell_volumes, load_snapshot, read_config, snapshots, cfg_bool
 
 
 RHO_REF = 1.2      # cfg%rho_gas por defecto
@@ -77,6 +77,11 @@ def main():
     global RHO_REF
     cfg = read_config(args.config)
     RHO_REF = float(cfg.get("rho_gas", 1.2))
+    # (bajo B6-11) --slag solo vale SIN flujo (docstring): con flujo la EOS
+    # reescribe la masa del gas y el inventario elemental no es identidad
+    if args.slag and cfg_bool(cfg, "solve_flow", default=True):
+        print("FAIL: check_chem --slag solo vale con solve_flow = false (con flujo la EOS reescribe el gas)")
+        sys.exit(1)
     files = snapshots(args.rundir)
     O0, C0, f0 = elements(files[0])
     O1, C1, f1 = elements(files[-1])
