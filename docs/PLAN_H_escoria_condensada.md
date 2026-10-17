@@ -55,3 +55,20 @@ Riesgos y su detección: ver el informe del plan (bit a bit/FMA; lectores oculto
 de liq%alpha en la ventana; corrientes espurias en la interfaz por el salto de
 ρ; superficie gas|escoria; escoria drenando en lecho frío; arco/MC/DO; química y
 espuma; cesta 2/ECS; MPI; reinicio; energía auditada; rendimiento).
+
+## Estado P4 (2026-10-16)
+Cableado completo. Gate arc_slag 10 s condensado: u_liq max 0.087 m/s,
+vol_lim max 2.4e-7, u_gas 95 -> 5 m/s, p_max 95 kPa estable, acero sobre la
+escoria ~1e-10, gas bajo la escoria 0, masas a 1e-10, energia gap 7.3e3 J
+(4e-3 del permitido), volfix -2.8e-5 kg. Legado bit a bit (bitwise_check).
+Hallazgos cerrados en P4: (1) trazas de escoria con E/m absurda (cancelacion
+de masa a 1e-110 kg con E en el redondeo) -> paso 580 a -2 MPa; equilibrio
+termico de la traza con el bano, auditado (E_slag_tclip). (2) E_sl y m_X con
+valores especificos de inicio de paso: la escoria que cruzaba una celda vacia
+dentro del paso viajaba sin energia y el reescalado final creaba energia sin
+auditar (1.3e6 J); ahora viajan con asl en cada movimiento (slq_adv).
+(3) gas bajo la escoria -> compactacion en el reordenamiento. (4) hidrostatica
+inicial con el peso de la escoria condensada (paso 1 de slag_rest: 4e-4 ->
+2e-10 m/s). Reposo (slag_rest): el transitorio posterior del gas (u_gas ~5
+m/s, u_liq ~1e-4) es el MISMO que sin escoria en el volumen (xfail bath_rest
+preexistente): el gate u <= 1e-9 se sustituye por "no peor que el legado".

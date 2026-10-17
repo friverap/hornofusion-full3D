@@ -85,7 +85,7 @@ contains
                                          alpha_old, rho_old, mdot_m)
         use mod_workspace, only: ensure_workspace, own_weight_face, ws_liq_cont, ws_liq_cont_valid, &
                                  liq_own_weight, liq_w, mix_cell_weight, liq_cont_fallback, bed_rel_face, &
-            ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, ws_trg, ws_trl, &
+            ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, ws_trg, ws_trl, ws_cond_on, ws_Fcm_r, ws_Fcm_th, ws_Fcm_z, &
             ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bed_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
@@ -331,7 +331,12 @@ contains
                     ! la forma simetrica anterior frenaba con su caudal
                     ! fantasma el modo par-impar que la fuerza balanceada
                     ! elimino; sin ella, el conservativo no es estable.
-                    if (cons_l) then
+                    if (cons_l .and. ws_cond_on) then
+                        ! (Plan H) momento del CONDENSADO: su flujo de masa
+                        Fw = ws_Fcm_r(i-1,j,k);  Fe = ws_Fcm_r(i,j,k)
+                        Fs = ws_Fcm_th(i,jm,k);  Fn = ws_Fcm_th(i,j,k)
+                        Fb = ws_Fcm_z(i,j,k-1);  Ft = ws_Fcm_z(i,j,k)
+                    else if (cons_l) then
                         Fw = ws_Fr(i-1,j,k);  Fe = ws_Fr(i,j,k)
                         Fs = ws_Fth(i,jm,k);  Fn = ws_Fth(i,j,k)
                         Fb = ws_Fz(i,j,k-1);  Ft = ws_Fz(i,j,k)

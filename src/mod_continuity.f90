@@ -29,7 +29,7 @@ module mod_continuity
     use mod_face_flux
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d
     use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS, AUD_ALPHA_CLIP_E, AUD_SPILL_MASS, &
-                         AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
+                         AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED, AUD_SLAG_TCLIP
     use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
                              ws_Mr, ws_Mth, ws_Mz, ws_lim, ws_flux_valid, &
                              ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
@@ -39,7 +39,7 @@ module mod_continuity
                              ws_Fc_af_r, ws_Fc_af_th, ws_Fc_af_z, &
                              ws_ud_r, ws_ud_th, ws_ud_z, ws_ut, ws_drift_valid, &
                              ws_mQ_r, ws_mQ_th, ws_mQ_z, ws_mW, ws_mKl, ws_mKg, ws_mix_valid, ws_mix_id, &
-                             ws_Fcm_r, ws_Fcm_th, ws_Fcm_z, ws_slag_clip_call
+                             ws_Fcm_r, ws_Fcm_th, ws_Fcm_z, ws_slag_clip_call, ws_Fsl_r, ws_Fsl_th, ws_Fsl_z
     implicit none
 
     logical, save :: fallback_warned = .false.
@@ -61,7 +61,7 @@ module mod_continuity
 
 contains
 
-    subroutine solve_volume_fraction(liq, gas, sol, alpha_slag, alpha_old, m, cfg)
+    subroutine solve_volume_fraction(liq, gas, sol, alpha_slag, alpha_old, m, cfg, asl_adv, slq_adv)
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
         ! Fracción de escoria: participa en la restricción de volumen
@@ -73,6 +73,24 @@ contains
         real(dp), intent(in)         :: alpha_old(-1:,-1:,-1:)
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
+        ! (Plan H) ESCORIA advectada con el condensado (liq%alpha = alpha_c):
+        ! entra con alpha_sl de inicio de paso; en cada sub-paso, en el derrame
+        ! y en el recorte se mueve con la composicion ACTUAL del dador
+        ! (alpha_sl/alpha_c): acotada por construccion (0 <= alpha_sl <=
+        ! alpha_c). Acumula ws_Fsl_* (flujo de volumen de escoria x rho_l).
+        real(dp), intent(inout), optional :: asl_adv(-1:,-1:,-1:)
+        ! Extensivas de la escoria (E_sl, m_X) que viajan CON su volumen en
+        ! los mismos movimientos que asl_adv, con la densidad por volumen de
+        ! escoria ACTUAL del dador (qd = Q/(alpha_sl V)). Con los valores
+        ! especificos de inicio de paso, la escoria que cruzaba una celda
+        ! vacia dentro del paso viajaba sin energia y el reescalado final
+        ! (masa por flujos vs alpha_sl, que se cancela a redondeo) creaba
+        ! o destruia energia sin auditar (arc_slag 10 s: 1.3e6 J)
+        real(dp), intent(inout), optional :: slq_adv(-1:,-1:,-1:,:)
+        real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+        real(dp), allocatable :: qtmp(:,:,:)
+        logical :: adv, advq
+        integer :: c
 
         integer :: i, j, k, isub, n_sub
         integer :: icfl, jcfl, kcfl
@@ -249,6 +267,20 @@ contains
 
         ! Partir SIEMPRE de alpha_old (ancla temporal, hallazgo 3.2)
         liq%alpha = alpha_old
+        adv = present(asl_adv)
+        if (adv) then
+            allocate(s_new, phs, mold=liq%alpha)
+            s_new = 0.0_dp; phs = 0.0_dp
+            ws_Fsl_r = 0.0_dp; ws_Fsl_th = 0.0_dp; ws_Fsl_z = 0.0_dp
+        end if
+        advq = adv .and. present(slq_adv)
+        if (advq) then
+            allocate(q_new(lbound(slq_adv,1):ubound(slq_adv,1), lbound(slq_adv,2):ubound(slq_adv,2), &
+                           lbound(slq_adv,3):ubound(slq_adv,3), size(slq_adv,4)))
+            allocate(qd, mold=q_new)
+            allocate(qtmp, mold=liq%alpha)
+            q_new = 0.0_dp; qd = 0.0_dp
+        end if
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
 
         call ensure_workspace(m)
@@ -388,6 +420,8 @@ contains
             ! (3) Actualización en forma de flujo con los flujos EFECTIVOS
             !     (mismo valor en las dos celdas de la cara) y acumulación
             !     para la energía
+            if (adv) call slag_phi(liq%alpha, asl_adv, phs)
+            if (advq) call slag_qden()
             do k = kstart, kend
                 do j = jstart, jend
                     do i = istart, iend
@@ -420,11 +454,45 @@ contains
                         ws_Fr(i,j,k)  = ws_Fr(i,j,k)  + Fe * dt_sub / cfg%dt
                         ws_Fth(i,j,k) = ws_Fth(i,j,k) + Fn * dt_sub / cfg%dt
                         ws_Fz(i,j,k)  = ws_Fz(i,j,k)  + Ft * dt_sub / cfg%dt
+                        if (adv) then
+                            s_new(i,j,k) = asl_adv(i,j,k) + dt_sub * ( &
+                                Fw * phd(Fw, phs(i-1,j,k), phs(i,j,k)) - Fe * phd(Fe, phs(i,j,k), phs(i+1,j,k)) &
+                              + Fs * phd(Fs, phs(i,j-1,k), phs(i,j,k)) - Fn * phd(Fn, phs(i,j,k), phs(i,j+1,k)) &
+                              + Fb * phd(Fb, phs(i,j,k-1), phs(i,j,k)) - Ft * phd(Ft, phs(i,j,k), phs(i,j,k+1))) &
+                              / (liq%rho(i,j,k) * m%vol(i,j,k))
+                            ws_Fsl_r(i,j,k)  = ws_Fsl_r(i,j,k)  + Fe * phd(Fe, phs(i,j,k), phs(i+1,j,k)) * dt_sub / cfg%dt
+                            ws_Fsl_th(i,j,k) = ws_Fsl_th(i,j,k) + Fn * phd(Fn, phs(i,j,k), phs(i,j+1,k)) * dt_sub / cfg%dt
+                            ws_Fsl_z(i,j,k)  = ws_Fsl_z(i,j,k)  + Ft * phd(Ft, phs(i,j,k), phs(i,j,k+1)) * dt_sub / cfg%dt
+                        end if
+                        if (advq) then
+                            do c = 1, size(slq_adv,4)
+                                q_new(i,j,k,c) = slq_adv(i,j,k,c) + dt_sub / liq%rho(i,j,k) * ( &
+                                    Fw * phd(Fw, phs(i-1,j,k), phs(i,j,k)) * phd(Fw, qd(i-1,j,k,c), qd(i,j,k,c)) &
+                                  - Fe * phd(Fe, phs(i,j,k), phs(i+1,j,k)) * phd(Fe, qd(i,j,k,c), qd(i+1,j,k,c)) &
+                                  + Fs * phd(Fs, phs(i,j-1,k), phs(i,j,k)) * phd(Fs, qd(i,j-1,k,c), qd(i,j,k,c)) &
+                                  - Fn * phd(Fn, phs(i,j,k), phs(i,j+1,k)) * phd(Fn, qd(i,j,k,c), qd(i,j+1,k,c)) &
+                                  + Fb * phd(Fb, phs(i,j,k-1), phs(i,j,k)) * phd(Fb, qd(i,j,k-1,c), qd(i,j,k,c)) &
+                                  - Ft * phd(Ft, phs(i,j,k), phs(i,j,k+1)) * phd(Ft, qd(i,j,k,c), qd(i,j,k+1,c)))
+                            end do
+                        end if
                     end do
                 end do
             end do
             liq%alpha = a_new
             call mpi_exchange_halos_3d(liq%alpha, m%topo)
+            if (adv) then
+                where (m%cell_type == 0) s_new = 0.0_dp
+                asl_adv(istart:iend,jstart:jend,kstart:kend) = s_new(istart:iend,jstart:jend,kstart:kend)
+                call mpi_exchange_halos_3d(asl_adv, m%topo)
+            end if
+            if (advq) then
+                do c = 1, size(slq_adv,4)
+                    where (m%cell_type(istart:iend,jstart:jend,kstart:kend) == 0) &
+                        q_new(istart:iend,jstart:jend,kstart:kend,c) = 0.0_dp
+                    slq_adv(istart:iend,jstart:jend,kstart:kend,c) = q_new(istart:iend,jstart:jend,kstart:kend,c)
+                end do
+                call slq_halos()
+            end if
         end do
         call mpi_exchange_halos_3d(ws_Fr,  m%topo)
         call mpi_exchange_halos_3d(ws_Fth, m%topo)
@@ -535,11 +603,14 @@ contains
             end if
             if (mv_glob <= 1.0e-15_dp) exit
             call mpi_exchange_halos_3d(ws_lim, m%topo)
+            if (adv) call slag_phi(liq%alpha, asl_adv, phs)
+            if (advq) call slag_qden()
             do k = kstart, kend
                 do j = jstart, jend
                     do i = istart, iend
                         if (m%cell_type(i,j,k) == 0) cycle
                         give = ws_lim(i,j,k)
+                        if (adv) call slag_spill(i, j, k, give)
                         liq%alpha(i,j,k) = liq%alpha(i,j,k) - give
                         ! (pc_spill_source: el derrame como fuente REALIMENTA al
                         ! reves — al dador lleno le dice que perdio volumen y el
@@ -563,6 +634,8 @@ contains
                 end do
             end do
             call mpi_exchange_halos_3d(liq%alpha, m%topo)
+            if (adv) call mpi_exchange_halos_3d(asl_adv, m%topo)
+            if (advq) call slq_halos()
         end do
         !-------------------------------------------------------------------
         ! (A11-2 con escoria / A13-1, oct-2026) la ESCORIA CEDE al acero: el
@@ -594,11 +667,14 @@ contains
             end do
         end do
         call mpi_exchange_halos_3d(ws_lim, m%topo)
+        if (adv) call slag_phi(liq%alpha, asl_adv, phs)
+            if (advq) call slag_qden()
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     give = ws_lim(i,j,k)
+                    if (adv) call slag_spill(i, j, k, give)
                     liq%alpha(i,j,k) = liq%alpha(i,j,k) - give
                     if (m%cell_type(i,j,k-1) /= 0) liq%alpha(i,j,k) = liq%alpha(i,j,k) &
                         + ws_lim(i,j,k-1) * m%vol(i,j,k-1) / m%vol(i,j,k)
@@ -610,6 +686,8 @@ contains
             end do
         end do
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
+        if (adv) call mpi_exchange_halos_3d(asl_adv, m%topo)
+        if (advq) call slq_halos()
         call mpi_exchange_halos_3d(ws_Fz, m%topo)
         call audit_step_delta(AUD_SPILL_MASS, spill_call, spill_step_prev, spill_step_id)
 
@@ -635,6 +713,15 @@ contains
                         min(1.0_dp - sol%alpha_s(i,j,k) - merge(0.0_dp, alpha_slag(i,j,k), &
                                 alpha_slag(i,j,k) >= ALPHA_CUTOFF), &
                             liq%alpha(i,j,k)))
+                    if (adv) then
+                        if (a_pre > 0.0_dp) then
+                            asl_adv(i,j,k) = asl_adv(i,j,k) * (liq%alpha(i,j,k) / a_pre)
+                            if (advq) slq_adv(i,j,k,:) = slq_adv(i,j,k,:) * (liq%alpha(i,j,k) / a_pre)
+                        else
+                            asl_adv(i,j,k) = 0.0_dp
+                            if (advq) slq_adv(i,j,k,:) = 0.0_dp
+                        end if
+                    end if
                     clip_call = clip_call + &
                         (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k)
                     clipE_call = clipE_call + &
@@ -649,6 +736,13 @@ contains
         end do
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
         call mpi_exchange_halos_3d(gas%alpha, m%topo)
+        if (adv) then
+            call mpi_exchange_halos_3d(asl_adv, m%topo)
+            if (advq) call slq_halos()
+            call mpi_exchange_halos_3d(ws_Fsl_r, m%topo)
+            call mpi_exchange_halos_3d(ws_Fsl_th, m%topo)
+            call mpi_exchange_halos_3d(ws_Fsl_z, m%topo)
+        end if
         call audit_step_delta(AUD_ALPHA_CLIP_MASS, clip_call, clip_step_prev, clip_step_id)
         call audit_step_delta(AUD_ALPHA_CLIP_E, clipE_call, clipE_step_prev, clipE_step_id)
 
@@ -863,6 +957,69 @@ contains
             else; fout = fout + f * ws_lim(ii,jj,kk+1); end if
         end subroutine cell_in_out
 
+        ! (Plan H) composicion de la escoria en el condensado (0 sin condensado)
+        subroutine slag_phi(ac, as, ph)
+            real(dp), intent(in)  :: ac(-1:,-1:,-1:), as(-1:,-1:,-1:)
+            real(dp), intent(out) :: ph(-1:,-1:,-1:)
+            where (ac > 0.0_dp)
+                ph = min(1.0_dp, max(0.0_dp, as / ac))
+            elsewhere
+                ph = 0.0_dp
+            end where
+        end subroutine slag_phi
+
+        ! fraccion de escoria del DADOR de una cara (F > 0: el de abajo/atras)
+        pure real(dp) function phd(F, pa, pb)
+            real(dp), intent(in) :: F, pa, pb
+            if (F >= 0.0_dp) then
+                phd = pa
+            else
+                phd = pb
+            end if
+        end function phd
+
+        ! derrame/cesion de la celda (i,j,k) hacia (i,j,k+1): la escoria sale
+        ! con la composicion del dador y entra la de la celda de abajo
+        subroutine slag_spill(ii, jj, kk, gv)
+            integer, intent(in)  :: ii, jj, kk
+            real(dp), intent(in) :: gv
+            asl_adv(ii,jj,kk) = asl_adv(ii,jj,kk) - gv * phs(ii,jj,kk)
+            if (m%cell_type(ii,jj,kk-1) /= 0) asl_adv(ii,jj,kk) = asl_adv(ii,jj,kk) &
+                + ws_lim(ii,jj,kk-1) * m%vol(ii,jj,kk-1) / m%vol(ii,jj,kk) * phs(ii,jj,kk-1)
+            if (gv > 0.0_dp) ws_Fsl_z(ii,jj,kk) = ws_Fsl_z(ii,jj,kk) + gv * phs(ii,jj,kk) &
+                * liq%rho(ii,jj,kk) * m%vol(ii,jj,kk) / cfg%dt
+            if (advq) then
+                slq_adv(ii,jj,kk,:) = slq_adv(ii,jj,kk,:) - gv * phs(ii,jj,kk) * m%vol(ii,jj,kk) &
+                                      * qd(ii,jj,kk,:)
+                if (m%cell_type(ii,jj,kk-1) /= 0) slq_adv(ii,jj,kk,:) = slq_adv(ii,jj,kk,:) &
+                    + ws_lim(ii,jj,kk-1) * m%vol(ii,jj,kk-1) * phs(ii,jj,kk-1) * qd(ii,jj,kk-1,:)
+            end if
+        end subroutine slag_spill
+
+        ! densidad de las extensivas por volumen de ESCORIA del dador. Por
+        ! debajo de ASL_QMIN la traza es residuo de una cancelacion (su Q es
+        ! redondeo de vecinas mucho mayores): no transporta extensivas (lo
+        ! que mueve es < 1e-12 de celda; solve_condensed_fraction equilibra
+        ! las trazas al final, auditado)
+        subroutine slag_qden()
+            real(dp), parameter :: ASL_QMIN = 1.0e-12_dp
+            do c = 1, size(slq_adv,4)
+                where (asl_adv >= ASL_QMIN .and. m%vol > 0.0_dp)
+                    qd(:,:,:,c) = slq_adv(:,:,:,c) / (asl_adv * m%vol)
+                elsewhere
+                    qd(:,:,:,c) = 0.0_dp
+                end where
+            end do
+        end subroutine slag_qden
+
+        subroutine slq_halos()
+            do c = 1, size(slq_adv,4)
+                qtmp = slq_adv(:,:,:,c)
+                call mpi_exchange_halos_3d(qtmp, m%topo)
+                slq_adv(:,:,:,c) = qtmp
+            end do
+        end subroutine slq_halos
+
     end subroutine solve_volume_fraction
 
 
@@ -871,106 +1028,100 @@ contains
     ! (alpha_c = alpha_l + alpha_sl) se transporta A VOLUMEN con la MISMA
     ! maquinaria validada (solve_volume_fraction: donor, limitador, derrame,
     ! recorte), sin escoria inmovil (alpha_slag = 0: la escoria ES condensado).
-    ! Luego cada flujo de cara (+) se reparte con la COMPOSICION DEL DADOR al
-    ! inicio del paso, phi = alpha_sl/alpha_c: escoria q phi (y su m_sl, E_sl,
-    ! m_X con los valores especificos del dador), acero el resto. mdot (fusion)
-    ! es acero. Con alpha_sl = 0 reproduce solve_volume_fraction BIT A BIT.
+    ! Cada movimiento de condensado (sub-paso, derrame, recorte) lleva escoria
+    ! con la COMPOSICION ACTUAL del dador, phi = alpha_sl/alpha_c, y con ella
+    ! su E_sl y m_X (densidad por volumen de escoria del dador, slq_adv);
+    ! acero el resto; m_sl = alpha_sl rho_sl V por construccion. mdot (fusion)
+    ! es acero. La masa inicial es alpha_sl rho_sl V. Con alpha_sl = 0 reproduce solve_volume_fraction BIT A BIT.
     ! Exporta: ws_Fr/Fth/Fz = flujo de masa de ACERO (energia del liquido);
     ! ws_Fcm_* = flujo de masa del CONDENSADO (momento del condensado).
     ! Entradas *_pre: estado de la escoria al INICIO del paso (cada iteracion
     ! externa rehace el paso desde el, como alpha_old).
     !---------------------------------------------------------------------------
-    subroutine solve_condensed_fraction(liq, gas, sol, slag, asl_pre, ms_pre, es_pre, &
+    subroutine solve_condensed_fraction(liq, gas, sol, slag, asl_pre, es_pre, &
                                         mx_pre, alpha_old, m, cfg)
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
         type(slag_t),  intent(inout) :: slag
-        real(dp), intent(in) :: asl_pre(-1:,-1:,-1:), ms_pre(-1:,-1:,-1:), es_pre(-1:,-1:,-1:)
+        real(dp), intent(in) :: asl_pre(-1:,-1:,-1:), es_pre(-1:,-1:,-1:)
         real(dp), intent(in) :: mx_pre(-1:,-1:,-1:,:)
         real(dp), intent(in) :: alpha_old(-1:,-1:,-1:)
         type(mesh_t), intent(in)   :: m
         type(config_t), intent(in) :: cfg
 
-        real(dp), allocatable :: ac_old(:,:,:), zero(:,:,:), phi(:,:,:), dsl(:,:,:), dms(:,:,:), &
-                                 des(:,:,:), dmx(:,:,:,:)
-        integer  :: i, j, k, c, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: clip_loc, rl
+        real(dp), allocatable :: ac_old(:,:,:), zero(:,:,:), asl(:,:,:), slq(:,:,:,:), tmp(:,:,:)
+        integer  :: i, j, k, c, nx, istart, iend, jstart, jend, kstart, kend
+        real(dp) :: clip_loc, rl, clip_e, E_tr, a_raw
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
-        allocate(ac_old, zero, phi, dsl, dms, des, mold=liq%alpha)
-        allocate(dmx(lbound(mx_pre,1):ubound(mx_pre,1), lbound(mx_pre,2):ubound(mx_pre,2), &
-                     lbound(mx_pre,3):ubound(mx_pre,3), size(mx_pre,4)))
+        nx = size(mx_pre,4)
+        allocate(ac_old, zero, asl, tmp, mold=liq%alpha)
+        allocate(slq(lbound(mx_pre,1):ubound(mx_pre,1), lbound(mx_pre,2):ubound(mx_pre,2), &
+                     lbound(mx_pre,3):ubound(mx_pre,3), 1 + nx))
         zero = 0.0_dp
         ac_old = alpha_old + asl_pre
-        where (ac_old > 0.0_dp)
-            phi = asl_pre / ac_old
-        elsewhere
-            phi = 0.0_dp
-        end where
-
-        call solve_volume_fraction(liq, gas, sol, zero, ac_old, m, cfg)
-        ! liq%alpha = alpha_c^{n+1}; ws_Fr/Fth/Fz = masa condensada (rho_l)
-
-        dsl = 0.0_dp; dms = 0.0_dp; des = 0.0_dp; dmx = 0.0_dp
-        ws_Fcm_r = 0.0_dp; ws_Fcm_th = 0.0_dp; ws_Fcm_z = 0.0_dp
-        rl = cfg%rho_steel
-        ! caras + de cada celda propia (y la - de la primera fila via halo):
-        ! se recorre la cara (i,i+1) desde la celda i en [istart-1, iend]
-        do k = kstart - 1, kend
-            do j = jstart - 1, jend
-                do i = istart - 1, iend
-                    call split_face(i, j, k, i+1, j, k, ws_Fr(i,j,k), 1)
-                    call split_face(i, j, k, i, j+1, k, ws_Fth(i,j,k), 2)
-                    call split_face(i, j, k, i, j, k+1, ws_Fz(i,j,k), 3)
-                end do
-            end do
+        asl = asl_pre
+        slq(:,:,:,1) = es_pre
+        do c = 1, nx
+            slq(:,:,:,1+c) = mx_pre(:,:,:,c)
         end do
+        rl = cfg%rho_steel
+        ! condensado a volumen + escoria (y su E_sl, m_X) advectada con la
+        ! composicion ACTUAL del dador en cada movimiento
+        call solve_volume_fraction(liq, gas, sol, zero, ac_old, m, cfg, asl_adv=asl, slq_adv=slq)
+        ! liq%alpha = alpha_c^{n+1}; asl = alpha_sl^{n+1}; ws_Fr = masa condensada
+        ! (x rho_l); ws_Fsl = volumen de escoria x rho_l (mismas unidades)
 
-        clip_loc = 0.0_dp
+        clip_loc = 0.0_dp; clip_e = 0.0_dp
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
-                    slag%alpha_sl(i,j,k) = asl_pre(i,j,k) + dsl(i,j,k) / m%vol(i,j,k)
-                    slag%m_sl(i,j,k) = ms_pre(i,j,k) + dms(i,j,k)
-                    slag%E_sl(i,j,k) = es_pre(i,j,k) + des(i,j,k)
-                    do c = 1, size(mx_pre,4)
-                        slag%m_X(i,j,k,c) = mx_pre(i,j,k,c) + dmx(i,j,k,c)
+                    a_raw = asl(i,j,k)
+                    slag%alpha_sl(i,j,k) = min(max(a_raw, 0.0_dp), liq%alpha(i,j,k))
+                    ! la masa sigue a alpha_sl por construccion; solo el acotado
+                    ! (redondeo) la recorta: auditado como clip de escoria
+                    clip_loc = clip_loc + (a_raw - slag%alpha_sl(i,j,k)) * cfg%rho_slag * m%vol(i,j,k)
+                    slag%m_sl(i,j,k) = slag%alpha_sl(i,j,k) * cfg%rho_slag * m%vol(i,j,k)
+                    slag%E_sl(i,j,k) = slq(i,j,k,1)
+                    do c = 1, nx
+                        slag%m_X(i,j,k,c) = slq(i,j,k,1+c)
                     end do
-                    ! cotas: 0 <= alpha_sl <= alpha_c (recorte AUDITADO)
-                    if (slag%alpha_sl(i,j,k) < 0.0_dp .or. slag%m_sl(i,j,k) < 0.0_dp) then
-                        clip_loc = clip_loc - min(slag%m_sl(i,j,k), 0.0_dp)
-                        slag%alpha_sl(i,j,k) = 0.0_dp; slag%m_sl(i,j,k) = 0.0_dp
-                        slag%E_sl(i,j,k) = 0.0_dp; slag%m_X(i,j,k,:) = 0.0_dp
-                    else if (slag%alpha_sl(i,j,k) > liq%alpha(i,j,k)) then
-                        clip_loc = clip_loc + (slag%alpha_sl(i,j,k) - liq%alpha(i,j,k)) * cfg%rho_slag * m%vol(i,j,k)
-                        ! la escoria que no cabe en el condensado se recorta
-                        ! (energia y componentes en proporcion)
-                        if (slag%alpha_sl(i,j,k) > 0.0_dp) then
-                            slag%E_sl(i,j,k) = slag%E_sl(i,j,k) * liq%alpha(i,j,k) / slag%alpha_sl(i,j,k)
-                            slag%m_X(i,j,k,:) = slag%m_X(i,j,k,:) * liq%alpha(i,j,k) / slag%alpha_sl(i,j,k)
-                        end if
-                        slag%alpha_sl(i,j,k) = liq%alpha(i,j,k)
-                        slag%m_sl(i,j,k) = slag%alpha_sl(i,j,k) * cfg%rho_slag * m%vol(i,j,k)
-                    end if
-                    if (slag%m_sl(i,j,k) > 1.0e-12_dp) then
+                    ! TRAZA (alpha_sl < ALPHA_CUTOFF): toma la T del bano local
+                    ! (fase residual en equilibrio termico con la continua, como
+                    ! CATHARE/NEPTUNE); la diferencia se audita. Sin esto la E de
+                    ! una celda que se vacia queda en el redondeo de E (~1e-16
+                    ! |E|, incluso negativa) frente a una masa de ~1e-110 kg: E/m
+                    ! absurda (arc_slag paso 579: T_sl 1.6e7 K -> bano a -2 MPa)
+                    if (slag%alpha_sl(i,j,k) < ALPHA_CUTOFF) then
+                        E_tr = slag%m_sl(i,j,k) * cfg%cp_slag * liq%T(i,j,k)
+                        clip_e = clip_e + (E_tr - slag%E_sl(i,j,k))
+                        slag%E_sl(i,j,k) = E_tr
+                        slag%T_sl(i,j,k) = liq%T(i,j,k)
+                        slag%m_X(i,j,k,:) = max(0.0_dp, slag%m_X(i,j,k,:))
+                    else
                         slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / (slag%m_sl(i,j,k) * cfg%cp_slag)
                     end if
-                    liq%alpha(i,j,k) = liq%alpha(i,j,k) - slag%alpha_sl(i,j,k)
+                    liq%alpha(i,j,k) = max(0.0_dp, liq%alpha(i,j,k) - slag%alpha_sl(i,j,k))
                     gas%alpha(i,j,k) = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k) - liq%alpha(i,j,k) &
                                                         - slag%alpha_sl(i,j,k))
                 end do
             end do
         end do
         ws_slag_clip_call = clip_loc
+        call audit_add(AUD_SLAG_TCLIP, clip_e)
 
-        ! flujo de ACERO para la energia: masa condensada x (1 - phi_dador)
-        do k = kstart - 1, kend
-            do j = jstart - 1, jend
-                do i = istart - 1, iend
-                    ws_Fr(i,j,k)  = ws_Fr(i,j,k)  * (1.0_dp - phi(donor_i(ws_Fr(i,j,k), i, i+1), j, k))
-                    ws_Fth(i,j,k) = ws_Fth(i,j,k) * (1.0_dp - phi(i, donor_i(ws_Fth(i,j,k), j, j+1), k))
-                    ws_Fz(i,j,k)  = ws_Fz(i,j,k)  * (1.0_dp - phi(i, j, donor_i(ws_Fz(i,j,k), k, k+1)))
+        ! flujos de masa: ACERO (energia) = condensado - escoria;
+        ! CONDENSADO (momento) = acero + escoria con rho_sl
+        do k = lbound(ws_Fr,3), ubound(ws_Fr,3)
+            do j = lbound(ws_Fr,2), ubound(ws_Fr,2)
+                do i = lbound(ws_Fr,1), ubound(ws_Fr,1)
+                    ws_Fr(i,j,k)  = ws_Fr(i,j,k)  - ws_Fsl_r(i,j,k)
+                    ws_Fth(i,j,k) = ws_Fth(i,j,k) - ws_Fsl_th(i,j,k)
+                    ws_Fz(i,j,k)  = ws_Fz(i,j,k)  - ws_Fsl_z(i,j,k)
+                    ws_Fcm_r(i,j,k)  = ws_Fr(i,j,k)  + ws_Fsl_r(i,j,k)  * (cfg%rho_slag / rl)
+                    ws_Fcm_th(i,j,k) = ws_Fth(i,j,k) + ws_Fsl_th(i,j,k) * (cfg%rho_slag / rl)
+                    ws_Fcm_z(i,j,k)  = ws_Fz(i,j,k)  + ws_Fsl_z(i,j,k)  * (cfg%rho_slag / rl)
                 end do
             end do
         end do
@@ -980,81 +1131,12 @@ contains
         call mpi_exchange_halos_3d(slag%m_sl, m%topo)
         call mpi_exchange_halos_3d(slag%E_sl, m%topo)
         call mpi_exchange_halos_3d(slag%T_sl, m%topo)
-        do c = 1, size(mx_pre,4)
-            dmx(:,:,:,1) = slag%m_X(:,:,:,c)
-            call mpi_exchange_halos_3d(dmx(:,:,:,1), m%topo)
-            slag%m_X(:,:,:,c) = dmx(:,:,:,1)
+        do c = 1, nx
+            tmp = slag%m_X(:,:,:,c)
+            call mpi_exchange_halos_3d(tmp, m%topo)
+            slag%m_X(:,:,:,c) = tmp
         end do
-        call mpi_exchange_halos_3d(ws_Fr,  m%topo)
-        call mpi_exchange_halos_3d(ws_Fth, m%topo)
-        call mpi_exchange_halos_3d(ws_Fz,  m%topo)
-        call mpi_exchange_halos_3d(ws_Fcm_r,  m%topo)
-        call mpi_exchange_halos_3d(ws_Fcm_th, m%topo)
-        call mpi_exchange_halos_3d(ws_Fcm_z,  m%topo)
-        deallocate(ac_old, zero, phi, dsl, dms, des, dmx)
-
-    contains
-
-        pure integer function donor_i(F, ia, ib)
-            real(dp), intent(in) :: F
-            integer, intent(in)  :: ia, ib
-            if (F >= 0.0_dp) then
-                donor_i = ia
-            else
-                donor_i = ib
-            end if
-        end function donor_i
-
-        ! reparte el flujo de masa condensado F (de a hacia b si F > 0) de la
-        ! cara (a,b): escoria = F/rho_l phi_dador; acumula en las celdas propias
-        subroutine split_face(ia, ja, ka, ib, jb, kb, F, dir)
-            integer, intent(in)  :: ia, ja, ka, ib, jb, kb, dir
-            real(dp), intent(in) :: F
-            integer  :: id, jd, kd
-            real(dp) :: q, qm, qe, rc
-            if (F == 0.0_dp) return
-            if (m%cell_type(ia,ja,ka) == 0 .or. m%cell_type(ib,jb,kb) == 0) return
-            if (F > 0.0_dp) then
-                id = ia; jd = ja; kd = ka
-            else
-                id = ib; jd = jb; kd = kb
-            end if
-            q = F / rl * phi(id,jd,kd) * cfg%dt          ! volumen de escoria [m3]
-            qm = 0.0_dp; qe = 0.0_dp
-            if (ms_pre(id,jd,kd) > 0.0_dp) then
-                qm = q * cfg%rho_slag
-                qe = qm * es_pre(id,jd,kd) / ms_pre(id,jd,kd)
-            end if
-            ! momento: masa condensada con la rho_c del dador
-            rc = rl
-            if (ac_old(id,jd,kd) > 0.0_dp) rc = (alpha_old(id,jd,kd) * rl &
-                                                + asl_pre(id,jd,kd) * cfg%rho_slag) / ac_old(id,jd,kd)
-            select case (dir)
-            case (1); ws_Fcm_r(ia,ja,ka)  = F / rl * rc
-            case (2); ws_Fcm_th(ia,ja,ka) = F / rl * rc
-            case (3); ws_Fcm_z(ia,ja,ka)  = F / rl * rc
-            end select
-            if (owned(ia,ja,ka)) then
-                dsl(ia,ja,ka) = dsl(ia,ja,ka) - q
-                dms(ia,ja,ka) = dms(ia,ja,ka) - qm
-                des(ia,ja,ka) = des(ia,ja,ka) - qe
-                if (ms_pre(id,jd,kd) > 0.0_dp) dmx(ia,ja,ka,:) = dmx(ia,ja,ka,:) &
-                    - qm * mx_pre(id,jd,kd,:) / ms_pre(id,jd,kd)
-            end if
-            if (owned(ib,jb,kb)) then
-                dsl(ib,jb,kb) = dsl(ib,jb,kb) + q
-                dms(ib,jb,kb) = dms(ib,jb,kb) + qm
-                des(ib,jb,kb) = des(ib,jb,kb) + qe
-                if (ms_pre(id,jd,kd) > 0.0_dp) dmx(ib,jb,kb,:) = dmx(ib,jb,kb,:) &
-                    + qm * mx_pre(id,jd,kd,:) / ms_pre(id,jd,kd)
-            end if
-        end subroutine split_face
-
-        pure logical function owned(ii, jj, kk)
-            integer, intent(in) :: ii, jj, kk
-            owned = ii >= istart .and. ii <= iend .and. jj >= jstart .and. jj <= jend &
-                    .and. kk >= kstart .and. kk <= kend
-        end function owned
+        deallocate(ac_old, zero, asl, slq, tmp)
 
     end subroutine solve_condensed_fraction
 

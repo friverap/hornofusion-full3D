@@ -805,11 +805,15 @@ contains
     ! descomposicion: gather global + escritura de celdas propias. Con solo
     ! gas la correccion es de decenas de Pa (rho_g g H).
     !---------------------------------------------------------------------------
-    subroutine initialize_hydrostatic_pressure(liq, gas, sh, m, cfg)
+    subroutine initialize_hydrostatic_pressure(liq, gas, sh, m, cfg, a_sl)
         type(phase_t), intent(in)    :: liq, gas
         type(shared_t), intent(inout) :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
+        ! (Plan H) escoria CONDENSADA: su peso entra en la mezcla fluida como
+        ! en ws_wc (sin ella el primer paso corregia la columna: u_liq 4e-4
+        ! en slag_rest frente a 2e-9 sin escoria en el volumen)
+        real(dp), intent(in), optional :: a_sl(-1:,-1:,-1:)
         real(dp), allocatable :: rf(:,:,:), rf_g(:,:,:), p_g(:,:,:)
         integer :: i, j, k, il, jl, kl, nzg, kprev
         logical :: owned
@@ -818,15 +822,24 @@ contains
         allocate(rf, mold=liq%alpha)
         rf = liq%alpha * liq%rho * (1.0_dp - cfg%beta_expansion * (liq%T - cfg%T_ref_boussinesq)) &
            + gas%alpha * gas%rho
+        if (present(a_sl)) rf = rf + a_sl * cfg%rho_slag
         ! Fuerza balanceada (liq_balanced_force): la hidrostatica del fluido
         ! es por volumen de FLUIDO (en un poro lleno grad p = rho_l g); igual
         ! que el W_f de momento y Poisson, asi el estado inicial es su punto fijo
         if (cfg%liq_balanced_force .and. .not. cfg%pc_fs_liquid_gradient) then
-            where (liq%alpha + gas%alpha > 1.0e-12_dp)
-                rf = rf / (liq%alpha + gas%alpha)
-            elsewhere
-                rf = 0.0_dp
-            end where
+            if (present(a_sl)) then
+                where (liq%alpha + a_sl + gas%alpha > 1.0e-12_dp)
+                    rf = rf / (liq%alpha + a_sl + gas%alpha)
+                elsewhere
+                    rf = 0.0_dp
+                end where
+            else
+                where (liq%alpha + gas%alpha > 1.0e-12_dp)
+                    rf = rf / (liq%alpha + gas%alpha)
+                elsewhere
+                    rf = 0.0_dp
+                end where
+            end if
         end if
         allocate(rf_g(m%nr_g, m%nth_g, m%nz_g), p_g(m%nr_g, m%nth_g, m%nz_g))
         call gather_global_field(rf, rf_g, m)

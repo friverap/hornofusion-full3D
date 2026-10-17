@@ -288,6 +288,11 @@ module mod_workspace
     ! (Plan H, P2) flujo de MASA condensado por las caras + (momento del
     ! condensado) [kg/s]: volumen del condensado x rho_c del dador
     real(dp), allocatable :: ws_Fcm_r(:,:,:), ws_Fcm_th(:,:,:), ws_Fcm_z(:,:,:)
+    ! (Plan H) flujo de VOLUMEN de escoria x rho_l por las caras + (unidades de ws_Fr)
+    real(dp), allocatable :: ws_Fsl_r(:,:,:), ws_Fsl_th(:,:,:), ws_Fsl_z(:,:,:)
+    ! (Plan H, P4) estado de la escoria al INICIO del paso (cada iteracion
+    ! externa rehace el transporte condensado desde el)
+    real(dp), allocatable :: ws_sp_asl(:,:,:), ws_sp_es(:,:,:), ws_sp_mx(:,:,:,:)
     ! masa de escoria recortada en la ultima llamada del transporte condensado
     real(dp), save :: ws_slag_clip_call = 0.0_dp
 
@@ -500,6 +505,8 @@ contains
             ws_rl_st_old = 0.0_dp; ws_wc = 0.0_dp
             allocate(ws_Fcm_r, ws_Fcm_th, ws_Fcm_z, mold=ws_aW)
             ws_Fcm_r = 0.0_dp; ws_Fcm_th = 0.0_dp; ws_Fcm_z = 0.0_dp
+            allocate(ws_Fsl_r, ws_Fsl_th, ws_Fsl_z, mold=ws_aW)
+            ws_Fsl_r = 0.0_dp; ws_Fsl_th = 0.0_dp; ws_Fsl_z = 0.0_dp
         end if
     end subroutine ensure_workspace
 

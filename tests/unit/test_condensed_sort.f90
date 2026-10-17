@@ -43,7 +43,7 @@ program test_condensed_sort
     call setcol([1.0_dp,1.0_dp,1.0_dp,0.45_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp], &
                 [0.0_dp,0.0_dp,0.0_dp,0.55_dp,1.0_dp,0.3_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp])
     al0 = liq%alpha; as0 = slag%alpha_sl; T0 = liq%T; E0 = slag%E_sl
-    call slag_condensed_sort(slag, liq, mesh, cfg)
+    call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh)
     if (any(liq%alpha(1:nr,1:nth,1:nz) /= al0(1:nr,1:nth,1:nz)) .or. &
         any(slag%alpha_sl(1:nr,1:nth,1:nz) /= as0(1:nr,1:nth,1:nz)) .or. &
         any(liq%T(1:nr,1:nth,1:nz) /= T0(1:nr,1:nth,1:nz)) .or. any(slag%E_sl(1:nr,1:nth,1:nz) /= E0(1:nr,1:nth,1:nz))) then
@@ -55,7 +55,7 @@ program test_condensed_sort
                 [0.0_dp,0.0_dp,1.0_dp,0.2_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp])
     al0 = liq%alpha; as0 = slag%alpha_sl
     call totals(est0, esl0, msl0)
-    call slag_condensed_sort(slag, liq, mesh, cfg)
+    call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh)
     call totals(est1, esl1, msl1)
     err_c = maxval(abs((liq%alpha(1:nr,1:nth,1:nz) + slag%alpha_sl(1:nr,1:nth,1:nz)) &
                        - (al0(1:nr,1:nth,1:nz) + as0(1:nr,1:nth,1:nz))))
@@ -81,7 +81,7 @@ program test_condensed_sort
     call setcol([0.5_dp,0.5_dp,0.0_dp,0.0_dp,0.4_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp], &
                 [0.0_dp,0.0_dp,0.0_dp,0.6_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp])
     al0 = liq%alpha
-    call slag_condensed_sort(slag, liq, mesh, cfg)
+    call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh)
     if (any(liq%alpha(1:nr,1:nth,1:2) /= al0(1:nr,1:nth,1:2))) then
         print '(A)', '   FAIL caso 3: el segmento de abajo cambio'; ok = .false.
     end if

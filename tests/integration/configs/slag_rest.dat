@@ -1,0 +1,36 @@
+# Banco slag_rest (Plan H, P4): bano de 274 t con 10 t de escoria condensada
+# (slag_in_volume) en REPOSO, isotermo, sin arco ni radiacion. La escoria es
+# fase del Poisson y del momento: el equilibrio ferrostatico con el salto de
+# densidad acero|escoria debe sostenerse sin corrientes espurias (gate:
+# u_liq y u_gas en el redondeo, sin acero sobre la escoria, masas exactas).
+nr = 12
+ntheta = 24
+stretch_r = 1.0
+stretch_z = 1.0
+dt = 0.01
+adaptive_dt = false
+charge_bucket1 = false
+heel_mass = 274000.0
+heel_T = 1850.0
+T_initial = 1850.0
+solve_flow = true
+solve_energy = true
+solve_melting = false
+solve_turb = false
+solve_radiation = false
+solve_chemistry = false
+solve_arc = false
+solve_multiphase = true
+alpha_p = 0.7
+max_outer = 10
+max_inner_mom = 3
+max_inner_pres = 400
+audit_freq = 1
+output_freq = 50
+monitor_freq = 50
+
+nz = 64
+solve_slag = true
+slag_in_volume = true
+m_slag_init = 10000.0
+t_final = 1.0

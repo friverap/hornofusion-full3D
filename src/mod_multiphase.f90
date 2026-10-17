@@ -23,7 +23,8 @@ module mod_multiphase
     use mod_probe, only: probe_report, probe_current_step
     use mod_parallel_utils, only: gather_global_field_int, get_loop_bounds
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d
-    use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bedg_f, gas_face_mask, ws_bub, ws_bub_f, ws_bed_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
+    use mod_workspace, only: ensure_workspace, cond_view_enter, cond_view_exit, ws_cond_on, &
+                             ws_sp_asl, ws_sp_es, ws_sp_mx, ws_liq_cont, ws_liq_cont_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bedg_f, gas_face_mask, ws_bub, ws_bub_f, ws_bed_valid, ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, ws_ut, &
                              ws_liq_room, ws_liq_room_valid, &
                              ws_liq_fr, ws_liq_fth, ws_liq_fz, &
                              ws_liq_cont_prev, ws_pv_active, ws_pv_valid, ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, ws_Tsrc, &
@@ -36,7 +37,7 @@ contains
                                      sh, m, cfg, drag_coef, conv)
         type(phase_t), intent(inout) :: liq, gas, liq_old, gas_old
         type(solid_t), intent(inout) :: sol
-        type(slag_t),  intent(in)    :: slag
+        type(slag_t),  intent(inout) :: slag
         type(shared_t), intent(inout) :: sh
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
@@ -48,6 +49,7 @@ contains
         real(dp) :: res_cont, res_energy_l, res_energy_g
         ! Plan E E2: corrector interno alpha<->p (n_pc_max pasadas)
         integer  :: ic, n_pc_used
+        logical  :: cond
         integer  :: istart, iend, jstart, jend, kstart, kend
         real(dp) :: res_ic, dalpha_loc, dalpha_pc
         real(dp), allocatable :: a_prev(:,:,:)
@@ -93,6 +95,11 @@ contains
 
         ! Mascara de liquido CONTINUO (Bug 15; halos de alpha ya intercambiados)
         call ensure_workspace(m)
+        ! (Plan H, P4) VISTA CONDENSADA acero+escoria para mascaras, momento y
+        ! Poisson (la escoria es volumen desplazable, no tapa rigida: M17-PV1)
+        cond = slag_condensed_on(cfg)
+        if (cond) call cond_view_enter(liq, liq_old, slag%alpha_sl, ws_sp_asl, cfg%rho_slag, &
+                                       cfg%beta_expansion, cfg%T_ref_boussinesq)
         call liquid_continuity_mask(liq, sol, m, ws_liq_cont)
         ! mascara del lecho (N-C1): misma regla que liq_continuous, halos
         ! incluidos (sol%alpha_s ya intercambiado; los halos fisicos tienen
@@ -103,11 +110,20 @@ contains
         ! (la mascara de presion de fluido, ws_pv_active, se fija mas abajo:
         !  necesita el arrastre de Ergun del gas para la percolacion, F2.16)
         ! Hueco de poro del liquido en el lecho (F2.8; ver ws_liq_room)
+        if (cond) then
+            ! condensado: la escoria ya esta en liq%alpha (vista)
+            where (sol%alpha_s >= ALPHA_BED)
+                ws_liq_room = liq_cap(sol%alpha_s, 0.0_dp) - liq%alpha
+            elsewhere
+                ws_liq_room = 1.0_dp
+            end where
+        else
         where (sol%alpha_s >= ALPHA_BED)
             ws_liq_room = liq_cap(sol%alpha_s, slag%alpha_sl) - liq%alpha
         elsewhere
             ws_liq_room = 1.0_dp
         end where
+        end if
         ws_liq_room_valid = .true.
         call compute_liquid_drift(liq, gas, sol, m, cfg, liq_old)
 
@@ -152,6 +168,12 @@ contains
             ws_pv_active = (ws_liq_cont .or. gas%alpha > 0.0_dp) .and. (m%cell_type /= 0)
         else
             call gas_percolation_mask(gas, sol, m, cfg, drag_gas, ws_gas_perc, ws_gas_reach)
+            ! (Plan H) con la escoria CONDENSADA el volumen sale por la cima de la
+            ! escoria (gas real): sin canal residual de gas (F2.21) en las
+            ! celdas con escoria, por donde el Poisson metia gas FANTASMA bajo la
+            ! escoria (gas dentro del bano: ~1e-6 por paso y pico de succion)
+            if (cond) ws_gas_reach = ws_gas_reach .and. (slag%alpha_sl < ALPHA_CUTOFF .or. &
+                                                         gas%alpha >= ALPHA_FLOW_CUTOFF)
             ws_gas_perc_valid = .true.
             ws_pv_active = (ws_liq_cont .or. &
                             (gas%alpha >= ALPHA_FLOW_CUTOFF .and. ws_gas_perc)) &
@@ -412,6 +434,8 @@ contains
         if (cfg%n_pc_max > 1) allocate(a_prev, mold=liq%alpha)
         dalpha_pc = 0.0_dp
         do ic = 1, max(1, cfg%n_pc_max)
+        if (cond .and. .not. ws_cond_on) call cond_view_enter(liq, liq_old, slag%alpha_sl, ws_sp_asl, &
+                                       cfg%rho_slag, cfg%beta_expansion, cfg%T_ref_boussinesq)
         ! Pressure correction de MEZCLA: ambas fases contribuyen y ambas
         ! se corrigen (C2.4)
         ! Referencia de la fuente de compresibilidad (auditoria 3, A3-3): la T
@@ -451,8 +475,17 @@ contains
         ! Volume fraction update
         if (cfg%solve_multiphase) then
             if (cfg%n_pc_max > 1) a_prev = liq%alpha
+            if (cond) then
+                ! (Plan H) fuera de la vista: transporte condensado acero+escoria
+                ! desde el estado de inicio de paso (liq_old acero, ws_sp_*)
+                call cond_view_exit(liq, liq_old)
+                if (cfg%n_pc_max > 1) a_prev = liq%alpha
+                call solve_condensed_fraction(liq, gas, sol, slag, ws_sp_asl, ws_sp_es, &
+                                              ws_sp_mx, liq_old%alpha, m, cfg)
+            else
             call solve_volume_fraction(liq, gas, sol, slag%alpha_sl, &
                                        liq_old%alpha, m, cfg)
+            end if
             ! Exchange after volume fraction update
             call phase_exchange_halos(liq, m)
             call phase_exchange_halos(gas, m)
@@ -461,11 +494,19 @@ contains
                 ! siguiente (fsat, limitador de F2.8, F2.29) es el de la alpha
                 ! recien transportada; las mascaras de CARA (ws_bedl_f) siguen
                 ! fijas por iteracion externa a proposito (A4-1)
+                if (cond) then
+                    where (sol%alpha_s >= ALPHA_BED)
+                        ws_liq_room = liq_cap(sol%alpha_s, 0.0_dp) - (liq%alpha + slag%alpha_sl)
+                    elsewhere
+                        ws_liq_room = 1.0_dp
+                    end where
+                else
                 where (sol%alpha_s >= ALPHA_BED)
                     ws_liq_room = liq_cap(sol%alpha_s, slag%alpha_sl) - liq%alpha
                 elsewhere
                     ws_liq_room = 1.0_dp
                 end where
+                end if
                 dalpha_loc = maxval(abs(liq%alpha(istart:iend,jstart:jend,kstart:kend) &
                                       - a_prev(istart:iend,jstart:jend,kstart:kend)))
                 if (m%is_parallel) then

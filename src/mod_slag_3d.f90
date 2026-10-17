@@ -365,7 +365,12 @@ contains
         ! p para el inventario del gas (M4-13); especies del gas creado (M5-5)
         type(shared_t), intent(inout), optional :: sh
 
-        call slag_buoyancy(slag, liq, gas, sol, m, cfg, sh)
+        if (slag_condensed_on(cfg)) then
+            ! (Plan H) la escoria es condensado: flotacion neutra en volumen
+            call slag_condensed_sort(slag, liq, gas, sol, m, cfg, sh)
+        else
+            call slag_buoyancy(slag, liq, gas, sol, m, cfg, sh)
+        end if
         call slag_energy(slag, liq, gas, m, cfg, dt, sh)
     end subroutine update_slag
 
@@ -380,11 +385,21 @@ contains
     ! segmento ya ordenado no se reescribe (sin ruido de redondeo). Patron
     ! invariante MPI: gather global, mismo barrido, escritura de celdas propias.
     !---------------------------------------------------------------------------
-    subroutine slag_condensed_sort(slag, liq, m, cfg)
+    subroutine slag_condensed_sort(slag, liq, gas, sol, m, cfg, sh)
         type(slag_t),  intent(inout) :: slag
-        type(phase_t), intent(inout) :: liq
+        type(phase_t), intent(inout) :: liq, gas
+        type(solid_t), intent(in)    :: sol
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
+        type(shared_t), intent(inout), optional :: sh
+        ! (compactacion) en los segmentos CON escoria el condensado llena de
+        ! abajo arriba hasta la capacidad de cada celda (liq_cap(alpha_s,0)): el
+        ! gas atrapado bajo la escoria sube a la cima del segmento (el transporte
+        ! deja ~1e-6 por paso en la celda de interfaz y crecia hasta el pico de
+        ! succion de F2.16). El gas reubicado se audita como el volfix.
+        real(dp), allocatable :: ss_g(:,:,:), acn(:,:,:)
+        real(dp) :: vcond, capk, ag_new, dmg, deg, pc, fdil
+        logical  :: has_slag
 
         real(dp), allocatable :: al_g(:,:,:), tl_g(:,:,:), as_g(:,:,:), ms_g(:,:,:), es_g(:,:,:)
         real(dp), allocatable :: x_g(:,:,:,:), tmp(:,:,:)
@@ -398,6 +413,8 @@ contains
         allocate(ms_g(m%nr_g, m%nth_g, m%nz_g), es_g(m%nr_g, m%nth_g, m%nz_g))
         allocate(x_g(m%nr_g, m%nth_g, m%nz_g, N_SLAG_COMP))
         allocate(tmp, mold=slag%m_sl)
+        allocate(ss_g(m%nr_g, m%nth_g, m%nz_g), acn(m%nr_g, m%nth_g, m%nz_g))
+        call gather_global_field(sol%alpha_s, ss_g, m)
         call gather_global_field(liq%alpha, al_g, m)
         call gather_global_field(liq%T, tl_g, m)
         call gather_global_field(slag%alpha_sl, as_g, m)
@@ -410,7 +427,7 @@ contains
         allocate(al_n, tl_n, as_n, ms_n, es_n, mold=al_g)
         allocate(x_n, mold=x_g); allocate(chg(m%nr_g, m%nth_g, m%nz_g))
         al_n = al_g; tl_n = tl_g; as_n = as_g; ms_n = ms_g; es_n = es_g; x_n = x_g
-        chg = .false.
+        chg = .false.; dmg = 0.0_dp; deg = 0.0_dp
 
         do j = 1, m%nth_g
             do i = 1, m%nr_g
@@ -427,9 +444,28 @@ contains
                         k = k + 1
                     end do
                     k2 = k - 1
+                    ! capacidad condensada objetivo de cada celda
+                    has_slag = any(as_g(i,j,k1:k2) > 0.0_dp)
+                    vcond = 0.0_dp
+                    do kk = k1, k2
+                        acn(i,j,kk) = al_g(i,j,kk) + as_g(i,j,kk)
+                        vcond = vcond + acn(i,j,kk) * m%vol_global(i,j,kk)
+                    end do
+                    if (has_slag) then
+                        do kk = k1, k2
+                            capk = liq_cap(ss_g(i,j,kk), 0.0_dp) * m%vol_global(i,j,kk)
+                            if (kk == k2) capk = vcond
+                            capk = max(min(capk, vcond), 0.0_dp)
+                            acn(i,j,kk) = capk / m%vol_global(i,j,kk)
+                            vcond = vcond - capk
+                        end do
+                    end if
                     ! ya ordenado: ninguna celda con acero por encima de una
-                    ! celda con escoria (dentro del segmento)
+                    ! celda con escoria (dentro del segmento) y nada que compactar
                     ordered = .true.; seen_slag = .false.
+                    do kk = k1, k2
+                        if (abs(acn(i,j,kk) - (al_g(i,j,kk) + as_g(i,j,kk))) > 1.0e-14_dp) ordered = .false.
+                    end do
                     do kk = k1, k2
                         if (seen_slag .and. al_g(i,j,kk) > 0.0_dp) ordered = .false.
                         if (as_g(i,j,kk) > 0.0_dp) seen_slag = .true.
@@ -446,7 +482,7 @@ contains
                     ! --- acero: llenar de abajo arriba (remapeo con su T)
                     ko = k1 - 1; rem = 0.0_dp
                     do kk = k1, k2
-                        ac = al_g(i,j,kk) + as_g(i,j,kk)
+                        ac = acn(i,j,kk)
                         cap = ac * m%vol_global(i,j,kk)
                         s_need = min(vst, cap)
                         vst = vst - s_need
@@ -469,7 +505,7 @@ contains
                     ! --- escoria: el resto de cada celda, parcelas en orden
                     ko = k1 - 1; rem = 0.0_dp
                     do kk = k1, k2
-                        ac = al_g(i,j,kk) + as_g(i,j,kk)
+                        ac = acn(i,j,kk)
                         vc = max(0.0_dp, ac - al_n(i,j,kk)) * m%vol_global(i,j,kk)   ! volumen de escoria
                         as_n(i,j,kk) = vc / m%vol_global(i,j,kk)
                         ms_n(i,j,kk) = 0.0_dp; es_n(i,j,kk) = 0.0_dp; x_n(i,j,kk,:) = 0.0_dp
@@ -509,13 +545,38 @@ contains
                     if (ms_n(i,j,k) > SMALL_SL) then
                         slag%T_sl(il,jl,kl) = es_n(i,j,k) / (ms_n(i,j,k) * cfg%cp_slag)
                     end if
+                    ! gas: complemento (compactacion), auditado como el volfix
+                    ag_new = max(0.0_dp, 1.0_dp - sol%alpha_s(il,jl,kl) - liq%alpha(il,jl,kl) &
+                                          - slag%alpha_sl(il,jl,kl))
+                    if (ag_new /= gas%alpha(il,jl,kl)) then
+                        pc = 0.0_dp
+                        if (present(sh)) pc = sh%p(il,jl,kl)
+                        dmg = dmg + (ag_new - gas%alpha(il,jl,kl)) * gas%rho(il,jl,kl) * m%vol(il,jl,kl)
+                        deg = deg + gas_inventory_cell(ag_new, gas%T(il,jl,kl), pc, gas%cp(il,jl,kl), &
+                                                       m%vol(il,jl,kl), cfg) &
+                                  - gas_inventory_cell(gas%alpha(il,jl,kl), gas%T(il,jl,kl), pc, &
+                                                       gas%cp(il,jl,kl), m%vol(il,jl,kl), cfg)
+                        if (present(sh) .and. ag_new > gas%alpha(il,jl,kl) .and. ag_new > 0.0_dp) then
+                            fdil = max(gas%alpha(il,jl,kl), 0.0_dp) / ag_new
+                            sh%Y_O2(il,jl,kl)  = sh%Y_O2(il,jl,kl)  * fdil
+                            sh%Y_CO(il,jl,kl)  = sh%Y_CO(il,jl,kl)  * fdil
+                            sh%Y_CO2(il,jl,kl) = sh%Y_CO2(il,jl,kl) * fdil
+                        else if (present(sh) .and. ag_new < gas%alpha(il,jl,kl)) then
+                            call audit_gas_destroyed(sh, il, jl, kl, &
+                                (gas%alpha(il,jl,kl) - ag_new) * gas%rho(il,jl,kl) * m%vol(il,jl,kl))
+                        end if
+                        gas%alpha(il,jl,kl) = ag_new
+                    end if
                 end do
             end do
         end do
+        call audit_add(AUD_GAS_VOLFIX, dmg)
+        call audit_add(AUD_GAS_VOLFIX_E, deg)
         call slag_exchange_halos(slag, m)
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
         call mpi_exchange_halos_3d(liq%T, m%topo)
-        deallocate(al_g, tl_g, as_g, ms_g, es_g, x_g, tmp, al_n, tl_n, as_n, ms_n, es_n, x_n, chg)
+        call mpi_exchange_halos_3d(gas%alpha, m%topo)
+        deallocate(al_g, tl_g, as_g, ms_g, es_g, x_g, tmp, al_n, tl_n, as_n, ms_n, es_n, x_n, chg, ss_g, acn)
     end subroutine slag_condensed_sort
 
     !---------------------------------------------------------------------------

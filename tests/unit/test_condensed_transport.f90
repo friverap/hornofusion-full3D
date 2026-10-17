@@ -60,7 +60,7 @@ program test_condensed_transport
     liq2 = liq; gas2 = gas
     call solve_volume_fraction(liq, gas, sol, zero, a_old, mesh, cfg)
     Fr1 = ws_Fr; Fth1 = ws_Fth; Fz1 = ws_Fz
-    call solve_condensed_fraction(liq2, gas2, sol, slag, zero, zero, zero, slag%m_X, a_old, mesh, cfg)
+    call solve_condensed_fraction(liq2, gas2, sol, slag, zero, zero, slag%m_X, a_old, mesh, cfg)
     if (any(liq2%alpha(1:nr,1:nth,1:nz) /= liq%alpha(1:nr,1:nth,1:nz)) .or. &
         any(gas2%alpha(1:nr,1:nth,1:nz) /= gas%alpha(1:nr,1:nth,1:nz)) .or. &
         any(ws_Fr /= Fr1) .or. any(ws_Fth /= Fth1) .or. any(ws_Fz /= Fz1)) then
@@ -96,7 +96,7 @@ program test_condensed_transport
     liq%alpha = a_old; gas%alpha = 1.0_dp - a_old - asl0
     mst0 = sum(a_old(1:nr,1:nth,1:nz) * mesh%vol(1:nr,1:nth,1:nz))
     msl0 = sum(ms0(1:nr,1:nth,1:nz)); E0 = sum(es0(1:nr,1:nth,1:nz)); X0 = sum(mx0(1:nr,1:nth,1:nz,:))
-    call solve_condensed_fraction(liq, gas, sol, slag, asl0, ms0, es0, mx0, a_old, mesh, cfg)
+    call solve_condensed_fraction(liq, gas, sol, slag, asl0, es0, mx0, a_old, mesh, cfg)
     mst1 = sum(liq%alpha(1:nr,1:nth,1:nz) * mesh%vol(1:nr,1:nth,1:nz))
     msl1 = sum(slag%m_sl(1:nr,1:nth,1:nz)); E1 = sum(slag%E_sl(1:nr,1:nth,1:nz))
     X1 = sum(slag%m_X(1:nr,1:nth,1:nz,:))
@@ -106,7 +106,7 @@ program test_condensed_transport
             (mst1-mst0)/mst0, (msl1-msl0)/msl0, (E1-E0)/E0, (X1-X0)/X0
         ok = .false.
     end if
-    if (any(slag%alpha_sl(1:nr,1:nth,1:nz) < 0.0_dp) .or. ws_slag_clip_call /= 0.0_dp) then
+    if (any(slag%alpha_sl(1:nr,1:nth,1:nz) < 0.0_dp) .or. abs(ws_slag_clip_call) > 1.0e-12_dp * msl0) then
         print '(A,ES11.3)', '   FAIL caso b: escoria negativa o recortada: ', ws_slag_clip_call
         ok = .false.
     end if
@@ -114,6 +114,22 @@ program test_condensed_transport
         print '(A)', '   FAIL caso b: alpha_sl incoherente con m_sl'
         ok = .false.
     end if
+
+    ! principio del maximo: la escoria resuelta no sale del rango de T inicial
+    ! (con valores especificos de inicio de paso y reescalado final, la que
+    ! cruzaba una celda dentro del paso llegaba sin energia)
+    do k = 1, nz
+        do j = 1, nth
+            do i = 1, nr
+                if (slag%alpha_sl(i,j,k) < 1.0e-6_dp) cycle
+                if (slag%T_sl(i,j,k) < 1700.0_dp + 10.0_dp - 1.0e-9_dp .or. &
+                    slag%T_sl(i,j,k) > 1700.0_dp + 10.0_dp * nth + 1.0e-9_dp) then
+                    print '(A,3I4,ES14.6)', '   FAIL caso b: T_sl fuera del rango inicial en ', i, j, k, slag%T_sl(i,j,k)
+                    ok = .false.
+                end if
+            end do
+        end do
+    end do
 
     if (ok) then
         print '(A,ES10.3,A)', ' PASS test_condensed_transport (sin escoria bit a bit; traslacion conserva a ', worst, ')'

@@ -377,4 +377,14 @@ module mod_types_3d
         logical  :: converged
     end type convergence_t
 
+contains
+
+    ! (Plan H) la escoria como fase condensada dentro del Poisson y del momento
+    ! (vista acero+escoria) esta activa: solo en dos fluidos con flujo
+    pure logical function slag_condensed_on(cfg)
+        type(config_t), intent(in) :: cfg
+        slag_condensed_on = cfg%solve_slag .and. cfg%slag_in_volume .and. cfg%solve_flow &
+                            .and. cfg%solve_multiphase .and. .not. cfg%mixture_model
+    end function slag_condensed_on
+
 end module mod_types_3d

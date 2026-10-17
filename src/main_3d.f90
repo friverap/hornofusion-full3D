@@ -32,7 +32,7 @@ program eaf_3d_simulator
     use mod_continuity
     use mod_multiphase
     use mod_mixture_3d
-    use mod_workspace, only: ensure_workspace, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new, ws_cc_drop, ws_p_n, ws_Fg_valid, &
+    use mod_workspace, only: ensure_workspace, ws_sp_asl, ws_sp_es, ws_sp_mx, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new, ws_cc_drop, ws_p_n, ws_Fg_valid, &
                              ws_liq_cont, ws_liq_cont_valid
     use mod_solid_phase
     use mod_melting_3d
@@ -239,10 +239,21 @@ program eaf_3d_simulator
         if (cfg%solve_slag) then
             call slag_initialize(slag, sol, liq, gas, mesh, cfg)
             call slag_exchange_halos(slag, mesh)
+            ! (Plan H) la colocacion legada UNA vez (llena el hueco de la celda
+            ! de superficie, gas auditado); despues solo reordenamiento
+            if (slag_condensed_on(cfg) .and. len_trim(cfg%restart_file) == 0) then
+                call slag_buoyancy(slag, liq, gas, sol, mesh, cfg, sh)
+                call slag_exchange_halos(slag, mesh)
+                call phase_exchange_halos(gas, mesh)
+            end if
         end if
         ! Presion hidrostatica inicial de la mezcla fluida (remanente en reposo;
         ! Plan C F2): evita el golpe de 50-70 kPa del primer paso
-        call initialize_hydrostatic_pressure(liq, gas, sh, mesh, cfg)
+        if (slag_condensed_on(cfg)) then
+            call initialize_hydrostatic_pressure(liq, gas, sh, mesh, cfg, slag%alpha_sl)
+        else
+            call initialize_hydrostatic_pressure(liq, gas, sh, mesh, cfg)
+        end if
         ! rho del gas con la presion inicial (EOS rho(P0 + p, T), M25)
         call update_properties(liq, gas, sh, mesh, cfg)
     else
@@ -538,6 +549,16 @@ program eaf_3d_simulator
         ! snapshot y romperian el reinicio bit a bit. Igual los del gas (M24)
         ws_flux_valid = .false.
         ws_Fg_valid = .false.
+        ! (Plan H) estado de la escoria al INICIO del paso: el transporte
+        ! condensado de cada iteracion externa parte de el
+        if (slag_condensed_on(cfg)) then
+            if (.not. allocated(ws_sp_asl)) then
+                allocate(ws_sp_asl, ws_sp_es, mold=slag%alpha_sl)
+                allocate(ws_sp_mx, mold=slag%m_X)
+            end if
+            ws_sp_asl = slag%alpha_sl
+            ws_sp_es = slag%E_sl; ws_sp_mx = slag%m_X
+        end if
         do outer = 1, cfg%max_outer
 
             ! Multiphase SIMPLE iteration
