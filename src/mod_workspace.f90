@@ -285,6 +285,11 @@ module mod_workspace
     real(dp), allocatable :: ws_al_st(:,:,:), ws_rl_st(:,:,:)
     real(dp), allocatable :: ws_al_st_old(:,:,:), ws_rl_st_old(:,:,:)
     real(dp), allocatable :: ws_wc(:,:,:)
+    ! (Plan H, P2) flujo de MASA condensado por las caras + (momento del
+    ! condensado) [kg/s]: volumen del condensado x rho_c del dador
+    real(dp), allocatable :: ws_Fcm_r(:,:,:), ws_Fcm_th(:,:,:), ws_Fcm_z(:,:,:)
+    ! masa de escoria recortada en la ultima llamada del transporte condensado
+    real(dp), save :: ws_slag_clip_call = 0.0_dp
 
 contains
 
@@ -493,6 +498,8 @@ contains
             allocate(ws_al_st, ws_rl_st, ws_al_st_old, ws_rl_st_old, ws_wc, mold=ws_aW)
             ws_al_st = 0.0_dp; ws_rl_st = 0.0_dp; ws_al_st_old = 0.0_dp
             ws_rl_st_old = 0.0_dp; ws_wc = 0.0_dp
+            allocate(ws_Fcm_r, ws_Fcm_th, ws_Fcm_z, mold=ws_aW)
+            ws_Fcm_r = 0.0_dp; ws_Fcm_th = 0.0_dp; ws_Fcm_z = 0.0_dp
         end if
     end subroutine ensure_workspace
 
