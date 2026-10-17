@@ -122,6 +122,13 @@ program test_condensed_transport
         print '(A)', '   FAIL caso b: alpha_sl incoherente con m_sl'
         ok = .false.
     end if
+    ! (auditoria 18, tests A5) la escoria tiene que MOVERSE: un transporte que
+    ! no hiciera nada pasaba la conservacion y el rango de T
+    if (maxval(abs(ws_Fsl_th)) <= 0.0_dp .or. &
+        maxval(abs(slag%alpha_sl(1:nr,1:nth,1:nz) - asl0(1:nr,1:nth,1:nz))) < 1.0e-6_dp) then
+        print '(A)', '   FAIL caso b: la escoria no se movio con el condensado'
+        ok = .false.
+    end if
 
     ! principio del maximo: la escoria resuelta no sale del rango de T inicial
     ! (con valores especificos de inicio de paso y reescalado final, la que
@@ -154,6 +161,11 @@ program test_condensed_transport
     end if
     if (any(ws_Fsl_r /= 0.0_dp) .or. any(ws_Fsl_th /= 0.0_dp) .or. any(ws_Fsl_z /= 0.0_dp)) then
         print '(A)', '   FAIL caso c: flujo de escoria rancio tras el fallback'; ok = .false.
+    end if
+    ! (tests A5) el fallback no recorta TODA la escoria (solo lo que no cabe)
+    if (msl1 < 0.5_dp * msl0) then
+        print '(A,2ES12.4)', '   FAIL caso c: el fallback recorto casi toda la escoria: ', msl1, msl0
+        ok = .false.
     end if
 
     ! ---- (d) congelacion mayor que el acero ----
