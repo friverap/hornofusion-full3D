@@ -3,7 +3,7 @@
 # bitwise_check.sh <bin_ref> <bin_new> [outdir]   (Plan H, P0)
 #   Corre con los dos binarios un corto de B1 (malla media, plantilla de
 #   campanas con los parametros de B1, 30 pasos) y un corto de produccion
-#   (config_production_full, 5 pasos) y exige audit.csv IDENTICO byte a byte y
+#   (config_production_full, 5 pasos) y exige audit.csv IDENTICO (columnas comunes) y
 #   el snapshot final igual a 0 (compare_decomposition --rtol 0). Es el gate
 #   de "con solve_slag false / slag_in_volume false nada cambia".
 #===============================================================================
@@ -26,8 +26,20 @@ run() {  # <bin> <tag> <case>
 }
 for c in b1 prod; do
     run "$REF" ref $c; run "$NEW" new $c
-    if cmp -s "$OUT/${c}_ref/audit.csv" "$OUT/${c}_new/audit.csv"; then
-        echo "  PASS  $c audit.csv identico"
+    # columnas COMUNES identicas como texto (una columna nueva del audit no es
+    # un cambio numerico; se informa aparte)
+    if python3 - "$OUT/${c}_ref/audit.csv" "$OUT/${c}_new/audit.csv" <<'PYEOF'
+import csv, sys
+a = list(csv.DictReader(open(sys.argv[1]))); b = list(csv.DictReader(open(sys.argv[2])))
+common = [k for k in a[0] if k in b[0]]
+extra = sorted(set(a[0]) ^ set(b[0]))
+if extra:
+    print("        (columnas solo en una de las dos: %s)" % ", ".join(extra))
+ok = len(a) == len(b) and all(r[k] == q[k] for r, q in zip(a, b) for k in common)
+sys.exit(0 if ok else 1)
+PYEOF
+    then
+        echo "  PASS  $c audit.csv identico (columnas comunes)"
     else
         echo "  FAIL  $c audit.csv distinto"; FAIL=1
     fi

@@ -129,7 +129,9 @@ DEFS = {
     "m_gas_volfix": ("C", "Gas mass created (+) or destroyed (-) when "
                           "$\\alpha_g=1-\\sum\\alpha$ is re-imposed without the "
                           "two-fluid $\\alpha$ transport [kg]"),
-    "E_slag_tclip": ("C", "Enthalpy injected by the slag floor $T_{sl}\\ge300$ K [J]"),
+    "E_slag_tclip": ("C", "Enthalpy injected by the slag floor $T_{sl}\\ge300$ K and, with "
+                          "condensed slag, by the thermal equilibration of slag traces "
+                          "($\\alpha_{sl}<10^{-6}$) with the bath [J]"),
     "E_mix_init": ("C", "Heat the liquid receives from the gas in the start-up "
                         "equilibration of the mixture model [J]"),
     "E_resolid": ("C", "Enthalpy handed to the solid by freezing ($dm\\,e_{entry}$) [J]"),
@@ -157,6 +159,10 @@ DEFS = {
                           "($\\rho_g$ x overflow of the carry bound, carry of cells that leave "
                           "the coupling, lose their gas or are sealed) [kg]; named part of the "
                           "EOS residual of mass\\_gas (audit 6, M6-1/M6-2)"),
+    "m_slag_clip": ("C", "Condensed slag mass removed by the bounding of the volume-fraction "
+                         "transport (slag share of the final clip, $\\alpha_{sl}\\le\\alpha_c$) "
+                         "[kg] (Plan H, P6)"),
+    "E_slag_clip": ("C", "Slag enthalpy leaving with m\\_slag\\_clip [J]"),
 }
 
 src = open(SRC).read()

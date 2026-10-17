@@ -178,7 +178,8 @@ def main():
     gas_inv = not gas_book
     if gas_inv:
         EXT_POS = EXT_POS + ("E_gas_volfix",)
-    EXT_NEG = ("E_wall_conv", "E_slag_red", "E_alpha_clip")
+    # (Plan H, P6) E_slag_clip: energia de la escoria condensada recortada
+    EXT_NEG = ("E_wall_conv", "E_slag_red", "E_alpha_clip", "E_slag_clip")
     # traspasos entre fases CONDENSADAS (inventarios de estado exactos): htol
     # (A4-4) sin E_iph_liq: es -E_iph_sol (misma transferencia contada dos
     # veces inflaba S_int)

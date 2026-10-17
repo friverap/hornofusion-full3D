@@ -75,7 +75,9 @@ def main():
     dm_sl = last["m_slag"] - first["m_slag"]
     flux = sum(r.get("m_flux_in", 0.0) for r in steps)
     c_consumed = feo_reduced * MW_C / MW_FEO
-    expected_dm_sl = feo_from_yield - feo_reduced - c_consumed + flux
+    # (Plan H, P6) escoria condensada recortada por el acotado del transporte
+    sclip = sum(r.get("m_slag_clip", 0.0) for r in steps)
+    expected_dm_sl = feo_from_yield - feo_reduced - c_consumed + flux - sclip
     err2 = abs(dm_sl - expected_dm_sl) / max(abs(expected_dm_sl), 1.0)
     chk.report("slag_mass", err2 <= 1e-6,
                f"dm_slag={dm_sl:.4f} vs esperado={expected_dm_sl:.4f} kg "

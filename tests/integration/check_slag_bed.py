@@ -82,8 +82,10 @@ def main():
         chk.report("slag_bed_volfix", vf <= a.volfix_max,
                    f"|m_gas_volfix| acumulado {vf:.3e} kg (techo {a.volfix_max:.1e})")
     m0 = float(rows[0]["m_slag"]); m1 = float(rows[-1]["m_slag"])
-    chk.report("slag_bed_mass", abs(m1 - m0) <= a.mtol * max(abs(m0), 1.0),
-               f"m_slag {m0:.6f} -> {m1:.6f} kg (rel {abs(m1 - m0) / max(abs(m0), 1.0):.2e})")
+    # (Plan H, P6) la escoria condensada recortada (auditada) sale del balance
+    sclip = sum(float(r.get("m_slag_clip", 0.0) or 0.0) for r in rows[1:])
+    chk.report("slag_bed_mass", abs(m1 - m0 + sclip) <= a.mtol * max(abs(m0), 1.0),
+               f"m_slag {m0:.6f} -> {m1:.6f} kg, clip {sclip:.3e} kg (rel {abs(m1 - m0 + sclip) / max(abs(m0), 1.0):.2e})")
     chk.exit()
 
 

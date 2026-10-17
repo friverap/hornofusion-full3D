@@ -29,7 +29,8 @@ module mod_continuity
     use mod_face_flux
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d
     use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS, AUD_ALPHA_CLIP_E, AUD_SPILL_MASS, &
-                         AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED, AUD_SLAG_TCLIP
+                         AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED, AUD_SLAG_TCLIP, &
+                         AUD_SLAG_CLIP_MASS, AUD_SLAG_CLIP_E
     use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
                              ws_Mr, ws_Mth, ws_Mz, ws_lim, ws_flux_valid, &
                              ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
@@ -63,6 +64,12 @@ module mod_continuity
     ! estado de inicio, asi que vale la de la ULTIMA llamada (auditoria P4, A1)
     real(dp), save :: tclip_step_prev = 0.0_dp
     integer,  save :: tclip_step_id = -huge(1)
+    ! (P6) escoria recortada: la parte del recorte final de solve_volume_
+    ! fraction (vf_sclip_*, de la llamada) mas el acotado alpha_sl <= alpha_c
+    ! de solve_condensed_fraction; por paso como el clip
+    real(dp), save :: vf_sclip_m = 0.0_dp, vf_sclip_e = 0.0_dp
+    real(dp), save :: sclipm_step_prev = 0.0_dp, sclipe_step_prev = 0.0_dp
+    integer,  save :: sclipm_step_id = -huge(1), sclipe_step_id = -huge(1)
 
 contains
 
@@ -112,7 +119,7 @@ contains
         integer, parameter :: N_SPILL_MAX = 128   ! >= nz de produccion (84): la cascada avanza una celda por pasada
         integer :: ilim, ipass, n_it_max
         real(dp) :: inflow, outflow, room, dlim, dlim_glob, clip_call, clipE_call
-        real(dp) :: dlim_exit, cap, exc, room_up, give, exc_glob, spill_call, fslag
+        real(dp) :: dlim_exit, cap, exc, room_up, give, exc_glob, spill_call, fslag, fsl
         real(dp) :: dlim_prev, dist_est, dist_exit
         real(dp) :: exc0_glob
         real(dp) :: vol_dalpha, vol_lim, vol_unl
@@ -698,6 +705,7 @@ contains
 
         ! Restricciones de acotamiento (el ÚNICO error de masa; auditado)
         clip_call = 0.0_dp; clipE_call = 0.0_dp
+        vf_sclip_m = 0.0_dp; vf_sclip_e = 0.0_dp
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
@@ -708,6 +716,11 @@ contains
                     end if
 
                     a_pre = liq%alpha(i,j,k)
+                    if (adv .and. a_pre > 0.0_dp) then
+                        fsl = min(1.0_dp, max(0.0_dp, asl_adv(i,j,k) / a_pre))
+                    else
+                        fsl = 0.0_dp
+                    end if
                     ! (el recorte final usa el hueco FISICO, no el de poro: el gas
                     ! residual solo limita la ENTRADA y dirige el derrame; el
                     ! liquido ya presente nunca se borra)
@@ -721,18 +734,31 @@ contains
                     if (adv) then
                         if (a_pre > 0.0_dp) then
                             asl_adv(i,j,k) = asl_adv(i,j,k) * (liq%alpha(i,j,k) / a_pre)
+                            if (advq) vf_sclip_e = vf_sclip_e + slq_adv(i,j,k,1) * (1.0_dp - liq%alpha(i,j,k) / a_pre)
                             if (advq) slq_adv(i,j,k,:) = slq_adv(i,j,k,:) * (liq%alpha(i,j,k) / a_pre)
                         else
                             asl_adv(i,j,k) = 0.0_dp
                             if (advq) slq_adv(i,j,k,:) = 0.0_dp
                         end if
                     end if
+                    if (adv) then
+                        ! (P6, auditoria P4 M1) el recorte del condensado es
+                        ! acero (1 - phi) y escoria (phi, con rho_sl y su E_sl)
+                        clip_call = clip_call + &
+                            (a_pre - liq%alpha(i,j,k)) * (1.0_dp - fsl) * liq%rho(i,j,k) * m%vol(i,j,k)
+                        clipE_call = clipE_call + &
+                            (a_pre - liq%alpha(i,j,k)) * (1.0_dp - fsl) * liq%rho(i,j,k) * m%vol(i,j,k) &
+                            * (liq%cp(i,j,k) * liq%T(i,j,k) + (cfg%cp_s - cfg%cp_l) &
+                               * cfg%T_liquidus + cfg%h_fusion)
+                        vf_sclip_m = vf_sclip_m + (a_pre - liq%alpha(i,j,k)) * fsl * cfg%rho_slag * m%vol(i,j,k)
+                    else
                     clip_call = clip_call + &
                         (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k)
                     clipE_call = clipE_call + &
                         (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k) &
                         * (liq%cp(i,j,k) * liq%T(i,j,k) + (cfg%cp_s - cfg%cp_l) &
                            * cfg%T_liquidus + cfg%h_fusion)
+                    end if
                     gas%alpha(i,j,k) = 1.0_dp - sol%alpha_s(i,j,k) &
                                        - alpha_slag(i,j,k) - liq%alpha(i,j,k)
                     gas%alpha(i,j,k) = max(0.0_dp, gas%alpha(i,j,k))
@@ -1056,7 +1082,7 @@ contains
 
         real(dp), allocatable :: ac_old(:,:,:), zero(:,:,:), asl(:,:,:), slq(:,:,:,:), tmp(:,:,:)
         integer  :: i, j, k, c, nx, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: clip_loc, rl, clip_e, E_tr, a_raw
+        real(dp) :: clip_loc, rl, clip_e, E_tr, a_raw, fcl, clip_el
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         nx = size(mx_pre,4)
@@ -1077,7 +1103,7 @@ contains
         ! liq%alpha = alpha_c^{n+1}; asl = alpha_sl^{n+1}; ws_Fr = masa condensada
         ! (x rho_l); ws_Fsl = volumen de escoria x rho_l (mismas unidades)
 
-        clip_loc = 0.0_dp; clip_e = 0.0_dp
+        clip_loc = 0.0_dp; clip_e = 0.0_dp; clip_el = 0.0_dp
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
@@ -1085,12 +1111,16 @@ contains
                     a_raw = asl(i,j,k)
                     slag%alpha_sl(i,j,k) = min(max(a_raw, 0.0_dp), liq%alpha(i,j,k))
                     ! la masa sigue a alpha_sl por construccion; solo el acotado
-                    ! (redondeo) la recorta: auditado como clip de escoria
+                    ! (redondeo) la recorta: auditado como clip de escoria, con
+                    ! E_sl y m_X en la misma proporcion
                     clip_loc = clip_loc + (a_raw - slag%alpha_sl(i,j,k)) * cfg%rho_slag * m%vol(i,j,k)
+                    fcl = 1.0_dp
+                    if (a_raw > slag%alpha_sl(i,j,k)) fcl = slag%alpha_sl(i,j,k) / a_raw
+                    clip_el = clip_el + slq(i,j,k,1) * (1.0_dp - fcl)
                     slag%m_sl(i,j,k) = slag%alpha_sl(i,j,k) * cfg%rho_slag * m%vol(i,j,k)
-                    slag%E_sl(i,j,k) = slq(i,j,k,1)
+                    slag%E_sl(i,j,k) = slq(i,j,k,1) * fcl
                     do c = 1, nx
-                        slag%m_X(i,j,k,c) = slq(i,j,k,1+c)
+                        slag%m_X(i,j,k,c) = slq(i,j,k,1+c) * fcl
                     end do
                     ! TRAZA (alpha_sl < ALPHA_CUTOFF): toma la T del bano local
                     ! (fase residual en equilibrio termico con la continua, como
@@ -1113,8 +1143,12 @@ contains
                 end do
             end do
         end do
-        ws_slag_clip_call = clip_loc
+        ! clip de escoria de la llamada (local del rank): recorte final del
+        ! condensado + acotado alpha_sl <= alpha_c
+        ws_slag_clip_call = clip_loc + vf_sclip_m
         call audit_step_delta(AUD_SLAG_TCLIP, clip_e, tclip_step_prev, tclip_step_id)
+        call audit_step_delta(AUD_SLAG_CLIP_MASS, ws_slag_clip_call, sclipm_step_prev, sclipm_step_id)
+        call audit_step_delta(AUD_SLAG_CLIP_E, clip_el + vf_sclip_e, sclipe_step_prev, sclipe_step_id)
 
         ! flujos de masa: ACERO (energia) = condensado - escoria;
         ! CONDENSADO (momento) = acero + escoria con rho_sl

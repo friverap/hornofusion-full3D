@@ -67,7 +67,7 @@ Generado por `scripts/make_audit_glossary.py` desde el encabezado de `src/mod_au
 | `m_dil_CO` | C | CO displaced by that dilution [kg] |
 | `m_dil_CO2` | C | CO`_2` displaced by that dilution [kg] |
 | `m_gas_volfix` | C | Gas mass created (+) or destroyed (-) when `\alpha_g=1-\sum\alpha` is re-imposed without the two-fluid `\alpha` transport [kg] |
-| `E_slag_tclip` | C | Enthalpy injected by the slag floor `T_{sl}\ge300` K [J] |
+| `E_slag_tclip` | C | Enthalpy injected by the slag floor `T_{sl}\ge300` K and, with condensed slag, by the thermal equilibration of slag traces (`\alpha_{sl}<10^{-6}`) with the bath [J] |
 | `E_mix_init` | C | Heat the liquid receives from the gas in the start-up equilibration of the mixture model [J] |
 | `E_resolid` | C | Enthalpy handed to the solid by freezing (`dm e_{entry}`) [J] |
 | `E_alpha_clip` | C | Enthalpy removed with the audited `\alpha` clip [J] |
@@ -83,3 +83,5 @@ Generado por `scripts/make_audit_glossary.py` desde el encabezado de `src/mod_au
 | `m_vf_CO` | C | CO mass leaving with the destroyed gas [kg] |
 | `m_vf_CO2` | C | CO`_2` mass leaving with the destroyed gas [kg] |
 | `m_gas_ccdrop` | C | Gas mass whose compressibility volume demand the step discards (`\rho_g` x overflow of the carry bound, carry of cells that leave the coupling, lose their gas or are sealed) [kg]; named part of the EOS residual of mass_gas (audit 6, M6-1/M6-2) |
+| `m_slag_clip` | C | Condensed slag mass removed by the bounding of the volume-fraction transport (slag share of the final clip, `\alpha_{sl}\le\alpha_c`) [kg] (Plan H, P6) |
+| `E_slag_clip` | C | Slag enthalpy leaving with m_slag_clip [J] |
