@@ -191,8 +191,12 @@ textos que describen la cesion en el derrame y la recolocacion por
   escoria aparte (`m_slag_clip`/`E_slag_clip`). Hidrostática inicial con el
   peso de la escoria. arc_slag 10 s: u_liq 0.087 m/s (legado 1.25), vol_lim
   2.9e-7, u_gas 6, p 95 kPa, energía 1.6e-3 del permitido. La capa condensada
-  AÍSLA el metal del O₂ en el estencil de oxidación (slag_chem_flow 0.99 kg
-  frente a 2.7 kg). `slag_in_volume = false` recupera la capa legada (con el
+  AISLABA el metal del O₂ en el estencil local de oxidación (slag_chem_flow
+  0.99 kg frente a 2.7 kg): con el condensado la oxidación va POR COLUMNA
+  (Plan I, I1, `slag_oxidation_column`): O₂ del gas del tope del tramo más
+  bajo (o de la celda de encima), Fe del acero de la interfaz (o del baño de
+  abajo), FeO a la escoria de la interfaz; mismas cotas; sustituye al estencil
+  local (no contar dos veces el O₂). Test `test_slag_ox_column`. `slag_in_volume = false` recupera la capa legada (con el
   hueco fantasma de gas F2.21 descrito en el plan). Con el condensado la escoria
   ya tiene transporte LATERAL (antes solo columnas). Sin modelar: viscosidad
   propia de la escoria (P5b opcional).

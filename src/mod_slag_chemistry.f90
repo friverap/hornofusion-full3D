@@ -132,6 +132,8 @@ contains
         req_fe = 0.0_dp; room = 0.0_dp
         call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
 
+        if (cond) call slag_oxidation_column(slag, liq, liq_old, gas, sh, m, cfg, c0)
+
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
@@ -143,7 +145,10 @@ contains
                     !--------------------------------------------------------
                     ! E2.3: oxidación Fe + 1/2 O2 -> FeO (baño abajo)
                     !--------------------------------------------------------
-                    if (m%cell_type(i,j,k-1) /= 0) then
+                    ! (Plan I, I1) con la escoria condensada la oxidacion va
+                    ! POR COLUMNA (slag_oxidation_column, antes de este lazo):
+                    ! el estencil local contaria dos veces el mismo O2
+                    if (.not. cond .and. m%cell_type(i,j,k-1) /= 0) then
                     if (liq%alpha(i,j,k-1) > SMALL_SL) then
                         vol_b = m%vol(i,j,k-1)
                         ! O2 remanente del paso en la celda de escoria
@@ -475,5 +480,196 @@ contains
         end subroutine add_fe
 
     end subroutine compute_slag_chemistry
+
+    !---------------------------------------------------------------------------
+    ! (Plan I, I1, 17-oct-2026) Oxidacion Fe + 1/2 O2 -> FeO POR COLUMNA con la
+    ! escoria CONDENSADA. La capa compactada no tiene gas: el estencil local
+    ! (O2 de la celda de escoria, Fe de la de abajo) solo actuaba donde una
+    ! celda parcial tocaba el baño y la capa resuelta aislaba el metal del O2
+    ! (slag_chem_flow 2.7 -> 0.99 kg). Por columna (i,j), en el tramo de
+    ! escoria MAS BAJO (kb = su celda inferior, kt = la superior):
+    !   - O2: el remanente del paso del gas de kt si esta resuelto
+    !     (alpha_g >= ALPHA_FLOW_CUTOFF), si no el de kt+1 (gas libre encima);
+    !   - Fe: del acero de kb si esta resuelto, si no del baño de kb-1;
+    !   - FeO, su masa y su energia (dato coherente, auditoria 19) a la
+    !     escoria de kb, con las MISMAS cotas que el estencil local (Fe
+    !     extraible F_MAX_FE del acero de origen; termica sobre la escoria de kb).
+    ! Patron invariante a la descomposicion: tramos por mascara con halos y
+    ! MIN global 2D; los valores de las celdas elegidas (cada una con UN solo
+    ! dueño) en planos 2D con una suma global exacta; mismo calculo en todos
+    ! los ranks y cada uno escribe sus celdas propias. La alpha_sl no cambia
+    ! (como el estencil local): el reordenamiento del paso siguiente la deriva
+    ! de la masa.
+    !---------------------------------------------------------------------------
+    subroutine slag_oxidation_column(slag, liq, liq_old, gas, sh, m, cfg, c0)
+        use mpi
+        type(slag_t),   intent(inout) :: slag
+        type(phase_t),  intent(inout) :: liq, liq_old
+        type(phase_t),  intent(in)    :: gas
+        type(shared_t), intent(inout) :: sh
+        type(mesh_t),   intent(in)    :: m
+        type(config_t), intent(in)    :: cfg
+        real(dp),       intent(in)    :: c0
+        ! planos 2D: gas de kt, O2 (kg/s) en kt y kt+1 (y si kt+1 existe),
+        ! acero y Fe extraible en kb y kb-1, cota termica de la escoria de kb
+        integer, parameter :: P_AG_KT = 1, P_O2_KT = 2, P_O2_KT1 = 3, P_OK_KT1 = 4, &
+                              P_AL_KB = 5, P_CAP_KB = 6, P_AL_KBM = 7, P_CAP_KBM = 8, &
+                              P_QLIM = 9, NPL = 9
+        real(dp), allocatable :: mask(:,:,:), pl(:,:,:)
+        integer,  allocatable :: kb_g(:,:), kt_g(:,:)
+        integer  :: i, j, k, ig, jg, i0, j0, k0, kg, kb, kt, ko, ks, kl, ierr
+        integer  :: istart, iend, jstart, jend, kstart, kend
+        real(dp) :: o2_rate, cap, dm_feo, dm_fe, dm_o2, q_rx, q_lim, tsl_r, e_fe, da
+
+        if (m%is_parallel) then
+            istart = m%topo%istart; iend = m%topo%iend
+            jstart = m%topo%jstart; jend = m%topo%jend
+            kstart = m%topo%kstart; kend = m%topo%kend
+            i0 = m%topo%iglobal_start; j0 = m%topo%jglobal_start
+            k0 = m%topo%kglobal_start
+        else
+            istart = 1; iend = m%nr
+            jstart = 1; jend = m%ntheta
+            kstart = 1; kend = m%nz
+            i0 = 1; j0 = 1; k0 = 1
+        end if
+
+        ! ── 1. Tramos de escoria: mascara con halos (los fisicos quedan en 0)
+        allocate(mask, mold=liq%alpha)
+        mask = 0.0_dp
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (slag%m_sl(i,j,k) > SMALL_SL .and. &
+                        slag%alpha_sl(i,j,k) >= ALPHA_CUTOFF) mask(i,j,k) = 1.0_dp
+                end do
+            end do
+        end do
+        call mpi_exchange_halos_3d(mask, m%topo)
+
+        ! kb = la base mas baja de un tramo; kt = el tope mas bajo, que es el
+        ! del MISMO tramo (los tramos son disjuntos y ordenados en z)
+        allocate(kb_g(m%nr_g, m%nth_g), kt_g(m%nr_g, m%nth_g))
+        kb_g = m%nz_g + 1; kt_g = m%nz_g + 1
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (mask(i,j,k) < 0.5_dp) cycle
+                    ig = i0 + i - 1; jg = j0 + j - 1; kg = k0 + k - 1
+                    if (mask(i,j,k-1) < 0.5_dp) kb_g(ig,jg) = min(kb_g(ig,jg), kg)
+                    if (mask(i,j,k+1) < 0.5_dp) kt_g(ig,jg) = min(kt_g(ig,jg), kg)
+                end do
+            end do
+        end do
+        if (m%is_parallel) then
+            call MPI_Allreduce(MPI_IN_PLACE, kb_g, size(kb_g), MPI_INTEGER, MPI_MIN, &
+                               m%topo%comm_cart, ierr)
+            call MPI_Allreduce(MPI_IN_PLACE, kt_g, size(kt_g), MPI_INTEGER, MPI_MIN, &
+                               m%topo%comm_cart, ierr)
+        end if
+
+        ! ── 2. Valores de las celdas elegidas (un solo dueño por valor)
+        allocate(pl(m%nr_g, m%nth_g, NPL))
+        pl = 0.0_dp
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    ig = i0 + i - 1; jg = j0 + j - 1; kg = k0 + k - 1
+                    kb = kb_g(ig,jg); kt = kt_g(ig,jg)
+                    if (kb > m%nz_g) cycle
+                    if (kg == kt) then
+                        pl(ig,jg,P_AG_KT) = gas%alpha(i,j,k)
+                        pl(ig,jg,P_O2_KT) = o2_remaining(i, j, k) * m%vol(i,j,k)
+                    end if
+                    if (kg == kt + 1) then
+                        pl(ig,jg,P_O2_KT1) = o2_remaining(i, j, k) * m%vol(i,j,k)
+                        pl(ig,jg,P_OK_KT1) = 1.0_dp
+                    end if
+                    if (kg == kb) then
+                        pl(ig,jg,P_AL_KB)  = liq%alpha(i,j,k)
+                        pl(ig,jg,P_CAP_KB) = F_MAX_FE * liq%alpha(i,j,k) * liq%rho(i,j,k) * m%vol(i,j,k)
+                        pl(ig,jg,P_QLIM)   = slag%m_sl(i,j,k) * cfg%cp_slag * DT_MAX_SLAG
+                    end if
+                    if (kg == kb - 1 .and. liq%alpha(i,j,k) > SMALL_SL) then
+                        pl(ig,jg,P_AL_KBM)  = liq%alpha(i,j,k)
+                        pl(ig,jg,P_CAP_KBM) = F_MAX_FE * liq%alpha(i,j,k) * liq%rho(i,j,k) * m%vol(i,j,k)
+                    end if
+                end do
+            end do
+        end do
+        if (m%is_parallel) call MPI_Allreduce(MPI_IN_PLACE, pl, size(pl), MPI_DOUBLE_PRECISION, &
+                                              MPI_SUM, m%topo%comm_cart, ierr)
+
+        ! ── 3. Reaccion por columna (mismo calculo en todo rank) y escritura
+        ! de las celdas propias
+        do j = jstart, jend
+            do i = istart, iend
+                ig = i0 + i - 1; jg = j0 + j - 1
+                kb = kb_g(ig,jg); kt = kt_g(ig,jg)
+                if (kb > m%nz_g) cycle
+                ko = kt; o2_rate = pl(ig,jg,P_O2_KT)
+                if (pl(ig,jg,P_AG_KT) < ALPHA_FLOW_CUTOFF .and. pl(ig,jg,P_OK_KT1) > 0.5_dp) then
+                    ko = kt + 1; o2_rate = pl(ig,jg,P_O2_KT1)
+                end if
+                if (pl(ig,jg,P_AL_KB) >= ALPHA_FLOW_CUTOFF) then
+                    ks = kb; cap = pl(ig,jg,P_CAP_KB)
+                else if (pl(ig,jg,P_AL_KBM) > SMALL_SL) then
+                    ks = kb - 1; cap = pl(ig,jg,P_CAP_KBM)
+                else
+                    cycle
+                end if
+                dm_feo = cfg%slag_eta_feo * o2_rate * (MW_FEO / (0.5_dp * MW_O2_S)) * cfg%dt
+                dm_fe  = min(dm_feo * MW_FE / MW_FEO, cap)
+                dm_feo = dm_fe * MW_FEO / MW_FE
+                q_rx  = dm_feo * (-DH_FEO_OX) / MW_FEO
+                q_lim = pl(ig,jg,P_QLIM)
+                if (q_rx > q_lim .and. q_rx > SMALL) then
+                    dm_feo = dm_feo * q_lim / q_rx
+                    dm_fe  = dm_feo * MW_FE / MW_FEO
+                    q_rx   = q_lim
+                end if
+                if (dm_feo <= SMALL) cycle
+                dm_o2 = dm_feo * (0.5_dp * MW_O2_S) / MW_FEO
+
+                ! Fe sale del acero de origen a su entalpia (cp_l T + C0)
+                kl = ks - k0 + 1
+                if (kl >= kstart .and. kl <= kend) then
+                    e_fe = dm_fe * (liq%cp(i,j,kl) * liq%T(i,j,kl) + c0)
+                    da = dm_fe / (liq%rho(i,j,kl) * m%vol(i,j,kl))
+                    liq%alpha(i,j,kl)     = max(0.0_dp, liq%alpha(i,j,kl) - da)
+                    liq_old%alpha(i,j,kl) = max(0.0_dp, liq_old%alpha(i,j,kl) - da)
+                    call audit_add(AUD_FE_YIELD, dm_fe)
+                    call audit_add(AUD_SLAG_OX_E, -e_fe)
+                end if
+                ! FeO a la escoria de kb a SU temperatura + el exotermico
+                kl = kb - k0 + 1
+                if (kl >= kstart .and. kl <= kend) then
+                    tsl_r = slag%E_sl(i,j,kl) / max(slag%m_sl(i,j,kl) * cfg%cp_slag, SMALL)
+                    slag%m_X(i,j,kl,SL_FEO) = slag%m_X(i,j,kl,SL_FEO) + dm_feo
+                    slag%m_sl(i,j,kl) = slag%m_sl(i,j,kl) + dm_feo
+                    slag%E_sl(i,j,kl) = slag%E_sl(i,j,kl) + dm_feo * cfg%cp_slag * tsl_r + q_rx
+                    slag%T_sl(i,j,kl) = slag%E_sl(i,j,kl) / (slag%m_sl(i,j,kl) * cfg%cp_slag)
+                    call audit_add(AUD_SLAG_OX_E, q_rx + dm_feo * cfg%cp_slag * tsl_r)
+                end if
+                ! O2 consumido del gas de la celda de O2
+                kl = ko - k0 + 1
+                if (kl >= kstart .and. kl <= kend) &
+                    sh%S_O2_src(i,j,kl) = sh%S_O2_src(i,j,kl) - dm_o2 / (m%vol(i,j,kl) * cfg%dt)
+            end do
+        end do
+        deallocate(mask, pl, kb_g, kt_g)
+
+    contains
+
+        ! O2 remanente del paso en la celda [kg/(m3 s)] (como el estencil local)
+        real(dp) function o2_remaining(ii, jj, kk) result(r)
+            integer, intent(in) :: ii, jj, kk
+            r = max(0.0_dp, gas%alpha(ii,jj,kk) * gas%rho(ii,jj,kk) * sh%Y_O2(ii,jj,kk) / cfg%dt &
+                    + sh%S_O2_src(ii,jj,kk))
+        end function o2_remaining
+
+    end subroutine slag_oxidation_column
 
 end module mod_slag_chemistry
