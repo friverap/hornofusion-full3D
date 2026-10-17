@@ -371,7 +371,10 @@ contains
                                 if (gas_after < ALPHA_FLOW_CUTOFF) gas_after = 0.0_dp
                                 if (capped(i, j, k)) gas_after = 0.0_dp
                             end if
-                            if (gas_after >= ALPHA_CUTOFF) then
+                            ! (dirigida general, BAJO-3) en el techo fisico se
+                            ! deposita igual (como la pasada 3): co_up del tope
+                            ! nadie lo consumia y se borraba sin auditar
+                            if (gas_after >= ALPHA_CUTOFF .or. (k == kend .and. at_zmax)) then
                                 sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + &
                                     dm_co / (vol * cfg%dt)
                             else
