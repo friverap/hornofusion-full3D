@@ -281,6 +281,14 @@ def main():
             chk.report("slag_adjust_bounded", worst_adj <= 1e-4 * esl,
                        f"peor paso {ws}: |E_slag_tclip| + |E_slag_clip| = {worst_adj:.3e} J "
                        f"sobre E_slag {esl:.3e} J (max 1e-4 por paso)")
+        # (auditoria 19, M19-C3) y ACUMULADO frente a las fuentes externas del
+        # tramo: el techo por inventario admitia mas que el arco de un paso
+        # (2.2e6 J frente a 8e5). Medido: arc_melt_slag 2.2e-4 de S_ext, el
+        # resto <= 1e-5; piso de 1 J para bancos sin fuentes (slag_rest)
+        adj_cum = sum(abs(r.get("E_slag_tclip", 0.0)) + abs(r.get("E_slag_clip", 0.0)) for r in steps)
+        chk.report("slag_adjust_cum", adj_cum <= 1e-2 * S_ext + 1.0,
+                   f"|E_slag_tclip| + |E_slag_clip| acumulado {adj_cum:.3e} J sobre S_ext {S_ext:.3e} J "
+                   f"(max 1e-2 S_ext + 1 J)")
 
     # -- mass_gas (A4-6): libro de MASA del gas ------------------------------
     # d m_gas = -venteo + volfix + reacciones + (lo que la EOS reescribe).
