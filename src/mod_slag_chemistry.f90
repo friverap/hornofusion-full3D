@@ -524,6 +524,7 @@ contains
         integer  :: i, j, k, ig, jg, i0, j0, k0, kg, kb, kt, kl, ierr
         integer  :: istart, iend, jstart, jend, kstart, kend
         real(dp) :: o2_rate, o2_kt, o2_kt1, cap, dm_feo, dm_fe, dm_o2, q_rx, q_lim, tsl_r, dm_fe_kb
+        real(dp) :: dm_fe_kbm, o2_s1
 
         if (m%is_parallel) then
             istart = m%topo%istart; iend = m%topo%iend
@@ -643,13 +644,20 @@ contains
                     q_rx   = q_lim
                 end if
                 if (dm_feo <= SMALL) cycle
-                dm_o2 = dm_feo * (0.5_dp * MW_O2_S) / MW_FEO
-
                 ! Fe sale del acero a su entalpia (cp_l T + C0): primero de kb
-                ! hasta su cota, el resto del baño de kb-1
-                dm_fe_kb = min(dm_fe, pl(ig,jg,P_CAP_KB))
+                ! hasta su cota, el resto del baño de kb-1 hasta la suya
+                ! (dirigida I1-b, B-2: tras la cota termica dm_fe se recalcula y
+                ! podia pasar 1 ulp de la cota; el resto iba a kb-1 aunque no
+                ! tuviera acero). FeO, calor y O2 se rehacen desde ese dm_fe
+                dm_fe_kb  = min(dm_fe, pl(ig,jg,P_CAP_KB))
+                dm_fe_kbm = min(dm_fe - dm_fe_kb, pl(ig,jg,P_CAP_KBM))
+                dm_fe  = dm_fe_kb + dm_fe_kbm
+                dm_feo = dm_fe * MW_FEO / MW_FE
+                q_rx   = dm_feo * (-DH_FEO_OX) / MW_FEO
+                if (dm_feo <= SMALL) cycle
+                dm_o2 = dm_feo * (0.5_dp * MW_O2_S) / MW_FEO
                 call take_fe(i, j, kb - k0 + 1, dm_fe_kb)
-                call take_fe(i, j, kb - 1 - k0 + 1, dm_fe - dm_fe_kb)
+                call take_fe(i, j, kb - 1 - k0 + 1, dm_fe_kbm)
                 ! FeO a la escoria de kb a SU temperatura + el exotermico
                 kl = kb - k0 + 1
                 if (kl >= kstart .and. kl <= kend) then
