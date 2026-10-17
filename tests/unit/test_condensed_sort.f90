@@ -18,6 +18,11 @@
 ! (7) (auditoria 18, A18-4) fundido PENDIENTE 0.1 en la celda de interfaz:
 !     la compactacion le deja ese hueco (alpha_l + alpha_sl = 0.9) y el gas
 !     complemento no lo rellena (alpha_g = 0: es volumen del liquido).
+! (8) (Plan I, dirigidas I2 H2/M1) horno SOBRELLENADO: escoria llena hasta el
+!     techo (4-10) y chatarra 0.3 solapada encima (la que atraviesa la
+!     escoria): el condensado no cabe ni hasta el techo; se compacta con el
+!     exceso repartido en proporcion al hueco (ninguna celda pasa de
+!     fover*liq_cap, fover = vcond/capsum de su columna), masa/E exactas.
 !===============================================================================
 program test_condensed_sort
     use mod_constants
@@ -35,7 +40,7 @@ program test_condensed_sort
     type(slag_t)   :: slag
     type(shared_t) :: sh
     real(dp), allocatable :: al0(:,:,:), as0(:,:,:), T0(:,:,:), E0(:,:,:), apd(:,:,:)
-    real(dp) :: est0, est1, esl0, esl1, msl0, msl1, err_c
+    real(dp) :: est0, est1, esl0, esl1, msl0, msl1, err_c, vc, cs, fov, worst
     integer  :: i, j, k, nr, nth, nz
     logical  :: ok
 
@@ -185,6 +190,46 @@ program test_condensed_sort
         end do
         if (.not. ok) exit
     end do
+
+    ! ---- (8) horno sobrellenado (escoria hasta el techo + chatarra) ----
+    call setcol([1.0_dp,1.0_dp,1.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp], &
+                [0.0_dp,0.0_dp,0.0_dp,1.0_dp,1.0_dp,1.0_dp,1.0_dp,1.0_dp,1.0_dp,1.0_dp])
+    sol%alpha_s = 0.0_dp; sol%alpha_s(:,:,4:nz) = 0.3_dp
+    where (mesh%cell_type == 0) sol%alpha_s = 0.0_dp
+    gas%alpha = 0.0_dp
+    call totals(est0, esl0, msl0)
+    call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh)
+    call totals(est1, esl1, msl1)
+    if (abs(est1-est0) > 1.0e-13_dp*est0 .or. abs(esl1-esl0) > 1.0e-13_dp*esl0 .or. abs(msl1-msl0) > 1.0e-13_dp*msl0) then
+        print '(A,3ES10.3)', '   FAIL caso 8: energia/masa: ', (est1-est0)/est0, (esl1-esl0)/esl0, (msl1-msl0)/msl0
+        ok = .false.
+    end if
+    worst = 0.0_dp
+    do j = 1, nth
+        do i = 1, nr
+            if (mesh%cell_type(i,j,3) == 0) cycle
+            ! fover de la columna: condensado de kc = 3 al techo sobre su hueco
+            vc = 0.0_dp; cs = 0.0_dp
+            do k = 3, nz
+                vc = vc + (liq%alpha(i,j,k) + slag%alpha_sl(i,j,k)) * mesh%vol(i,j,k)
+                cs = cs + liq_cap(sol%alpha_s(i,j,k), 0.0_dp) * mesh%vol(i,j,k)
+            end do
+            fov = vc / cs
+            if (.not. fov > 1.0_dp) then
+                print '(A,F8.4)', '   FAIL caso 8: la columna no esta sobrellenada (caso no ejercido): ', fov
+                ok = .false.
+            end if
+            do k = 3, nz
+                worst = max(worst, (liq%alpha(i,j,k) + slag%alpha_sl(i,j,k)) &
+                    - fov * liq_cap(sol%alpha_s(i,j,k), 0.0_dp))
+            end do
+        end do
+    end do
+    if (worst > 1.0e-12_dp) then
+        print '(A,ES10.3)', '   FAIL caso 8: exceso concentrado (celda por encima de fover*hueco): ', worst
+        ok = .false.
+    end if
+    sol%alpha_s = 0.0_dp
 
     if (ok) then
         print '(A)', ' PASS test_condensed_sort (ordenada intacta; pelicula baja con alpha_c y energia exactas; segmentos aislados; fuente al volumen de su masa)'
