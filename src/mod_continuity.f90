@@ -68,6 +68,9 @@ module mod_continuity
     ! fraction (vf_sclip_*, de la llamada) mas el acotado alpha_sl <= alpha_c
     ! de solve_condensed_fraction; por paso como el clip
     real(dp), save :: vf_sclip_m = 0.0_dp, vf_sclip_e = 0.0_dp
+    ! (A18-5) deficit de acero por congelacion en el condensado (por paso)
+    real(dp), save :: dsc_m_prev = 0.0_dp, dsc_e_prev = 0.0_dp
+    integer,  save :: dsc_m_id = -huge(1), dsc_e_id = -huge(1)
     real(dp), save :: sclipm_step_prev = 0.0_dp, sclipe_step_prev = 0.0_dp
     integer,  save :: sclipm_step_id = -huge(1), sclipe_step_id = -huge(1)
 
@@ -777,8 +780,9 @@ contains
                             if (advq) vf_sclip_e = vf_sclip_e + slq_adv(i,j,k,1) * (1.0_dp - liq%alpha(i,j,k) / a_pre)
                             if (advq) slq_adv(i,j,k,:) = slq_adv(i,j,k,:) * (liq%alpha(i,j,k) / a_pre)
                         else
-                            asl_adv(i,j,k) = 0.0_dp
-                            if (advq) slq_adv(i,j,k,:) = 0.0_dp
+                            ! (A18-5) condensado <= 0 solo por CONGELACION (sumidero
+                            ! de acero): la escoria no se toca; el deficit de acero
+                            ! lo audita solve_condensed_fraction
                         end if
                     end if
                     if (adv) then
@@ -1122,7 +1126,7 @@ contains
 
         real(dp), allocatable :: ac_old(:,:,:), zero(:,:,:), asl(:,:,:), slq(:,:,:,:), tmp(:,:,:)
         integer  :: i, j, k, c, nx, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: clip_loc, rl, clip_e, E_tr, a_raw, fcl, clip_el
+        real(dp) :: clip_loc, rl, clip_e, E_tr, a_raw, fcl, clip_el, dsteel, dclip_m, dclip_e
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         nx = size(mx_pre,4)
@@ -1148,19 +1152,34 @@ contains
         ! (x rho_l); ws_Fsl = volumen de escoria x rho_l (mismas unidades)
 
         clip_loc = 0.0_dp; clip_e = 0.0_dp; clip_el = 0.0_dp
+        dclip_m = 0.0_dp; dclip_e = 0.0_dp
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
                     if (m%cell_type(i,j,k) == 0) cycle
                     a_raw = asl(i,j,k)
-                    slag%alpha_sl(i,j,k) = min(max(a_raw, 0.0_dp), liq%alpha(i,j,k))
+                    ! (auditoria 18, A18-5) alpha_sl <= alpha_c por construccion
+                    ! (la escoria viaja con phi <= 1 del flujo del condensado);
+                    ! solo el sumidero de CONGELACION (mdot < 0, que es acero)
+                    ! puede dejar alpha_sl > alpha_c: es DEFICIT DE ACERO, no
+                    ! escoria. La escoria conserva volumen, masa y energia; el
+                    ! acero queda en 0 y el deficit va al clip del liquido con el
+                    ! signo y la entalpia del camino legado (antes se recortaba
+                    ! escoria a rho_sl: mass_liq y la energia se desviaban)
+                    slag%alpha_sl(i,j,k) = max(a_raw, 0.0_dp)
+                    dsteel = max(0.0_dp, slag%alpha_sl(i,j,k) - liq%alpha(i,j,k))
+                    if (dsteel > 0.0_dp) then
+                        dclip_m = dclip_m - dsteel * rl * m%vol(i,j,k)
+                        dclip_e = dclip_e - dsteel * rl * m%vol(i,j,k) &
+                            * (cfg%cp_l * liq%T(i,j,k) + (cfg%cp_s - cfg%cp_l) * cfg%T_liquidus &
+                               + cfg%h_fusion)
+                        liq%alpha(i,j,k) = slag%alpha_sl(i,j,k)
+                    end if
                     ! la masa sigue a alpha_sl por construccion; solo el acotado
-                    ! (redondeo) la recorta: auditado como clip de escoria, con
-                    ! E_sl y m_X en la misma proporcion
+                    ! de una alpha_sl negativa (redondeo) la recorta: clip de
+                    ! escoria (la energia de la traza la fija el equilibrio)
                     clip_loc = clip_loc + (a_raw - slag%alpha_sl(i,j,k)) * cfg%rho_slag * m%vol(i,j,k)
                     fcl = 1.0_dp
-                    if (a_raw > slag%alpha_sl(i,j,k)) fcl = slag%alpha_sl(i,j,k) / a_raw
-                    clip_el = clip_el + slq(i,j,k,1) * (1.0_dp - fcl)
                     slag%m_sl(i,j,k) = slag%alpha_sl(i,j,k) * cfg%rho_slag * m%vol(i,j,k)
                     slag%E_sl(i,j,k) = slq(i,j,k,1) * fcl
                     do c = 1, nx
@@ -1203,6 +1222,9 @@ contains
         call audit_step_delta(AUD_SLAG_TCLIP, clip_e, tclip_step_prev, tclip_step_id)
         call audit_step_delta(AUD_SLAG_CLIP_MASS, ws_slag_clip_call, sclipm_step_prev, sclipm_step_id)
         call audit_step_delta(AUD_SLAG_CLIP_E, clip_el + vf_sclip_e, sclipe_step_prev, sclipe_step_id)
+        ! (A18-5) deficit de acero por congelacion: clip del liquido, por paso
+        call audit_step_delta(AUD_ALPHA_CLIP_MASS, dclip_m, dsc_m_prev, dsc_m_id)
+        call audit_step_delta(AUD_ALPHA_CLIP_E, dclip_e, dsc_e_prev, dsc_e_id)
 
         ! flujos de masa: ACERO (energia) = condensado - escoria;
         ! CONDENSADO (momento) = acero + escoria con rho_sl

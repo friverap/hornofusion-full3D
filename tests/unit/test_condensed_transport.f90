@@ -7,7 +7,11 @@
 !     conservados a 1e-13, 0 <= alpha_sl <= alpha_c, sin recorte;
 ! (c) (auditoria P4 M3) CFL no sub-pasable -> fallback implicito: la escoria
 !     queda en su celda acotada por alpha_c, sin flujo de escoria, y masa de
-!     escoria + clip auditado = masa inicial.
+!     escoria + clip auditado = masa inicial;
+! (d) (auditoria 18, A18-5) congelacion mayor que el acero de una celda con
+!     escoria (acero 0.3, escoria 0.1, sumidero 0.4): la escoria se conserva
+!     ENTERA (sin clip de escoria) y el acero queda en 0 (el deficit es clip
+!     del liquido, no escoria recortada).
 !===============================================================================
 program test_condensed_transport
     use mod_constants
@@ -150,6 +154,24 @@ program test_condensed_transport
     end if
     if (any(ws_Fsl_r /= 0.0_dp) .or. any(ws_Fsl_th /= 0.0_dp) .or. any(ws_Fsl_z /= 0.0_dp)) then
         print '(A)', '   FAIL caso c: flujo de escoria rancio tras el fallback'; ok = .false.
+    end if
+
+    ! ---- (d) congelacion mayor que el acero ----
+    liq%ur = 0.0_dp; liq%uth = 0.0_dp; liq%uz = 0.0_dp
+    a_old = 0.0_dp; asl0 = 0.0_dp; es0 = 0.0_dp; mx0 = 0.0_dp
+    i = 2; j = 3; k = 3
+    a_old(i,j,k) = 0.3_dp; asl0(i,j,k) = 0.1_dp
+    es0(i,j,k) = asl0(i,j,k) * cfg%rho_slag * mesh%vol(i,j,k) * cfg%cp_slag * 1800.0_dp
+    sol%mdot = 0.0_dp
+    sol%mdot(i,j,k) = -0.4_dp * cfg%rho_steel * mesh%vol(i,j,k) / cfg%dt
+    liq%alpha = a_old; gas%alpha = 1.0_dp - a_old - asl0
+    call solve_condensed_fraction(liq, gas, sol, slag, asl0, es0, mx0, a_old, mesh, cfg)
+    sol%mdot = 0.0_dp
+    if (abs(slag%alpha_sl(i,j,k) - 0.1_dp) > 1.0e-12_dp .or. liq%alpha(i,j,k) /= 0.0_dp .or. &
+        abs(ws_slag_clip_call) > 1.0e-12_dp * cfg%rho_slag * mesh%vol(i,j,k)) then
+        print '(A,3ES12.4)', '   FAIL caso d: la congelacion recorto escoria: ', slag%alpha_sl(i,j,k), &
+            liq%alpha(i,j,k), ws_slag_clip_call
+        ok = .false.
     end if
 
     if (ok) then
