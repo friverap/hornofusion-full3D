@@ -33,6 +33,9 @@ program test_ecs_feed
     type(shared_t) :: sh
     real(dp) :: m0, m1, e0, e1, fed, dm_expected, err
     real(dp), parameter :: MDOT = 40.0_dp, DT = 0.5_dp
+    ! parte 2: caudal mayor (10 t en 20 pasos) para que la chatarra sumergida
+    ! pase ECS_SURF_ALPHA y la superficie suba dentro de la escoria (H3)
+    real(dp), parameter :: MDOT2 = 1000.0_dp
     integer :: n, i, j, k, kmin_ecs
     real(dp) :: msl0, esl0, over
     logical :: ok
@@ -42,7 +45,10 @@ program test_ecs_feed
     cfg%solve_ecs = .true.
     cfg%ecs_rate = MDOT
     cfg%ecs_theta_center = 0.5_dp * PI
-    cfg%ecs_theta_width  = 0.5_dp
+    ! (dirigida I2, H1) 0.6 rad: con nth = 12 los centros mas proximos a pi/2
+    ! estan a 0.2618 rad; con 0.5 la banda no contenia NINGUNA celda y el test
+    ! pasaba sin depositar nada (todo quedaba pendiente)
+    cfg%ecs_theta_width  = 0.6_dp
     cfg%ecs_r_inner      = 2.4_dp
     cfg%ecs_vfrac        = 0.6_dp
     cfg%ecs_T_charge     = 320.0_dp
@@ -70,6 +76,10 @@ program test_ecs_feed
     dm_expected = 20.0_dp * MDOT * DT
     fed = (m1 - m0) + m_ecs_pending
 
+    if (.not. (m1 - m0) > 0.0_dp .or. m_ecs_pending > 0.0_dp) then
+        print '(A,2ES12.4)', '   FAIL la carga no se deposito (depositado, pendiente): ', m1 - m0, m_ecs_pending
+        ok = .false.
+    end if
     err = abs(fed - dm_expected) / dm_expected
     if (err > 1.0e-12_dp) then
         print '(A,ES10.3)', '   FAIL conservacion de masa, err = ', err
@@ -127,13 +137,17 @@ program test_ecs_feed
     msl0 = sum(slag%m_sl(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz))
     esl0 = sum(slag%E_sl(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz))
     do n = 1, 20
-        call ecs_feed(sol, gas, liq, mesh, cfg, MDOT, DT, sh, slag)
+        call ecs_feed(sol, gas, liq, mesh, cfg, MDOT2, DT, sh, slag)
         call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh)
     end do
     m1 = sum(sol%m_s(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz))
-    if (m_ecs_pending > 0.0_dp .or. abs((m1 - m0) - 20.0_dp * MDOT * DT) > 1.0e-12_dp * 20.0_dp * MDOT * DT) then
+    if (m_ecs_pending > 0.0_dp .or. abs((m1 - m0) - 20.0_dp * MDOT2 * DT) > 1.0e-12_dp * 20.0_dp * MDOT2 * DT) then
         print '(A,2ES12.4)', '   FAIL parte 2: carga no colocada entera (pendiente, error): ', &
-            m_ecs_pending, (m1 - m0) - 20.0_dp * MDOT * DT
+            m_ecs_pending, (m1 - m0) - 20.0_dp * MDOT2 * DT
+        ok = .false.
+    end if
+    if (.not. maxval(sol%alpha_s(1:mesh%nr, 1:mesh%ntheta, 4)) > ECS_SURF_ALPHA) then
+        print '(A)', '   FAIL parte 2: la chatarra sumergida no paso ECS_SURF_ALPHA (superficie no ejercida)'
         ok = .false.
     end if
     if (abs(sum(slag%m_sl(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz)) - msl0) > 1.0e-12_dp * msl0 .or. &

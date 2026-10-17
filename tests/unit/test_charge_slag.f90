@@ -15,8 +15,8 @@
 ! vfrac 0.5. Exige: ninguna celda con alpha_s + liquido + escoria > 1, masa
 ! cargada exacta, y toda la chatarra por encima de la escoria.
 !
-! Caso 3 (Plan I, I2): con la escoria CONDENSADA (slag_in_volume) la cesta 2
-! ATRAVIESA la capa: se apoya en el tope del ACERO bajo una capa gruesa de
+! Caso 3 (Plan I, I2): con la escoria CONDENSADA (slag_in_volume) una cesta 2
+! de 30 t ATRAVIESA la capa: se apoya en el tope del ACERO bajo una capa gruesa de
 ! escoria llena (3 celdas) y el reordenamiento de inicio de paso
 ! (slag_condensed_sort) sube la escoria desplazada: masa y energia de la
 ! escoria exactas, Sigma alpha <= 1 y la base de la chatarra en el tope del
@@ -165,6 +165,9 @@ program test_charge_slag
     gas%alpha = max(0.0_dp, 1.0_dp - liq%alpha - slag%alpha_sl)
     where (mesh%cell_type == 0) gas%alpha = 0.0_dp
     msl0 = sum(slag%m_sl(1:nr,1:nth,1:nz)); esl0 = sum(slag%E_sl(1:nr,1:nth,1:nz))
+    ! (dirigida I2, H3) 30 t: niveles completos de chatarra (alpha_s 0.5) a
+    ! traves de la capa (con 3 t solo ocupaba ~6 % de la primera celda)
+    cfg%layer_mass(2) = 30000.0_dp
     call charge_scrap(sol, gas, mesh, cfg, 2, sh, slag)
     call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh)
     over = 0.0_dp; m_added = 0.0_dp; z_scrap_low = huge(1.0_dp); z_slag_hi = 0.0_dp
@@ -182,12 +185,16 @@ program test_charge_slag
     print '(A,F9.3,A,F6.3,A,F6.3,A,F6.3,A,ES10.3)', '   escoria condensada: masa cargada ', m_added, &
         ' kg  base de la chatarra ', z_scrap_low, ' m  tope del acero ', mesh%zf(ks), &
         '  cima de la escoria ', z_slag_hi, '  sobrellenado ', over
-    if (abs(m_added - 3000.0_dp) > 1.0e-9_dp * 3000.0_dp) then
+    if (abs(m_added - 30000.0_dp) > 1.0e-9_dp * 30000.0_dp) then
         print '(A)', '   FAIL caso 3: la masa cargada no es la de la receta'
         ok = .false.
     end if
     if (abs(z_scrap_low - mesh%zf(ks)) > 1.0e-12_dp) then
         print '(A)', '   FAIL caso 3: la chatarra no se apoya en el tope del acero (no atraviesa la escoria)'
+        ok = .false.
+    end if
+    if (.not. maxval(sol%alpha_s(1:nr,1:nth,ks + 1)) > 0.49_dp) then
+        print '(A)', '   FAIL caso 3: la primera celda de escoria no quedo llena de chatarra (no ejerce niveles completos)'
         ok = .false.
     end if
     if (.not. z_slag_hi > mesh%zf(ks + 3) + 1.0e-12_dp) then
