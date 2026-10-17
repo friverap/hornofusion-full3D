@@ -324,6 +324,14 @@ contains
                                     gas%alpha(i,j,k) = ag_new
                                 end if
                                 gas_after = gas%alpha(i,j,k)
+                                ! (auditoria 19, A19-C1) el CO va a la celda solo
+                                ! si queda gas RESUELTO (>= ALPHA_FLOW_CUTOFF): un
+                                ! gas de ~1e-5 bajo la escoria lo compacta el sort
+                                ! del paso siguiente (destruido con sus especies);
+                                ! si no, sube (co_up) al gas de la cima. (m_dil_CO
+                                ! NO es perdida: es el termino -Y S_gas de la forma
+                                ! no conservativa de las especies, M14)
+                                if (gas_after < ALPHA_FLOW_CUTOFF) gas_after = 0.0_dp
                             end if
                             if (gas_after >= ALPHA_CUTOFF) then
                                 sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + &
