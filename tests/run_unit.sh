@@ -16,8 +16,16 @@ for t in tests/bin/*; do
     [ -x "$t" ] || continue
     name=$(basename "$t")
     # (auditoria dirigida 16, B2) tope de tiempo: un cuelgue (A15-1) falla el
-    # gate en vez de colgarlo (SIGALRM -> codigo 142)
-    if perl -e 'alarm shift; exec @ARGV' "${UNIT_TIMEOUT:-300}" "$t" > "tests/bin/$name.log" 2>&1; then
+    # gate en vez de colgarlo. (auditoria 18) con SIGKILL desde un vigilante:
+    # el SIGALRM de perl lo ignoraba el binario MPI singleton (Open MPI instala
+    # sus manejadores; test_mesh_seam colgo 50 min en el rebaseline v123)
+    "$t" > "tests/bin/$name.log" 2>&1 &
+    tpid=$!
+    ( sleep "${UNIT_TIMEOUT:-300}"; kill -9 "$tpid" 2>/dev/null ) &
+    wpid=$!
+    wait "$tpid"; trc=$?
+    kill "$wpid" 2>/dev/null; wait "$wpid" 2>/dev/null
+    if [ "$trc" -eq 0 ]; then
         if is_xfail "$name"; then
             echo "XPASS unit:$name (quitar de tests/xfail.list)"
         else
