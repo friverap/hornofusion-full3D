@@ -128,6 +128,9 @@ def main():
         s0 = rows[0]["m_sol"] + rows[0]["m_liq"]
         s1 = rows[-1]["m_sol"] + rows[-1]["m_liq"]
         clip = sum(r["m_alpha_clip"] for r in rows[1:])
+        # (dirigida A19, B5) el acero creado por el deficit de congelacion del
+        # condensado (columna propia desde e53249a) entra como clip negativo
+        clip -= sum(float(r.get("m_steel_deficit", 0.0) or 0.0) for r in rows[1:])
         # el acero se conserva salvo el clip AUDITADO (bath_freeze: 0.28 kg de
         # 246 t bajo congelacion masiva); lo que se exige es que la perdida
         # sea exactamente el clip, no que el clip sea cero

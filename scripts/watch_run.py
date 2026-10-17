@@ -87,6 +87,9 @@ def main():
     steel = m_sol + m_liq
     d_steel = steel - m0 - m_in
     clip = S("m_alpha_clip")
+    # (dirigida A19, B5) deficit de acero por congelacion del condensado
+    if "m_steel_deficit" in rows[0]:
+        clip -= S("m_steel_deficit")
     melt, resol = S("m_melted"), S("m_resolid")
     if d_steel > 1.0e-3 * m0:
         A(f"masa de acero CREADA: +{d_steel:.0f} kg ({d_steel/m0:.2%})")
