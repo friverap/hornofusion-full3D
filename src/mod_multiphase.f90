@@ -106,7 +106,7 @@ contains
             ws_sp_asl = slag%alpha_sl; ws_sp_es = slag%E_sl; ws_sp_mx = slag%m_X
         end if
         if (cond) call cond_view_enter(liq, liq_old, slag%alpha_sl, ws_sp_asl, cfg%rho_slag, &
-                                       cfg%beta_expansion, cfg%T_ref_boussinesq)
+                                       cfg%beta_expansion, cfg%T_ref_boussinesq, cfg%mu_slag)
         call liquid_continuity_mask(liq, sol, m, ws_liq_cont)
         ! mascara del lecho (N-C1): misma regla que liq_continuous, halos
         ! incluidos (sol%alpha_s ya intercambiado; los halos fisicos tienen
@@ -442,7 +442,7 @@ contains
         dalpha_pc = 0.0_dp
         do ic = 1, max(1, cfg%n_pc_max)
         if (cond .and. .not. ws_cond_on) call cond_view_enter(liq, liq_old, slag%alpha_sl, ws_sp_asl, &
-                                       cfg%rho_slag, cfg%beta_expansion, cfg%T_ref_boussinesq)
+                                       cfg%rho_slag, cfg%beta_expansion, cfg%T_ref_boussinesq, cfg%mu_slag)
         ! Pressure correction de MEZCLA: ambas fases contribuyen y ambas
         ! se corrigen (C2.4)
         ! Referencia de la fuente de compresibilidad (auditoria 3, A3-3): la T

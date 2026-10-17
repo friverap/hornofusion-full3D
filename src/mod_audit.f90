@@ -44,7 +44,7 @@ module mod_audit
     public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2, AUD_GAS_VOLFIX, AUD_SLAG_TCLIP, AUD_MIX_INIT
     public :: AUD_RESOLID_E, AUD_ALPHA_CLIP_E
     public :: AUD_VF_O2, AUD_VF_CO, AUD_VF_CO2, audit_gas_destroyed, AUD_GAS_CCDROP
-    public :: AUD_SLAG_CLIP_MASS, AUD_SLAG_CLIP_E
+    public :: AUD_SLAG_CLIP_MASS, AUD_SLAG_CLIP_E, AUD_SLAG_SOL
 
     ! Contadores acumulativos (ids públicos para los hooks en física)
     integer, parameter :: AUD_ARC_DIRECT      = 1  ! J al sólido (P_rad directo)
@@ -143,7 +143,10 @@ module mod_audit
     ! masa con rho_sl y su E_sl (antes contada como acero o sin contar)
     integer, parameter :: AUD_SLAG_CLIP_MASS  = 54
     integer, parameter :: AUD_SLAG_CLIP_E     = 55
-    integer, parameter :: N_AUD = 55
+    ! (auditoria 18, A18-10) calor escoria -> solido por contacto en el lecho
+    ! (interno entre inventarios; diagnostico)
+    integer, parameter :: AUD_SLAG_SOL        = 56
+    integer, parameter :: N_AUD = 56
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -360,7 +363,7 @@ contains
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
                 'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq,m_gas_out,m_gas_rxn,E_gas_volfix,' // &
-                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip'
+                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip,E_slag_sol'
             close(iu)
         end if
         acc = 0.0_dp
@@ -524,7 +527,7 @@ contains
                 ',', a(AUD_SLAG_GAS), ',', a(AUD_SLAG_LIQ), &
                 ',', a(AUD_GAS_OUT), ',', a(AUD_GAS_RXN), ',', a(AUD_GAS_VOLFIX_E), &
                 ',', a(AUD_VF_O2), ',', a(AUD_VF_CO), ',', a(AUD_VF_CO2), &
-                ',', a(AUD_GAS_CCDROP), ',', a(AUD_SLAG_CLIP_MASS), ',', a(AUD_SLAG_CLIP_E)
+                ',', a(AUD_GAS_CCDROP), ',', a(AUD_SLAG_CLIP_MASS), ',', a(AUD_SLAG_CLIP_E), ',', a(AUD_SLAG_SOL)
             close(iu)
         end if
     end subroutine audit_write_step

@@ -720,6 +720,8 @@ program eaf_3d_simulator
                 interpolate_rate(cal_prof, time), &
                 interpolate_rate(cinj_prof, time), cfg%dt)
             call update_slag(slag, liq, gas, sol, mesh, cfg, cfg%dt, sh)
+            ! (A18-10) el contacto escoria-chatarra cambia E_s/T_s
+            if (slag_condensed_on(cfg)) call solid_exchange_halos(sol, mesh)
             call phase_exchange_halos(liq, mesh)
             call phase_exchange_halos(gas, mesh)
             call slag_exchange_halos(slag, mesh)

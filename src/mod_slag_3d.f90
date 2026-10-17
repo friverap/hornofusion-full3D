@@ -14,8 +14,9 @@ module mod_slag_3d
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_allreduce_sum, mpi_exchange_halos_3d
     use mod_parallel_utils, only: gather_global_field, global_to_local, should_print
     use mod_fields_3d, only: slag_exchange_halos
+    use mod_melting_3d, only: solid_T_from_enthalpy
     use mod_audit, only: audit_add, audit_gas_destroyed, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT, AUD_SLAG_TCLIP, &
-                         AUD_SLAG_GAS, AUD_SLAG_LIQ, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
+                         AUD_SLAG_GAS, AUD_SLAG_LIQ, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, AUD_SLAG_SOL, &
                          gas_inventory_cell, gas_heat_capacity_ref, gas_log_exchange
     implicit none
 
@@ -358,7 +359,7 @@ contains
     subroutine update_slag(slag, liq, gas, sol, m, cfg, dt, sh)
         type(slag_t),  intent(inout) :: slag
         type(phase_t), intent(inout) :: liq, gas
-        type(solid_t), intent(in)    :: sol
+        type(solid_t), intent(inout) :: sol
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
         real(dp),      intent(in)    :: dt
@@ -371,7 +372,7 @@ contains
         else
             call slag_buoyancy(slag, liq, gas, sol, m, cfg, sh)
         end if
-        call slag_energy(slag, liq, gas, m, cfg, dt, sh)
+        call slag_energy(slag, liq, gas, sol, m, cfg, dt, sh)
     end subroutine update_slag
 
     !---------------------------------------------------------------------------
@@ -858,16 +859,17 @@ contains
     ! dos pasadas con halos, auditoria A14). La T de la escoria es E/(m cp)
     ! sin recorte (el recorte a 300 K desacoplaba T de E).
     !---------------------------------------------------------------------------
-    subroutine slag_energy(slag, liq, gas, m, cfg, dt, sh)
+    subroutine slag_energy(slag, liq, gas, sol, m, cfg, dt, sh)
         type(slag_t),  intent(inout) :: slag
         type(phase_t), intent(inout) :: liq, gas
+        type(solid_t), intent(inout) :: sol
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
         real(dp),      intent(in)    :: dt
         type(shared_t), intent(in), optional :: sh
 
         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: Cs, Cf, Cb, hA, f, Q, Cg, Tg, Ts, pc
+        real(dp) :: Cs, Cf, Cb, hA, f, Q, Cg, Tg, Ts, pc, Csol, wet
         real(dp), allocatable :: qdown(:,:,:)
 
         if (m%is_parallel) then
@@ -927,6 +929,27 @@ contains
                         slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
                         qdown(i,j,k) = Q        ! se le resta al bano de abajo en la pasada 2
                         call audit_add(AUD_SLAG_LIQ, Q)
+                    end if
+                    ! (auditoria 18, A18-10) CONTACTO escoria-chatarra: con la
+                    ! escoria condensada en los poros del lecho no habia camino
+                    ! termico al solido (la chatarra solo veia la DO). Dos nodos
+                    ! con la superficie especifica del lecho (6 alpha_s/d_p) por
+                    ! la fraccion del poro llena de escoria; capacidad lineal del
+                    ! solido (cota del calor: en la zona pastosa el latente lo
+                    ! absorbe sin sobrepaso). Interno entre inventarios (E_sol,
+                    ! E_slag): columna diagnostica E_slag_sol
+                    if (slag_condensed_on(cfg) .and. sol%alpha_s(i,j,k) >= ALPHA_BED &
+                        .and. sol%m_s(i,j,k) > SMALL_SL .and. cfg%d_particle > 0.0_dp) then
+                        Csol = sol%m_s(i,j,k) * cfg%cp_s
+                        wet = min(1.0_dp, slag%alpha_sl(i,j,k) / max(1.0_dp - sol%alpha_s(i,j,k), 1.0e-6_dp))
+                        hA = cfg%h_contact_sl * 6.0_dp * sol%alpha_s(i,j,k) / cfg%d_particle &
+                             * m%vol(i,j,k) * wet
+                        f = 1.0_dp - exp(-dt * hA * (1.0_dp / Cs + 1.0_dp / Csol))
+                        Q = Cs * Csol / (Cs + Csol) * (sol%T_s(i,j,k) - slag%E_sl(i,j,k) / Cs) * f
+                        slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
+                        sol%E_s(i,j,k) = sol%E_s(i,j,k) - Q
+                        sol%T_s(i,j,k) = solid_T_from_enthalpy(sol%E_s(i,j,k) / sol%m_s(i,j,k), cfg)
+                        call audit_add(AUD_SLAG_SOL, Q)
                     end if
                     ! gas de la propia celda
                     ! Gas de la propia celda, CONSISTENTE con el inventario del

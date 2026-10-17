@@ -160,6 +160,10 @@ contains
         ! (Plan H, P9) la escoria es fase CONDENSADA del Poisson y del momento
         ! por defecto; solo actua donde aplica (slag_condensed_on)
         cfg%slag_in_volume = .true.
+        ! (auditoria 18, A18-10 / Plan H P5b) viscosidad de la escoria: del
+        ! orden de 0.1 Pa s para escorias basicas de EAF a ~1873 K (17x la del
+        ! acero); entra en la mezcla condensada (Ergun, percolacion, momento)
+        cfg%mu_slag = 0.1_dp
 
         ! Species transport (CO/CO2)
         cfg%solve_species   = .false.
@@ -391,6 +395,7 @@ contains
         case ('m_slag_init');  call parse_real(val, key, cfg%m_slag_init)
         case ('solve_slag');   cfg%solve_slag = parse_bool(val)
         case ('slag_in_volume'); cfg%slag_in_volume = parse_bool(val)
+        case ('mu_slag');        call parse_real(val, key, cfg%mu_slag)
         ! Species transport
         case ('solve_species');   cfg%solve_species = parse_bool(val)
         case ('carbon_frac');     call parse_real(val, key, cfg%carbon_frac)
@@ -554,6 +559,7 @@ contains
         if (cfg%adaptive_dt) call require(cfg%dt >= cfg%dt_min .and. cfg%dt <= cfg%dt_max, &
                      'requires dt_min <= dt <= dt_max (adaptive_dt)', ok)
         call require(cfg%wall_time_max >= 0.0_dp, 'wall_time_max must be >= 0 (0 = off)', ok)
+        call require(cfg%mu_slag > 0.0_dp, 'mu_slag must be > 0', ok)
         ! (Plan H, P9) la vista condensada solo existe en dos fluidos con flujo:
         ! fuera de ahi la clave no actua (slag_condensed_on la apaga; con el
         ! default true no es un error de configuracion)

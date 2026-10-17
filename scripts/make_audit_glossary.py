@@ -163,6 +163,8 @@ DEFS = {
                          "transport (slag share of the final clip, $\\alpha_{sl}\\le\\alpha_c$) "
                          "[kg] (Plan H, P6)"),
     "E_slag_clip": ("C", "Slag enthalpy leaving with m\\_slag\\_clip [J]"),
+    "E_slag_sol": ("C", "Heat from the slag to the scrap by contact in the bed (condensed slag "
+                        "in the pores; internal between inventories, diagnostic) [J]"),
 }
 
 src = open(SRC).read()

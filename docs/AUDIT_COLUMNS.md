@@ -85,3 +85,4 @@ Generado por `scripts/make_audit_glossary.py` desde el encabezado de `src/mod_au
 | `m_gas_ccdrop` | C | Gas mass whose compressibility volume demand the step discards (`\rho_g` x overflow of the carry bound, carry of cells that leave the coupling, lose their gas or are sealed) [kg]; named part of the EOS residual of mass_gas (audit 6, M6-1/M6-2) |
 | `m_slag_clip` | C | Condensed slag mass removed by the bounding of the volume-fraction transport (slag share of the final clip, `\alpha_{sl}\le\alpha_c`) [kg] (Plan H, P6) |
 | `E_slag_clip` | C | Slag enthalpy leaving with m_slag_clip [J] |
+| `E_slag_sol` | C | Heat from the slag to the scrap by contact in the bed (condensed slag in the pores; internal between inventories, diagnostic) [J] |

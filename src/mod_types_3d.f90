@@ -128,6 +128,7 @@ module mod_types_3d
         ! (Plan H, M17-PV1) la escoria como fase CONDENSADA dentro del Poisson de
         ! volumen y del momento (vista acero+escoria); false = camino legado
         logical  :: slag_in_volume
+        real(dp) :: mu_slag      ! viscosidad de la escoria [Pa s] (Plan H P5b)
         logical  :: solve_slag     ! Enable slag model
 
         ! Species transport (CO/CO2)

@@ -283,6 +283,9 @@ module mod_workspace
     ! ws_wc: peso propio del condensado [N/m3] = (a_l w_l(T_l) + a_sl rho_sl g)/a_c
     logical, save :: ws_cond_on = .false.
     real(dp), allocatable :: ws_al_st(:,:,:), ws_rl_st(:,:,:)
+    ! (A18-10) viscosidades del acero guardadas por la vista condensada
+    real(dp), allocatable :: ws_mu_st(:,:,:), ws_mue_st(:,:,:)
+    logical :: ws_mu_set = .false.
     real(dp), allocatable :: ws_al_st_old(:,:,:), ws_rl_st_old(:,:,:)
     real(dp), allocatable :: ws_wc(:,:,:)
     ! (Plan H, P2) flujo de MASA condensado por las caras + (momento del
@@ -349,14 +352,22 @@ contains
     ! pone alpha = a_l + a_sl, rho = (a_l rho_l + a_sl rho_sl)/a_c (rho_l si
     ! a_c = 0); a_sl y a_sl_old son la escoria actual y la de inicio de paso.
     ! ws_wc con el Boussinesq del acero (T_l) y el peso de la escoria.
-    subroutine cond_view_enter(liq, liq_old, a_sl, a_sl_old, rho_sl, beta, Tref)
+    subroutine cond_view_enter(liq, liq_old, a_sl, a_sl_old, rho_sl, beta, Tref, mu_sl)
         type(phase_t), intent(inout) :: liq, liq_old
         real(dp), intent(in) :: a_sl(-1:,-1:,-1:), a_sl_old(-1:,-1:,-1:)
         real(dp), intent(in) :: rho_sl, beta, Tref
+        ! (A18-10, P5b) viscosidad de la escoria: la mezcla condensada usa
+        ! mu_c = (a_l mu_l + a_sl mu_sl)/a_c (Ergun, percolacion, difusion de
+        ! momento; la parte turbulenta de mu_eff se conserva)
+        real(dp), intent(in), optional :: mu_sl
         real(dp) :: ac
         integer :: i, j, k
         ws_al_st = liq%alpha;     ws_rl_st = liq%rho
         ws_al_st_old = liq_old%alpha; ws_rl_st_old = liq_old%rho
+        ws_mu_set = present(mu_sl)
+        if (ws_mu_set) then
+            ws_mu_st = liq%mu; ws_mue_st = liq%mu_eff
+        end if
         do k = lbound(ws_wc,3), ubound(ws_wc,3)
             do j = lbound(ws_wc,2), ubound(ws_wc,2)
                 do i = lbound(ws_wc,1), ubound(ws_wc,1)
@@ -365,6 +376,10 @@ contains
                         ws_wc(i,j,k) = (ws_al_st(i,j,k) * liq_own_weight(ws_rl_st(i,j,k), liq%T(i,j,k), beta, Tref) &
                                         + a_sl(i,j,k) * rho_sl * GRAVITY) / ac
                         liq%rho(i,j,k) = (ws_al_st(i,j,k) * ws_rl_st(i,j,k) + a_sl(i,j,k) * rho_sl) / ac
+                        if (ws_mu_set) then
+                            liq%mu(i,j,k) = (ws_al_st(i,j,k) * ws_mu_st(i,j,k) + a_sl(i,j,k) * mu_sl) / ac
+                            liq%mu_eff(i,j,k) = liq%mu(i,j,k) + (ws_mue_st(i,j,k) - ws_mu_st(i,j,k))
+                        end if
                     else
                         ws_wc(i,j,k) = liq_own_weight(ws_rl_st(i,j,k), liq%T(i,j,k), beta, Tref)
                     end if
@@ -384,6 +399,9 @@ contains
         type(phase_t), intent(inout) :: liq, liq_old
         liq%alpha = ws_al_st;     liq%rho = ws_rl_st
         liq_old%alpha = ws_al_st_old; liq_old%rho = ws_rl_st_old
+        if (ws_mu_set) then
+            liq%mu = ws_mu_st; liq%mu_eff = ws_mue_st
+        end if
         ws_cond_on = .false.
     end subroutine cond_view_exit
 
@@ -501,6 +519,7 @@ contains
         ws_mKl = 0.0_dp; ws_mKg = 0.0_dp
         if (.not. allocated(ws_wc)) then
             allocate(ws_al_st, ws_rl_st, ws_al_st_old, ws_rl_st_old, ws_wc, mold=ws_aW)
+            allocate(ws_mu_st, ws_mue_st, mold=ws_aW)
             ws_al_st = 0.0_dp; ws_rl_st = 0.0_dp; ws_al_st_old = 0.0_dp
             ws_rl_st_old = 0.0_dp; ws_wc = 0.0_dp
             allocate(ws_Fcm_r, ws_Fcm_th, ws_Fcm_z, mold=ws_aW)
