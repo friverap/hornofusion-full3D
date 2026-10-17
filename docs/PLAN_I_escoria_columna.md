@@ -70,8 +70,11 @@ Tests unitarios: casos condensados de `test_charge_slag` (30 t), `test_ecs_feed`
 ## Orden y estado
 
 I1 → dirigidas (I1, I1-b) → I2 → dirigidas (I2, I2-b) → general (3
-dimensiones) hechos en la rama `plan-i`, verificados SOLO por sintaxis
-(`mpif90 -fsyntax-only`, sin enlazar ni ejecutar) mientras corre B1.
+dimensiones) hechos en la rama `plan-i`. Mientras corre B1: compilados y
+ENLAZADOS (simulador + los 41 unit tests, banderas de desarrollo -O2
+-fcheck=bounds -Wall, en un arbol aparte, sin ejecutar nada); los avisos del
+compilador en lo tocado son solo las comparaciones exactas intencionadas de
+los tests bit a bit. Falta EJECUTAR (gates de abajo).
 
 ## Aceptados de la auditoría general (con causa)
 
