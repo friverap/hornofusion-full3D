@@ -80,7 +80,7 @@ contains
         ! con halos intercambiados: invariante a la descomposicion en z (antes
         ! la escritura en un halo de k-1 se perdia; auditoria A14)
         real(dp), allocatable :: fe_out(:,:,:), fe_in(:,:,:), t_in(:,:,:)
-        logical  :: below
+        logical  :: below, cond
         ! (auditoria 5, M5-5 bis) CO de la reduccion nacido en una celda de
         ! escoria SIN gas (alpha_g < ALPHA_CUTOFF: escoria sobre bano lleno).
         ! El solver de especies descarta la fuente de una celda sin gas (su
@@ -121,6 +121,7 @@ contains
         end if
 
         c0 = liquid_datum_offset(cfg)
+        cond = slag_condensed_on(cfg)
         allocate(fe_out(lbound(liq%alpha,1):ubound(liq%alpha,1), &
                         lbound(liq%alpha,2):ubound(liq%alpha,2), &
                         lbound(liq%alpha,3):ubound(liq%alpha,3)))
@@ -218,6 +219,13 @@ contains
                     if (m%cell_type(i,j,k) == 0) cycle
                     room(i,j,k) = max(0.0_dp, liq_cap(sol%alpha_s(i,j,k), slag%alpha_sl(i,j,k)) &
                                   - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k)
+                    ! (Plan H, auditoria 18 A1) con la escoria CONDENSADA la
+                    ! capa esta compactada (sin gas): el hueco de la reduccion es
+                    ! el volumen que libera la propia escoria reducida, (FeO +
+                    ! C)/rho_sl, ~3.75 veces el del Fe que vuelve: el Fe propio
+                    ! siempre cabe (antes solo reducia la celda tope con gas)
+                    if (cond) room(i,j,k) = room(i,j,k) + req_fe(i,j,k) * liq%rho(i,j,k) &
+                        * (MW_FEO + MW_C_S) / (cfg%rho_slag * MW_FE)
                 end do
             end do
         end do
@@ -266,6 +274,11 @@ contains
                                 slag%m_X(i,j,k,SL_C) - dm_c
                             slag%m_sl(i,j,k) = slag%m_sl(i,j,k) &
                                                - dm_red - dm_c
+                            ! (A1) la escoria condensada ocupa el volumen de su
+                            ! masa: el volumen liberado queda disponible ya (para
+                            ! el CO de abajo y la restriccion de volumen)
+                            if (cond) slag%alpha_sl(i,j,k) = slag%m_sl(i,j,k) &
+                                / (cfg%rho_slag * vol)
                             ! entalpia del Fe que VIAJA (a T_sl) + endo
                             e_fe = dm_fe * (cfg%cp_l * slag%T_sl(i,j,k) + c0)
                             if (dm_b > 0.0_dp) then

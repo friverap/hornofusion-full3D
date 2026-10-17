@@ -29,6 +29,8 @@ def main():
     ap.add_argument("rundir")
     ap.add_argument("--config", required=True)
     ap.add_argument("--xfail", default="")
+    # (auditoria 18, A1) actividad de la REDUCCION: Fe devuelto minimo [kg]
+    ap.add_argument("--min-return", type=float, default=None)
     args = ap.parse_args()
 
     rows = [{k: safe_float(v) for k, v in r.items()}
@@ -48,6 +50,9 @@ def main():
     # escoria y baño en la de abajo; tras la compactacion la celda inferior
     # no tiene gas): slag_chem_flow oxida 0.99 kg frente a 2.7 kg del legado.
     # El check vigila que la quimica CORRA, no su tasa
+    if args.min_return is not None:
+        chk.report("reduction", fer >= args.min_return,
+                   f"Fe devuelto por la reduccion = {fer:.3f} kg (min {args.min_return:.3f})")
     chk.report("activity", fey > 0.5,
                f"Fe oxidado = {fey:.3f} kg (>0.5 kg exige quimica activa)")
 

@@ -356,6 +356,8 @@ full | rebaseline)
     # r a traves del baño (n4/n8 cortan z en k = 8, sobre las fases)
     run_case slag_chem_test 9
     run_case slag_chem_flow 4
+    # (auditoria 18, A1) quimica con capa de escoria condensada gruesa
+    run_case slag_chem_thick 4
     # Bug 19 (Plan C, F0): bancos del bano de liquido puro — reposo (n1/n4)
     # y llenado por fusion (n4). Sus checks propios (bath:*) llevan xfail
     # con causa hasta F1/F2; los invariantes duros (nan/bounds) NO.
@@ -457,6 +459,8 @@ full | rebaseline)
         $PY $INT/check_chem.py "$OUT/slag_chem_test_n8" --config "$CFG/slag_chem_test.dat" --slag
     run_script "slag_chem_flow" \
         $PY $INT/check_slag_chem.py "$OUT/slag_chem_flow_n4" --config "$CFG/slag_chem_flow.dat"
+    run_script "slag_chem_thick" \
+        $PY $INT/check_slag_chem.py "$OUT/slag_chem_thick_n4" --config "$CFG/slag_chem_thick.dat" --min-return 0.5
     # escoria por columna global (auditoria A14): invariante a la descomposicion
     # ECS con r DESCOMPUESTO (12 ranks -> 2x3x2): antes de la auditoria M38
     # la carga no se depositaba (indice radial local tomado como global)
