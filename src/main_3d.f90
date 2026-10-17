@@ -60,6 +60,7 @@ program eaf_3d_simulator
     type(mesh_t)          :: mesh
     type(phase_t)         :: liq, gas
     type(phase_t)         :: liq_old, gas_old
+    real(dp), allocatable :: sort_a(:,:,:), sort_t(:,:,:)   ! (Plan H P5) delta del reordenamiento
     type(solid_t)         :: sol
     type(slag_t)          :: slag
     type(shared_t)        :: sh
@@ -553,9 +554,19 @@ program eaf_3d_simulator
         ! condensado de cada iteracion externa parte de el
         if (slag_condensed_on(cfg)) then
             if (.not. allocated(ws_sp_asl)) then
+                allocate(sort_a, sort_t, mold=liq%alpha)
                 allocate(ws_sp_asl, ws_sp_es, mold=slag%alpha_sl)
                 allocate(ws_sp_mx, mold=slag%m_X)
             end if
+            ! (P5) las fuentes de escoria del paso hasta aqui (quimica) cambian
+            ! su masa sin tocar alpha_sl: el reordenamiento la lleva al volumen
+            ! de su masa antes de fijar el estado de inicio de paso; acero
+            ! remapeado con su T (energia exacta) -> liq_old lo sigue (la
+            ! quimica ya mantenia liq_old = liq en alpha)
+            sort_a = liq%alpha; sort_t = liq%T
+            call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh)
+            liq_old%alpha = liq_old%alpha + (liq%alpha - sort_a)
+            liq_old%T = liq_old%T + (liq%T - sort_t)
             ws_sp_asl = slag%alpha_sl
             ws_sp_es = slag%E_sl; ws_sp_mx = slag%m_X
         end if

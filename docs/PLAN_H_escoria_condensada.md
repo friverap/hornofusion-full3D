@@ -72,3 +72,18 @@ inicial con el peso de la escoria condensada (paso 1 de slag_rest: 4e-4 ->
 2e-10 m/s). Reposo (slag_rest): el transitorio posterior del gas (u_gas ~5
 m/s, u_liq ~1e-4) es el MISMO que sin escoria en el volumen (xfail bath_rest
 preexistente): el gate u <= 1e-9 se sustituye por "no peor que el legado".
+
+## Estado P5 (2026-10-16)
+Fuentes de escoria (quimica E2.3/E2.4, adiciones) al VOLUMEN DE SU MASA en
+slag_condensed_sort: alpha_sl = m_sl/(rho_sl V) donde difiere del redondeo y,
+si el condensado no cabe, el segmento se extiende hacia arriba sobre el gas
+de la columna; el gas desplazado se audita como el volfix (misma convencion
+que la fusion: sin fuente en el Poisson, NOTA de mod_pressure_3d). El sort se
+llama tambien al fijar el estado de inicio de paso (tras la quimica), con el
+delta del remapeo aplicado a liq_old. slag_chem_flow condensado: slag_mass
+err 7e-12 (antes 0.95: la masa de las fuentes se perdia), fe_element 6e-11,
+volfix -1.0e-4 kg auditado. PENDIENTE P7: `activity` del banco (Fe oxidado
+0.99 kg frente a 2.7 kg legado, umbral 1 kg): el estencil de oxidacion pide
+O2 en la celda de escoria y bano en la de abajo; con la capa compactada la
+celda inferior no tiene gas (la capa resuelta aisla el metal). Decidir en P7
+(estencil por columna o umbral del banco) antes de P9.

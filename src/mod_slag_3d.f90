@@ -398,8 +398,9 @@ contains
         ! deja ~1e-6 por paso en la celda de interfaz y crecia hasta el pico de
         ! succion de F2.16). El gas reubicado se audita como el volfix.
         real(dp), allocatable :: ss_g(:,:,:), acn(:,:,:)
-        real(dp) :: vcond, capk, ag_new, dmg, deg, pc, fdil
+        real(dp) :: vcond, capk, ag_new, dmg, deg, pc, fdil, capsum, as_m
         logical  :: has_slag
+        integer  :: k2e
 
         real(dp), allocatable :: al_g(:,:,:), tl_g(:,:,:), as_g(:,:,:), ms_g(:,:,:), es_g(:,:,:)
         real(dp), allocatable :: x_g(:,:,:,:), tmp(:,:,:)
@@ -426,8 +427,26 @@ contains
         end do
         allocate(al_n, tl_n, as_n, ms_n, es_n, mold=al_g)
         allocate(x_n, mold=x_g); allocate(chg(m%nr_g, m%nth_g, m%nz_g))
-        al_n = al_g; tl_n = tl_g; as_n = as_g; ms_n = ms_g; es_n = es_g; x_n = x_g
         chg = .false.; dmg = 0.0_dp; deg = 0.0_dp
+        ! (P5) la escoria ocupa el VOLUMEN DE SU MASA: las fuentes (quimica,
+        ! adiciones) cambian m_sl, E_sl y m_X sin tocar alpha_sl; aqui
+        ! alpha_sl = m_sl/(rho_sl V) y el volumen nuevo desplaza gas (la
+        ! compactacion lo sube por la columna; gas auditado como el volfix).
+        ! Solo donde difieren mas que el redondeo (m_sl = alpha_sl rho_sl V
+        ! tras el transporte: no reescribir con ruido)
+        do k = 1, m%nz_g
+            do j = 1, m%nth_g
+                do i = 1, m%nr_g
+                    if (m%cell_type_global(i,j,k) == 0) cycle
+                    as_m = ms_g(i,j,k) / (cfg%rho_slag * m%vol_global(i,j,k))
+                    if (abs(as_m - as_g(i,j,k)) > 1.0e-12_dp * max(as_g(i,j,k), as_m)) then
+                        as_g(i,j,k) = as_m
+                        chg(i,j,k) = .true.
+                    end if
+                end do
+            end do
+        end do
+        al_n = al_g; tl_n = tl_g; as_n = as_g; ms_n = ms_g; es_n = es_g; x_n = x_g
 
         do j = 1, m%nth_g
             do i = 1, m%nr_g
@@ -452,6 +471,25 @@ contains
                         vcond = vcond + acn(i,j,kk) * m%vol_global(i,j,kk)
                     end do
                     if (has_slag) then
+                        ! (P5) si el condensado no cabe en el segmento (escoria
+                        ! nueva de las fuentes), el segmento se extiende hacia
+                        ! arriba sobre las celdas de gas de la columna
+                        capsum = 0.0_dp
+                        do kk = k1, k2
+                            capsum = capsum + liq_cap(ss_g(i,j,kk), 0.0_dp) * m%vol_global(i,j,kk)
+                        end do
+                        k2e = k2
+                        do while (vcond > capsum * (1.0_dp + 1.0e-14_dp) .and. k2e < m%nz_g)
+                            if (m%cell_type_global(i,j,k2e+1) == 0) exit
+                            k2e = k2e + 1
+                            acn(i,j,k2e) = al_g(i,j,k2e) + as_g(i,j,k2e)
+                            vcond = vcond + acn(i,j,k2e) * m%vol_global(i,j,k2e)
+                            capsum = capsum + liq_cap(ss_g(i,j,k2e), 0.0_dp) * m%vol_global(i,j,k2e)
+                        end do
+                        if (k2e > k2) then
+                            k2 = k2e
+                            k = k2 + 1
+                        end if
                         do kk = k1, k2
                             capk = liq_cap(ss_g(i,j,kk), 0.0_dp) * m%vol_global(i,j,kk)
                             if (kk == k2) capk = vcond
