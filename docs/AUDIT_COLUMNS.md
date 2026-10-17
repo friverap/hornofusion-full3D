@@ -45,8 +45,8 @@ Generado por `scripts/make_audit_glossary.py` desde el encabezado de `src/mod_au
 | `E_flux_in` | C | Sensible enthalpy of slag additions (enter at ambient temperature) [J] |
 | `m_fe_yield` | C | Iron oxidised out of the bath into slag FeO (yield loss) [kg] |
 | `m_fe_return` | C | Iron returned to the bath by FeO+C reduction [kg] |
-| `E_slag_ox` | C | Exothermic heat of Fe+1/2O`_2``\to`FeO to the slag [J] |
-| `E_slag_red` | C | Endothermic heat of FeO+C`\to`Fe+CO from the slag [J] |
+| `E_slag_ox` | C | Energy gained by slag + bath in Fe+1/2O`_2``\to`FeO: exothermic heat plus the datum difference between phases (FeO at the slag datum, Fe out at the steel datum) [J] (audit 19) |
+| `E_slag_red` | C | Energy leaving slag + bath in FeO+C`\to`Fe+CO: endothermic heat plus the datum difference (reactants at the slag datum, Fe in at the steel datum, CO enthalpy) [J] (audit 19) |
 | `E_rad_foam` | C | DO radiation absorbed by the foam/slag layer [J] |
 | `E_iph_sol` | C | Interphase heat gained by the solid over the interval, as applied to `E_s` [J] |
 | `E_iph_gas` | C | Interphase heat removed from the gas (with the regularised denominator of the `T` update) [J] |

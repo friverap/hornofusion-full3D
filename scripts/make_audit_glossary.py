@@ -86,10 +86,12 @@ DEFS = {
                         "(yield loss) [kg]"),
     "m_fe_return": ("C", "Iron returned to the bath by FeO+C reduction "
                          "[kg]"),
-    "E_slag_ox": ("C", "Exothermic heat of Fe+1/2O$_2$$\\to$FeO to the "
-                       "slag [J]"),
-    "E_slag_red": ("C", "Endothermic heat of FeO+C$\\to$Fe+CO from the "
-                        "slag [J]"),
+    "E_slag_ox": ("C", "Energy gained by slag + bath in Fe+1/2O$_2$$\\to$FeO: exothermic "
+                       "heat plus the datum difference between phases (FeO at the slag "
+                       "datum, Fe out at the steel datum) [J] (audit 19)"),
+    "E_slag_red": ("C", "Energy leaving slag + bath in FeO+C$\\to$Fe+CO: endothermic heat "
+                        "plus the datum difference (reactants at the slag datum, Fe in at "
+                        "the steel datum, CO enthalpy) [J] (audit 19)"),
     "E_rad_foam": ("C", "DO radiation absorbed by the foam/slag layer "
                         "[J]"),
     "E_iph_sol": ("C", "Interphase heat gained by the solid over the "

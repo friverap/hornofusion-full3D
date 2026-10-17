@@ -65,8 +65,8 @@ module mod_audit
     integer, parameter :: AUD_FLUX_E          = 16 ! J de entalpia de las adiciones
     integer, parameter :: AUD_FE_YIELD        = 17 ! kg Fe oxidados a la escoria
     integer, parameter :: AUD_FE_RETURN       = 18 ! kg Fe devueltos por reduccion
-    integer, parameter :: AUD_SLAG_OX_E       = 19 ! J exo de Fe+1/2O2->FeO
-    integer, parameter :: AUD_SLAG_RED_E      = 20 ! J endo de FeO+C->Fe+CO
+    integer, parameter :: AUD_SLAG_OX_E       = 19 ! J exo de Fe+1/2O2->FeO + diferencia de datos (aud. 19)
+    integer, parameter :: AUD_SLAG_RED_E      = 20 ! J endo de FeO+C->Fe+CO + diferencia de datos y CO (aud. 19)
     integer, parameter :: AUD_RAD_FOAM        = 21 ! J radiativos a la espuma/escoria
     integer, parameter :: AUD_IPH_SOL         = 22 ! J interfase GANADOS por el sólido
     integer, parameter :: AUD_IPH_GAS         = 23 ! J interfase RETIRADOS del gas (tal como se aplicó)
