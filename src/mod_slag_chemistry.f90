@@ -82,7 +82,7 @@ contains
         ! la escritura en un halo de k-1 se perdia; auditoria A14)
         real(dp), allocatable :: fe_out(:,:,:), fe_in(:,:,:), t_in(:,:,:)
         logical  :: below, cond
-        real(dp) :: ag_new, ag_old, fdil, tsl_r, h_react
+        real(dp) :: ag_new, ag_old, fdil, tsl_r, h_react, co_thr
         ! (auditoria 5, M5-5 bis) CO de la reduccion nacido en una celda de
         ! escoria SIN gas (alpha_g < ALPHA_CUTOFF: escoria sobre bano lleno).
         ! El solver de especies descarta la fuente de una celda sin gas (su
@@ -409,6 +409,8 @@ contains
         ! (co_up(k) es lo pendiente de pasar a k+1; cada pasada mueve una
         ! capa; en el techo fisico sin gas se deposita igual, el solver lo
         ! descartaria y quedaria sin columna)
+        co_thr = ALPHA_CUTOFF
+        if (cond) co_thr = ALPHA_FLOW_CUTOFF
         co_loc = sum(co_up(istart:iend, jstart:jend, kstart:kend))
         call mpi_allreduce_sum(co_loc, co_tot, m%topo)
         npass = 0
@@ -422,7 +424,11 @@ contains
                         if (m%cell_type(i,j,k) == 0 .or. m%cell_type(i,j,k-1) == 0) cycle
                         inc = co_up(i,j,k-1)
                         if (inc <= 0.0_dp) cycle
-                        if (gas%alpha(i,j,k) >= ALPHA_CUTOFF .or. (k == kend .and. at_zmax)) then
+                        ! (dirigida A19, M1) con la escoria condensada, el mismo
+                        ! umbral de gas resuelto que la celda propia: el gas de
+                        ! ~1e-5 que rellena la reduccion de la celda de arriba
+                        ! lo compacta el sort (el CO se destruiria)
+                        if (gas%alpha(i,j,k) >= co_thr .or. (k == kend .and. at_zmax)) then
                             sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + inc / (m%vol(i,j,k) * cfg%dt)
                         else
                             co_new(i,j,k) = inc
