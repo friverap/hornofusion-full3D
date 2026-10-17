@@ -74,7 +74,7 @@ contains
 
                     ! Find lowest empty cell below this one
                     if (m%cell_type_global(i,j,k_below) == 0) cycle
-                    if (a_g(i,j,k_below) > ALPHA_BED) cycle
+                    if (a_g(i,j,k_below) > a_sup(i,j,k_below)) cycle
                     if (al_g(i,j,k_below) >= ALPHA_LIQ_CONT) cycle   ! bano debajo
 
                     ! Solid has void below -- it falls
@@ -82,7 +82,7 @@ contains
                     k_dest = k_below
                     do while (k_dest > 1)
                         if (m%cell_type_global(i,j,k_dest-1) == 0) exit
-                        if (a_g(i,j,k_dest-1) > ALPHA_BED) exit
+                        if (a_g(i,j,k_dest-1) > a_sup(i,j,k_dest-1)) exit
                         if (al_g(i,j,k_dest-1) >= ALPHA_LIQ_CONT) exit
                         k_dest = k_dest - 1
                     end do
@@ -159,6 +159,19 @@ contains
         end do
 
         deallocate(m_g, E_g, a_g, T_g, lid_g, mc_g, al_g, asl_g)
+
+    contains
+
+        ! Umbral de soporte de la celda global (ii,jj,kk). (auditoria general
+        ! Plan I, fisica BAJO-4) con la escoria CONDENSADA una celda de escoria
+        ! con chatarra dispersa del ECS (ALPHA_BED < alpha_s < ALPHA_SCRAP_SURF)
+        ! no sostiene la chatarra que cae: quedaba flotando sobre una franja de
+        ! escoria sin chatarra hasta fundir la celda
+        real(dp) function a_sup(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            a_sup = ALPHA_BED
+            if (thru .and. asl_g(ii,jj,kk) >= ALPHA_FLOW_CUTOFF) a_sup = max(ALPHA_BED, ALPHA_SCRAP_SURF)
+        end function a_sup
 
     end subroutine apply_scrap_collapse
 
