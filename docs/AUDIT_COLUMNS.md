@@ -86,3 +86,5 @@ Generado por `scripts/make_audit_glossary.py` desde el encabezado de `src/mod_au
 | `m_slag_clip` | C | Condensed slag mass removed by the bounding of the volume-fraction transport (slag share of the final clip, `\alpha_{sl}\le\alpha_c`) [kg] (Plan H, P6) |
 | `E_slag_clip` | C | Slag enthalpy leaving with m_slag_clip [J] |
 | `E_slag_sol` | C | Heat from the slag to the scrap by contact in the bed (condensed slag in the pores; internal between inventories, diagnostic) [J] |
+| `m_steel_deficit` | C | Steel mass created by the freezing deficit of the condensed transport (freezing sink larger than the cell steel; audit 19, M19-C2) [kg] |
+| `E_steel_deficit` | C | Enthalpy of m_steel_deficit [J] |

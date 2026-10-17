@@ -164,7 +164,7 @@ def main():
         # (auditoria 3, A3-6: el gap era exactamente E_iph_gas)
         dE_gas = last["E_gas"] - first["E_gas"]
     dE = total_E(last) - total_E(first) + dE_gas
-    EXT_POS = ("E_src_liq_arc", "E_src_liq_rad", "E_src_liq_chem",
+    EXT_POS = ("E_steel_deficit", "E_src_liq_arc", "E_src_liq_rad", "E_src_liq_chem",
                "E_src_gas_arc", "E_src_gas_rad", "E_src_gas_chem",
                "E_arc_direct_sol", "E_slag_intercept", "E_rad_sol",
                "E_conv_defect", "E_chem_sol", "E_ecs_in", "E_flux_in",
@@ -384,7 +384,10 @@ def main():
     m_clip = sum(r["m_alpha_clip"] for r in steps)
     m_fey = sum(r.get("m_fe_yield", 0.0) for r in steps)
     m_fer = sum(r.get("m_fe_return", 0.0) for r in steps)
-    expected = m_melt - m_res - m_clip - m_fey + m_fer
+    # (auditoria 19, M19-C2) acero creado por el deficit de congelacion del
+    # condensado: columna propia, positiva, con techo propio (abajo)
+    m_def = sum(r.get("m_steel_deficit", 0.0) for r in steps)
+    expected = m_melt - m_res - m_clip - m_fey + m_fer + m_def
     # (M3-5) el clip no infla la escala
     # (auditoria 4, B4-22) SIEMPRE: con menos de 1 kg de movimiento la
     # identidad se mide contra 1 kg (absoluta); antes se saltaba y un
@@ -406,6 +409,9 @@ def main():
     if args.clip_abs_max is not None:
         chk.report("alpha_clip_bounded", abs(m_clip) <= args.clip_abs_max,
                    f"clip auditado {m_clip:.3e} kg (techo {args.clip_abs_max:.1e} kg)")
+    if any("m_steel_deficit" in r for r in steps):
+        chk.report("steel_deficit_bounded", m_def <= args.ctol * max(abs(m_melt) + abs(m_res), 1.0),
+                   f"acero creado por deficit de congelacion {m_def:.3e} kg (max {args.ctol} relativo)")
 
     # -- mass_sol (M3-6): inventario del solido ---------------------------
     # dm_sol = cargas + ECS - fundido + resolid - C oxidado (m_resid_closed es

@@ -30,7 +30,7 @@ module mod_continuity
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d
     use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS, AUD_ALPHA_CLIP_E, AUD_SPILL_MASS, &
                          AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED, AUD_SLAG_TCLIP, &
-                         AUD_SLAG_CLIP_MASS, AUD_SLAG_CLIP_E
+                         AUD_SLAG_CLIP_MASS, AUD_SLAG_CLIP_E, AUD_STEEL_DEF_MASS, AUD_STEEL_DEF_E
     use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
                              ws_Mr, ws_Mth, ws_Mz, ws_lim, ws_flux_valid, &
                              ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
@@ -1168,8 +1168,8 @@ contains
                     slag%alpha_sl(i,j,k) = max(a_raw, 0.0_dp)
                     dsteel = max(0.0_dp, slag%alpha_sl(i,j,k) - liq%alpha(i,j,k))
                     if (dsteel > 0.0_dp) then
-                        dclip_m = dclip_m - dsteel * rl * m%vol(i,j,k)
-                        dclip_e = dclip_e - dsteel * rl * m%vol(i,j,k) &
+                        dclip_m = dclip_m + dsteel * rl * m%vol(i,j,k)
+                        dclip_e = dclip_e + dsteel * rl * m%vol(i,j,k) &
                             * (cfg%cp_l * liq%T(i,j,k) + (cfg%cp_s - cfg%cp_l) * cfg%T_liquidus &
                                + cfg%h_fusion)
                         liq%alpha(i,j,k) = slag%alpha_sl(i,j,k)
@@ -1238,9 +1238,10 @@ contains
         call audit_step_delta(AUD_SLAG_TCLIP, clip_e, tclip_step_prev, tclip_step_id)
         call audit_step_delta(AUD_SLAG_CLIP_MASS, ws_slag_clip_call, sclipm_step_prev, sclipm_step_id)
         call audit_step_delta(AUD_SLAG_CLIP_E, clip_el + vf_sclip_e, sclipe_step_prev, sclipe_step_id)
-        ! (A18-5) deficit de acero por congelacion: clip del liquido, por paso
-        call audit_step_delta(AUD_ALPHA_CLIP_MASS, dclip_m, dsc_m_prev, dsc_m_id)
-        call audit_step_delta(AUD_ALPHA_CLIP_E, dclip_e, dsc_e_prev, dsc_e_id)
+        ! (A18-5; auditoria 19 M19-C2) deficit de acero por congelacion: acero
+        ! CREADO (positivo) en su columna propia, por paso
+        call audit_step_delta(AUD_STEEL_DEF_MASS, dclip_m, dsc_m_prev, dsc_m_id)
+        call audit_step_delta(AUD_STEEL_DEF_E, dclip_e, dsc_e_prev, dsc_e_id)
 
         ! flujos de masa: ACERO (energia) = condensado - escoria;
         ! CONDENSADO (momento) = acero + escoria con rho_sl

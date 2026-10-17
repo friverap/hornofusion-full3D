@@ -163,6 +163,9 @@ DEFS = {
                          "transport (slag share of the final clip, $\\alpha_{sl}\\le\\alpha_c$) "
                          "[kg] (Plan H, P6)"),
     "E_slag_clip": ("C", "Slag enthalpy leaving with m\\_slag\\_clip [J]"),
+    "m_steel_deficit": ("C", "Steel mass created by the freezing deficit of the condensed transport "
+                              "(freezing sink larger than the cell steel; audit 19, M19-C2) [kg]"),
+    "E_steel_deficit": ("C", "Enthalpy of m\\_steel\\_deficit [J]"),
     "E_slag_sol": ("C", "Heat from the slag to the scrap by contact in the bed (condensed slag "
                         "in the pores; internal between inventories, diagnostic) [J]"),
 }
