@@ -82,7 +82,7 @@ contains
         ! la escritura en un halo de k-1 se perdia; auditoria A14)
         real(dp), allocatable :: fe_out(:,:,:), fe_in(:,:,:), t_in(:,:,:)
         logical  :: below, cond
-        real(dp) :: ag_new, ag_old, fdil
+        real(dp) :: ag_new, ag_old, fdil, tsl_r, h_react
         ! (auditoria 5, M5-5 bis) CO de la reduccion nacido en una celda de
         ! escoria SIN gas (alpha_g < ALPHA_CUTOFF: escoria sobre bano lleno).
         ! El solver de especies descarta la fuente de una celda sin gas (su
@@ -174,15 +174,23 @@ contains
                                    liq%T(i,j,k-1) + c0)
                             fe_out(i,j,k) = fe_out(i,j,k) + dm_fe   ! pasada 2
                             ! FeO a la escoria; entalpía del Fe VIAJA + exo
+                            ! (auditoria 19, fisica M1 = B3-9) la escoria gana el
+                            ! FeO a SU temperatura (su dato es m cp_sl T) mas el
+                            ! exotermico completo; el Fe sale del baño con su
+                            ! entalpia (cp_l T + C0). La diferencia de datos
+                            ! entre fases es parte del termino de reaccion
+                            ! auditado (antes la escoria recibia e_fe + q: 168 de
+                            ! 272 kJ/mol). (El O2 sale del inventario del gas)
+                            tsl_r = slag%E_sl(i,j,k) / max(slag%m_sl(i,j,k) * cfg%cp_slag, SMALL)
                             slag%m_X(i,j,k,SL_FEO) = &
                                 slag%m_X(i,j,k,SL_FEO) + dm_feo
                             slag%m_sl(i,j,k) = slag%m_sl(i,j,k) + dm_feo
-                            slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + e_fe + q_rx
+                            slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + dm_feo * cfg%cp_slag * tsl_r + q_rx
                             ! O2 consumido: sumidero adicional de especies
                             sh%S_O2_src(i,j,k) = sh%S_O2_src(i,j,k) - &
                                 dm_o2 / (vol * cfg%dt)
                             call audit_add(AUD_FE_YIELD, dm_fe)
-                            call audit_add(AUD_SLAG_OX_E, q_rx)
+                            call audit_add(AUD_SLAG_OX_E, q_rx + dm_feo * cfg%cp_slag * tsl_r - e_fe)
                         end if
                     end if
                     end if
@@ -289,7 +297,14 @@ contains
                             end if
                             if (dm_fe - dm_b > 0.0_dp) &
                                 call add_fe(i, j, k, dm_fe - dm_b, slag%T_sl(i,j,k))
-                            slag%E_sl(i,j,k) = slag%E_sl(i,j,k) - e_fe - q_rx
+                            ! (fisica M1 = B3-9) la escoria pierde la entalpia
+                            ! sensible de los REACTIVOS a su T (dato m cp_sl T)
+                            ! mas el endotermico; el Fe entra al baño con e_fe y
+                            ! la diferencia (CO + datos) es parte del termino de
+                            ! reaccion auditado (antes la escoria se enfriaba
+                            ! 24 de 155 kJ/mol)
+                            h_react = (dm_red + dm_c) * cfg%cp_slag * slag%T_sl(i,j,k)
+                            slag%E_sl(i,j,k) = slag%E_sl(i,j,k) - h_react - q_rx
                             ! (M6-3) CO al gas de la celda solo si le QUEDA gas
                             ! despues del Fe (el propio y el de la escoria de
                             ! encima); si no, sube (pasada 3). Antes se decidia
@@ -341,7 +356,7 @@ contains
                             end if
                             dm_co_cell = dm_co
                             call audit_add(AUD_FE_RETURN, dm_fe)
-                            call audit_add(AUD_SLAG_RED_E, q_rx)
+                            call audit_add(AUD_SLAG_RED_E, q_rx + h_react - e_fe)
                         end if
                     end if
 
