@@ -488,8 +488,8 @@ contains
     ! celda parcial tocaba el baño y la capa resuelta aislaba el metal del O2
     ! (slag_chem_flow 2.7 -> 0.99 kg). Por columna (i,j), en el tramo de
     ! escoria MAS BAJO (kb = su celda inferior, kt = la superior):
-    !   - O2: el remanente del paso del gas de kt si esta resuelto
-    !     (alpha_g >= ALPHA_FLOW_CUTOFF), si no el de kt+1 (gas libre encima);
+    !   - O2: el remanente del paso del gas de kt mas el de kt+1 (gas libre
+    !     encima), cada uno si la celda tiene gas (alpha_g >= ALPHA_CUTOFF);
     !   - Fe: del acero de kb hasta su cota y el resto del baño de kb-1;
     !   - FeO, su masa y su energia (dato coherente, auditoria 19) a la
     !     escoria de kb, con las MISMAS cotas que el estencil local (Fe
@@ -510,15 +510,15 @@ contains
         type(mesh_t),   intent(in)    :: m
         type(config_t), intent(in)    :: cfg
         real(dp),       intent(in)    :: c0
-        ! planos 2D: gas de kt, O2 (kg/s) en kt y kt+1 (y si kt+1 existe),
+        ! planos 2D: gas de kt y de kt+1, O2 (kg/s) en kt y kt+1,
         ! Fe extraible en kb y kb-1, cota termica de la escoria de kb
-        integer, parameter :: P_AG_KT = 1, P_O2_KT = 2, P_O2_KT1 = 3, P_OK_KT1 = 4, &
+        integer, parameter :: P_AG_KT = 1, P_O2_KT = 2, P_O2_KT1 = 3, P_AG_KT1 = 4, &
                               P_CAP_KB = 5, P_CAP_KBM = 6, P_QLIM = 7, NPL = 7
         real(dp), allocatable :: mask(:,:,:), pl(:,:,:)
         integer,  allocatable :: kb_g(:,:), kt_g(:,:)
-        integer  :: i, j, k, ig, jg, i0, j0, k0, kg, kb, kt, ko, kl, ierr
+        integer  :: i, j, k, ig, jg, i0, j0, k0, kg, kb, kt, kl, ierr
         integer  :: istart, iend, jstart, jend, kstart, kend
-        real(dp) :: o2_rate, cap, dm_feo, dm_fe, dm_o2, q_rx, q_lim, tsl_r, dm_fe_kb
+        real(dp) :: o2_rate, o2_kt, o2_kt1, cap, dm_feo, dm_fe, dm_o2, q_rx, q_lim, tsl_r, dm_fe_kb
 
         if (m%is_parallel) then
             istart = m%topo%istart; iend = m%topo%iend
@@ -584,7 +584,7 @@ contains
                     end if
                     if (kg == kt + 1) then
                         pl(ig,jg,P_O2_KT1) = o2_remaining(i, j, k) * m%vol(i,j,k)
-                        pl(ig,jg,P_OK_KT1) = 1.0_dp
+                        pl(ig,jg,P_AG_KT1) = gas%alpha(i,j,k)
                     end if
                     if (kg == kb) then
                         pl(ig,jg,P_CAP_KB) = F_MAX_FE * liq%alpha(i,j,k) * liq%rho(i,j,k) * m%vol(i,j,k)
@@ -606,10 +606,16 @@ contains
                 ig = i0 + i - 1; jg = j0 + j - 1
                 kb = kb_g(ig,jg); kt = kt_g(ig,jg)
                 if (kb > m%nz_g) cycle
-                ko = kt; o2_rate = pl(ig,jg,P_O2_KT)
-                if (pl(ig,jg,P_AG_KT) < ALPHA_FLOW_CUTOFF .and. pl(ig,jg,P_OK_KT1) > 0.5_dp) then
-                    ko = kt + 1; o2_rate = pl(ig,jg,P_O2_KT1)
-                end if
+                ! (dirigida I1, MEDIO-3) O2 del gas de kt MAS el de kt+1 (antes
+                ! una sola celda por el umbral alpha_g(kt) >= ALPHA_FLOW_CUTOFF:
+                ! la tasa saltaba ~90 veces); solo celdas con gas (alpha_g >=
+                ! ALPHA_CUTOFF: el solver de especies descarta el sumidero de
+                ! una celda sin gas y el O no cerraria)
+                o2_kt = 0.0_dp; o2_kt1 = 0.0_dp
+                if (pl(ig,jg,P_AG_KT)  >= ALPHA_CUTOFF) o2_kt  = pl(ig,jg,P_O2_KT)
+                if (pl(ig,jg,P_AG_KT1) >= ALPHA_CUTOFF) o2_kt1 = pl(ig,jg,P_O2_KT1)
+                o2_rate = o2_kt + o2_kt1
+                if (o2_rate <= 0.0_dp) cycle
                 ! (dirigida I1, MEDIO-2) Fe del acero de kb y del baño de kb-1
                 ! con la suma de sus cotas (antes una sola fuente por umbral:
                 ! la cota saltaba ~100 veces con alpha_l(kb) en torno a 0.01)
@@ -643,10 +649,15 @@ contains
                     slag%T_sl(i,j,kl) = slag%E_sl(i,j,kl) / (slag%m_sl(i,j,kl) * cfg%cp_slag)
                     call audit_add(AUD_SLAG_OX_E, q_rx + dm_feo * cfg%cp_slag * tsl_r)
                 end if
-                ! O2 consumido del gas de la celda de O2
-                kl = ko - k0 + 1
-                if (kl >= kstart .and. kl <= kend) &
-                    sh%S_O2_src(i,j,kl) = sh%S_O2_src(i,j,kl) - dm_o2 / (m%vol(i,j,kl) * cfg%dt)
+                ! O2 consumido del gas de kt y kt+1 en proporcion a su aporte
+                kl = kt - k0 + 1
+                if (o2_kt > 0.0_dp .and. kl >= kstart .and. kl <= kend) &
+                    sh%S_O2_src(i,j,kl) = sh%S_O2_src(i,j,kl) &
+                        - dm_o2 * (o2_kt / o2_rate) / (m%vol(i,j,kl) * cfg%dt)
+                kl = kt + 1 - k0 + 1
+                if (o2_kt1 > 0.0_dp .and. kl >= kstart .and. kl <= kend) &
+                    sh%S_O2_src(i,j,kl) = sh%S_O2_src(i,j,kl) &
+                        - dm_o2 * (o2_kt1 / o2_rate) / (m%vol(i,j,kl) * cfg%dt)
             end do
         end do
         deallocate(mask, pl, kb_g, kt_g)

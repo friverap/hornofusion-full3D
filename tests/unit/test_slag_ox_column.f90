@@ -3,12 +3,14 @@
 ! escoria CONDENSADA (Plan I, I1). Singleton MPI, sin carbon en la escoria
 ! (solo oxidacion). Por caso, en todas las columnas:
 !   1. Capa compactada de 3 celdas (4-6, sin gas) entre el baño (1-3) y gas
-!      con O2 (7+): el O2 sale de la celda 7 (gas libre sobre el tope), el Fe
+!      con O2 (7+): el O2 sale de la celda 7 (gas libre sobre el tope; la 6
+!      no tiene gas y no aporta), el Fe
 !      del baño de la celda 3 y el FeO va a la escoria de la celda 4 (antes la
 !      capa aislaba el metal: no habia oxidacion).
 !   2. Una celda parcial de escoria con gas propio (4: escoria 0.5 + gas 0.5)
-!      sobre el baño: O2 de la propia celda 4 y Fe de la 3 (el caso del
-!      estencil local; con el modo legado da la MISMA reaccion).
+!      sobre el baño: O2 de la propia celda 4 MAS el de la 5 (gas libre) y Fe
+!      de la 3; el estencil local (modo legado) solo usa el O2 de la 4: la
+!      columna oxida MAS que el legado.
 !   3. Celda de interfaz con acero resuelto (4: acero 0.5 + escoria 0.5) bajo
 !      escoria compactada (5) y gas (6+): Fe del acero de la celda 4, O2 de la 6.
 ! En todos: Fe, O y energia conservados contra el audit (AUD_FE_YIELD,
@@ -60,24 +62,24 @@ program test_slag_ox_column
     call setup(3)
     call put_slag(4, 1.0_dp, 0.0_dp); call put_slag(5, 1.0_dp, 0.0_dp)
     call put_slag(6, 1.0_dp, 0.0_dp)
-    call run_case('caso 1', 7, 3, 4)
+    call run_case('caso 1', 7, 7, 3, 4)
     ! --- caso 2: celda parcial con gas propio ---------------------------------
     call setup(3)
     call put_slag(4, 0.5_dp, 0.0_dp)
-    call run_case('caso 2', 4, 3, 4)
+    call run_case('caso 2', 4, 5, 3, 4)
     dfeo_col = last_dfeo
-    ! el mismo caso con el estencil LOCAL (modo legado) da la misma reaccion
+    ! el mismo caso con el estencil LOCAL (modo legado): solo el O2 de la 4
     cfg%slag_in_volume = .false.
     call setup(3)
     call put_slag(4, 0.5_dp, 0.0_dp)
-    call run_case('caso 2 legado', 4, 3, 4)
-    if (abs(last_dfeo - dfeo_col) > 1.0e-12_dp * dfeo_col) &
-        call fail('caso 2: columna /= estencil local (rel)', (last_dfeo - dfeo_col) / dfeo_col)
+    call run_case('caso 2 legado', 4, 4, 3, 4)
+    if (.not. dfeo_col > last_dfeo * (1.0_dp + 1.0e-6_dp)) &
+        call fail('caso 2: la columna no suma el O2 de la celda de encima (kg)', dfeo_col - last_dfeo)
     cfg%slag_in_volume = .true.
     ! --- caso 3: interfaz con acero resuelto ----------------------------------
     call setup(3)
     call put_slag(4, 0.5_dp, 0.5_dp); call put_slag(5, 1.0_dp, 0.0_dp)
-    call run_case('caso 3', 6, 4, 4)
+    call run_case('caso 3', 6, 6, 4, 4)
 
     if (ok) then
         print '(A)', ' PASS test_slag_ox_column (O2 sobre la capa, Fe bajo la capa, Fe/O/energia exactos)'
@@ -120,10 +122,10 @@ contains
         end do
     end subroutine put_slag
 
-    ! ko: celda del O2; ks: celda del Fe; kb: celda que recibe el FeO
-    subroutine run_case(tag, ko, ks, kb)
+    ! ko1..ko2: celdas del O2; ks: celda del Fe; kb: celda que recibe el FeO
+    subroutine run_case(tag, ko1, ko2, ks, kb)
         character(len=*), intent(in) :: tag
-        integer, intent(in) :: ko, ks, kb
+        integer, intent(in) :: ko1, ko2, ks, kb
         real(dp), allocatable :: feo0(:,:,:), al0(:,:,:), esl0(:,:,:)
         real(dp) :: c0, dfeo, dfe, do2, de_sl, de_l, aud_fe0, aud_e0, aud_fe, aud_e, e_ref
         ! (dirigida I1, MEDIO-1) escalas del redondeo de las RESTAS de
@@ -160,8 +162,8 @@ contains
                         call fail(tag // ': FeO fuera de la celda kb en k', real(kk, dp))
                     if (kk /= ks .and. liq%alpha(ii,jj,kk) /= al0(ii,jj,kk)) &
                         call fail(tag // ': Fe sale de otra celda que ks en k', real(kk, dp))
-                    if (kk /= ko .and. sh%S_O2_src(ii,jj,kk) /= 0.0_dp) &
-                        call fail(tag // ': O2 sale de otra celda que ko en k', real(kk, dp))
+                    if ((kk < ko1 .or. kk > ko2) .and. sh%S_O2_src(ii,jj,kk) /= 0.0_dp) &
+                        call fail(tag // ': O2 sale de otra celda que ko1..ko2 en k', real(kk, dp))
                     if (liq_old%alpha(ii,jj,kk) /= liq%alpha(ii,jj,kk)) &
                         call fail(tag // ': ancla temporal del liquido sin el Fe en k', real(kk, dp))
                 end do
