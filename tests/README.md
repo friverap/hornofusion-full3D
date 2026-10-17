@@ -20,9 +20,10 @@ STAGE=v1 make test-rebaseline   # regenera el golden de métricas (una vez por e
 - **XFAIL** (`xfail.list`): fallos esperados hasta que aterrice su fix. La
   entrada se elimina en el mismo commit que el fix; un XPASS lo recuerda.
 - Determinismo: mismo binario + mismo nº de ranks ⇒ misma salida (métricas a
-  rtol 1e-12). Entre distintos nº de ranks el resultado NO es bitwise
-  (interfaces TDMA retardadas, SOR): tolerancia 1e-3 (post C1.2) → 1e-6
-  (post Etapa 2), endureciendo solo vía más iteraciones internas del config.
+  rtol 1e-12). Entre distintos nº de ranks el resultado NO es bitwise (el
+  depósito del MC se reduce con MPI_SUM): las comparaciones de descomposición
+  de la matriz usan 1e-9..1e-10 (medido ~1e-12), salvo excepciones con causa
+  en `run_tests.sh`.
 
 ## Estructura
 
@@ -36,7 +37,13 @@ STAGE=v1 make test-rebaseline   # regenera el golden de métricas (una vez por e
 | `run_restart_case` (en `run_tests.sh`) | Reinicio desde snapshot (`restart_file`): reanuda `cold_10step` desde el paso 5 (n8→n8 en quick; n8→n4 y `melt_forced` paso 6 en full) y exige snapshot final BIT A BIT (`compare_decomposition` a 1e-12) contra la corrida continua con el mismo nº de ranks; con distinto nº aplica la tolerancia de descomposición (1e-10; medido 8.5e-13). Además (auditoría 4, B4-19) el tramo reanudado pasa invariantes y audit, y su `audit.csv` coincide bit a bit con el de la continua (`compare_audit.py`, filas `step > st`). Vive en `tests/out/restart/` (fuera del golden) |
 | `integration/compare_audit.py` | `audit.csv` de un reinicio frente a la corrida continua, columna a columna |
 | `integration/check_symmetry.py` | Invarianza a rotación de 120° |
-| `integration/check_audit.py` | Balances de `audit.csv` (existe desde C0.2) |
+| `integration/check_audit.py` | Balances de `audit.csv` (energía total y por paso, masas, arco, radiación, centinelas, techo de ajustes de escoria) |
+| `integration/check_slag_bed.py` | Capa de escoria: orden acero/escoria, T, masa (con `m_slag_clip` y su techo), volfix, saltos del soporte; con `--umax-liq/--umax-gas` el reposo de `slag_rest` |
+| `integration/check_slag_chem.py` | Química de la escoria: Fe elemental, masa de escoria, actividad de oxidación y (`--min-return`) de reducción |
+| bancos de escoria | `arc_slag`, `arc_melt_slag`, `arc_melt_slag_heel`, `slag_chem_flow`, `slag_chem_thick` (capa condensada gruesa), `slag_rest` (reposo con escoria condensada) y `slag_chem_test` (sin flujo) |
+| `unit/test_condensed_*.f90` | Escoria condensada (Plan H): vista (ida y vuelta), transporte (bit a bit sin escoria, traslación, fallback, congelación) y reordenamiento (casos 1–7) |
+| `../scripts/bitwise_check.sh` | Gate bit a bit del camino legado contra un binario de referencia (B1 corto y producción corta) |
+| `../scripts/diag/gate_summary.py` | Resumen de un gate de banco (u_liq, vol_lim, u_gas, p por segundo; capa de escoria) |
 | `integration/metrics_snapshot.py` | Golden de métricas escalares |
 | `xfail.list` | Fallos esperados pendientes de fix |
 

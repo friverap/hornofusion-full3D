@@ -119,4 +119,6 @@ audit_oneflow:energy_balance_step
 # arc_slag: audit_arcslag:alpha_clip RETIRADO (oct-2026, A11-2 con escoria):
 # la escoria CEDE al acero (el exceso bajo la interfaz entra en su celda y
 # slag_buoyancy la sube): clip 3.7 kg -> 1.7e-9 kg en 10 s. El techo
-# alpha_clip_bounded (M15-4) queda como guarda.
+# alpha_clip_bounded (M15-4) queda como guarda. Con la escoria condensada
+# (Plan H, default) la escoria ya no cede: es fase del Poisson; la parte de
+# escoria del recorte va a m_slag_clip (con su propio techo, A18-3).

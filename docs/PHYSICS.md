@@ -62,7 +62,7 @@ Los halos permiten acceso a celdas vecinas entre ranks MPI sin sincronización a
 | Gas | `gas` | Mezcla CO/CO₂/aire caliente |
 | Líquido | `liq` | Acero fundido |
 | Sólido | `sol` | Chatarra/HBI (dual-cell, sin N-S) |
-| Escoria | `slag` | Pseudo-fase por flotabilidad |
+| Escoria | `slag` | Fase CONDENSADA con el acero (Plan H, default); legado: pseudo-fase por flotabilidad |
 
 ### Restricción de fracción de volumen
 
@@ -434,7 +434,14 @@ resuelven una vez por paso; A2). `solve_chemistry` exige `solve_species`.
 
 ## 14. Escoria
 
-Pseudo-fase sin momento propio. Flotación por **columna global** (gather +
+> **Vigente (Plan H, `slag_in_volume = true`, default)**: la escoria es fase
+> CONDENSADA con el acero dentro del Poisson y del momento (§14.x, al final de
+> esta sección). Los apartados siguientes describen el **camino legado**
+> (`slag_in_volume = false`), salvo lo que es común a ambos (química, espuma,
+> radiación, acople térmico con el baño y el gas). `slag_buoyancy` solo corre
+> en t = 0 con el modelo condensado; la flotación es `slag_condensed_sort`.
+
+Legado: pseudo-fase sin momento propio. Flotación por **columna global** (gather +
 mismo barrido en todos los ranks): la escoria asciende hasta el tope del baño
 o desciende cuando el material de abajo desaparece, nunca entra a celdas
 llenas de chatarra, y `α_sl = m_sl/(ρ_sl V)` (A14); el gas que crea o destruye al reescribir

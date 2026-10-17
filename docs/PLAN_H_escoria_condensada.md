@@ -42,11 +42,11 @@ datos (CLAUDE.md, AUDITORIA_17).
 |---|---|---|
 | P0 | clave, línea base arc_slag 10 s, arnés bit a bit (producción y B1 corto) | golden sin cambio |
 | P1 | vista condensada + peso | test_condensed_view; golden sin cambio |
-| P2 | transporte condensado | test_condensed_transport (a–e); golden sin cambio |
-| P3 | reordenamiento | test_condensed_sort (1–5) |
+| P2 | transporte condensado | test_condensed_transport (a–d); golden sin cambio |
+| P3 | reordenamiento | test_condensed_sort (1–7) |
 | P4 | cableado (multiphase, main, momento) | reposo baño+escoria u ≤ 1e-9; banco slag_rest; arc_slag 2 s u_liq ≤ 0.2 |
 | P5 | fuentes de volumen (P5b viscosidad opcional) | slag_chem_flow: volfix ≈ 0, química cerrada |
-| P6 | audit (m_slag_clip, E_slag_clip, m_slag_src) | identidades por paso |
+| P6 | audit (m_slag_clip, E_slag_clip; las fuentes no necesitan columna propia: su volumen lo toma el sort, gas como volfix) | identidades por paso |
 | P7 | validación arc_slag 10 s y bancos con escoria; rebaseline | u_liq ≤ 0.2, vol_lim ≲ 1e-6, u_gas ≤ 100, masas 1e-12, película 0, volfix 0 |
 | P8 | robustez: decomposition n1/n4/n9, reinicio, sNaN | 1e-9 / bit a bit |
 | P9 | docs; slag_in_volume = true | — |

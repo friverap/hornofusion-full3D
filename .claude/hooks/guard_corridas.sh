@@ -13,6 +13,16 @@ cmd=$(jq -r '.tool_input.command // empty' <<<"$input")
 [ -z "$cmd" ] && exit 0
 case "$cmd" in *"# permitir-concurrente"*) exit 0 ;; esac
 
+# bash lee run_tests.sh de forma INCREMENTAL: editarlo mientras la suite corre
+# corrompe la ejecucion (rebaseline v121: error de sintaxis al final y golden
+# de una corrida contaminada). Bloquea comandos que lo modifiquen si corre.
+if grep -q 'run_tests\.sh' <<<"$cmd" && grep -Eq "open\(|>|sed -i|perl -i|tee |cp |mv |python" <<<"$cmd"; then
+    if pgrep -f 'tests/run_tests\.sh' >/dev/null 2>&1; then
+        jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "tests/run_tests.sh se esta ejecutando: bash lo lee de forma incremental y editarlo ahora corrompe la corrida. Espera a que termine la suite."}}'
+        exit 0
+    fi
+fi
+
 # comandos que lanzan corridas, recompilan o escriben en bin/: se mira cada
 # subcomando (separado por ; & | && || ( ) en posicion de comando, para no
 # confundir "grep make" o "cp bin/x /tmp" (solo lee de bin/)

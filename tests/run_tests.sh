@@ -386,9 +386,9 @@ full | rebaseline)
     run_case arc_noscrap 4
     # (auditoria 12, M12-1arc) arco sobre escoria en su propia capa (malla fina)
     run_case arc_slag 4
-    # (oct-2026) invarianza MPI de la escoria que cede al acero (la pasada de
-    # cesion y slag_buoyancy): arc_slag es el banco que la ejerce (sin ella
-    # su alpha_clip estricto falla: 9.5e-5 kg)
+    # invarianza MPI de la escoria CONDENSADA (Plan H, default: transporte con
+    # el condensado y slag_condensed_sort; decomposition_arcslag n1 frente a
+    # n4). Con slag_in_volume = false era la cesion + slag_buoyancy legada
     run_case arc_slag 1
     # (Plan H, P4/P7) escoria CONDENSADA (slag_in_volume) en reposo: fase del
     # Poisson y del momento, hidrostatica con su peso, reordenamiento y masa

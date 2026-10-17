@@ -197,7 +197,7 @@ type :: solid_t
 end type solid_t
 ```
 
-### `slag_t` — Escoria (pseudo-fase)
+### `slag_t` — Escoria (fase condensada con el acero, Plan H; legado: pseudo-fase)
 
 ```fortran
 type :: slag_t
@@ -205,8 +205,25 @@ type :: slag_t
     real(dp), allocatable :: m_sl(:,:,:)       ! masa [kg]
     real(dp), allocatable :: T_sl(:,:,:)       ! temperatura [K]
     real(dp), allocatable :: E_sl(:,:,:)       ! energía interna [J]
+    real(dp), allocatable :: m_X(:,:,:,:)      ! masa por componente (FeO, CaO, SiO2, MgO, C)
+    real(dp), allocatable :: alpha_foam(:,:,:) ! espuma (atributo óptico, fuera de Σα = 1)
 end type slag_t
 ```
+
+**Escoria condensada (Plan H, `slag_in_volume = true`, default;
+`docs/PLAN_H_escoria_condensada.md`).** Dentro de `multiphase_iteration`,
+`cond_view_enter/exit` (`mod_workspace`) ponen en `liq%alpha`/`liq%rho` el
+condensado α_c = α_l + α_sl y ρ_c, con el peso `ws_wc` vía `liq_w` (el acero
+se guarda en `ws_al_st`). Antes del transporte se sale de la vista y
+`solve_condensed_fraction` (`mod_continuity`) transporta α_c con
+`solve_volume_fraction` y la escoria con él (`asl_adv`) con sus extensivas
+E_sl y m_X (`slq_adv`); exporta `ws_Fr` (acero, energía) y `ws_Fcm`
+(condensado, momento). La flotación es `slag_condensed_sort` (`mod_slag_3d`),
+llamado al fijar el estado de inicio de paso (`ws_sp_*`, con el fundido
+pendiente) y en `update_slag`; `slag_buoyancy` solo coloca la escoria en
+t = 0. Tests: `test_condensed_view/transport/sort`, bancos `slag_rest`,
+`slag_chem_thick` y los de escoria; `scripts/bitwise_check.sh` para el
+legado con la escoria apagada.
 
 ### `shared_t` — Campos compartidos entre fases
 
