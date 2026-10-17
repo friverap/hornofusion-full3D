@@ -4,7 +4,10 @@
 !     (alpha del acero, alpha del gas, flujos ws_Fr/Fth/Fz);
 ! (b) traslacion azimutal uniforme (periodica) de acero y escoria con
 !     composicion variable: masa de acero, masa de escoria, E_sl y m_X
-!     conservados a 1e-13, 0 <= alpha_sl <= alpha_c, sin recorte.
+!     conservados a 1e-13, 0 <= alpha_sl <= alpha_c, sin recorte;
+! (c) (auditoria P4 M3) CFL no sub-pasable -> fallback implicito: la escoria
+!     queda en su celda acotada por alpha_c, sin flujo de escoria, y masa de
+!     escoria + clip auditado = masa inicial.
 !===============================================================================
 program test_condensed_transport
     use mod_constants
@@ -14,7 +17,8 @@ program test_condensed_transport
     use mod_mesh_3d, only: mesh_generate_parallel
     use mod_fields_3d
     use mod_continuity, only: solve_volume_fraction, solve_condensed_fraction
-    use mod_workspace, only: ws_Fr, ws_Fth, ws_Fz, ws_slag_clip_call, ensure_workspace
+    use mod_workspace, only: ws_Fr, ws_Fth, ws_Fz, ws_slag_clip_call, ensure_workspace, &
+                             ws_Fsl_r, ws_Fsl_th, ws_Fsl_z
     implicit none
     type(config_t) :: cfg
     type(mesh_t)   :: mesh
@@ -130,6 +134,23 @@ program test_condensed_transport
             end do
         end do
     end do
+
+    ! ---- (c) fallback implicito ----
+    liq%ur = 0.0_dp; liq%uth = 5.0e3_dp; liq%uz = 0.0_dp
+    liq%alpha = a_old; gas%alpha = 1.0_dp - a_old - asl0
+    ws_Fsl_r = 1.0_dp; ws_Fsl_th = 1.0_dp; ws_Fsl_z = 1.0_dp
+    call solve_condensed_fraction(liq, gas, sol, slag, asl0, es0, mx0, a_old, mesh, cfg)
+    msl1 = sum(slag%m_sl(1:nr,1:nth,1:nz))
+    if (abs(msl1 + ws_slag_clip_call - msl0) > 1.0e-12_dp * msl0) then
+        print '(A,2ES12.4)', '   FAIL caso c: masa de escoria + clip /= inicial: ', msl1 + ws_slag_clip_call - msl0, msl0
+        ok = .false.
+    end if
+    if (any(slag%alpha_sl(1:nr,1:nth,1:nz) < 0.0_dp) .or. any(liq%alpha(1:nr,1:nth,1:nz) < 0.0_dp)) then
+        print '(A)', '   FAIL caso c: fraccion negativa tras el fallback'; ok = .false.
+    end if
+    if (any(ws_Fsl_r /= 0.0_dp) .or. any(ws_Fsl_th /= 0.0_dp) .or. any(ws_Fsl_z /= 0.0_dp)) then
+        print '(A)', '   FAIL caso c: flujo de escoria rancio tras el fallback'; ok = .false.
+    end if
 
     if (ok) then
         print '(A,ES10.3,A)', ' PASS test_condensed_transport (sin escoria bit a bit; traslacion conserva a ', worst, ')'

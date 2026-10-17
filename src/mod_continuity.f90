@@ -253,6 +253,7 @@ contains
             end if
             n_sub = N_SUB_MAX
         end if
+        adv = present(asl_adv)
         if (n_sub > N_SUB_MAX) then
             if (.not. fallback_warned .and. .not. m%is_parallel .or. &
                 (.not. fallback_warned .and. m%topo%rank == 0)) then
@@ -269,6 +270,40 @@ contains
             call solve_alpha_bounded_implicit(liq, gas, sol, alpha_slag, &
                                               alpha_old, m, cfg, ur_e, uth_e, uz_e)
             ws_lim_step_valid = .false.
+            if (adv) then
+                ! (Plan H, auditoria P4 M3) sin flujos de cara la escoria no se
+                ! mueve: queda en su celda acotada por el condensado nuevo (lo
+                ! que no cabe, al clip de escoria auditado) y sin flujo de
+                ! escoria (antes: ws_Fsl de la llamada anterior)
+                ws_Fsl_r = 0.0_dp; ws_Fsl_th = 0.0_dp; ws_Fsl_z = 0.0_dp
+                vf_sclip_m = 0.0_dp; vf_sclip_e = 0.0_dp
+                do k = kstart, kend
+                    do j = jstart, jend
+                        do i = istart, iend
+                            if (m%cell_type(i,j,k) == 0) cycle
+                            if (asl_adv(i,j,k) <= liq%alpha(i,j,k)) cycle
+                            fsl = max(liq%alpha(i,j,k), 0.0_dp) / asl_adv(i,j,k)
+                            vf_sclip_m = vf_sclip_m + (asl_adv(i,j,k) - max(liq%alpha(i,j,k), 0.0_dp)) &
+                                         * cfg%rho_slag * m%vol(i,j,k)
+                            if (present(slq_adv)) then
+                                vf_sclip_e = vf_sclip_e + slq_adv(i,j,k,1) * (1.0_dp - fsl)
+                                slq_adv(i,j,k,:) = slq_adv(i,j,k,:) * fsl
+                            end if
+                            asl_adv(i,j,k) = max(liq%alpha(i,j,k), 0.0_dp)
+                        end do
+                    end do
+                end do
+                call mpi_exchange_halos_3d(asl_adv, m%topo)
+                if (present(slq_adv)) then
+                    allocate(qtmp, mold=liq%alpha)
+                    do c = 1, size(slq_adv,4)
+                        qtmp = slq_adv(:,:,:,c)
+                        call mpi_exchange_halos_3d(qtmp, m%topo)
+                        slq_adv(:,:,:,c) = qtmp
+                    end do
+                    deallocate(qtmp)
+                end if
+            end if
             deallocate(a_new, lim_new, ur_e, uth_e, uz_e, Gr, Gth, Gz, cont)
             return
         end if
