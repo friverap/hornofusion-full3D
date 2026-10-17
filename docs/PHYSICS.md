@@ -398,7 +398,8 @@ al líquido) solo si ya alcanzó el solidus (M10).
 
 La chatarra sobre un hueco cae conservando su **empaquetamiento** (α del
 trozo), sin superar el hueco libre de líquido y escoria; lo que no cabe se
-apila hacia arriba (A4). Una celda de baño no es hueco.
+apila hacia arriba (A4). Una celda de baño no es hueco. Con la escoria
+condensada el hueco es 1 − α_l: la chatarra atraviesa la escoria (Plan I).
 
 ---
 
@@ -504,6 +505,32 @@ escoria resuelta. Las fuentes de masa de escoria (química, adiciones)
 toman su volumen del gas de la columna. Las trazas (α_sl < 10⁻⁶) se
 equilibran térmicamente con el baño (`E_slag_tclip`) y el recorte de
 escoria se audita aparte (`m_slag_clip`, `E_slag_clip`).
+
+**Oxidación por columna (Plan I, I1).** Con la escoria condensada la capa
+no tiene gas y el estencil celda a celda (O₂ de la celda de escoria, Fe de la
+de abajo) quedaba aislado del metal. En cada columna, sobre el tramo de
+escoria RESUELTA (α_sl ≥ 10⁻²) más bajo, con kb su celda inferior y kt la
+superior:
+
+  dm_FeO = η_FeO · (Ȯ₂(kt) + Ȯ₂(kt+1)) · (M_FeO / ½M_O₂) · Δt,
+
+con Ȯ₂ = α_g ρ_g Y_O₂/Δt + S_O₂ (el remanente del paso, solo en celdas con
+gas α_g ≥ 10⁻⁶). El Fe sale del acero de kb hasta su cota (F_MAX_FE de su
+masa) y el resto del baño de kb−1 hasta la suya; la cota térmica se aplica
+sobre la escoria de kb, que recibe el FeO. El sumidero de O₂ se reparte entre
+kt y kt+1 en proporción a su aporte. Sustituye al estencil local (en legado
+no cambia).
+
+**Chatarra que atraviesa la escoria (Plan I, I2).** Con la escoria
+condensada, la cesta 2 se apoya en el tope del ACERO, el ECS cuenta la
+escoria en la capacidad de la celda (con un presupuesto por columna igual al
+gas libre desde la base, menos el piso de poro: nunca sobrellena) y el
+colapso usa el hueco 1 − α_l. El solape escoria/chatarra lo resuelve el
+reordenamiento de inicio de paso, que sube la escoria desplazada (gas
+auditado como volfix). Si una columna no cabe ni hasta el techo (horno
+sobrellenado: no debe ocurrir), el reordenamiento compacta con las
+capacidades escaladas por el sobrellenado, avisa (`[SLAG] AVISO`, el harness
+falla) y el exceso entra al SIMPLE.
 
 ## 15. Transferencia de calor interfase
 

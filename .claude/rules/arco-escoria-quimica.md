@@ -197,7 +197,7 @@ textos que describen la cesion en el derrame y la recolocacion por
   (α_sl ≥ ALPHA_FLOW_CUTOFF: una traza de upwind bajo la interfaz no es kb)
   más bajo, O₂ del gas del tope kt MÁS el de kt+1 (cada uno si tiene gas), Fe
   del acero de kb hasta su cota y el resto del baño de kb−1 (sumas, nunca una
-  fuente elegida por umbral: la tasa saltaba ~100 veces), FeO a la escoria de
+  fuente elegida por umbral: las tasas saltaban ~90-100 veces), FeO a la escoria de
   kb; mismas cotas; sustituye al estencil local (no contar dos veces el O₂).
   Una columna con escoria solo en trazas (< 0.01 en todas sus celdas) no
   oxida; queda un salto residual (~1.5×) en α_sl(kb) ≈ 0.01 con gas frío

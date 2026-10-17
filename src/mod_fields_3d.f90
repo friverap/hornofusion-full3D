@@ -587,7 +587,8 @@ contains
         ! escoria llena el derrame no pasa y el exceso iba al CLIP (replica de
         ! produccion: 12 t en el paso de carga). Contenido no gas y no solido
         ! (liquido + escoria) >= ALPHA_LIQ_CONT marca bano o escoria. La cesta
-        ! 1 (arranque con el talon) no cambia.
+        ! 1 (arranque con el talon) no cambia. (Plan I, I2) con la escoria
+        ! CONDENSADA solo cuenta el acero: la chatarra atraviesa la escoria
         if (bucket > 1) then
             thru = .false.
             if (present(slag)) thru = slag_condensed_on(cfg)

@@ -12,32 +12,33 @@ la celda de escoria y baño en la de abajo) solo actúa donde una celda parcial
 de escoria toca el baño; la capa resuelta aísla el metal del O2
 (`slag_chem_flow` 2.7 → 0.99 kg; `activity` con umbral 0.5 kg).
 
-Modelo (O2 inyectado/arrastrado que atraviesa la capa): en cada columna (i,j)
-- `kt` = celda TOPE de la escoria (α_sl ≥ ALPHA_CUTOFF más alta del tramo);
-  O2 disponible = el remanente del paso en el gas de `kt` (si α_g(kt) ≥
-  ALPHA_FLOW_CUTOFF) o de `kt+1` (gas libre encima);
-- `kb` = celda de interfaz (la de escoria más baja); Fe del acero de `kb`
-  (acero resuelto propio) o de `kb−1` (baño de abajo);
-- r_FeO = η_feo · O2_rem (misma cinética que E2.3) con las MISMAS cotas: Fe
-  extraíble (F_MAX_FE del acero de origen) y cota térmica sobre la capacidad
-  de la escoria de `kb` (que recibe el FeO).
-- FeO, su masa y su energía (dato coherente, auditoría 19) a la escoria de
-  `kb`; Fe sale del acero de origen (fe_out, a su entalpía); O2 sale del gas
-  de la celda de O2 (S_O2_src). Columnas y auditoría: las de E2.3
-  (AUD_FE_YIELD, AUD_SLAG_OX_E).
-- Patrón invariante MPI: gather global de α_l, α_sl, α_g, ρ_g, Y_O2,
-  S_O2_src, m_sl, E_sl, T_l y cp; mismo barrido en todos los ranks; cada rank
-  aplica a sus celdas propias.
-- Modo legado y celdas donde el estencil local ya actúa: sin cambio (en
-  condensado la oxidación por columna SUSTITUYE al estencil local para no
-  contar dos veces el mismo O2).
+Modelo final (tras las dirigidas I1 e I1-b), `slag_oxidation_column`. En cada
+columna (i,j), sobre el tramo de escoria RESUELTA (α_sl ≥ ALPHA_FLOW_CUTOFF:
+una traza de upwind bajo la interfaz no cuenta) más bajo, con kb su celda
+inferior y kt la superior:
+- O2 = remanente del paso del gas de kt MÁS el de kt+1, cada uno solo si la
+  celda tiene gas (α_g ≥ ALPHA_CUTOFF, la guardia del solver de especies);
+  el sumidero se reparte en proporción (la segunda parte es el resto);
+- Fe del acero de kb hasta su cota (F_MAX_FE) y el resto del baño de kb−1
+  hasta la suya (sumas, nunca una fuente elegida por umbral: la tasa saltaba
+  ~90-100 veces); FeO, calor y O2 se rehacen desde el Fe repartido;
+- r_FeO = η_feo · O2 (misma cinética que E2.3), cota térmica sobre la
+  escoria de kb, que recibe el FeO (masa y energía con el dato coherente de
+  la auditoría 19). Auditoría: AUD_FE_YIELD y AUD_SLAG_OX_E repartidas entre
+  los dueños de las celdas (take_fe por fuente).
+- Patrón invariante MPI: máscara de escoria resuelta con halos, MIN global 2D
+  de kb y kt (el tope más bajo es el del tramo de kb), valores de las celdas
+  elegidas en planos 2D con un solo dueño y suma global exacta, mismo
+  cálculo en todos los ranks, escritura de celdas propias.
+- Sustituye al estencil local solo con la escoria condensada (en legado no
+  cambia). Corre antes de congelar el hueco de la reducción (BAJO-5,
+  documentado). Columnas con escoria solo en trazas no oxidan; queda un salto
+  residual (~1.5×) en α_sl(kb) ≈ 0.01 con gas frío.
 
-Gates: `slag_chem_flow` y `slag_chem_thick` con `fe_element`/`slag_mass`
-exactos (1e-10), energía cerrada, actividad de oxidación del orden del legado
-(umbral de `activity` de vuelta a ~1 kg en `slag_chem_flow`), invarianza
-n1/n4 (rtol 1e-7) y reinicio bit a bit; unit test de una columna (O2 arriba,
-escoria compactada de 3 celdas, baño abajo) con conservación de Fe, O y
-energía.
+Test unitario `test_slag_ox_column`: 5 casos (capa compactada; celda parcial
+con cociente exacto frente al legado; interfaz con acero; traza bajo la
+interfaz; acero en traza que agota la cota de kb), con Fe, O y energía
+contra el audit.
 
 ## I2 — La chatarra atraviesa la escoria condensada
 
@@ -47,29 +48,56 @@ capacidad solo desplaza gas; el colapso trata una celda llena de escoria como
 escoria. La chatarra (ρ ≫ ρ_sl) queda flotando sobre la capa y aislada del
 baño.
 
-Modelo: con la escoria condensada, la chatarra que cae sobre escoria se
-coloca en las celdas de escoria (desplazando escoria, no solo gas) hasta
-apoyarse en el baño o el lecho; el volumen de escoria desplazado lo sube el
-reordenamiento (`slag_condensed_sort`, extensión del tramo sobre el gas;
-gas auditado como volfix), de forma conservativa (masa, E_sl, m_X).
-- ECS: capacidad por celda min(vfrac − α_s, α_g + α_sl); superficie = tope del
-  ACERO (no del condensado).
-- Cesta 2 (`charge_scrap` bucket > 1): cota de carga = tope del acero, no del
-  baño + escoria (A11-1 queda para el acero: la chatarra no desplaza acero).
-- Colapso: una celda de escoria condensada no es soporte (capacidad incluye
-  α_sl).
-- El sort de inicio de paso ya corre después del ECS, la cesta 2 y la
-  prefusión (colapso): resuelve el solape escoria/chatarra antes del SIMPLE.
-- Contacto escoria–chatarra (A18-10) y fusión bajo la escoria se ejercen.
+Modelo final (tras las dirigidas I2, I2-b y la auditoría general): con la
+escoria condensada la chatarra que cae sobre escoria ocupa las celdas de
+escoria hasta apoyarse en el acero o el lecho; el volumen desplazado lo sube
+el reordenamiento de inicio de paso (`slag_condensed_sort`, extensión sobre
+el gas, auditado como volfix), conservando masa, E_sl y m_X.
+- ECS: capacidad por celda min(vfrac − α_s, α_g + α_sl), con un presupuesto
+  de volumen por columna igual al gas libre desde la base menos el piso de
+  poro (allreduce 2D decrementado por nivel): nunca sobrellena; lo que no
+  cabe queda pendiente. La superficie ya es el tope del acero.
+- Cesta 2: cota de carga = tope del ACERO.
+- Colapso: hueco 1 − α_l (la escoria no es soporte ni ocupa el hueco).
+- Sort: si una columna no cabe ni hasta el techo (estado de error), compacta
+  con las capacidades escaladas por el sobrellenado, avisa `[SLAG] AVISO`
+  (el harness falla) y el exceso entra al SIMPLE; bit a bit igual cuando cabe.
 
-Gates: banco nuevo `ecs_slag` (ECS sobre baño con capa condensada gruesa):
-la chatarra termina bajo la escoria (ninguna celda con α_s sobre escoria
-resuelta), masa/energía de escoria exactas, volfix acotado, sin Σα > 1;
-`test_charge_slag` y `test_ecs_feed` extendidos; `cold_bucket2` con escoria;
-matriz completa y rebaseline.
+Tests unitarios: casos condensados de `test_charge_slag` (30 t), `test_ecs_feed`
+(10 t con control legado pendiente; escoria hasta el techo: todo pendiente),
+`test_scrap_collapse` y `test_condensed_sort` caso 8 (sobrellenado).
 
 ## Orden y estado
 
-I1 → dirigida → I2 → dirigida → general. Código en la rama `plan-i`,
-verificado solo por sintaxis (`mpif90 -fsyntax-only` en un árbol aparte,
-sin enlazar ni ejecutar) mientras corre B1; gates al terminar B1.
+I1 → dirigidas (I1, I1-b) → I2 → dirigidas (I2, I2-b) → general (3
+dimensiones) hechos en la rama `plan-i`, verificados SOLO por sintaxis
+(`mpif90 -fsyntax-only`, sin enlazar ni ejecutar) mientras corre B1.
+
+## Gates tras B1 (en orden, uno por uno)
+
+1. `make test-unit` (los 5 tests de arriba y el resto sin regresión).
+2. `/verificacion-bitwise` de lo que debe quedar idéntico: `slag_chem_test`
+   n1/n8/n9 (legado), `ecs_test` n1/n8/n12, `cold_bucket2_n4`,
+   `arc_slag_legacy`; `arc_slag` y `slag_rest` solo cambiarían con
+   sobrellenado (si cambian, diagnosticar).
+3. `slag_chem_flow_n4` y `slag_chem_thick_n1/n4`: medir el Fe oxidado y
+   α_sl(kb); subir `--min-yield` claramente por encima de 0.99 kg (el
+   condensado SIN I1), p.ej. 0.6 × lo medido; `fe_element`/`slag_mass` a
+   1e-10 y `check_audit`.
+4. Descomposición de I1: `slag_chem_flow` n1 con `decomposition_slagflow`
+   y `slag_chem_thick` con un np cuyo corte en z caiga en la interfaz medida
+   (n7, n12 o n9 según kb), rtol 1e-7 (n4 corta lejos de la interfaz).
+5. Reinicio con escoria en el tramo con oxidación (`slag_chem_flow` 4→4 ya
+   existe; añadir uno con np distinto).
+6. Banco nuevo `ecs_slag` (baño con capa condensada gruesa, `solve_ecs`):
+   n1/n8/n12 con `decomposition_ecs_slag` a 1e-12, reinicio, invariantes.
+7. `check_ecs.py --slag` (H4): masa con las columnas de fusión, energía por
+   la identidad de `check_audit`, masa/energía de escoria, `m_ecs_pending`
+   = 0, base de `layer_id == ID_ECS` = tope del acero + 1 en la banda.
+8. Banco `cold_bucket2_slag` (cesta 2 de toneladas sobre capa condensada).
+9. `arc_melt_slag_n4` y `arc_melt_slag_heel_n1/n4`: el colapso que atraviesa
+   la escoria cambia volfix/jumps; si superan su techo, diagnosticar (nunca
+   subirlo sin causa); `decomposition_slagbed`.
+10. `make test-full` y `STAGE=v128 make test-rebaseline` (cambian seguro
+    `slag_chem_flow_n4`, `slag_chem_thick_n1/n4`; probable
+    `arc_melt_slag*`; nuevos `ecs_slag_*`, `cold_bucket2_slag_n4`).

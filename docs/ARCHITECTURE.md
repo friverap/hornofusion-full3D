@@ -221,7 +221,8 @@ E_sl y m_X (`slq_adv`); exporta `ws_Fr` (acero, energía) y `ws_Fcm`
 (condensado, momento). La flotación es `slag_condensed_sort` (`mod_slag_3d`),
 llamado al fijar el estado de inicio de paso (`ws_sp_*`, con el fundido
 pendiente) y en `update_slag`; `slag_buoyancy` solo coloca la escoria en
-t = 0. Tests: `test_condensed_view/transport/sort`, bancos `slag_rest`,
+t = 0. Tests: `test_condensed_view/transport/sort`, `test_slag_ox_column`
+(Plan I), bancos `slag_rest`,
 `slag_chem_thick` y los de escoria; `scripts/bitwise_check.sh` para el
 legado con la escoria apagada.
 
@@ -405,7 +406,8 @@ time_loop: do while (time < t_final)
 
     ! --- RADIACIÓN DO (S4/S6/S8) ---
     ! --- QUÍMICA ---  compute_carbon_oxidation → compute_slag_chemistry (Fe
-    !     al baño acotado por el hueco, A3-7); sin transporte de alpha de dos
+    !     al baño acotado por el hueco, A3-7; con la escoria condensada la
+    !     oxidación por columna slag_oxidation_column, Plan I); sin transporte de alpha de dos
     !     fluidos: enforce_volume_constraint (alpha_g complemento, Y diluida)
     ! --- ESPECIES ---  solve_species_3d (CO, CO2, O2)
     ! --- SÓLIDO ---    update_solid_premelt (palanca + colapso; mdot, ws_Tsrc);

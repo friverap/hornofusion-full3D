@@ -312,7 +312,7 @@ Si el archivo no existe, se usa un perfil constante: 500 V, 50 kA.
 | `k_slag` | real | 1.5 | W/(m·K) | Conductividad térmica de la escoria |
 | `h_contact_sl` | real | 1000.0 | W/(m²·K) | Coeficiente de contacto escoria-acero |
 | `m_slag_init` | real | 3300.0 | kg | Masa inicial de escoria en el horno |
-| `slag_in_volume` | bool | true | — | Escoria CONDENSADA (Plan H): acero + escoria son una fase del Poisson y del momento (vista α_c = α_l + α_sl, peso con ρ_sl), la escoria se transporta con el condensado y flota por reordenamiento por columna. Solo actúa con `solve_slag`, `solve_flow`, `solve_multiphase` y sin `mixture_model`; `false` recupera la capa legada fuera del Poisson (M17-PV1) |
+| `slag_in_volume` | bool | true | — | Escoria CONDENSADA (Plan H): acero + escoria son una fase del Poisson y del momento (vista α_c = α_l + α_sl, peso con ρ_sl), la escoria se transporta con el condensado y flota por reordenamiento por columna. Solo actúa con `solve_slag`, `solve_flow`, `solve_multiphase` y sin `mixture_model`; `false` recupera la capa legada fuera del Poisson (M17-PV1). Con `true` la oxidación Fe → FeO va por columna (O₂ del tope del tramo y de la celda de encima, Fe de la interfaz y del baño de abajo) y la chatarra de la cesta 2, el ECS y el colapso atraviesa la escoria (Plan I) |
 | `mu_slag` | real | 0.1 | Pa·s | Viscosidad de la escoria (escoria condensada: mezcla μ_c = (α_l μ_l + α_sl μ_sl)/α_c en Ergun, percolación y momento) |
 
 La escoria se inicializa 3 niveles k por encima de la superficie del scrap,  
@@ -417,7 +417,7 @@ Defaults de `config_set_defaults` (`mod_config_3d.f90`), que es la verdad.
 | `cal_frac_cao` / `cal_frac_mgo` | 0.75 / 0.20 | composición de la cal |
 | `carbon_inj_rate` / `carbon_inj_profile_file` | 0 / '' | inyección de carbón a la escoria |
 | `slag_x_feo_init` / `slag_x_cao_init` / `slag_x_sio2_init` / `slag_x_mgo_init` | 0.25 / 0.35 / 0.16 / 0.08 | composición inicial de la escoria |
-| `slag_eta_feo` | 0.3 | rendimiento de la oxidación Fe → FeO con el O₂ remanente |
+| `slag_eta_feo` | 0.3 | rendimiento de la oxidación Fe → FeO con el O₂ remanente (con la escoria condensada, el de la celda tope del tramo más el de la de encima) |
 
 ## Config de producción
 

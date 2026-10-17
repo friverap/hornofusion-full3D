@@ -9,6 +9,9 @@
 !   (pérdida de rendimiento, auditada) y su entalpía VIAJA con él a la
 !   escoria (transferencia interna: los inventarios la capturan); solo el
 !   calor de reacción es fuente externa del balance (E_slag_ox).
+!   Con la escoria CONDENSADA (Plan I, I1) la oxidación va POR COLUMNA
+!   (slag_oxidation_column): O2 del tope del tramo de escoria resuelta y de
+!   la celda de encima, Fe de la interfaz y del baño de abajo.
 !
 ! Reducción (celdas de escoria con carbón SL_C, E2.4):
 !     FeO + C -> Fe(l) + CO            dH = +155 kJ/mol FeO (endo)

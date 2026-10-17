@@ -40,13 +40,19 @@ guarda sin leer su causa.
   de la capa más alta con líquido + escoria ≥ ALPHA_LIQ_CONT: la chatarra solo
   desplaza GAS. Antes se metía en celdas con baño y el exceso dependía del
   derrame, que no atraviesa una capa de escoria llena: clip de toneladas en el
-  paso de carga (réplica de producción: 12 t). Consecuencia física a vigilar:
-  la cesta 2 empieza sin contacto con el baño (como el ECS y el colapso, que ya
-  apoyan la chatarra sobre el baño); la cesta 1 (talón) no cambia.
+  paso de carga (réplica de producción: 12 t). En la capa LEGADA la cesta 2
+  empieza sin contacto con el baño (como el ECS y el colapso, que apoyan la
+  chatarra sobre el baño); la cesta 1 (talón) no cambia.
   `test_charge_slag`. **Con la escoria CONDENSADA (Plan I, I2) la chatarra
   ATRAVIESA la escoria** en la cesta 2 (cota = tope del ACERO), el ECS
   (capacidad min(vfrac − α_s, α_g + α_sl)) y el colapso (hueco 1 − α_l): el
   solape escoria/chatarra lo resuelve `slag_condensed_sort` al inicio del paso
   (corre después de los tres), que sube la escoria desplazada y audita el gas
-  como el volfix. Tests: casos condensados de `test_charge_slag`,
+  como el volfix. El ECS lleva un presupuesto por columna (gas libre desde la
+  base menos el piso de poro): nunca sobrellena, lo que no cabe queda
+  pendiente. Si aun asi una columna no cabe hasta el techo (cesta 2 que llega
+  al techo, FeO en columna sin gas), el sort compacta con las capacidades
+  escaladas por el sobrellenado, avisa `[SLAG] AVISO` (el harness falla) y
+  queda Σα > 1 que el transporte recortaria: es un estado de error, no un
+  régimen. Tests: casos condensados de `test_charge_slag`,
   `test_ecs_feed` y `test_scrap_collapse`.
