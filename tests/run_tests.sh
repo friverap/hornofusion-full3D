@@ -471,7 +471,7 @@ full | rebaseline)
     run_case ecs_test 12 && run_script "decomposition_ecs_r" \
         $PY $INT/compare_decomposition.py "$OUT/ecs_test_n12" "$OUT/ecs_test_n1" --rtol 1e-12
     run_script "decomposition_slag" \
-        $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n8" --rtol 1e-5
+        $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n8" --rtol 1e-7
     run_script "bath_test_cold" \
         $PY $INT/check_bath.py "$OUT/bath_test_cold_n4" --config "$CFG/bath_test_cold.dat" --fill \
         --xfail "$(xfail_ids bath_test_cold)"
@@ -543,7 +543,7 @@ full | rebaseline)
     run_script "decomposition_freeze_z" \
         $PY $INT/compare_decomposition.py "$OUT/bath_freeze_n1" "$OUT/bath_freeze_n9" --rtol 1e-5
     run_script "decomposition_slag_z" \
-        $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n9" --rtol 1e-5
+        $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n9" --rtol 1e-7
     run_script "decomposition_freeze" \
         $PY $INT/compare_decomposition.py "$OUT/bath_freeze_n1" "$OUT/bath_freeze_n4" --rtol 1e-5
     # (M3-10) tolerancias ~100x lo medido: drenaje 7e-6, llenado 1e-6, arco
