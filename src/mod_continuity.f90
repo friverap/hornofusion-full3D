@@ -1213,9 +1213,10 @@ contains
                         clip_e = clip_e + (E_tr - slag%E_sl(i,j,k))
                         slag%E_sl(i,j,k) = E_tr
                         slag%T_sl(i,j,k) = liq%T(i,j,k)
-                        ! (auditoria 18, A18-7) sin escoria no hay espuma: la DO
-                        ! absorbia/emitia con una alpha_foam huerfana sin columna
-                        slag%alpha_foam(i,j,k) = 0.0_dp
+                        ! (A18-7; dirigida A18, B2) la espuma huerfana la quita el
+                        ! sort de FIN de paso (una vez por paso, antes de la DO
+                        ! siguiente); aqui se borraria en cada iteracion externa
+                        ! sin restaurarse
                         slag%m_X(i,j,k,:) = max(0.0_dp, slag%m_X(i,j,k,:))
                         ! bajo ASL_QMIN la traza cede volumen sin extensivas: su
                         ! composicion se acota a la masa (Sigma m_X <= m_sl;
@@ -1266,7 +1267,6 @@ contains
         call mpi_exchange_halos_3d(slag%m_sl, m%topo)
         call mpi_exchange_halos_3d(slag%E_sl, m%topo)
         call mpi_exchange_halos_3d(slag%T_sl, m%topo)
-        call mpi_exchange_halos_3d(slag%alpha_foam, m%topo)
         do c = 1, nx
             tmp = slag%m_X(:,:,:,c)
             call mpi_exchange_halos_3d(tmp, m%topo)

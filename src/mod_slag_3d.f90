@@ -639,6 +639,9 @@ contains
         end do
         call audit_add(AUD_GAS_VOLFIX, dmg)
         call audit_add(AUD_GAS_VOLFIX_E, deg)
+        ! (A18-7; dirigida A18, B2) sin escoria no hay espuma en NINGUNA celda
+        ! propia (el transporte puede vaciar celdas que el sort no reescribe)
+        where (slag%alpha_sl < ALPHA_CUTOFF) slag%alpha_foam = 0.0_dp
         call slag_exchange_halos(slag, m)
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
         call mpi_exchange_halos_3d(liq%T, m%topo)
