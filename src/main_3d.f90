@@ -75,6 +75,7 @@ program eaf_3d_simulator
     ! Time loop
     real(dp) :: time, V_elec, I_elec
     real(dp) :: dt_nominal = 0.0_dp
+    real(dp) :: dt_step = 0.0_dp      ! (B6-1) dt del ultimo paso dado
     ! (auditoria 5, B5-28/B5-29) ultimo paso decidido UNA vez con el dt del
     ! paso; fila del audit ya escrita en este paso (el freno de NaN no la repite)
     logical  :: last_step = .false., audit_written = .false.
@@ -306,6 +307,7 @@ program eaf_3d_simulator
     end if
 
     call system_clock(wall_c0, wall_rate)
+    dt_step = cfg%dt
     time_loop: do while (time < cfg%t_final)
 
         ! El ultimo paso termina EXACTAMENTE en t_final (auditoria, bajos: el
@@ -321,12 +323,17 @@ program eaf_3d_simulator
         if (last_step) exit time_loop
         dt_nominal = cfg%dt
         if (time + cfg%dt > cfg%t_final) then
-            if (cfg%t_final - time <= 1.0e-6_dp * cfg%dt) exit time_loop
+            ! (bajo B6-1) mismo umbral que decidio last_step (dt del paso
+            ! anterior, dt_step): con el dt ya adaptado habia una franja en la
+            ! que se salia sin la fila final del audit; aqui last_step era falso
+            ! y el hueco es > 1e-6 dt_step: se da el paso corto final
+            if (cfg%t_final - time <= 1.0e-6_dp * dt_step) exit time_loop
             cfg%dt = cfg%t_final - time
         end if
 
         step = step + 1
         time = time + cfg%dt
+        dt_step = cfg%dt
         last_step = (cfg%t_final - time <= 1.0e-6_dp * cfg%dt)
         audit_written = .false.
         
