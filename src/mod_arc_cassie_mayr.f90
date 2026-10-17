@@ -448,6 +448,10 @@ contains
                         end do
                     end do
                 end do
+                else
+                    ! (bajo N-B3) sin celdas bajo la gaussiana la energia se
+                    ! perdia en silencio: se registra como descartada (arc_budget)
+                    if (.not. m%is_parallel .or. m%topo%rank == 0) call audit_add(AUD_ARC_DISCARD, P_rad_arc * cfg%dt)
                 end if
             end if
 
@@ -472,6 +476,9 @@ contains
                         end do
                     end do
                 end do
+            else
+                ! (N-B3) idem para P_conv
+                if (.not. m%is_parallel .or. m%topo%rank == 0) call audit_add(AUD_ARC_DISCARD, P_conv * cfg%dt)
             end if
 
             ! ── P_elec: a la capa de la superficie del BANO (kc_lo = kc_hi), peso
