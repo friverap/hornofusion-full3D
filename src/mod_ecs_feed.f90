@@ -11,14 +11,17 @@
 !      (z está descompuesta: ninguna decisión usa datos solo locales).
 !   2. La celda destino de cada columna se deriva de h y de z_global
 !      (idénticos en todos los ranks); el dueño computa su capacidad local
-!      C_cell = rho_steel * max(0, min(ecs_vfrac - alpha_s, alpha_g)) * V.
+!      C_cell = rho_steel * max(0, min(ecs_vfrac - alpha_s, alpha_g)) * V
+!      (con la escoria CONDENSADA, Plan I I2: alpha_g + alpha_sl y el
+!      presupuesto de gas libre de la columna, ver mas abajo).
 !   3. C_glob = allreduce_sum; el depósito es PROPORCIONAL:
 !      dm_cell = dm_nivel * C_cell / C_glob  (<= C_cell por construcción).
 !   4. Si el nivel se llena, se sube al siguiente; si el horno se llena,
 !      el excedente queda en m_ecs_pending (conserva masa; warn rank 0).
 !
-! El depósito ACUMULA (m_s/E_s/m_C) y desplaza SOLO gas: nunca toca
-! liq%alpha ni la escoria. La mezcla entálpica usa la función única
+! El depósito ACUMULA (m_s/E_s/m_C) y desplaza gas; nunca toca liq%alpha.
+! En legado nunca toca la escoria; con la condensada la atraviesa (el solape
+! lo resuelve slag_condensed_sort al inicio del paso). La mezcla entálpica usa la función única
 ! solid_enthalpy / solid_T_from_enthalpy (exacta). layer_id = ID_ECS.
 !
 ! Auditoría: AUD_ECS_MASS / AUD_ECS_ENERGY por celda depositada (columnas
@@ -70,6 +73,13 @@ contains
         type(slag_t), intent(in), optional :: slag
         real(dp) :: ag_old, pc, dmg, deg
         logical  :: thru
+        ! (auditoria general Plan I, MEDIO-1) presupuesto de VOLUMEN por
+        ! columna con thru: la chatarra nueva no supera el gas libre de la
+        ! columna desde la base (descontado el piso de poro): asi el sort
+        ! siempre puede subir la escoria desplazada y nunca queda un
+        ! sobrellenado que el transporte recortaria (clip). Lo que no cabe
+        ! queda pendiente, como con el techo
+        real(dp), allocatable :: bud(:,:), dvb(:,:)
 
         real(dp), allocatable :: h_loc(:,:), h_glob(:,:)
         integer,  allocatable :: k0_glob(:,:)
@@ -144,9 +154,30 @@ contains
 
         e_in = solid_enthalpy(cfg%ecs_T_charge, cfg)
 
+        if (thru) then
+            allocate(bud(m%nr_g, m%nth_g), dvb(m%nr_g, m%nth_g))
+            bud = 0.0_dp
+            do kl = 1, m%nz
+                do jl = 1, m%ntheta
+                    jg = m%topo%jglobal_start + jl - 1
+                    do i = 1, m%nr
+                        ig = m%topo%iglobal_start + i - 1
+                        kg = m%topo%kglobal_start + kl - 1
+                        if (.not. in_band(ig,jg)) cycle
+                        if (m%cell_type(i,jl,kl) == 0 .or. kg < k0_glob(ig,jg)) cycle
+                        bud(ig,jg) = bud(ig,jg) + max(0.0_dp, gas%alpha(i,jl,kl) - ALPHA_PORE_GAS) &
+                                     * m%vol(i,jl,kl)
+                    end do
+                end do
+            end do
+            if (m%is_parallel) call MPI_Allreduce(MPI_IN_PLACE, bud, size(bud), &
+                MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+        end if
+
         ! ── 3. Depósito proporcional por niveles ────────────────────────────
         do lvl = 0, ECS_MAX_LEVELS - 1
             if (dm_total <= 0.0_dp) exit
+            if (thru) dvb = 0.0_dp
 
             ! capacidad local de las celdas propias del nivel
             c_loc = 0.0_dp
@@ -163,7 +194,8 @@ contains
                             gas%alpha(il,jl,kl)))
                     if (thru) cap_alpha = max(0.0_dp, &
                         min(cfg%ecs_vfrac - sol%alpha_s(il,jl,kl), &
-                            gas%alpha(il,jl,kl) + slag%alpha_sl(il,jl,kl)))
+                            gas%alpha(il,jl,kl) + slag%alpha_sl(il,jl,kl), &
+                            bud(i,jg) / m%vol(il,jl,kl)))
                     c_loc = c_loc + cfg%rho_steel * cap_alpha * &
                             m%vol(il,jl,kl)
                 end do
@@ -191,7 +223,8 @@ contains
                             gas%alpha(il,jl,kl)))
                     if (thru) cap_alpha = max(0.0_dp, &
                         min(cfg%ecs_vfrac - sol%alpha_s(il,jl,kl), &
-                            gas%alpha(il,jl,kl) + slag%alpha_sl(il,jl,kl)))
+                            gas%alpha(il,jl,kl) + slag%alpha_sl(il,jl,kl), &
+                            bud(i,jg) / m%vol(il,jl,kl)))
                     dm_cell = dm_level * (cfg%rho_steel * cap_alpha * vol) &
                               / c_glob
                     if (dm_cell <= 0.0_dp) cycle
@@ -205,6 +238,7 @@ contains
                     sol%T_s(il,jl,kl) = solid_T_from_enthalpy( &
                         sol%E_s(il,jl,kl) / sol%m_s(il,jl,kl), cfg)
                     sol%layer_id(il,jl,kl) = ID_ECS
+                    if (thru) dvb(i,jg) = dvb(i,jg) + dm_cell / cfg%rho_steel
                     ag_old = gas%alpha(il,jl,kl)
                     gas%alpha(il,jl,kl) = max(0.0_dp, gas%alpha(il,jl,kl) &
                         - dm_cell / (cfg%rho_steel * vol))
@@ -227,6 +261,12 @@ contains
             end do
 
             dm_total = dm_total - dm_level
+            ! presupuesto restante de cada columna (volumen ya colocado)
+            if (thru) then
+                if (m%is_parallel) call MPI_Allreduce(MPI_IN_PLACE, dvb, size(dvb), &
+                    MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+                bud = max(0.0_dp, bud - dvb)
+            end if
         end do
 
         ! ── 4. Excedente: conservar y avisar (una vez) ─────────────────────
@@ -241,6 +281,7 @@ contains
         end if
 
         deallocate(h_loc, h_glob, k0_glob, in_band)
+        if (thru) deallocate(bud, dvb)
 
     end subroutine ecs_feed
 

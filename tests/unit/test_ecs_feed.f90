@@ -12,6 +12,8 @@
 ! carga queda pendiente (legado); con ella la chatarra ATRAVIESA la capa, se
 ! apoya en el tope del acero y el reordenamiento sube la escoria desplazada
 ! (masa y energía de la escoria exactas, Sigma alpha <= 1, nada pendiente).
+! Parte 3: escoria hasta el techo: sin gas en la columna la carga queda
+! pendiente (presupuesto de volumen por columna; nunca sobrellena).
 !===============================================================================
 program test_ecs_feed
     use mod_constants
@@ -178,6 +180,25 @@ program test_ecs_feed
     end if
     print '(A,I3,A,ES10.3)', '   parte 2 (escoria condensada): base de la chatarra k =', kmin_ecs, &
         '  sobrellenado ', over
+
+    ! ---- parte 3 (auditoria general Plan I, MEDIO-1): escoria hasta el techo
+    ! (4-10): la columna no tiene gas al que subir la escoria desplazada; la
+    ! carga queda PENDIENTE (antes atravesaba la escoria y el sort quedaba
+    ! sobrellenado: clip en el transporte)
+    call setup_slag_bed()
+    slag%alpha_sl(:,:,4:mesh%nz) = 1.0_dp
+    where (mesh%cell_type == 0) slag%alpha_sl = 0.0_dp
+    slag%m_sl = slag%alpha_sl * cfg%rho_slag * mesh%vol
+    slag%E_sl = slag%m_sl * cfg%cp_slag * 1850.0_dp
+    gas%alpha = max(0.0_dp, 1.0_dp - liq%alpha - slag%alpha_sl)
+    where (mesh%cell_type == 0) gas%alpha = 0.0_dp
+    call ecs_feed(sol, gas, liq, mesh, cfg, MDOT2, DT, sh, slag)
+    if (sum(sol%m_s(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz)) > 0.0_dp .or. &
+        abs(m_ecs_pending - MDOT2 * DT) > 1.0e-12_dp * MDOT2 * DT) then
+        print '(A,2ES12.4)', '   FAIL parte 3: sin gas en la columna la carga debia quedar pendiente (depositado, pendiente): ', &
+            sum(sol%m_s(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz)), m_ecs_pending
+        ok = .false.
+    end if
 
     if (ok) then
         print '(A,F10.1,A)', ' PASS test_ecs_feed (', fed, ' kg cargados)'
