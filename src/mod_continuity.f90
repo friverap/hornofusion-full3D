@@ -107,7 +107,6 @@ contains
         ! condensado, liq%alpha llega con el ACERO y el resultado es alpha_c
         real(dp), intent(in), optional :: a_in_add(-1:,-1:,-1:)
         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
-        real(dp), allocatable :: qtmp(:,:,:)
         logical :: adv, advq
         integer :: c
 
@@ -298,13 +297,9 @@ contains
                 end do
                 call mpi_exchange_halos_3d(asl_adv, m%topo)
                 if (present(slq_adv)) then
-                    allocate(qtmp, mold=liq%alpha)
                     do c = 1, size(slq_adv,4)
-                        qtmp = slq_adv(:,:,:,c)
-                        call mpi_exchange_halos_3d(qtmp, m%topo)
-                        slq_adv(:,:,:,c) = qtmp
+                        call mpi_exchange_halos_3d(slq_adv(:,:,:,c), m%topo)
                     end do
-                    deallocate(qtmp)
                 end if
             end if
             deallocate(a_new, lim_new, ur_e, uth_e, uz_e, Gr, Gth, Gz, cont)
@@ -333,7 +328,6 @@ contains
             allocate(q_new(lbound(slq_adv,1):ubound(slq_adv,1), lbound(slq_adv,2):ubound(slq_adv,2), &
                            lbound(slq_adv,3):ubound(slq_adv,3), size(slq_adv,4)))
             allocate(qd, mold=q_new)
-            allocate(qtmp, mold=liq%alpha)
             q_new = 0.0_dp; qd = 0.0_dp
         end if
         call mpi_exchange_halos_3d(liq%alpha, m%topo)

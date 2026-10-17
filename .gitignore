@@ -45,6 +45,5 @@ paper/
 __pycache__/
 
 # Python bytecode y espacio de trabajo local (auditorias 7/8/11: B7-21, B8-14, B10-7)
-__pycache__/
 *.pyc
 scratchpad/

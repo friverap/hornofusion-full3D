@@ -952,7 +952,7 @@ contains
                     ! absorbe sin sobrepaso). Interno entre inventarios (E_sol,
                     ! E_slag): columna diagnostica E_slag_sol
                     if (slag_condensed_on(cfg) .and. sol%alpha_s(i,j,k) >= ALPHA_BED &
-                        .and. sol%m_s(i,j,k) > SMALL_SL .and. cfg%d_particle > 0.0_dp) then
+                        .and. sol%m_s(i,j,k) > SMALL_SL) then   ! (d_particle > 0 lo valida config, N-B17)
                         Csol = sol%m_s(i,j,k) * cfg%cp_s
                         wet = min(1.0_dp, slag%alpha_sl(i,j,k) / max(1.0_dp - sol%alpha_s(i,j,k), 1.0e-6_dp))
                         hA = cfg%h_contact_sl * 6.0_dp * sol%alpha_s(i,j,k) / cfg%d_particle &
