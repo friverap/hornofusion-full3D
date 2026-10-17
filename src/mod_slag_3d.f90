@@ -906,14 +906,22 @@ contains
                         ! esa celda ya acopla su escoria con el baño; la escoria
                         ! de encima no vuelve a acoplarse con ese acero (doble
                         ! area de contacto). Legado sin cambio
+                        ! (dirigida A18, M1) solo si la de abajo ES la interfaz
+                        ! (acero y escoria resueltos): con una traza de escoria
+                        ! en un baño puro la columna quedaba sin contacto
                         if (slag_condensed_on(cfg) .and. &
-                            slag%alpha_sl(i,j,k-1) >= ALPHA_CUTOFF) Cb = 0.0_dp
+                            slag%alpha_sl(i,j,k-1) >= ALPHA_FLOW_CUTOFF .and. &
+                            liq%alpha(i,j,k-1) >= ALPHA_FLOW_CUTOFF) Cb = 0.0_dp
                     end if
                     ! (A18-8) con la escoria condensada, una celda con acero propio
                     ! ES la interfaz: su escoria toca ese acero (el "reservorio de
                     ! mayor capacidad" es del legado, donde la celda de escoria
                     ! guardaba solo una traza de liquido)
-                    if (Cf > 0.0_dp .and. (Cf >= Cb .or. slag_condensed_on(cfg))) then
+                    ! (dirigida A18, M1) con acero propio RESUELTO: una traza de
+                    ! acero en la celda de interfaz (nivel cruzando una cara) no
+                    ! le quita el contacto al baño de abajo
+                    if (Cf > 0.0_dp .and. (Cf >= Cb .or. (slag_condensed_on(cfg) .and. &
+                        liq%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF))) then
                         Cf = liq%alpha(i,j,k) * liq%rho(i,j,k) * liq%cp(i,j,k) * m%vol(i,j,k)
                         hA = cfg%h_contact_sl * m%Az(i,j,k-1)
                         f = 1.0_dp - exp(-dt * hA * (1.0_dp / Cs + 1.0_dp / Cf))
