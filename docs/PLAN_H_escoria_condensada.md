@@ -102,3 +102,12 @@ slag_chem_test no tiene flujo (la clave no aplica). slag_chem_flow: activity
 con umbral 0.5 kg (la capa condensada aisla el metal del O2: 0.99 kg frente a
 2.7 kg legado; el check vigila que la quimica corra). slag_rest en la matriz
 de test-full; golden v116.
+
+## Estado P8 (2026-10-16)
+arc_slag condensado 0.3 s: n1/n4/n9 a <= 1.2e-12 (redondeo del MC). Reinicio
+misma descomposicion BIT A BIT (campos y audit); n4 -> n9: campos 6e-13 y
+columnas de audit de redondeo puro (m_slag_clip ~1e-33 kg, m_spill ~1e-26 kg)
+que cambian de signo: m_slag_clip/E_slag_clip entran en las columnas de
+redondeo de compare_audit (piso 1e-15 del inventario de escoria, solo con
+--decomp); m_spill NO (M7-2). sNaN (snanfill + -O0 -ffpe-trap=invalid) en
+slag_rest y arc_slag condensados: limpio. Reinicio de slag_rest en la matriz.

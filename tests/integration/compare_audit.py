@@ -72,11 +72,14 @@ def main():
     # ranks): 1e-15 del inventario de gas. Con el mismo numero de ranks el
     # reinicio es BIT A BIT (el piso de la auditoria 6 se aplicaba a toda
     # columna m_*/E_* y aflojaba m_spill, m_vf_*, m_gas_volfix a 1e-3)
-    ROUNDOFF_COLS = ("m_gas_ccdrop",)
+    # (Plan H, P8) el clip de escoria condensada es del mismo tipo (~1e-33 kg
+    # con signo segun la descomposicion): piso con el inventario de escoria
+    ROUNDOFF_COLS = {"m_gas_ccdrop": "m_gas", "m_slag_clip": "m_slag", "E_slag_clip": "E_slag"}
     def inv_floor(c):
         if not (args.decomp and c in ROUNDOFF_COLS):
             return 0.0
-        v = [abs(float(B[s]["m_gas"])) for s in steps if "m_gas" in B[s]]
+        inv = ROUNDOFF_COLS[c]
+        v = [abs(float(B[s][inv])) for s in steps if inv in B[s]]
         return 1e-15 * max(v) if v else 0.0
     worst, worst_id = 0.0, "-"
     # fila N: inventarios del estado de arranque frente a la continua

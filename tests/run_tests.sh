@@ -567,6 +567,9 @@ full | rebaseline)
     # (M3-10) reinicios de ECS, escoria con flujo+quimica+especies, y n8 -> n12
     run_restart_case ecs_test 8 8 10
     run_restart_case slag_chem_flow 4 4 10
+    # (Plan H, P8) reinicio BIT A BIT con la escoria condensada (estado de
+    # inicio de paso ws_sp_* desde el snapshot, sin la colocacion inicial)
+    run_restart_case slag_rest 4 4 50
     run_restart_case cold_10step 8 12 5
     # (A4-7) reinicio a MITAD de la fusion progresiva (paso 100 de 200)
     run_restart_case arc_melt 4 4 100
