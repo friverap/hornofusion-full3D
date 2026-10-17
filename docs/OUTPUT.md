@@ -51,7 +51,7 @@ output_dir/audit.csv
 
 Una línea por paso (`audit_freq`; cada snapshot y el último paso escriben
 además la suya, B4-4) con inventarios de masa y energía por fase, integrales
-de fuente del intervalo y contadores. Las 78 columnas están definidas en
+de fuente del intervalo y contadores. Las 84 columnas están definidas en
 [`AUDIT_COLUMNS.md`](AUDIT_COLUMNS.md) (generado desde `mod_audit.f90`) y las
 identidades que las relacionan (energía total y por paso, masa de líquido,
 sólido y gas, presupuesto del arco, cierre radiativo, centinelas) en

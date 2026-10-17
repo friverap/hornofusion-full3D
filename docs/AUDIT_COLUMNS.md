@@ -53,11 +53,11 @@ Generado por `scripts/make_audit_glossary.py` desde el encabezado de `src/mod_au
 | `E_iph_liq` | C | Interphase heat removed from the liquid (idem) [J] |
 | `m_resid_closed` | C | Residual solid handed to the liquid by the vanishing-phase closure (`0<\alpha_s\le10^{-4}`) [kg]; subset of m_melted |
 | `E_resid_closed` | C | Enthalpy handed with that residual [J]; subset of E_melt_from_solid |
-| `m_spill` | C | Liquid displaced upward by the conservative spill of volume-constraint excess [kg] (informative; no mass error) |
+| `m_spill` | C | Liquid mass moved upward by the conservative spill of volume-constraint excess, counted PER HOP [kg]: a relay chain of `L` cells adds `L` times the mass, so it is an upper bound of the mass moved (informative; no mass error; audit 9, B9-5) |
 | `vol_dalpha_outer` | D | Liquid volume moved between the incoming outer iterate and the transported fraction, last outer iteration [m`^3`] (lag of `\alpha` in the pressure equation) |
 | `vol_lim` | D | Liquid inflow blocked by the pore-capacity limiter, last outer iteration [m`^3`] |
 | `vol_unlinked` | D | Liquid volume crossing faces not linked in the pressure equation (dispersed/drift), last outer iteration [m`^3`] |
-| `p_max` | D | Maximum `|p|` over active cells at the written step [Pa] (blow-up sentinel: the cap is `2\times10^6`) |
+| `p_max` | D | Maximum `\|p\|` over active cells at the written step [Pa] (blow-up sentinel: the cap is `2\times10^6`) |
 | `u_gas_max` | D | Maximum gas speed over cells with `\alpha_g\ge10^{-2}` [m s`^{-1}`] |
 | `u_liq_max` | D | Maximum liquid speed over cells with `\alpha_l\ge10^{-2}` [m s`^{-1}`] (cap 20) |
 | `m_charge_in` | C | Scrap mass charged by baskets after start-up [kg] |

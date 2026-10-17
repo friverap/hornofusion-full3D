@@ -342,7 +342,10 @@ guarda sin leer su causa.
   min(dt, `DT_MOB_REF`) con `DT_MOB_REF` = 2 ms (el dt de B1): nunca un paso
   MAYOR que el de calibración (auditoría 8, M8-2; con dt < 2 ms, el real,
   auditoría 13)**: con dt ≥ ~6.5 ms el gas de piso de una
-  capa saturada (ε_g = 0.015) caía bajo el umbral y la bolsa bajo el lecho
+  capa saturada (ε_g = 0.015) caía bajo el umbral (cifra de la movilidad
+  medida en pocket_rise, 0.0130 a 5 ms, con mob = 1/(1 + Ergun·dt/(α_g ρ_g));
+  a 2 ms queda ~0.032, margen ~3× sobre GAS_MOB_MIN: para el gas de piso el
+  umbral SÍ es sensible, no aplica el «1e-2..1e-4 no es crítico») y la bolsa bajo el lecho
   inundado quedaba pared (pocket_rise a 10 ms: gas a 131 m/s). La
   clasificación es del estado, no del integrador (`test_gas_percolation`). Es criterio de CAMINO,
   no local: F2.13 lo probaba celda a celda y al declarar pared a las celdas

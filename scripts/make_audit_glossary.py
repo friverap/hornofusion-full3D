@@ -4,7 +4,8 @@
 Extrae el encabezado REAL del CSV desde mod_audit.f90 (fuente de verdad) y
 lo cruza con el diccionario de definiciones de este script. Si aparece una
 columna sin definición, FALLA: así el glosario no puede quedarse atrás del
-código. Salida: paper/tables/audit_glossary.tex
+código. Salidas: paper/tables/audit_glossary.tex (LaTeX, fuera del repo) y
+docs/AUDIT_COLUMNS.md (Markdown, versionado; B5-22).
 """
 import os
 import re
@@ -112,9 +113,11 @@ DEFS = {
                      "outer iteration [m$^3$]"),
     "vol_unlinked": ("D", "Liquid volume crossing faces not linked in the pressure "
                           "equation (dispersed/drift), last outer iteration [m$^3$]"),
-    "m_spill": ("C", "Liquid displaced upward by the conservative spill of "
-                     "volume-constraint excess [kg] (informative; no mass "
-                     "error)"),
+    "m_spill": ("C", "Liquid mass moved upward by the conservative spill of "
+                     "volume-constraint excess, counted PER HOP [kg]: a relay "
+                     "chain of $L$ cells adds $L$ times the mass, so it is an "
+                     "upper bound of the mass moved (informative; no mass "
+                     "error; audit 9, B9-5)"),
     "p_max": ("D", "Maximum $|p|$ over active cells at the written step [Pa] "
                    "(blow-up sentinel: the cap is $2\\times10^6$)"),
     "u_gas_max": ("D", "Maximum gas speed over cells with "
@@ -223,5 +226,6 @@ with open(OUT_MD, "w") as f:
     for c in cols:
         typ, desc = DEFS[c]
         d = desc.replace("\\_", "_").replace("$", "`").replace("\\,", " ")
+        d = d.replace("|", "\\|")   # (B6-21) una | sin escapar rompe la tabla
         f.write(f"| `{c}` | {typ} | {d} |\n")
 print(f"escrito {OUT_MD}")

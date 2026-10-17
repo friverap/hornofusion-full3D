@@ -58,14 +58,13 @@ def main():
     # (A4-6) cota al defecto convectivo del gas fuera del venteo:
     # |E_conv_gas - E_out_conv| <= ctol_gas x S_gas
     # (A4-6) masa que la EOS reescribe sobre el presupuesto de masa del gas:
-    # medido 13 % (cold, arc_melt, bath_freeze) a 42 % (bath_fill 36, bed_drain
-    # 38, slag_chem_flow 42) en los bancos de dos fluidos; 79 % en bed_flood
-    # (xfail). Es una propiedad del modelo low-Mach (gas fuera del acople por
-    # F2.13/F2.31/fsat, COMP_SRC_CAP, lazo externo); el gate acota regresiones
-    # (>= 50 %) y el juez es B1 (N-M4 abierto)
-    # (A4-6) residuo de la EOS: medido 2-37 % en los bancos de dos fluidos
-    # (bed_drain 0.37, bath_fill 0.36; auditoria 5, golden v92); los xfail
-    # con causa: bed_flood 0.80, bath_fill_mix 0.76, melt_forced 1.28
+    # medido (tests/out, 17-oct-2026) 0.6 % (slag_chem_flow) a 33 % (arc_slag
+    # 0.327, melt_forced 0.324, bed_flood 0.235, arc_melt 0.13, bath_fill
+    # 0.10) en los bancos de dos fluidos; pocket_rise 0.44. Es una propiedad
+    # del modelo low-Mach (gas fuera del acople por F2.13/F2.31/fsat,
+    # COMP_SRC_CAP, lazo externo); el gate acota regresiones (>= 50 %) y el
+    # juez es B1 (N-M4 abierto). Unico xfail con causa: bath_fill_mix 0.57
+    # (bed_flood y melt_forced salieron del xfail con N-M4, auditoria 6)
     ap.add_argument("--mgtol", type=float, default=0.5)
     # (A4-5) cierre radiativo: |sum rad fases + E_rad_wall| <= rtol_rad x sum|rad|
     ap.add_argument("--rtol-rad", type=float, default=0.05)

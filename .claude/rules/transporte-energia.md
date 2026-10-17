@@ -61,7 +61,9 @@ guarda sin leer su causa.
   **Limitador de hueco (sep-2026)**: la entrada a cada celda se escala a
   `(1−α_s−α_sl−α_l)·ρV/dt_sub + salida − mdot` (factor `ws_lim`, barridos
   Jacobi con halos HASTA CONVERGENCIA — el "no cabe" avanza una celda por
-  barrido; 3 fijos recortaron 2.6 t en B1 v9), aplicado por igual en las
+  barrido; 3 fijos recortaron 2.6 t en B1 v9 — con tope `N_LIM_MAX` = 256
+  barridos: si se agota, el exceso que deja el punto fijo no convergido lo
+  mueve el derrame (`m_spill`), ver M9-6 abajo), aplicado por igual en las
   dos celdas de la cara
   → el fundido que no cabe se ACUMULA encima en vez de recortarse (B1 v8
   perdía 4.4 t en 427 s por el clip). Los flujos efectivos promediados

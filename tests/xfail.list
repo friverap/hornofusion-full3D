@@ -4,7 +4,8 @@
 # arc_budget SOLO en noflow: sin flujo, el gas (85% en la columna del
 # arco) no consume su parte de S_arc — limitación de diseño del test,
 # no un bug (con flujo el presupuesto cierra a 1.0000). M12 (atenuacion del
-# gas en el camino del MC): 0.486 -> 0.393, misma causa.
+# gas en el camino del MC): 0.486 -> 0.393, misma causa; hoy 0.421
+# (tests/out, 17-oct-2026).
 audit_noflow:arc_budget
 # energy_balance SOLO en el cold de 10 pasos: con la carga por masa exacta
 # (2026-09) el transitorio de ignición es más rígido y el error de
@@ -75,7 +76,9 @@ audit_noflow:arc_budget
 # (audit_mix:alpha_clip retirado el 15-oct-2026, auditoria 8: los 232 kg que
 # recortaba bath_fill_mix eran exceso que el derrame no podia subir a traves
 # de una celda LLENA; con la cascada que atraviesa celdas llenas, clip 0.)
-# bath_fill_mix (modelo de mezcla, opt-in negativo): la EOS reescribe el 76 %
+# bath_fill_mix (modelo de mezcla, opt-in negativo): la EOS reescribe el 57 %
+# del presupuesto de masa del gas (tests/out, 17-oct-2026; antes 76 %), sobre
+# la tolerancia --mgtol 0.5.
 audit_mix:mass_gas
 # (auditoria 4, B4-19) tramo reanudado de slag_chem_flow (pasos 10-20): el
 # audit.csv es BIT A BIT el de la continua y la misma ventana 10-20 de la

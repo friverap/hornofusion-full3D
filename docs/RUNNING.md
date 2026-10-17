@@ -26,10 +26,12 @@ make clean        # elimina obj/ y bin/
 ### Targets de test (roadmap 2026; detalles en tests/README.md)
 
 ```bash
-make test-quick   # gate por commit (~1.5 min): corrida fría -n 8 + bath_test + arc_melt + invariantes
-                  # + balances de audit.csv + métricas vs golden
+make test-quick   # gate por commit (~1.5 min): corrida fría -n 8 + bath_test + arc_melt
+                  # + bed_bath_rest + invariantes + balances de audit.csv + métricas vs golden
 make test-full    # gate por etapa (~5-10 min): unit + matriz {configs}x{-n}
                   # + fusión + simetría 120° + química + convergencia externa
+                  # + oneflow_test (rama legada de una fase, check_bath.py)
+                  # + pocket_rise (bolsa de gas bajo capa saturada, check_pocket.py)
 make test-unit    # unit tests Fortran (TDMA, malla, entalpía, flujos de cara,
                   # equilibrio DO, receta de carga)
 STAGE=vN make test-rebaseline   # regenerar tests/golden/metrics_vN.json tras

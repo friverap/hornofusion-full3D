@@ -38,6 +38,9 @@ STAGE=v1 make test-rebaseline   # regenera el golden de métricas (una vez por e
 | `integration/compare_audit.py` | `audit.csv` de un reinicio frente a la corrida continua, columna a columna |
 | `integration/check_symmetry.py` | Invarianza a rotación de 120° |
 | `integration/check_audit.py` | Balances de `audit.csv` (energía total y por paso, masas, arco, radiación, centinelas, techo de ajustes de escoria) |
+| `oneflow_test` (full) | Rama legada de UNA fase (`solve_multiphase = false`) sobre el baño en reposo de `bath_test`, con `check_bath.py`; vigila que no empeore (masa, α congelada, centinelas); reposo y energía en xfail con causa (B5-4) |
+| `pocket_rise` (full) | Bolsa de gas bajo una capa saturada del lecho (M4-12): reanuda desde un estado construido por `integration/make_pocket_init.py` sobre el paso 0 de `bed_bath_rest_n4` |
+| `integration/check_pocket.py` | Criterio de `pocket_rise`: la capa saturada gana gas, la bolsa lo pierde y se despresuriza sin repuntes ni retención (presión de las capas 6–7 frente a la 9; M8-3) |
 | `integration/check_slag_bed.py` | Capa de escoria: orden acero/escoria, T, masa (con `m_slag_clip` y su techo), volfix, saltos del soporte; con `--umax-liq/--umax-gas` el reposo de `slag_rest` |
 | `integration/check_slag_chem.py` | Química de la escoria: Fe elemental, masa de escoria, actividad de oxidación y (`--min-return`) de reducción |
 | bancos de escoria | `arc_slag`, `arc_melt_slag`, `arc_melt_slag_heel`, `slag_chem_flow`, `slag_chem_thick` (capa condensada gruesa), `slag_rest` (reposo con escoria condensada) y `slag_chem_test` (sin flujo) |
