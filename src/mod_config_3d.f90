@@ -222,7 +222,10 @@ contains
         integer :: iu, ios
         character(len=512) :: line, key, val
         integer :: eq_pos, cpos
+        real(dp) :: tref0, tliq0
 
+        ! (bajo N-B10) T_ref_boussinesq por defecto SIGUE a T_liquidus del config
+        tref0 = cfg%T_ref_boussinesq; tliq0 = cfg%T_liquidus
         open(newunit=iu, file=trim(filename), status='old', iostat=ios)
         if (ios /= 0) then
             if (cfg_root()) print '(A,A)', ' [CONFIG] ERROR: cannot open config file: ', trim(filename)
@@ -261,6 +264,9 @@ contains
         ! bano a 1850 K quedaba x0.81 mientras la inercia usaba 7500 (auditoria
         ! 12-oct-2026, A7)
         if (cfg%T_ref_boussinesq < 0.0_dp) cfg%T_ref_boussinesq = cfg%T_liquidus
+        ! (N-B10) sin T_ref_boussinesq explicito, la referencia es el T_liquidus
+        ! LEIDO (antes quedaba el del default aunque el config lo cambiara)
+        if (cfg%T_ref_boussinesq == tref0 .and. tref0 == tliq0) cfg%T_ref_boussinesq = cfg%T_liquidus
     end subroutine config_read
 
     ! Posicion del primer '#' o '!' precedido de blanco/tabulador (0 si no hay)
