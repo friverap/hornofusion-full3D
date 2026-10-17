@@ -157,6 +157,7 @@ contains
         cfg%h_contact_sl = 1000.0_dp
         cfg%m_slag_init  = 3300.0_dp
         cfg%solve_slag   = .false.
+        cfg%slag_in_volume = .false.
 
         ! Species transport (CO/CO2)
         cfg%solve_species   = .false.
@@ -387,6 +388,7 @@ contains
         case ('h_contact_sl'); call parse_real(val, key, cfg%h_contact_sl)
         case ('m_slag_init');  call parse_real(val, key, cfg%m_slag_init)
         case ('solve_slag');   cfg%solve_slag = parse_bool(val)
+        case ('slag_in_volume'); cfg%slag_in_volume = parse_bool(val)
         ! Species transport
         case ('solve_species');   cfg%solve_species = parse_bool(val)
         case ('carbon_frac');     call parse_real(val, key, cfg%carbon_frac)
@@ -550,6 +552,10 @@ contains
         if (cfg%adaptive_dt) call require(cfg%dt >= cfg%dt_min .and. cfg%dt <= cfg%dt_max, &
                      'requires dt_min <= dt <= dt_max (adaptive_dt)', ok)
         call require(cfg%wall_time_max >= 0.0_dp, 'wall_time_max must be >= 0 (0 = off)', ok)
+        ! (Plan H) la vista condensada solo existe en dos fluidos con flujo
+        if (cfg%slag_in_volume) call require(cfg%solve_slag .and. cfg%solve_flow .and. &
+            cfg%solve_multiphase .and. .not. cfg%mixture_model, &
+            'slag_in_volume requires solve_slag, solve_flow, solve_multiphase and not mixture_model', ok)
         call require(cfg%do_quadrature == 4 .or. cfg%do_quadrature == 6 &
                      .or. cfg%do_quadrature == 8, &
                      'do_quadrature must be 4, 6 or 8', ok)

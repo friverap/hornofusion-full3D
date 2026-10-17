@@ -125,6 +125,9 @@ module mod_types_3d
         real(dp) :: k_slag         ! Slag conductivity         [W/(m·K)]  ~1.5
         real(dp) :: h_contact_sl   ! Slag-steel interface h    [W/(m²·K)] ~1000
         real(dp) :: m_slag_init    ! Initial slag mass         [kg]       ~3300
+        ! (Plan H, M17-PV1) la escoria como fase CONDENSADA dentro del Poisson de
+        ! volumen y del momento (vista acero+escoria); false = camino legado
+        logical  :: slag_in_volume
         logical  :: solve_slag     ! Enable slag model
 
         ! Species transport (CO/CO2)
