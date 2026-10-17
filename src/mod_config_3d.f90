@@ -566,6 +566,9 @@ contains
                      'requires dt_min <= dt <= dt_max (adaptive_dt)', ok)
         call require(cfg%wall_time_max >= 0.0_dp, 'wall_time_max must be >= 0 (0 = off)', ok)
         call require(cfg%mu_slag > 0.0_dp, 'mu_slag must be > 0', ok)
+        ! (bajo N-B17) parametros que dividen o escalan el paso
+        call require(cfg%cfl_max > 0.0_dp, 'cfl_max must be > 0', ok)
+        call require(cfg%d_particle > 0.0_dp, 'd_particle must be > 0', ok)
         ! (Plan H, P9) la vista condensada solo existe en dos fluidos con flujo:
         ! fuera de ahi la clave no actua (slag_condensed_on la apaga; con el
         ! default true no es un error de configuracion)
