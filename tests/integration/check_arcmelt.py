@@ -5,8 +5,8 @@ paso 1 (melt_forced, bath_fill y bed_flood funden >= 99.99 % en el paso 1).
   arcmelt_progressive  fracción de pasos con m_melted > 0 >= --frac (medido
                        0.62 desde la banda ±1 del 14-oct; 0.56 antes) y
                        ningún paso funde más de --maxstep del total
-  arcmelt_mass         m_liq final >= --mliq kg (medido 36.8; 28 antes de
-                       la banda ±1)
+  arcmelt_mass         m_liq final >= --mliq kg (medido 37.1; la regresion de
+                       la banda +-1 dejaba 8.4 kg; umbral 25, auditoria 15)
 Uso: check_arcmelt.py RUNDIR [--xfail ids]
 """
 import argparse, csv, os, sys
@@ -19,7 +19,7 @@ def main():
     ap.add_argument("rundir")
     ap.add_argument("--frac", type=float, default=0.4)
     ap.add_argument("--maxstep", type=float, default=0.1)
-    ap.add_argument("--mliq", type=float, default=10.0)
+    ap.add_argument("--mliq", type=float, default=25.0)
     ap.add_argument("--xfail", default="")
     a = ap.parse_args()
     chk = Checker(parse_xfail_arg(a.xfail))
