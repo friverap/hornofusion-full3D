@@ -392,7 +392,8 @@ full | rebaseline)
     # el condensado y slag_condensed_sort; decomposition_arcslag n1 frente a
     # n4). Con slag_in_volume = false era la cesion + slag_buoyancy legada
     run_case arc_slag 1
-    # (auditoria 19) descomposicion en r/theta de la escoria condensada (n12)
+    # (auditoria 19) descomposicion en THETA de la escoria condensada (n12 =
+    # 1x2x6; r no se corta con nr = 12)
     run_case arc_slag 12
     # (auditoria 18, A18-9) el camino legado de la escoria sigue soportado
     run_case arc_slag_legacy 4
