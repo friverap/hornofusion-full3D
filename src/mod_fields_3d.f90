@@ -521,7 +521,7 @@ contains
                 cfg%heel_mass, ' kg de liquido'
     end subroutine init_heel
 
-    subroutine charge_scrap(sol, gas, m, cfg, bucket, sh)
+    subroutine charge_scrap(sol, gas, m, cfg, bucket, sh, slag)
         type(solid_t), intent(inout)  :: sol
         type(phase_t), intent(inout)  :: gas
         type(mesh_t), intent(in)      :: m
@@ -530,7 +530,13 @@ contains
         ! (auditoria 5, M5-4) p para el inventario del gas que la carga
         ! destruye (columnas m_gas_volfix / E_gas_volfix, como el volfix)
         type(shared_t), intent(in), optional :: sh
+        ! (Plan I, I2) con la escoria CONDENSADA la cesta 2 se apoya en el tope
+        ! del ACERO (no del bano + escoria): la chatarra atraviesa la capa y el
+        ! reordenamiento de inicio de paso sube la escoria desplazada
+        type(slag_t), intent(in), optional :: slag
         real(dp) :: ag_old, pc, dmg, deg
+        real(dp), allocatable :: cont(:,:)
+        logical  :: thru
 
         integer :: i, j, k, k_global, n
         real(dp) :: vfrac
@@ -583,14 +589,19 @@ contains
         ! (liquido + escoria) >= ALPHA_LIQ_CONT marca bano o escoria. La cesta
         ! 1 (arranque con el talon) no cambia.
         if (bucket > 1) then
+            thru = .false.
+            if (present(slag)) thru = slag_condensed_on(cfg)
+            allocate(cont(istart:iend, jstart:jend))
             do k = kend, kstart, -1
+                cont = 1.0_dp - gas%alpha(istart:iend,jstart:jend,k) - sol%alpha_s(istart:iend,jstart:jend,k)
+                if (thru) cont = cont - slag%alpha_sl(istart:iend,jstart:jend,k)
                 if (any(m%cell_type(istart:iend,jstart:jend,k) /= 0 .and. &
-                        1.0_dp - gas%alpha(istart:iend,jstart:jend,k) &
-                        - sol%alpha_s(istart:iend,jstart:jend,k) >= ALPHA_LIQ_CONT)) then
+                        cont >= ALPHA_LIQ_CONT)) then
                     z_top = max(z_top, m%zf(k))
                     exit
                 end if
             end do
+            deallocate(cont)
         end if
         
         ! Global max z_top across all processes

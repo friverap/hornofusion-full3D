@@ -360,7 +360,7 @@ program eaf_3d_simulator
         if (cfg%n_layers_b2 > 0 .and. &
             time >= cfg%t_bucket2_charge .and. &
             time - cfg%dt < cfg%t_bucket2_charge) then
-            call charge_scrap(sol, gas, mesh, cfg, 2, sh)
+            call charge_scrap(sol, gas, mesh, cfg, 2, sh, slag)
             ! Recarga (auditoria A10): los electrodos se retiran al techo y la
             ! perforacion de la nueva cesta empieza de nuevo
             do e = 1, N_ELECTRODES
@@ -378,7 +378,7 @@ program eaf_3d_simulator
         if (cfg%solve_ecs .and. time >= cfg%ecs_t_start .and. &
             time <= cfg%ecs_t_stop) then
             mdot_ecs = interpolate_rate(ecs_prof, time)
-            call ecs_feed(sol, gas, liq, mesh, cfg, mdot_ecs, cfg%dt, sh)
+            call ecs_feed(sol, gas, liq, mesh, cfg, mdot_ecs, cfg%dt, sh, slag)
             call solid_exchange_halos(sol, mesh)
             if (mesh%is_parallel) &
                 call mpi_exchange_halos_3d(gas%alpha, mesh%topo)

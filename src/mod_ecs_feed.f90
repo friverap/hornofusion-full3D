@@ -50,7 +50,7 @@ module mod_ecs_feed
 
 contains
 
-    subroutine ecs_feed(sol, gas, liq, m, cfg, mdot, dt, sh)
+    subroutine ecs_feed(sol, gas, liq, m, cfg, mdot, dt, sh, slag)
         type(solid_t), intent(inout) :: sol
         type(phase_t), intent(inout) :: gas
         ! liquido: el tope del BAÑO tambien es superficie (auditoria M38)
@@ -61,7 +61,15 @@ contains
         real(dp), intent(in)         :: dt
         ! (auditoria 5, M5-4) p para el inventario del gas desplazado
         type(shared_t), intent(in), optional :: sh
+        ! (Plan I, I2) con la escoria CONDENSADA la chatarra ATRAVIESA la capa:
+        ! la capacidad de la celda incluye la escoria (no solo el gas). El gas
+        ! se desplaza primero; el solape con la escoria lo resuelve el
+        ! reordenamiento de inicio de paso (slag_condensed_sort, que corre
+        ! despues: sube la escoria desplazada y audita el gas como el volfix).
+        ! La superficie ya es el tope del ACERO (alpha_l es solo acero)
+        type(slag_t), intent(in), optional :: slag
         real(dp) :: ag_old, pc, dmg, deg
+        logical  :: thru
 
         real(dp), allocatable :: h_loc(:,:), h_glob(:,:)
         integer,  allocatable :: k0_glob(:,:)
@@ -71,6 +79,8 @@ contains
         integer  :: i, ig, jg, kg, il, jl, kl, lvl, k, ierr
         logical  :: owned
 
+        thru = .false.
+        if (present(slag)) thru = slag_condensed_on(cfg)
         dm_total = mdot * dt + m_ecs_pending
         m_ecs_pending = 0.0_dp
         if (dm_total <= 0.0_dp) return
@@ -151,6 +161,9 @@ contains
                     cap_alpha = max(0.0_dp, &
                         min(cfg%ecs_vfrac - sol%alpha_s(il,jl,kl), &
                             gas%alpha(il,jl,kl)))
+                    if (thru) cap_alpha = max(0.0_dp, &
+                        min(cfg%ecs_vfrac - sol%alpha_s(il,jl,kl), &
+                            gas%alpha(il,jl,kl) + slag%alpha_sl(il,jl,kl)))
                     c_loc = c_loc + cfg%rho_steel * cap_alpha * &
                             m%vol(il,jl,kl)
                 end do
@@ -176,6 +189,9 @@ contains
                     cap_alpha = max(0.0_dp, &
                         min(cfg%ecs_vfrac - sol%alpha_s(il,jl,kl), &
                             gas%alpha(il,jl,kl)))
+                    if (thru) cap_alpha = max(0.0_dp, &
+                        min(cfg%ecs_vfrac - sol%alpha_s(il,jl,kl), &
+                            gas%alpha(il,jl,kl) + slag%alpha_sl(il,jl,kl)))
                     dm_cell = dm_level * (cfg%rho_steel * cap_alpha * vol) &
                               / c_glob
                     if (dm_cell <= 0.0_dp) cycle

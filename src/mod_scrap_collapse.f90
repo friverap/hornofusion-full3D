@@ -45,7 +45,9 @@ contains
         real(dp), allocatable :: m_g(:,:,:), E_g(:,:,:), a_g(:,:,:), T_g(:,:,:)
         real(dp), allocatable :: mc_g(:,:,:), al_g(:,:,:), asl_g(:,:,:)
         integer,  allocatable :: lid_g(:,:,:)
+        logical :: thru
 
+        thru = slag_condensed_on(cfg)
         allocate(m_g(m%nr_g, m%nth_g, m%nz_g), E_g(m%nr_g, m%nth_g, m%nz_g))
         allocate(a_g(m%nr_g, m%nth_g, m%nz_g), T_g(m%nr_g, m%nth_g, m%nz_g))
         allocate(lid_g(m%nr_g, m%nth_g, m%nz_g))
@@ -117,6 +119,12 @@ contains
                         else
                             a_cap = min(max(a_src, a_g(i,j,kk)), &
                                         max(0.0_dp, 1.0_dp - al_g(i,j,kk) - asl_g(i,j,kk)))
+                            ! (Plan I, I2) con la escoria CONDENSADA la chatarra
+                            ! ocupa tambien el volumen de la escoria (la
+                            ! atraviesa): el reordenamiento de inicio de paso,
+                            ! que corre despues, sube la escoria desplazada
+                            if (thru) a_cap = min(max(a_src, a_g(i,j,kk)), &
+                                                  max(0.0_dp, 1.0_dp - al_g(i,j,kk)))
                             room = a_cap * cfg%rho_steel * m%vol_global(i,j,kk) - m_g(i,j,kk)
                             take = min(rem, max(0.0_dp, room))
                         end if

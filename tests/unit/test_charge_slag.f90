@@ -14,6 +14,13 @@
 ! una capa de escoria encima (alpha_sl 0.6), sin chatarra; cesta 2 de 3 t a
 ! vfrac 0.5. Exige: ninguna celda con alpha_s + liquido + escoria > 1, masa
 ! cargada exacta, y toda la chatarra por encima de la escoria.
+!
+! Caso 3 (Plan I, I2): con la escoria CONDENSADA (slag_in_volume) la cesta 2
+! ATRAVIESA la capa: se apoya en el tope del ACERO bajo una capa gruesa de
+! escoria llena (3 celdas) y el reordenamiento de inicio de paso
+! (slag_condensed_sort) sube la escoria desplazada: masa y energia de la
+! escoria exactas, Sigma alpha <= 1 y la base de la chatarra en el tope del
+! acero (antes quedaba flotando sobre la escoria, aislada del baño).
 !===============================================================================
 program test_charge_slag
     use mod_constants
@@ -23,6 +30,7 @@ program test_charge_slag
     use mod_mesh_3d, only: mesh_generate_parallel
     use mod_fields_3d
     use mod_input_profiles, only: read_charge_recipe
+    use mod_slag_3d, only: slag_condensed_sort
     implicit none
 
     type(config_t) :: cfg
@@ -32,7 +40,7 @@ program test_charge_slag
     type(slag_t)   :: slag
     type(shared_t) :: sh
     real(dp), allocatable :: al(:,:,:), asl(:,:,:), ms0(:,:,:)
-    real(dp) :: over, m_added, z_slag_top, z_scrap_low
+    real(dp) :: over, m_added, z_slag_top, z_scrap_low, msl0, esl0, z_slag_hi
     integer  :: i, j, k, nr, nth, nz, iu, ks
     logical  :: ok
 
@@ -136,8 +144,69 @@ program test_charge_slag
         ok = .false.
     end if
 
+    ! caso 3 (Plan I, I2): escoria condensada gruesa sobre el baño
+    cfg%solve_slag = .true.; cfg%slag_in_volume = .true.
+    cfg%solve_flow = .true.; cfg%solve_multiphase = .true.; cfg%mixture_model = .false.
+    if (.not. slag_condensed_on(cfg)) then
+        print '(A)', '   FAIL caso 3: la escoria condensada no esta activa'
+        ok = .false.
+    end if
+    sol%alpha_s = 0.0_dp; sol%m_s = 0.0_dp; sol%E_s = 0.0_dp; sol%m_C = 0.0_dp
+    liq%alpha = al; liq%T = 1850.0_dp
+    slag%alpha_sl = 0.0_dp; slag%m_sl = 0.0_dp; slag%E_sl = 0.0_dp; slag%m_X = 0.0_dp
+    do k = ks + 1, ks + 3
+        slag%alpha_sl(:,:,k) = 1.0_dp
+    end do
+    where (mesh%cell_type == 0) slag%alpha_sl = 0.0_dp
+    slag%m_sl = slag%alpha_sl * cfg%rho_slag * mesh%vol
+    slag%m_X(:,:,:,SL_CAO) = 0.5_dp * slag%m_sl
+    slag%T_sl = 1850.0_dp
+    slag%E_sl = slag%m_sl * cfg%cp_slag * 1850.0_dp
+    gas%alpha = max(0.0_dp, 1.0_dp - liq%alpha - slag%alpha_sl)
+    where (mesh%cell_type == 0) gas%alpha = 0.0_dp
+    msl0 = sum(slag%m_sl(1:nr,1:nth,1:nz)); esl0 = sum(slag%E_sl(1:nr,1:nth,1:nz))
+    call charge_scrap(sol, gas, mesh, cfg, 2, sh, slag)
+    call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh)
+    over = 0.0_dp; m_added = 0.0_dp; z_scrap_low = huge(1.0_dp); z_slag_hi = 0.0_dp
+    do k = 1, nz
+        do j = 1, nth
+            do i = 1, nr
+                if (mesh%cell_type(i,j,k) == 0) cycle
+                over = max(over, sol%alpha_s(i,j,k) + liq%alpha(i,j,k) + slag%alpha_sl(i,j,k) - 1.0_dp)
+                m_added = m_added + sol%m_s(i,j,k)
+                if (sol%m_s(i,j,k) > 0.0_dp) z_scrap_low = min(z_scrap_low, mesh%zf(k-1))
+                if (slag%alpha_sl(i,j,k) >= ALPHA_CUTOFF) z_slag_hi = max(z_slag_hi, mesh%zf(k))
+            end do
+        end do
+    end do
+    print '(A,F9.3,A,F6.3,A,F6.3,A,F6.3,A,ES10.3)', '   escoria condensada: masa cargada ', m_added, &
+        ' kg  base de la chatarra ', z_scrap_low, ' m  tope del acero ', mesh%zf(ks), &
+        '  cima de la escoria ', z_slag_hi, '  sobrellenado ', over
+    if (abs(m_added - 3000.0_dp) > 1.0e-9_dp * 3000.0_dp) then
+        print '(A)', '   FAIL caso 3: la masa cargada no es la de la receta'
+        ok = .false.
+    end if
+    if (abs(z_scrap_low - mesh%zf(ks)) > 1.0e-12_dp) then
+        print '(A)', '   FAIL caso 3: la chatarra no se apoya en el tope del acero (no atraviesa la escoria)'
+        ok = .false.
+    end if
+    if (.not. z_slag_hi > mesh%zf(ks + 3) + 1.0e-12_dp) then
+        print '(A)', '   FAIL caso 3: la escoria desplazada no subio'
+        ok = .false.
+    end if
+    if (over > 1.0e-12_dp) then
+        print '(A)', '   FAIL caso 3: Sigma alpha > 1 tras el reordenamiento'
+        ok = .false.
+    end if
+    if (abs(sum(slag%m_sl(1:nr,1:nth,1:nz)) - msl0) > 1.0e-12_dp * msl0 .or. &
+        abs(sum(slag%E_sl(1:nr,1:nth,1:nz)) - esl0) > 1.0e-12_dp * esl0) then
+        print '(A,2ES12.4)', '   FAIL caso 3: masa/energia de escoria no conservadas: ', &
+            sum(slag%m_sl(1:nr,1:nth,1:nz)) - msl0, sum(slag%E_sl(1:nr,1:nth,1:nz)) - esl0
+        ok = .false.
+    end if
+
     if (ok) then
-        print '(A)', ' PASS test_charge_slag (la cesta 2 se apoya sobre bano y escoria; solo desplaza gas)'
+        print '(A)', ' PASS test_charge_slag (legado: sobre bano y escoria; condensada: atraviesa la escoria)'
     else
         print '(A)', ' FAIL test_charge_slag'
         stop 1

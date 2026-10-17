@@ -10,6 +10,10 @@
 !      0.55; alpha_s = m/(rho V) en todas las celdas.
 !   2. Igual, con liquido alpha_l = 0.6 en el destino (k = 1): el solido que
 !      entra no supera el hueco libre (alpha_s + alpha_l <= 1).
+!   3. (Plan I, I2) baño lleno en k = 1 y escoria CONDENSADA llena en k = 2:
+!      la celda de escoria no es soporte y la chatarra la ATRAVIESA (ocupa su
+!      volumen; el reordenamiento de inicio de paso sube la escoria). Antes
+!      su hueco libre era 0 y la chatarra quedaba flotando sobre la escoria.
 !===============================================================================
 program test_scrap_collapse
     use mod_constants
@@ -46,7 +50,11 @@ program test_scrap_collapse
     nr = mesh%nr; nth = mesh%ntheta; nz = mesh%nz
     ok = .true.
 
-    do icase = 1, 2
+    do icase = 1, 3
+        if (icase == 3) then
+            cfg%solve_slag = .true.; cfg%slag_in_volume = .true.
+            cfg%solve_flow = .true.; cfg%solve_multiphase = .true.; cfg%mixture_model = .false.
+        end if
         sol%alpha_s = 0.0_dp; sol%m_s = 0.0_dp; sol%E_s = 0.0_dp; sol%m_C = 0.0_dp
         sol%layer_id = 0; liq%alpha = 0.0_dp; slag%alpha_sl = 0.0_dp
         do k = 1, nz
@@ -62,6 +70,8 @@ program test_scrap_collapse
                         sol%layer_id(i,j,k) = 1
                     end if
                     if (icase == 2 .and. k == 1) liq%alpha(i,j,k) = 0.6_dp
+                    if (icase == 3 .and. k == 1) liq%alpha(i,j,k) = 1.0_dp
+                    if (icase == 3 .and. k == 2) slag%alpha_sl(i,j,k) = 1.0_dp
                 end do
             end do
         end do

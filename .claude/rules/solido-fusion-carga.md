@@ -43,4 +43,10 @@ guarda sin leer su causa.
   paso de carga (réplica de producción: 12 t). Consecuencia física a vigilar:
   la cesta 2 empieza sin contacto con el baño (como el ECS y el colapso, que ya
   apoyan la chatarra sobre el baño); la cesta 1 (talón) no cambia.
-  `test_charge_slag`.
+  `test_charge_slag`. **Con la escoria CONDENSADA (Plan I, I2) la chatarra
+  ATRAVIESA la escoria** en la cesta 2 (cota = tope del ACERO), el ECS
+  (capacidad min(vfrac − α_s, α_g + α_sl)) y el colapso (hueco 1 − α_l): el
+  solape escoria/chatarra lo resuelve `slag_condensed_sort` al inicio del paso
+  (corre después de los tres), que sube la escoria desplazada y audita el gas
+  como el volfix. Tests: casos condensados de `test_charge_slag`,
+  `test_ecs_feed` y `test_scrap_collapse`.
