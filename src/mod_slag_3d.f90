@@ -511,18 +511,21 @@ contains
                             k2 = k2e
                             k = k2 + 1
                         end if
-                        ! (auditoria P4 M4) si ni hasta el techo cabe, no se
-                        ! compacta (la ultima celda quedaria por encima de su
-                        ! hueco): solo se reordena con las alpha_c de cada celda
-                        if (vcond <= capsum * (1.0_dp + 1.0e-14_dp)) then
-                            do kk = kc, k2
-                                capk = max(0.0_dp, liq_cap(ss_g(i,j,kk), 0.0_dp) - ap_g(i,j,kk)) * m%vol_global(i,j,kk)
-                                if (kk == k2) capk = vcond
-                                capk = max(min(capk, vcond), 0.0_dp)
-                                acn(i,j,kk) = capk / m%vol_global(i,j,kk)
-                                vcond = vcond - capk
-                            end do
-                        end if
+                        ! (auditoria P4 M4) antes, si ni hasta el techo cabia, no
+                        ! se compactaba. Con Sigma alpha = 1 a la entrada era
+                        ! inalcanzable; con la chatarra que atraviesa la escoria
+                        ! (Plan I, I2; dirigida H2) un horno sobrellenado deja un
+                        ! solape que asi entraba al SIMPLE repartido y sin aviso.
+                        ! Ahora se compacta igual: cada celda hasta su hueco y el
+                        ! exceso en la ultima (k2), como la columna de escoria en
+                        ! el techo (room = vneed)
+                        do kk = kc, k2
+                            capk = max(0.0_dp, liq_cap(ss_g(i,j,kk), 0.0_dp) - ap_g(i,j,kk)) * m%vol_global(i,j,kk)
+                            if (kk == k2) capk = vcond
+                            capk = max(min(capk, vcond), 0.0_dp)
+                            acn(i,j,kk) = capk / m%vol_global(i,j,kk)
+                            vcond = vcond - capk
+                        end do
                     end if
                     ! ya ordenado: ninguna celda con acero por encima de una
                     ! celda con escoria (dentro del segmento) y nada que compactar
