@@ -29,7 +29,7 @@ module mod_audit
     implicit none
     private
 
-    public :: audit_init, audit_write_step, audit_add, audit_accumulate
+    public :: audit_init, audit_write_step, audit_add, audit_accumulate, audit_peek
     public :: audit_set_energy, gas_inventory_cell, gas_heat_capacity_ref, gas_log_exchange
     public :: AUD_ARC_DIRECT, AUD_ARC_DISCARD, AUD_MC_DEPOSIT
     public :: AUD_ALPHA_CLIP_MASS, AUD_MELT_MASS, AUD_RESOLID_MASS
@@ -298,6 +298,13 @@ contains
     end subroutine audit_set_energy
 
     !---------------------------------------------------------------------------
+    ! (auditoria 19, tests B6) lectura del contador acumulado desde la ultima
+    ! fila escrita (para los unit tests de las rutas auditadas)
+    real(dp) function audit_peek(id)
+        integer, intent(in) :: id
+        audit_peek = acc(id)
+    end function audit_peek
+
     subroutine audit_add(id, val)
         integer, intent(in)  :: id
         real(dp), intent(in) :: val

@@ -21,6 +21,7 @@ program test_condensed_transport
     use mod_mesh_3d, only: mesh_generate_parallel
     use mod_fields_3d
     use mod_continuity, only: solve_volume_fraction, solve_condensed_fraction
+    use mod_audit, only: audit_peek, AUD_STEEL_DEF_MASS
     use mod_workspace, only: ws_Fr, ws_Fth, ws_Fz, ws_slag_clip_call, ensure_workspace, &
                              ws_Fsl_r, ws_Fsl_th, ws_Fsl_z
     implicit none
@@ -32,7 +33,7 @@ program test_condensed_transport
     type(shared_t) :: sh
     real(dp), allocatable :: a_old(:,:,:), zero(:,:,:), Fr1(:,:,:), Fth1(:,:,:), Fz1(:,:,:)
     real(dp), allocatable :: asl0(:,:,:), ms0(:,:,:), es0(:,:,:), mx0(:,:,:,:)
-    real(dp) :: mst0, mst1, msl0, msl1, E0, E1, X0, X1, worst
+    real(dp) :: mst0, mst1, msl0, msl1, E0, E1, X0, X1, worst, def0
     integer  :: i, j, k, nr, nth, nz
     logical  :: ok
 
@@ -177,8 +178,17 @@ program test_condensed_transport
     sol%mdot = 0.0_dp
     sol%mdot(i,j,k) = -0.4_dp * cfg%rho_steel * mesh%vol(i,j,k) / cfg%dt
     liq%alpha = a_old; gas%alpha = 1.0_dp - a_old - asl0
+    def0 = audit_peek(AUD_STEEL_DEF_MASS)
     call solve_condensed_fraction(liq, gas, sol, slag, asl0, es0, mx0, a_old, mesh, cfg)
     sol%mdot = 0.0_dp
+    ! (auditoria 19, tests B6) el deficit (0.1 de la celda) va a m_steel_deficit
+    ! con signo positivo (acero creado)
+    if (abs((audit_peek(AUD_STEEL_DEF_MASS) - def0) - 0.1_dp * cfg%rho_steel * mesh%vol(i,j,k)) &
+        > 1.0e-9_dp * cfg%rho_steel * mesh%vol(i,j,k)) then
+        print '(A,2ES12.4)', '   FAIL caso d: m_steel_deficit no registra el deficit: ', &
+            audit_peek(AUD_STEEL_DEF_MASS) - def0, 0.1_dp * cfg%rho_steel * mesh%vol(i,j,k)
+        ok = .false.
+    end if
     if (abs(slag%alpha_sl(i,j,k) - 0.1_dp) > 1.0e-12_dp .or. liq%alpha(i,j,k) /= 0.0_dp .or. &
         abs(ws_slag_clip_call) > 1.0e-12_dp * cfg%rho_slag * mesh%vol(i,j,k)) then
         print '(A,3ES12.4)', '   FAIL caso d: la congelacion recorto escoria: ', slag%alpha_sl(i,j,k), &
