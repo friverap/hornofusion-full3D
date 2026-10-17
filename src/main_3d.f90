@@ -646,7 +646,10 @@ program eaf_3d_simulator
                 conv%res_cont = 0.0_dp
             else
                 ! No physics enabled - mark as converged immediately
+                ! (bajo N-B13) con n_outer definido: llega a monitor.log y a
+                ! adapt_timestep
                 conv%converged = .true.
+                conv%n_outer = outer
                 exit
             end if
 
