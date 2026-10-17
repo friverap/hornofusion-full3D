@@ -60,7 +60,7 @@ program eaf_3d_simulator
     type(mesh_t)          :: mesh
     type(phase_t)         :: liq, gas
     type(phase_t)         :: liq_old, gas_old
-    real(dp), allocatable :: sort_a(:,:,:), sort_t(:,:,:), sort_p(:,:,:), sort_g(:,:,:)   ! (Plan H P5) delta del reordenamiento
+    real(dp), allocatable :: sort_a(:,:,:), sort_t(:,:,:), sort_p(:,:,:)   ! (Plan H P5) delta del reordenamiento
     type(solid_t)         :: sol
     type(slag_t)          :: slag
     type(shared_t)        :: sh
@@ -577,17 +577,19 @@ program eaf_3d_simulator
             ! remapeado con su T (energia exacta) -> liq_old lo sigue (la
             ! quimica ya mantenia liq_old = liq en alpha)
             ! (auditoria 18, bajo MPI-1) guarda propia: no depender de ws_sp_*
-            if (.not. allocated(sort_a)) allocate(sort_a, sort_t, sort_p, sort_g, mold=liq%alpha)
-            sort_a = liq%alpha; sort_t = liq%T; sort_g = gas%alpha
+            if (.not. allocated(sort_a)) allocate(sort_a, sort_t, sort_p, mold=liq%alpha)
+            sort_a = liq%alpha; sort_t = liq%T
             ! (A18-4) el fundido pendiente del paso es volumen del liquido
             sort_p = 0.0_dp
             where (mesh%cell_type /= 0) sort_p = max(sol%mdot, 0.0_dp) * cfg%dt / (liq%rho * mesh%vol)
             call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh, a_pend=sort_p)
             liq_old%alpha = liq_old%alpha + (liq%alpha - sort_a)
             liq_old%T = liq_old%T + (liq%T - sort_t)
-            ! (auditoria 18, bajo MPI-5) el gas que el sort compacta o desplaza
-            ! tampoco es transporte: el transitorio del momento del gas lo sigue
-            gas_old%alpha = gas_old%alpha + (gas%alpha - sort_g)
+            ! (auditoria 18 MPI-5; auditoria 19 B1) entre la copia de gas_old y
+            ! aqui NO hay transporte (quimica con su relleno de gas, volfix de la
+            ! prefusion, sort): todo cambio de alpha_g es no convectivo y el
+            ! transitorio del momento del gas debe partir del estado actual
+            gas_old%alpha = gas%alpha
             ws_sp_asl = slag%alpha_sl
             ws_sp_es = slag%E_sl; ws_sp_mx = slag%m_X
         end if
