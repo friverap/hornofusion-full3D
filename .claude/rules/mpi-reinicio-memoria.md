@@ -6,9 +6,13 @@ paths:
   - "src/mod_parallel_utils.f90"
   - "src/mod_mesh_3d.f90"
   - "src/main_3d.f90"
-  - "tests/run_tests.sh"
-  - "tests/integration/compare_*.py"
+  - "tests/**"
   - "scripts/**"
+  - "Makefile"
+  - "src/mod_types_3d.f90"
+  - "src/mod_config_3d.f90"
+  - "src/mod_probe.f90"
+  - "src/mod_timers.f90"
 ---
 
 # MPI, halos, reinicio desde snapshot, memoria sin inicializar, harness de tests

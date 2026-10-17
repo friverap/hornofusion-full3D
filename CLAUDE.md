@@ -85,11 +85,11 @@ obligatorio si editas por Bash o scripts, que no la cargan:
 
 | Tema | Archivo | Modulos |
 |---|---|---|
-| Acople P-V, momento, multifase, lecho, gas; Planes C-G y lo que NO funciono | `.claude/rules/acople-pv.md` | pressure, momentum, multiphase, mixture, drag, workspace, face_flux |
+| Acople P-V, momento, multifase, lecho, gas; Planes C-G y lo que NO funciono | `.claude/rules/acople-pv.md` | pressure, momentum, multiphase, mixture, drag, workspace, face_flux, turbulence, convergence |
 | Transporte de alpha, energia, DO, audit de balances | `.claude/rules/transporte-energia.md` | continuity, energy, audit, interphase_ht, radiation_do |
 | Arco, escoria (Plan H condensada / legado), quimica | `.claude/rules/arco-escoria-quimica.md` | arc_*, slag_*, foam, electrode, chemistry, species |
 | Solido, fusion/congelacion, colapso, cestas, ECS | `.claude/rules/solido-fusion-carga.md` | melting, solid_phase, scrap_collapse, ecs_feed, fields |
-| MPI, halos, reinicio, memoria, harness | `.claude/rules/mpi-reinicio-memoria.md` | restart, output_hdf5, mpi_topology, mesh, main |
+| MPI, halos, reinicio, memoria, harness, tipos/config, tests | `.claude/rules/mpi-reinicio-memoria.md` | restart, output_hdf5, mpi_topology, mesh, main, types, config, `tests/**`, Makefile |
 
 Reglas criticas (una linea; detalle en el archivo del tema):
 - Flujos convectivos SIEMPRE via `mod_face_flux`; liquido donor-cell (energia y

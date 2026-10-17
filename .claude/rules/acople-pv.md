@@ -9,6 +9,8 @@ paths:
   - "src/mod_face_flux.f90"
   - "src/mod_boundary_3d.f90"
   - "src/mod_constants.f90"
+  - "src/mod_turbulence_3d.f90"
+  - "src/mod_convergence_3d.f90"
   - "input/**"
   - "campaigns/**"
 ---
