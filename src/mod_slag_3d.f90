@@ -899,8 +899,19 @@ contains
                     if (m%cell_type(i,j,k-1) /= 0) then
                         if (liq%alpha(i,j,k-1) > SMALL_SL) Cb = liq%alpha(i,j,k-1) &
                             * liq%rho(i,j,k-1) * liq%cp(i,j,k-1) * m%vol(i,j,k-1)
+                        ! (auditoria 18, A18-8) con la escoria condensada la
+                        ! interfaz suele caer DENTRO de una celda (acero + escoria):
+                        ! esa celda ya acopla su escoria con el baño; la escoria
+                        ! de encima no vuelve a acoplarse con ese acero (doble
+                        ! area de contacto). Legado sin cambio
+                        if (slag_condensed_on(cfg) .and. &
+                            slag%alpha_sl(i,j,k-1) >= ALPHA_CUTOFF) Cb = 0.0_dp
                     end if
-                    if (Cf > 0.0_dp .and. Cf >= Cb) then
+                    ! (A18-8) con la escoria condensada, una celda con acero propio
+                    ! ES la interfaz: su escoria toca ese acero (el "reservorio de
+                    ! mayor capacidad" es del legado, donde la celda de escoria
+                    ! guardaba solo una traza de liquido)
+                    if (Cf > 0.0_dp .and. (Cf >= Cb .or. slag_condensed_on(cfg))) then
                         Cf = liq%alpha(i,j,k) * liq%rho(i,j,k) * liq%cp(i,j,k) * m%vol(i,j,k)
                         hA = cfg%h_contact_sl * m%Az(i,j,k-1)
                         f = 1.0_dp - exp(-dt * hA * (1.0_dp / Cs + 1.0_dp / Cf))
