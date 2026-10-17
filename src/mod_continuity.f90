@@ -58,6 +58,11 @@ module mod_continuity
     real(dp), save :: vd_step_prev = 0.0_dp, vl_step_prev = 0.0_dp, vu_step_prev = 0.0_dp
     integer,  save :: vd_step_id = -1, vl_step_id = -1, vu_step_id = -1
     integer,  save :: spill_step_id = -huge(1)
+    ! (Plan H) energia del equilibrio de trazas de escoria: el transporte
+    ! condensado corre en cada iteracion externa y rehace el paso desde el
+    ! estado de inicio, asi que vale la de la ULTIMA llamada (auditoria P4, A1)
+    real(dp), save :: tclip_step_prev = 0.0_dp
+    integer,  save :: tclip_step_id = -huge(1)
 
 contains
 
@@ -1109,7 +1114,7 @@ contains
             end do
         end do
         ws_slag_clip_call = clip_loc
-        call audit_add(AUD_SLAG_TCLIP, clip_e)
+        call audit_step_delta(AUD_SLAG_TCLIP, clip_e, tclip_step_prev, tclip_step_id)
 
         ! flujos de masa: ACERO (energia) = condensado - escoria;
         ! CONDENSADO (momento) = acero + escoria con rho_sl
