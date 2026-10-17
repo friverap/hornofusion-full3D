@@ -373,8 +373,15 @@ contains
                 do i = lbound(ws_wc,1), ubound(ws_wc,1)
                     ac = ws_al_st(i,j,k) + a_sl(i,j,k)
                     if (ac > 0.0_dp) then
-                        ws_wc(i,j,k) = (ws_al_st(i,j,k) * liq_own_weight(ws_rl_st(i,j,k), liq%T(i,j,k), beta, Tref) &
-                                        + a_sl(i,j,k) * rho_sl * GRAVITY) / ac
+                        ! (auditoria 18, tests A4) la T del acero solo se lee con
+                        ! acero: en una celda solo de escoria puede ser basura
+                        ! (rancia o NaN) y 0 x NaN = NaN
+                        if (ws_al_st(i,j,k) > 0.0_dp) then
+                            ws_wc(i,j,k) = (ws_al_st(i,j,k) * liq_own_weight(ws_rl_st(i,j,k), liq%T(i,j,k), beta, Tref) &
+                                            + a_sl(i,j,k) * rho_sl * GRAVITY) / ac
+                        else
+                            ws_wc(i,j,k) = rho_sl * GRAVITY
+                        end if
                         liq%rho(i,j,k) = (ws_al_st(i,j,k) * ws_rl_st(i,j,k) + a_sl(i,j,k) * rho_sl) / ac
                         if (ws_mu_set) then
                             liq%mu(i,j,k) = (ws_al_st(i,j,k) * ws_mu_st(i,j,k) + a_sl(i,j,k) * mu_sl) / ac

@@ -8,6 +8,7 @@
 ! (4) liq_w: con la vista apagada es liq_own_weight bit a bit; encendida, ws_wc.
 !===============================================================================
 program test_condensed_view
+    use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
     use mod_constants
     use mod_types_3d
     use mod_mpi_topology
@@ -47,7 +48,7 @@ program test_condensed_view
         end do
     end do
     ! celda solo de escoria con T basura
-    liq%alpha(2,3,3) = 0.0_dp; asl(2,3,3) = 0.6_dp; liq%T(2,3,3) = 1.0e30_dp
+    liq%alpha(2,3,3) = 0.0_dp; asl(2,3,3) = 0.6_dp; liq%T(2,3,3) = ieee_value(1.0_dp, ieee_quiet_nan)
     a0 = liq%alpha; r0 = liq%rho; ao0 = liq_old%alpha; ro0 = liq_old%rho
 
     ! (4) liq_w con la vista apagada
