@@ -21,10 +21,19 @@ for t in tests/bin/*; do
     # sus manejadores; test_mesh_seam colgo 50 min en el rebaseline v123)
     "$t" > "tests/bin/$name.log" 2>&1 &
     tpid=$!
-    ( sleep "${UNIT_TIMEOUT:-300}"; kill -9 "$tpid" 2>/dev/null ) &
+    # el vigilante no hereda la salida y mata a su propio sleep al terminar
+    # (dirigida de bajos A18, B2: un sleep huerfano por test retenia el stdout
+    # y una tuberia 'make test-unit | tee' no cerraba hasta 300 s despues)
+    ( exec >/dev/null 2>&1
+      sleep "${UNIT_TIMEOUT:-300}" & sp=$!
+      trap 'kill $sp 2>/dev/null; exit 0' TERM
+      wait $sp && kill -9 "$tpid" 2>/dev/null ) &
     wpid=$!
     wait "$tpid"; trc=$?
     kill "$wpid" 2>/dev/null; wait "$wpid" 2>/dev/null
+    if [ "$trc" -eq 137 ]; then
+        echo "TIMEOUT unit:$name (> ${UNIT_TIMEOUT:-300} s, matado con SIGKILL)" >> "tests/bin/$name.log"
+    fi
     if [ "$trc" -eq 0 ]; then
         if is_xfail "$name"; then
             echo "XPASS unit:$name (quitar de tests/xfail.list)"
