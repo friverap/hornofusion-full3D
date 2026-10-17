@@ -33,9 +33,12 @@ program test_ecs_feed
     type(shared_t) :: sh
     real(dp) :: m0, m1, e0, e1, fed, dm_expected, err
     real(dp), parameter :: MDOT = 40.0_dp, DT = 0.5_dp
-    ! parte 2: caudal mayor (10 t en 20 pasos) para que la chatarra sumergida
-    ! pase ECS_SURF_ALPHA y la superficie suba dentro de la escoria (H3)
-    real(dp), parameter :: MDOT2 = 1000.0_dp
+    ! parte 2: caudal mayor (2 t en 20 pasos) para que la chatarra sumergida
+    ! pase ECS_SURF_ALPHA y la superficie suba dentro de la escoria (H3). Con
+    ! 10 t la superficie subia una celda cada 2 pasos y llegaba al techo en el
+    ! paso 15 (3 t pendientes; dirigida I2-b, A1): 200 kg/s deja alpha_s 0.054
+    ! en k = 4, 0.052 en k = 5 y nada pendiente
+    real(dp), parameter :: MDOT2 = 200.0_dp
     integer :: n, i, j, k, kmin_ecs
     real(dp) :: msl0, esl0, over
     logical :: ok
