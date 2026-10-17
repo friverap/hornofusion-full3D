@@ -31,6 +31,8 @@ def main():
     ap.add_argument("--xfail", default="")
     # (auditoria 18, A1) actividad de la REDUCCION: Fe devuelto minimo [kg]
     ap.add_argument("--min-return", type=float, default=None)
+    # (auditoria 19, M19-4) umbral de la actividad de oxidacion por banco
+    ap.add_argument("--min-yield", type=float, default=0.5)
     args = ap.parse_args()
 
     rows = [{k: safe_float(v) for k, v in r.items()}
@@ -45,16 +47,17 @@ def main():
     fer = sum(r.get("m_fe_return", 0.0) for r in steps)
     dm_liq = last["m_liq"] - first["m_liq"]
 
-    # umbral 0.5 kg (Plan H, P7): con la escoria CONDENSADA la capa resuelta
-    # aisla el metal del O2 (el estencil de oxidacion pide O2 en la celda de
-    # escoria y baño en la de abajo; tras la compactacion la celda inferior
-    # no tiene gas): slag_chem_flow oxida 0.99 kg frente a 2.7 kg del legado.
-    # El check vigila que la quimica CORRA, no su tasa
+    # actividad de la REDUCCION (auditoria 18, A18-1): Fe devuelto minimo
     if args.min_return is not None:
         chk.report("reduction", fer >= args.min_return,
                    f"Fe devuelto por la reduccion = {fer:.3f} kg (min {args.min_return:.3f})")
-    chk.report("activity", fey > 0.5,
-               f"Fe oxidado = {fey:.3f} kg (>0.5 kg exige quimica activa)")
+    # actividad de la OXIDACION: umbral por banco (por defecto 0.5 kg, Plan H
+    # P7: con la escoria CONDENSADA la capa resuelta aisla el metal del O2 -el
+    # estencil pide O2 en la celda de escoria y baño en la de abajo-:
+    # slag_chem_flow oxida 0.99 kg frente a 2.7 del legado). El check vigila
+    # que la quimica CORRA, no su tasa
+    chk.report("activity", fey > args.min_yield,
+               f"Fe oxidado = {fey:.3f} kg (>{args.min_yield} kg exige quimica activa)")
 
     # Fe elemental: el liquido pierde (yield - return) exactamente.
     # Tolerancia 1e-6 relativa al flujo: dm_liq es la RESTA de inventarios

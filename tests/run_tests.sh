@@ -468,7 +468,8 @@ full | rebaseline)
     run_script "slag_chem_flow" \
         $PY $INT/check_slag_chem.py "$OUT/slag_chem_flow_n4" --config "$CFG/slag_chem_flow.dat"
     run_script "slag_chem_thick" \
-        $PY $INT/check_slag_chem.py "$OUT/slag_chem_thick_n4" --config "$CFG/slag_chem_thick.dat" --min-return 0.5
+        $PY $INT/check_slag_chem.py "$OUT/slag_chem_thick_n4" --config "$CFG/slag_chem_thick.dat" --min-return 0.5 \
+        --min-yield 0.3
     # escoria por columna global (auditoria A14): invariante a la descomposicion
     # ECS con r DESCOMPUESTO (12 ranks -> 2x3x2): antes de la auditoria M38
     # la carga no se depositaba (indice radial local tomado como global)
