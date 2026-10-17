@@ -12,8 +12,9 @@
 !   3. (auditoria general Plan I, fisica MEDIO-1) escoria CONDENSADA con
 !      chatarra sumergida: celda 5 con escoria 0.5 + chatarra 0.485 + gas de
 !      poro 0.015 (>= ALPHA_FLOW_CUTOFF) bajo escoria llena (6) y gas (7+):
-!      el gas de poro esta aislado (el sort lo compactaria con su CO); todo el
-!      CO de las celdas 5 y 6 sube al gas libre (k >= 7), conservado.
+!      el gas de poro esta aislado (el sort lo compactaria con su CO): el CO
+!      de la 5 sube al gas que conecta con el libre (k >= 6: la cima de la
+!      escoria, con el gas que libera su reduccion, y encima), conservado.
 !===============================================================================
 program test_slag_reduction
     use mod_constants
@@ -66,8 +67,10 @@ program test_slag_reduction
     sol%alpha_s(:,:,5) = 0.485_dp
     gas%alpha(:,:,5) = 0.015_dp
     call run_case('caso 3', 6)
-    if (sum(sh%S_CO_src(1:6,1:8,1:6)) /= 0.0_dp) &
-        call fail('caso 3: CO en el gas aislado bajo la escoria (kg/m3/s)', sum(sh%S_CO_src(1:6,1:8,1:6)))
+    if (sum(sh%S_CO_src(1:6,1:8,1:5)) /= 0.0_dp) &
+        call fail('caso 3: CO en el gas de poro aislado bajo la escoria (kg/m3/s)', sum(sh%S_CO_src(1:6,1:8,1:5)))
+    if (.not. sum(sh%S_CO_src(1:6,1:8,6:10)) > 0.0_dp) &
+        call fail('caso 3: sin CO sobre la escoria (no hubo reduccion)', 0.0_dp)
     cfg%solve_slag = .false.
 
     if (ok) then
