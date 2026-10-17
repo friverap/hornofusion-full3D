@@ -1178,6 +1178,16 @@ contains
                         slag%E_sl(i,j,k) = E_tr
                         slag%T_sl(i,j,k) = liq%T(i,j,k)
                         slag%m_X(i,j,k,:) = max(0.0_dp, slag%m_X(i,j,k,:))
+                        ! bajo ASL_QMIN la traza cede volumen sin extensivas: su
+                        ! composicion se acota a la masa (Sigma m_X <= m_sl;
+                        ! slag_chem_flow: Sigma X = 1.04 con alpha_sl 4e-14)
+                        if (sum(slag%m_X(i,j,k,:)) > slag%m_sl(i,j,k)) then
+                            if (slag%m_sl(i,j,k) > 0.0_dp) then
+                                slag%m_X(i,j,k,:) = slag%m_X(i,j,k,:) * (slag%m_sl(i,j,k) / sum(slag%m_X(i,j,k,:)))
+                            else
+                                slag%m_X(i,j,k,:) = 0.0_dp
+                            end if
+                        end if
                     else
                         slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / (slag%m_sl(i,j,k) * cfg%cp_slag)
                     end if

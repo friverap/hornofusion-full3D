@@ -480,6 +480,24 @@ exacta). Bancos `arc_slag` (10 s: T_sl máx bajo T_l máx; clip ~0) y
 
 ---
 
+### 14.x Escoria condensada (Plan H, `slag_in_volume`, default true)
+
+Acero y escoria forman la fase CONDENSADA del modelo de dos fluidos:
+α_c = α_l + α_sl, ρ_c = (α_l ρ_l + α_sl ρ_sl)/α_c y peso
+w_c = (α_l w_l + α_sl ρ_sl g)/α_c (Boussinesq solo en el acero). El Poisson
+de volumen y el momento ven el condensado; el transporte de α_c es el del
+líquido (donor-cell con los flujos conservativos, limitador, derrame,
+recorte) y en cada movimiento la escoria viaja con la fracción del dador
+φ = α_sl/α_c, junto con su entalpía y su composición por volumen de escoria.
+Flujos exportados: acero (energía del líquido) = condensado − escoria;
+condensado (momento) = acero + escoria·ρ_sl/ρ_l. La flotación es un
+reordenamiento lagrangiano por columna (acero abajo con su T, escoria
+arriba con E_sl y m_X), con compactación del gas bajo la interfaz de
+escoria resuelta. Las fuentes de masa de escoria (química, adiciones)
+toman su volumen del gas de la columna. Las trazas (α_sl < 10⁻⁶) se
+equilibran térmicamente con el baño (`E_slag_tclip`) y el recorte de
+escoria se audita aparte (`m_slag_clip`, `E_slag_clip`).
+
 ## 15. Transferencia de calor interfase
 
 **Gas–líquido en dos fluidos (auditoría 2, N-A1; auditoría 4, M4-9/M4-10)**:

@@ -775,25 +775,31 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   (cada parcela conserva su entalpía y composición; antes la media de columna
   daba conductividad vertical infinita, M17-arc1): el transporte entre capas
   de escoria lo hace la DO (espesor óptico ~5 por celda; `k_slag` sin efecto).
-  **ABIERTO (M17-PV1, desarrollo de modelo)**: la escoria NO está en la
-  restricción de volumen del Poisson. Con la escoria llenando el hueco de la
-  celda de la superficie del baño (sin gas), el limitador la ve llena y el
-  Poisson pide caudal: el baño bajo la escoria se acelera sin tope (arc_slag
-  10 s: u_liq 1.25 m/s, vol_lim 0.1 m³; sin escoria 0.11 m/s). Probado y
-  RECHAZADO: cerrar la cara en el Poisson (u_liq 25 m/s, gas 300), ceder la
-  escoria en el limitador (todo o solo la interfaz: el gas a 300 m/s por la
-  creación/destrucción de gas de slag_buoyancy fuera del Poisson) y dejar libre
-  la celda de la superficie (gas 300, p 1.4 MPa). CAUSA localizada (oct-2026,
-  diagnóstico por celda): en la celda de interfaz (α_g 0) el Poisson ventea por
-  su cara superior un gas FANTASMA del canal residual F2.21 (2.5e-4 m³/s en
-  arc_slag) que equilibra la entrada de líquido que el limitador bloquea. Quitar
-  el canal en celdas con escoria (5.º intento) es PEOR: u_liq 49 m/s, gas 300,
-  p en P_HYDRO_CAP desde el primer segundo (la celda queda sin ningún grado de
-  libertad de volumen). Usar en el transporte el α de cara del Poisson en las
-  caras con escoria no cambia nada (el bloqueo viene del gas). Ruta: meter α_sl
-  y su cambio por paso en la restricción de volumen del Poisson (la escoria
-  como volumen desplazable, no como hueco fantasma de gas). No afecta a producción
-  (sin escoria inicial) ni a B1. Sin modelar: transporte lateral.
+  **M17-PV1 CERRADO con Plan H (16-oct-2026, `slag_in_volume`, default
+  true; `docs/PLAN_H_escoria_condensada.md`)**: la escoria es fase CONDENSADA
+  del Poisson y del momento. Dentro de `multiphase_iteration` `liq%alpha`/
+  `liq%rho` son α_c = α_l + α_sl y ρ_c (`cond_view_enter/exit`; el acero vive
+  en `ws_al_st`), con el peso `ws_wc` (Boussinesq del acero + ρ_sl g) vía
+  `liq_w`. El condensado se transporta con `solve_volume_fraction` y la
+  escoria viaja con él (`asl_adv`) con la composición ACTUAL del dador en
+  cada sub-paso, derrame y recorte, y con ella sus extensivas E_sl y m_X
+  (`slq_adv`; con los valores específicos de inicio de paso la escoria que
+  cruzaba una celda vacía viajaba sin energía). Flotación =
+  `slag_condensed_sort` (reordenamiento por columna neutro en volumen,
+  compactación del gas SOLO bajo la interfaz de escoria resuelta, α_sl =
+  m_sl/(ρ_sl V) para las fuentes de química/adiciones, que extienden el tramo
+  sobre el gas; gas auditado como volfix). Trazas de escoria (α_sl <
+  ALPHA_CUTOFF) en equilibrio térmico con el baño (`E_slag_tclip`, por paso):
+  la masa de una celda que se vacía cancela a ~1e-110 kg y su E solo al
+  redondeo — E/m absurda llevó 5e11 J a la vecina y el baño a −2 MPa. Clip de
+  escoria aparte (`m_slag_clip`/`E_slag_clip`). Hidrostática inicial con el
+  peso de la escoria. arc_slag 10 s: u_liq 0.087 m/s (legado 1.25), vol_lim
+  2.9e-7, u_gas 6, p 95 kPa, energía 1.6e-3 del permitido. La capa condensada
+  AÍSLA el metal del O₂ en el estencil de oxidación (slag_chem_flow 0.99 kg
+  frente a 2.7 kg). `slag_in_volume = false` recupera la capa legada (con el
+  hueco fantasma de gas F2.21 descrito en el plan). Con el condensado la escoria
+  ya tiene transporte LATERAL (antes solo columnas). Sin modelar: viscosidad
+  propia de la escoria (P5b opcional).
 - **Régimen de PASO válido del modelo de dos fluidos (auditoría 12, M12-2)**:
   dt de unos pocos ms con CFL ≤ 1 (los parámetros de B1: dt_0 2 ms, dt_min
   1 ms, cfl_max 1). Con pasos fijos ≥ 50 ms, o con el antiguo dt_0 0.5 s /

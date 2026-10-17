@@ -111,3 +111,12 @@ que cambian de signo: m_slag_clip/E_slag_clip entran en las columnas de
 redondeo de compare_audit (piso 1e-15 del inventario de escoria, solo con
 --decomp); m_spill NO (M7-2). sNaN (snanfill + -O0 -ffpe-trap=invalid) en
 slag_rest y arc_slag condensados: limpio. Reinicio de slag_rest en la matriz.
+
+## Estado P9 (2026-10-16) — PLAN H CERRADO
+slag_in_volume = true por defecto (sin error de configuracion donde no
+aplica: slag_condensed_on la apaga). Produccion y B1 bit a bit (sin escoria).
+Hallazgo del rebaseline: traza de escoria (alpha_sl 4e-14 < ASL_QMIN) con
+Sigma X = 1.04 en slag_chem_flow (cede volumen sin extensivas): composicion
+de la traza acotada a su masa. Golden v117 (arc_slag, arc_melt_slag[_heel],
+slag_chem_flow pasan a condensado). Docs: CLAUDE.md (M17-PV1 cerrado),
+CONFIGURATION.md, PHYSICS.md §14.x.

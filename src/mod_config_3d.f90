@@ -157,7 +157,9 @@ contains
         cfg%h_contact_sl = 1000.0_dp
         cfg%m_slag_init  = 3300.0_dp
         cfg%solve_slag   = .false.
-        cfg%slag_in_volume = .false.
+        ! (Plan H, P9) la escoria es fase CONDENSADA del Poisson y del momento
+        ! por defecto; solo actua donde aplica (slag_condensed_on)
+        cfg%slag_in_volume = .true.
 
         ! Species transport (CO/CO2)
         cfg%solve_species   = .false.
@@ -552,10 +554,9 @@ contains
         if (cfg%adaptive_dt) call require(cfg%dt >= cfg%dt_min .and. cfg%dt <= cfg%dt_max, &
                      'requires dt_min <= dt <= dt_max (adaptive_dt)', ok)
         call require(cfg%wall_time_max >= 0.0_dp, 'wall_time_max must be >= 0 (0 = off)', ok)
-        ! (Plan H) la vista condensada solo existe en dos fluidos con flujo
-        if (cfg%slag_in_volume) call require(cfg%solve_slag .and. cfg%solve_flow .and. &
-            cfg%solve_multiphase .and. .not. cfg%mixture_model, &
-            'slag_in_volume requires solve_slag, solve_flow, solve_multiphase and not mixture_model', ok)
+        ! (Plan H, P9) la vista condensada solo existe en dos fluidos con flujo:
+        ! fuera de ahi la clave no actua (slag_condensed_on la apaga; con el
+        ! default true no es un error de configuracion)
         call require(cfg%do_quadrature == 4 .or. cfg%do_quadrature == 6 &
                      .or. cfg%do_quadrature == 8, &
                      'do_quadrature must be 4, 6 or 8', ok)
