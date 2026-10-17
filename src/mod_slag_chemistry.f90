@@ -649,6 +649,7 @@ contains
                 ! (dirigida I1-b, B-2: tras la cota termica dm_fe se recalcula y
                 ! podia pasar 1 ulp de la cota; el resto iba a kb-1 aunque no
                 ! tuviera acero). FeO, calor y O2 se rehacen desde ese dm_fe
+                ! (cada parte <= su cota exacta; q_rx puede pasar q_lim en ~ulp)
                 dm_fe_kb  = min(dm_fe, pl(ig,jg,P_CAP_KB))
                 dm_fe_kbm = min(dm_fe - dm_fe_kb, pl(ig,jg,P_CAP_KBM))
                 dm_fe  = dm_fe_kb + dm_fe_kbm
@@ -670,7 +671,7 @@ contains
                 end if
                 ! O2 consumido del gas de kt y kt+1 en proporcion a su aporte;
                 ! (dirigida I1-b, B-1) la segunda parte es el RESTO: las dos
-                ! suman dm_o2 exacto
+                ! suman dm_o2 salvo el redondeo de la resta (~1 ulp)
                 o2_s1 = dm_o2
                 if (o2_kt1 > 0.0_dp) o2_s1 = dm_o2 * (o2_kt / o2_rate)
                 kl = kt - k0 + 1
