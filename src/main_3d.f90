@@ -252,6 +252,9 @@ program eaf_3d_simulator
                 call phase_exchange_halos(gas, mesh)
             end if
         end if
+        ! (dirigida de bajos A18, B4) init_heel y slag_initialize reescriben
+        ! alpha_g en celdas propias: halos del gas coherentes en toda rama
+        call phase_exchange_halos(gas, mesh)
         ! Presion hidrostatica inicial de la mezcla fluida (remanente en reposo;
         ! Plan C F2): evita el golpe de 50-70 kPa del primer paso
         if (slag_condensed_on(cfg)) then
