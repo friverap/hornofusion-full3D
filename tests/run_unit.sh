@@ -12,6 +12,12 @@ FAILURES=0
 
 is_xfail() { grep -qx "unit:$1" "$XFAIL_LIST" 2>/dev/null; }
 
+# (auditoria 19, tests) el tope debe ser un entero positivo: con un valor no
+# numerico sleep fallaba y no habia tope; con 0 se mataba todo
+if ! [[ "${UNIT_TIMEOUT:-300}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "run_unit.sh: UNIT_TIMEOUT debe ser un entero positivo (segundos), recibido '${UNIT_TIMEOUT}'"
+    exit 2
+fi
 for t in tests/bin/*; do
     [ -x "$t" ] || continue
     name=$(basename "$t")
