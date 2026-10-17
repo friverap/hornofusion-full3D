@@ -359,6 +359,7 @@ full | rebaseline)
     run_case slag_chem_flow 4
     # (auditoria 18, A1) quimica con capa de escoria condensada gruesa
     run_case slag_chem_thick 4
+    run_case slag_chem_thick 1
     # Bug 19 (Plan C, F0): bancos del bano de liquido puro — reposo (n1/n4)
     # y llenado por fusion (n4). Sus checks propios (bath:*) llevan xfail
     # con causa hasta F1/F2; los invariantes duros (nan/bounds) NO.
@@ -431,6 +432,9 @@ full | rebaseline)
     run_case arc_melt_slag 4
     # (oct-2026) con talon de bano bajo el lecho: soporte de la escoria
     run_case arc_melt_slag_heel 4
+    # (auditoria 19, MEDIO-2 MPI) escoria condensada en el lecho: contacto
+    # escoria-chatarra, fundido pendiente del sort, cara superior de la escoria
+    run_case arc_melt_slag_heel 1
 
 
     run_script "decomposition_cold_n1" \
@@ -564,6 +568,10 @@ full | rebaseline)
         $PY $INT/compare_decomposition.py "$OUT/arc_slag_n1" "$OUT/arc_slag_n4" --rtol 1e-9
     run_script "decomposition_arcslag_legacy" \
         $PY $INT/compare_decomposition.py "$OUT/arc_slag_legacy_n1" "$OUT/arc_slag_legacy_n4" --rtol 1e-9
+    run_script "decomposition_slagbed" \
+        $PY $INT/compare_decomposition.py "$OUT/arc_melt_slag_heel_n1" "$OUT/arc_melt_slag_heel_n4" --rtol 1e-7
+    run_script "decomposition_slagthick" \
+        $PY $INT/compare_decomposition.py "$OUT/slag_chem_thick_n1" "$OUT/slag_chem_thick_n4" --rtol 1e-7
     run_script "decomposition_arcmelt" \
         $PY $INT/compare_decomposition.py "$OUT/arc_melt_n1" "$OUT/arc_melt_n4" --rtol 1e-11
     # Reinicio desde snapshot: mismo numero de ranks y distinto (lectura por
@@ -583,6 +591,8 @@ full | rebaseline)
     # (Plan H, P8) reinicio BIT A BIT con la escoria condensada (estado de
     # inicio de paso ws_sp_* desde el snapshot, sin la colocacion inicial)
     run_restart_case slag_rest 4 4 50
+    # (auditoria 19) reinicio con escoria condensada en el lecho que funde
+    run_restart_case arc_melt_slag_heel 4 4 100
     run_restart_case cold_10step 8 12 5
     # (A4-7) reinicio a MITAD de la fusion progresiva (paso 100 de 200)
     run_restart_case arc_melt 4 4 100
