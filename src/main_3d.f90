@@ -451,6 +451,12 @@ program eaf_3d_simulator
                 call slag_exchange_halos(slag, mesh)
                 call phase_exchange_halos(liq, mesh)
                 call phase_exchange_halos(liq_old, mesh)
+                ! (A18-1b) con la escoria condensada la reduccion rellena de gas
+                ! el volumen que libera (gas y sus Y cambian)
+                if (slag_condensed_on(cfg)) then
+                    call phase_exchange_halos(gas, mesh)
+                    call shared_exchange_halos(sh, mesh)
+                end if
             end if
             ! Sin transporte de alpha de dos fluidos nadie repone el gas que
             ! la quimica desplaza (oxidacion del C baja alpha_s, Fe de la
@@ -558,9 +564,10 @@ program eaf_3d_simulator
                 allocate(ws_sp_asl, ws_sp_es, mold=slag%alpha_sl)
                 allocate(ws_sp_mx, mold=slag%m_X)
             end if
-            ! (P5) las fuentes de escoria del paso hasta aqui (quimica) cambian
-            ! su masa sin tocar alpha_sl: el reordenamiento la lleva al volumen
-            ! de su masa antes de fijar el estado de inicio de paso; acero
+            ! (P5) las fuentes de escoria que cambian su masa sin tocar alpha_sl
+            ! (oxidacion; la reduccion ya fija alpha_sl y rellena de gas, A18-1)
+            ! se llevan al volumen de su masa antes de fijar el estado de inicio
+            ! de paso; acero
             ! remapeado con su T (energia exacta) -> liq_old lo sigue (la
             ! quimica ya mantenia liq_old = liq en alpha)
             sort_a = liq%alpha; sort_t = liq%T

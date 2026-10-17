@@ -28,7 +28,8 @@ module mod_slag_chemistry
     use mod_types_3d
     use mod_slag_3d, only: slag_T_from_E
     use mod_audit, only: audit_add, AUD_FE_YIELD, AUD_FE_RETURN, &
-                         AUD_SLAG_OX_E, AUD_SLAG_RED_E
+                         AUD_SLAG_OX_E, AUD_SLAG_RED_E, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
+                         gas_inventory_cell
     use mod_melting_3d, only: liquid_datum_offset
     use mod_foam, only: xi_pretorius
     use mod_mpi_topology, only: mpi_exchange_halos_3d, mpi_allreduce_sum
@@ -81,6 +82,7 @@ contains
         ! la escritura en un halo de k-1 se perdia; auditoria A14)
         real(dp), allocatable :: fe_out(:,:,:), fe_in(:,:,:), t_in(:,:,:)
         logical  :: below, cond
+        real(dp) :: ag_new, ag_old, fdil
         ! (auditoria 5, M5-5 bis) CO de la reduccion nacido en una celda de
         ! escoria SIN gas (alpha_g < ALPHA_CUTOFF: escoria sobre bano lleno).
         ! El solver de especies descarta la fuente de una celda sin gas (su
@@ -295,6 +297,34 @@ contains
                             ! Fe llenaba el hueco.
                             gas_after = 1.0_dp - sol%alpha_s(i,j,k) - slag%alpha_sl(i,j,k) &
                                       - liq%alpha(i,j,k) - b_up / (liq%rho(i,j,k) * vol)
+                            ! (auditoria dirigida A18-1a/b) con la escoria
+                            ! condensada el hueco que libera la reduccion se
+                            ! rellena AQUI de gas (antes del transporte de especies,
+                            ! que descarta fuentes en celdas sin gas), auditado
+                            ! como el volfix: masa, inventario de energia y
+                            ! dilucion de las Y (el gas creado no trae especies).
+                            ! En condensado el Fe propio cabe en el volumen
+                            ! liberado (b_up = 0): el CO decide con el gas REAL
+                            if (cond) then
+                                ag_new = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k) &
+                                    - slag%alpha_sl(i,j,k) - liq%alpha(i,j,k))
+                                if (ag_new > gas%alpha(i,j,k)) then
+                                    ag_old = max(gas%alpha(i,j,k), 0.0_dp)
+                                    call audit_add(AUD_GAS_VOLFIX, (ag_new - ag_old) &
+                                        * gas%rho(i,j,k) * vol)
+                                    call audit_add(AUD_GAS_VOLFIX_E, &
+                                        gas_inventory_cell(ag_new, gas%T(i,j,k), sh%p(i,j,k), &
+                                                           gas%cp(i,j,k), vol, cfg) &
+                                      - gas_inventory_cell(ag_old, gas%T(i,j,k), sh%p(i,j,k), &
+                                                           gas%cp(i,j,k), vol, cfg))
+                                    fdil = ag_old / ag_new
+                                    sh%Y_O2(i,j,k)  = sh%Y_O2(i,j,k)  * fdil
+                                    sh%Y_CO(i,j,k)  = sh%Y_CO(i,j,k)  * fdil
+                                    sh%Y_CO2(i,j,k) = sh%Y_CO2(i,j,k) * fdil
+                                    gas%alpha(i,j,k) = ag_new
+                                end if
+                                gas_after = gas%alpha(i,j,k)
+                            end if
                             if (gas_after >= ALPHA_CUTOFF) then
                                 sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + &
                                     dm_co / (vol * cfg%dt)
