@@ -232,6 +232,10 @@ program eaf_3d_simulator
         ! la receta (~5x medido). Revisar en B1 (benchmark Ugarte).)
         if (cfg%charge_bucket1) then
             call charge_scrap(sol, gas, mesh, cfg, 1)
+            ! (bajo N-B15) halos del solido y del gas coherentes antes de que
+            ! init_heel / slag_initialize lean vecinas
+            call solid_exchange_halos(sol, mesh)
+            call phase_exchange_halos(gas, mesh)
         end if
         call init_heel(liq, gas, sol, mesh, cfg)
         call phase_exchange_halos(liq, mesh)
