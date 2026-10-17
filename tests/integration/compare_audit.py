@@ -77,8 +77,9 @@ def main():
         sys.exit(1)
     cols = ca
     # (auditoria 7, M7-2) tolerancia ABSOLUTA solo para las columnas de
-    # REDONDEO PURO (m_gas_ccdrop: ~1e-18 kg que cambia de signo entre
-    # descomposiciones) y solo con --decomp (reinicio con otro numero de
+    # REDONDEO PURO (m_gas_ccdrop vale ~1e-18 kg en los bancos sin escoria;
+    # con el transitorio de arranque del gas frio sobre un talon caliente es
+    # ~1 kg y NO es redondeo: su techo lo vigila check_audit ccdrop_bounded) y solo con --decomp (reinicio con otro numero de
     # ranks): 1e-15 del inventario de gas. Con el mismo numero de ranks el
     # reinicio es BIT A BIT (el piso de la auditoria 6 se aplicaba a toda
     # columna m_*/E_* y aflojaba m_spill, m_vf_*, m_gas_volfix a 1e-3)

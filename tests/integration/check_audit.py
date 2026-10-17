@@ -421,6 +421,17 @@ def main():
         chk.report("steel_deficit_bounded", m_def <= args.ctol * max(abs(m_melt) + abs(m_res), 1.0),
                    f"acero creado por deficit de congelacion {m_def:.3e} kg (max {args.ctol} relativo)")
 
+    # (auditoria 19, M19-1) techo del acarreo de compresibilidad DESCARTADO
+    # (m_gas_ccdrop): sin el, una regresion que descarte toneladas de demanda
+    # pasaba la matriz. Medido: <= 0.7 % del inventario de gas (transitorio de
+    # arranque del gas a 300 K sobre el talon a 1850 K en los bancos de
+    # escoria; ~0 en el resto)
+    if any("m_gas_ccdrop" in r for r in steps):
+        ccd = sum(abs(r.get("m_gas_ccdrop", 0.0)) for r in steps)
+        mg = max(abs(r.get("m_gas", 0.0)) for r in rows)
+        chk.report("ccdrop_bounded", ccd <= 2e-2 * max(mg, 1e-30) + 1e-12,
+                   f"|m_gas_ccdrop| acumulado {ccd:.3e} kg sobre m_gas {mg:.3e} kg (max 2e-2)")
+
     # -- mass_sol (M3-6): inventario del solido ---------------------------
     # dm_sol = cargas + ECS - fundido + resolid - C oxidado (m_resid_closed es
     # subconjunto de m_melted)
