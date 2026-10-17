@@ -400,7 +400,7 @@ contains
         real(dp), allocatable :: ss_g(:,:,:), acn(:,:,:)
         real(dp) :: vcond, capk, ag_new, dmg, deg, pc, fdil, capsum, as_m
         logical  :: has_slag
-        integer  :: k2e
+        integer  :: k2e, kc
 
         real(dp), allocatable :: al_g(:,:,:), tl_g(:,:,:), as_g(:,:,:), ms_g(:,:,:), es_g(:,:,:)
         real(dp), allocatable :: x_g(:,:,:,:), tmp(:,:,:)
@@ -464,18 +464,29 @@ contains
                     end do
                     k2 = k - 1
                     ! capacidad condensada objetivo de cada celda
-                    has_slag = any(as_g(i,j,k1:k2) > 0.0_dp)
+                    ! (auditoria P4 M5) compacta solo con escoria RESUELTA y solo
+                    ! desde la celda bajo la escoria mas baja: con cualquier traza
+                    ! se compactaba la columna entera y las burbujas del fondo del
+                    ! baño subian a la cima en un paso
+                    has_slag = any(as_g(i,j,k1:k2) >= ALPHA_CUTOFF)
                     vcond = 0.0_dp
                     do kk = k1, k2
                         acn(i,j,kk) = al_g(i,j,kk) + as_g(i,j,kk)
-                        vcond = vcond + acn(i,j,kk) * m%vol_global(i,j,kk)
                     end do
                     if (has_slag) then
-                        ! (P5) si el condensado no cabe en el segmento (escoria
-                        ! nueva de las fuentes), el segmento se extiende hacia
-                        ! arriba sobre las celdas de gas de la columna
-                        capsum = 0.0_dp
+                        kc = k1
                         do kk = k1, k2
+                            if (as_g(i,j,kk) >= ALPHA_CUTOFF) then
+                                kc = max(k1, kk - 1); exit
+                            end if
+                        end do
+                        do kk = kc, k2
+                            vcond = vcond + acn(i,j,kk) * m%vol_global(i,j,kk)
+                        end do
+                        ! (P5) si el condensado no cabe, el tramo se extiende
+                        ! hacia arriba sobre las celdas de gas de la columna
+                        capsum = 0.0_dp
+                        do kk = kc, k2
                             capsum = capsum + liq_cap(ss_g(i,j,kk), 0.0_dp) * m%vol_global(i,j,kk)
                         end do
                         k2e = k2
@@ -490,13 +501,18 @@ contains
                             k2 = k2e
                             k = k2 + 1
                         end if
-                        do kk = k1, k2
-                            capk = liq_cap(ss_g(i,j,kk), 0.0_dp) * m%vol_global(i,j,kk)
-                            if (kk == k2) capk = vcond
-                            capk = max(min(capk, vcond), 0.0_dp)
-                            acn(i,j,kk) = capk / m%vol_global(i,j,kk)
-                            vcond = vcond - capk
-                        end do
+                        ! (auditoria P4 M4) si ni hasta el techo cabe, no se
+                        ! compacta (la ultima celda quedaria por encima de su
+                        ! hueco): solo se reordena con las alpha_c de cada celda
+                        if (vcond <= capsum * (1.0_dp + 1.0e-14_dp)) then
+                            do kk = kc, k2
+                                capk = liq_cap(ss_g(i,j,kk), 0.0_dp) * m%vol_global(i,j,kk)
+                                if (kk == k2) capk = vcond
+                                capk = max(min(capk, vcond), 0.0_dp)
+                                acn(i,j,kk) = capk / m%vol_global(i,j,kk)
+                                vcond = vcond - capk
+                            end do
+                        end if
                     end if
                     ! ya ordenado: ninguna celda con acero por encima de una
                     ! celda con escoria (dentro del segmento) y nada que compactar

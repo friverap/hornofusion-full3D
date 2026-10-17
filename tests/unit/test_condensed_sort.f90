@@ -10,6 +10,11 @@
 !     sin tocar alpha_sl: alpha_sl sigue a la masa, el exceso sube a la celda
 !     de gas 5, masa/E/X de escoria y energia del acero conservadas a 1e-13,
 !     ninguna celda por encima de su capacidad.
+! (5) (auditoria P4 M5) burbuja en el fondo del baño (celda 2, alpha_g 0.2)
+!     bajo una capa de escoria: no se mueve (antes la compactacion la subia
+!     a la cima en un paso).
+! (6) gas bajo la interfaz (celda 4, alpha_g 0.1, escoria en 5): se compacta
+!     hacia la cima de la escoria, energia y masas exactas.
 !===============================================================================
 program test_condensed_sort
     use mod_constants
@@ -125,6 +130,31 @@ program test_condensed_sort
         end do
         if (.not. ok) exit
     end do
+
+    ! ---- (5) burbuja en el fondo ----
+    call setcol([1.0_dp,0.8_dp,1.0_dp,1.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp], &
+                [0.0_dp,0.0_dp,0.0_dp,0.0_dp,1.0_dp,0.4_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp])
+    al0 = liq%alpha
+    call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh)
+    if (any(liq%alpha(1:nr,1:nth,1:3) /= al0(1:nr,1:nth,1:3))) then
+        print '(A)', '   FAIL caso 5: la burbuja del fondo del baño se movio'; ok = .false.
+    end if
+
+    ! ---- (6) gas bajo la interfaz ----
+    call setcol([1.0_dp,1.0_dp,1.0_dp,0.9_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp], &
+                [0.0_dp,0.0_dp,0.0_dp,0.0_dp,1.0_dp,0.4_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp])
+    call totals(est0, esl0, msl0)
+    call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh)
+    call totals(est1, esl1, msl1)
+    if (maxval(gas%alpha(1:nr,1:nth,1:5), mask=mesh%cell_type(1:nr,1:nth,1:5) /= 0) > 1.0e-14_dp) then
+        print '(A,ES10.3)', '   FAIL caso 6: queda gas bajo la escoria: ', &
+            maxval(gas%alpha(1:nr,1:nth,1:5), mask=mesh%cell_type(1:nr,1:nth,1:5) /= 0)
+        ok = .false.
+    end if
+    if (abs(est1-est0) > 1.0e-13_dp*est0 .or. abs(esl1-esl0) > 1.0e-13_dp*esl0 .or. abs(msl1-msl0) > 1.0e-13_dp*msl0) then
+        print '(A,3ES10.3)', '   FAIL caso 6: energia/masa: ', (est1-est0)/est0, (esl1-esl0)/esl0, (msl1-msl0)/msl0
+        ok = .false.
+    end if
 
     if (ok) then
         print '(A)', ' PASS test_condensed_sort (ordenada intacta; pelicula baja con alpha_c y energia exactas; segmentos aislados; fuente al volumen de su masa)'
