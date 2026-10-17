@@ -668,15 +668,17 @@ contains
                     slag%T_sl(i,j,kl) = slag%E_sl(i,j,kl) / (slag%m_sl(i,j,kl) * cfg%cp_slag)
                     call audit_add(AUD_SLAG_OX_E, q_rx + dm_feo * cfg%cp_slag * tsl_r)
                 end if
-                ! O2 consumido del gas de kt y kt+1 en proporcion a su aporte
+                ! O2 consumido del gas de kt y kt+1 en proporcion a su aporte;
+                ! (dirigida I1-b, B-1) la segunda parte es el RESTO: las dos
+                ! suman dm_o2 exacto
+                o2_s1 = dm_o2
+                if (o2_kt1 > 0.0_dp) o2_s1 = dm_o2 * (o2_kt / o2_rate)
                 kl = kt - k0 + 1
                 if (o2_kt > 0.0_dp .and. kl >= kstart .and. kl <= kend) &
-                    sh%S_O2_src(i,j,kl) = sh%S_O2_src(i,j,kl) &
-                        - dm_o2 * (o2_kt / o2_rate) / (m%vol(i,j,kl) * cfg%dt)
+                    sh%S_O2_src(i,j,kl) = sh%S_O2_src(i,j,kl) - o2_s1 / (m%vol(i,j,kl) * cfg%dt)
                 kl = kt + 1 - k0 + 1
                 if (o2_kt1 > 0.0_dp .and. kl >= kstart .and. kl <= kend) &
-                    sh%S_O2_src(i,j,kl) = sh%S_O2_src(i,j,kl) &
-                        - dm_o2 * (o2_kt1 / o2_rate) / (m%vol(i,j,kl) * cfg%dt)
+                    sh%S_O2_src(i,j,kl) = sh%S_O2_src(i,j,kl) - (dm_o2 - o2_s1) / (m%vol(i,j,kl) * cfg%dt)
             end do
         end do
         deallocate(mask, pl, kb_g, kt_g)
