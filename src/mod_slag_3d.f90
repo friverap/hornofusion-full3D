@@ -918,6 +918,11 @@ contains
                         if (slag_condensed_on(cfg) .and. &
                             slag%alpha_sl(i,j,k-1) >= ALPHA_FLOW_CUTOFF .and. &
                             liq%alpha(i,j,k-1) >= ALPHA_FLOW_CUTOFF) Cb = 0.0_dp
+                        ! (auditoria 19, fisica B3) ni con una TRAZA de acero
+                        ! abajo (segundo contacto por columna, acotado por la
+                        ! capacidad de la traza)
+                        if (slag_condensed_on(cfg) .and. &
+                            liq%alpha(i,j,k-1) < ALPHA_FLOW_CUTOFF) Cb = 0.0_dp
                     end if
                     ! (A18-8) con la escoria condensada, una celda con acero propio
                     ! ES la interfaz: su escoria toca ese acero (el "reservorio de
