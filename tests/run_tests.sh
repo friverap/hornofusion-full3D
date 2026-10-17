@@ -393,6 +393,7 @@ full | rebaseline)
     run_case arc_slag 1
     # (auditoria 18, A18-9) el camino legado de la escoria sigue soportado
     run_case arc_slag_legacy 4
+    run_case arc_slag_legacy 1
     # (Plan H, P4/P7) escoria CONDENSADA (slag_in_volume) en reposo: fase del
     # Poisson y del momento, hidrostatica con su peso, reordenamiento y masa
     run_case slag_rest 4
@@ -561,6 +562,8 @@ full | rebaseline)
     # (oct-2026) medido 1.3e-10 (T_gas); Y_* solo donde hay gas
     run_script "decomposition_arcslag" \
         $PY $INT/compare_decomposition.py "$OUT/arc_slag_n1" "$OUT/arc_slag_n4" --rtol 1e-9
+    run_script "decomposition_arcslag_legacy" \
+        $PY $INT/compare_decomposition.py "$OUT/arc_slag_legacy_n1" "$OUT/arc_slag_legacy_n4" --rtol 1e-9
     run_script "decomposition_arcmelt" \
         $PY $INT/compare_decomposition.py "$OUT/arc_melt_n1" "$OUT/arc_melt_n4" --rtol 1e-11
     # Reinicio desde snapshot: mismo numero de ranks y distinto (lectura por
