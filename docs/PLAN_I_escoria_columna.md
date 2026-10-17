@@ -73,6 +73,17 @@ I1 → dirigidas (I1, I1-b) → I2 → dirigidas (I2, I2-b) → general (3
 dimensiones) hechos en la rama `plan-i`, verificados SOLO por sintaxis
 (`mpif90 -fsyntax-only`, sin enlazar ni ejecutar) mientras corre B1.
 
+## Aceptados de la auditoría general (con causa)
+
+- Σα > 1 transitorio entre la cesta 2/ECS y el sort de inicio de paso: el
+  arco, el MC, la DO y la fusión ven el solape un paso (celdas algo más
+  opacas); sin pérdida de masa ni energía. Llamar al sort justo tras la
+  carga duplicaría sus gathers por paso con el ECS activo.
+- Salto de kt cuando α_sl del tope cruza 0.01 (el O2 cae ~2× ese paso) y del
+  piso de poro cuando α_s cruza ALPHA_BED dentro de la escoria (gas 0.015·V
+  auditado como volfix): acotados; rampas solo si el juez estadístico de B6
+  los señala.
+
 ## Gates tras B1 (en orden, uno por uno)
 
 1. `make test-unit` (los 5 tests de arriba y el resto sin regresión).
