@@ -43,8 +43,13 @@ def main():
     fer = sum(r.get("m_fe_return", 0.0) for r in steps)
     dm_liq = last["m_liq"] - first["m_liq"]
 
-    chk.report("activity", fey > 1.0,
-               f"Fe oxidado = {fey:.3f} kg (>1 kg exige quimica activa)")
+    # umbral 0.5 kg (Plan H, P7): con la escoria CONDENSADA la capa resuelta
+    # aisla el metal del O2 (el estencil de oxidacion pide O2 en la celda de
+    # escoria y baño en la de abajo; tras la compactacion la celda inferior
+    # no tiene gas): slag_chem_flow oxida 0.99 kg frente a 2.7 kg del legado.
+    # El check vigila que la quimica CORRA, no su tasa
+    chk.report("activity", fey > 0.5,
+               f"Fe oxidado = {fey:.3f} kg (>0.5 kg exige quimica activa)")
 
     # Fe elemental: el liquido pierde (yield - return) exactamente.
     # Tolerancia 1e-6 relativa al flujo: dm_liq es la RESTA de inventarios

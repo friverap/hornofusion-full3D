@@ -87,3 +87,18 @@ volfix -1.0e-4 kg auditado. PENDIENTE P7: `activity` del banco (Fe oxidado
 O2 en la celda de escoria y bano en la de abajo; con la capa compactada la
 celda inferior no tiene gas (la capa resuelta aisla el metal). Decidir en P7
 (estencil por columna o umbral del banco) antes de P9.
+
+## Estado P6–P7 (2026-10-16)
+P6: m_slag_clip / E_slag_clip (recorte del condensado partido acero/escoria,
+acotado alpha_sl <= alpha_c; por paso). Auditoria dirigida de P4 cerrada:
+A1 (tclip por paso), A2 (= P5), M1 (= P6), M2 (vol_dalpha condensado), M3
+(fallback implicito), M4/M5 (compactacion solo en la interfaz de escoria
+resuelta y nunca por encima del hueco), bajos (ws_sp_* en drivers, rho_l
+constante documentada). P7: arc_slag 10 s condensado tras M4/M5: u_liq 0.087,
+vol_lim 2.9e-7, u_gas 6, p 95 kPa, energia 1.6e-3 del permitido, orden y masa
+de la capa exactos. arc_melt_slag y arc_melt_slag_heel condensados: todos los
+checks de check_slag_bed y del audit PASS (regimen comparable al legado).
+slag_chem_test no tiene flujo (la clave no aplica). slag_chem_flow: activity
+con umbral 0.5 kg (la capa condensada aisla el metal del O2: 0.99 kg frente a
+2.7 kg legado; el check vigila que la quimica corra). slag_rest en la matriz
+de test-full; golden v116.

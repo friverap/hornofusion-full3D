@@ -388,6 +388,9 @@ full | rebaseline)
     # cesion y slag_buoyancy): arc_slag es el banco que la ejerce (sin ella
     # su alpha_clip estricto falla: 9.5e-5 kg)
     run_case arc_slag 1
+    # (Plan H, P4/P7) escoria CONDENSADA (slag_in_volume) en reposo: fase del
+    # Poisson y del momento, hidrostatica con su peso, reordenamiento y masa
+    run_case slag_rest 4
     # Cesta 2 durante la corrida (auditoria A5): carga aditiva y auditada
     run_case cold_bucket2 4
     # Drenaje del lecho con la fuerza balanceada (auditoria 2, N-C1)
@@ -504,6 +507,8 @@ full | rebaseline)
         $PY $INT/check_arcmelt.py "$OUT/arc_melt_n4" --xfail "$(xfail_ids arc_melt)"
     run_script "arc_slag_bed" \
         $PY $INT/check_slag_bed.py "$OUT/arc_slag_n4" --volfix-max 0.06 --xfail "$(xfail_ids arc_slag)"
+    run_script "slag_rest" \
+        $PY $INT/check_slag_bed.py "$OUT/slag_rest_n4" --volfix-max 1e-3 --xfail "$(xfail_ids slag_rest)"
     run_script "arc_melt_slag_heel" \
         $PY $INT/check_slag_bed.py "$OUT/arc_melt_slag_heel_n4" --max-jumps 0 \
         --asl-min 1e-3 --al-min 0.05 --volfix-max 0.15 --xfail "$(xfail_ids arc_melt_slag_heel)"

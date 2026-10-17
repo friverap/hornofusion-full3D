@@ -1136,6 +1136,9 @@ contains
         do c = 1, nx
             slq(:,:,:,1+c) = mx_pre(:,:,:,c)
         end do
+        ! rho del acero CONSTANTE (mod_properties_3d: liq%rho = rho_steel; el
+        ! Boussinesq va solo en el peso): ws_Fcm usa rl como la rho de ws_Fsl.
+        ! Si rho_l llegara a depender de T, ws_Fsl debe llevar la rho del dador
         rl = cfg%rho_steel
         ! condensado a volumen + escoria (y su E_sl, m_X) advectada con la
         ! composicion ACTUAL del dador en cada movimiento

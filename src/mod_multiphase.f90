@@ -98,6 +98,13 @@ contains
         ! (Plan H, P4) VISTA CONDENSADA acero+escoria para mascaras, momento y
         ! Poisson (la escoria es volumen desplazable, no tapa rigida: M17-PV1)
         cond = slag_condensed_on(cfg)
+        ! (auditoria P4, bajo) el estado de inicio de paso lo fija main; un
+        ! driver que llame sin el (tests) lo toma del estado actual
+        if (cond .and. .not. allocated(ws_sp_asl)) then
+            allocate(ws_sp_asl, ws_sp_es, mold=slag%alpha_sl)
+            allocate(ws_sp_mx, mold=slag%m_X)
+            ws_sp_asl = slag%alpha_sl; ws_sp_es = slag%E_sl; ws_sp_mx = slag%m_X
+        end if
         if (cond) call cond_view_enter(liq, liq_old, slag%alpha_sl, ws_sp_asl, cfg%rho_slag, &
                                        cfg%beta_expansion, cfg%T_ref_boussinesq)
         call liquid_continuity_mask(liq, sol, m, ws_liq_cont)
