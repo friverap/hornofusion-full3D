@@ -13,6 +13,7 @@ module mod_slag_3d
     use mod_types_3d
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_allreduce_sum, mpi_exchange_halos_3d
     use mod_parallel_utils, only: gather_global_field, global_to_local, should_print
+    use mod_fields_3d, only: slag_exchange_halos
     use mod_audit, only: audit_add, audit_gas_destroyed, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT, AUD_SLAG_TCLIP, &
                          AUD_SLAG_GAS, AUD_SLAG_LIQ, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
                          gas_inventory_cell, gas_heat_capacity_ref, gas_log_exchange
@@ -367,6 +368,155 @@ contains
         call slag_buoyancy(slag, liq, gas, sol, m, cfg, sh)
         call slag_energy(slag, liq, gas, m, cfg, dt, sh)
     end subroutine update_slag
+
+    !---------------------------------------------------------------------------
+    ! (Plan H, P3) FLOTACION CONDENSADA: reordenamiento NEUTRO EN VOLUMEN de la
+    ! composicion acero/escoria dentro de cada SEGMENTO CONDENSADO contiguo de
+    ! cada columna global (celdas con alpha_c = alpha_l + alpha_sl >=
+    ! ALPHA_FLOW_CUTOFF). Conserva alpha_c de cada celda (no crea ni destruye
+    ! gas: sin volfix): el acero llena de abajo arriba y la escoria encima.
+    ! Remapeo lagrangiano: cada parcela de acero lleva su T (cp_l constante:
+    ! energia exacta) y cada parcela de escoria su E_sl y m_X (M17-arc1). Un
+    ! segmento ya ordenado no se reescribe (sin ruido de redondeo). Patron
+    ! invariante MPI: gather global, mismo barrido, escritura de celdas propias.
+    !---------------------------------------------------------------------------
+    subroutine slag_condensed_sort(slag, liq, m, cfg)
+        type(slag_t),  intent(inout) :: slag
+        type(phase_t), intent(inout) :: liq
+        type(mesh_t),  intent(in)    :: m
+        type(config_t),intent(in)    :: cfg
+
+        real(dp), allocatable :: al_g(:,:,:), tl_g(:,:,:), as_g(:,:,:), ms_g(:,:,:), es_g(:,:,:)
+        real(dp), allocatable :: x_g(:,:,:,:), tmp(:,:,:)
+        real(dp), allocatable :: al_n(:,:,:), tl_n(:,:,:), as_n(:,:,:), ms_n(:,:,:), es_n(:,:,:), x_n(:,:,:,:)
+        logical,  allocatable :: chg(:,:,:)
+        integer  :: i, j, k, k1, k2, kk, ko, c, il, jl, kl
+        logical  :: owned, ordered, seen_slag
+        real(dp) :: vst, cap, s_need, d, rem, vt, ac, vc
+
+        allocate(al_g(m%nr_g, m%nth_g, m%nz_g), tl_g(m%nr_g, m%nth_g, m%nz_g), as_g(m%nr_g, m%nth_g, m%nz_g))
+        allocate(ms_g(m%nr_g, m%nth_g, m%nz_g), es_g(m%nr_g, m%nth_g, m%nz_g))
+        allocate(x_g(m%nr_g, m%nth_g, m%nz_g, N_SLAG_COMP))
+        allocate(tmp, mold=slag%m_sl)
+        call gather_global_field(liq%alpha, al_g, m)
+        call gather_global_field(liq%T, tl_g, m)
+        call gather_global_field(slag%alpha_sl, as_g, m)
+        call gather_global_field(slag%m_sl, ms_g, m)
+        call gather_global_field(slag%E_sl, es_g, m)
+        do c = 1, N_SLAG_COMP
+            tmp = slag%m_X(:,:,:,c)
+            call gather_global_field(tmp, x_g(:,:,:,c), m)
+        end do
+        allocate(al_n, tl_n, as_n, ms_n, es_n, mold=al_g)
+        allocate(x_n, mold=x_g); allocate(chg(m%nr_g, m%nth_g, m%nz_g))
+        al_n = al_g; tl_n = tl_g; as_n = as_g; ms_n = ms_g; es_n = es_g; x_n = x_g
+        chg = .false.
+
+        do j = 1, m%nth_g
+            do i = 1, m%nr_g
+                k = 1
+                do while (k <= m%nz_g)
+                    if (m%cell_type_global(i,j,k) == 0 .or. &
+                        al_g(i,j,k) + as_g(i,j,k) < ALPHA_FLOW_CUTOFF) then
+                        k = k + 1; cycle
+                    end if
+                    k1 = k
+                    do while (k <= m%nz_g)
+                        if (m%cell_type_global(i,j,k) == 0) exit
+                        if (al_g(i,j,k) + as_g(i,j,k) < ALPHA_FLOW_CUTOFF) exit
+                        k = k + 1
+                    end do
+                    k2 = k - 1
+                    ! ya ordenado: ninguna celda con acero por encima de una
+                    ! celda con escoria (dentro del segmento)
+                    ordered = .true.; seen_slag = .false.
+                    do kk = k1, k2
+                        if (seen_slag .and. al_g(i,j,kk) > 0.0_dp) ordered = .false.
+                        if (as_g(i,j,kk) > 0.0_dp) seen_slag = .true.
+                    end do
+                    ! una celda mixta en el tope del acero esta permitida: la
+                    ! condicion anterior marca escoria y exige que lo de arriba
+                    ! no tenga acero
+                    if (ordered) cycle
+                    ! volumen total de acero del segmento
+                    vst = 0.0_dp
+                    do kk = k1, k2
+                        vst = vst + al_g(i,j,kk) * m%vol_global(i,j,kk)
+                    end do
+                    ! --- acero: llenar de abajo arriba (remapeo con su T)
+                    ko = k1 - 1; rem = 0.0_dp
+                    do kk = k1, k2
+                        ac = al_g(i,j,kk) + as_g(i,j,kk)
+                        cap = ac * m%vol_global(i,j,kk)
+                        s_need = min(vst, cap)
+                        vst = vst - s_need
+                        al_n(i,j,kk) = s_need / m%vol_global(i,j,kk)
+                        vt = 0.0_dp
+                        do while (s_need > 0.0_dp)
+                            if (rem <= 0.0_dp) then
+                                ko = ko + 1
+                                if (ko > k2) exit
+                                rem = al_g(i,j,ko) * m%vol_global(i,j,ko)
+                                cycle
+                            end if
+                            d = min(s_need, rem)
+                            vt = vt + d * tl_g(i,j,ko)
+                            rem = rem - d; s_need = s_need - d
+                        end do
+                        if (al_n(i,j,kk) > 0.0_dp) tl_n(i,j,kk) = vt / (al_n(i,j,kk) * m%vol_global(i,j,kk))
+                        chg(i,j,kk) = .true.
+                    end do
+                    ! --- escoria: el resto de cada celda, parcelas en orden
+                    ko = k1 - 1; rem = 0.0_dp
+                    do kk = k1, k2
+                        ac = al_g(i,j,kk) + as_g(i,j,kk)
+                        vc = max(0.0_dp, ac - al_n(i,j,kk)) * m%vol_global(i,j,kk)   ! volumen de escoria
+                        as_n(i,j,kk) = vc / m%vol_global(i,j,kk)
+                        ms_n(i,j,kk) = 0.0_dp; es_n(i,j,kk) = 0.0_dp; x_n(i,j,kk,:) = 0.0_dp
+                        s_need = vc
+                        do while (s_need > 0.0_dp)
+                            if (rem <= 0.0_dp) then
+                                ko = ko + 1
+                                if (ko > k2) exit
+                                rem = as_g(i,j,ko) * m%vol_global(i,j,ko)
+                                cycle
+                            end if
+                            d = min(s_need, rem)
+                            if (as_g(i,j,ko) > 0.0_dp) then
+                                ms_n(i,j,kk) = ms_n(i,j,kk) + d / (as_g(i,j,ko) * m%vol_global(i,j,ko)) * ms_g(i,j,ko)
+                                es_n(i,j,kk) = es_n(i,j,kk) + d / (as_g(i,j,ko) * m%vol_global(i,j,ko)) * es_g(i,j,ko)
+                                x_n(i,j,kk,:) = x_n(i,j,kk,:) + d / (as_g(i,j,ko) * m%vol_global(i,j,ko)) * x_g(i,j,ko,:)
+                            end if
+                            rem = rem - d; s_need = s_need - d
+                        end do
+                    end do
+                end do
+            end do
+        end do
+
+        do k = 1, m%nz_g
+            do j = 1, m%nth_g
+                do i = 1, m%nr_g
+                    if (.not. chg(i,j,k)) cycle
+                    call global_to_local(m, i, j, k, il, jl, kl, owned)
+                    if (.not. owned) cycle
+                    liq%alpha(il,jl,kl) = al_n(i,j,k)
+                    liq%T(il,jl,kl) = tl_n(i,j,k)
+                    slag%alpha_sl(il,jl,kl) = as_n(i,j,k)
+                    slag%m_sl(il,jl,kl) = ms_n(i,j,k)
+                    slag%E_sl(il,jl,kl) = es_n(i,j,k)
+                    slag%m_X(il,jl,kl,:) = x_n(i,j,k,:)
+                    if (ms_n(i,j,k) > SMALL_SL) then
+                        slag%T_sl(il,jl,kl) = es_n(i,j,k) / (ms_n(i,j,k) * cfg%cp_slag)
+                    end if
+                end do
+            end do
+        end do
+        call slag_exchange_halos(slag, m)
+        call mpi_exchange_halos_3d(liq%alpha, m%topo)
+        call mpi_exchange_halos_3d(liq%T, m%topo)
+        deallocate(al_g, tl_g, as_g, ms_g, es_g, x_g, tmp, al_n, tl_n, as_n, ms_n, es_n, x_n, chg)
+    end subroutine slag_condensed_sort
 
     !---------------------------------------------------------------------------
     ! Flotacion por COLUMNA GLOBAL (auditoria 12-oct-2026: A14, M17, M18).
