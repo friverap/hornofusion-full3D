@@ -392,6 +392,8 @@ full | rebaseline)
     # el condensado y slag_condensed_sort; decomposition_arcslag n1 frente a
     # n4). Con slag_in_volume = false era la cesion + slag_buoyancy legada
     run_case arc_slag 1
+    # (auditoria 19) descomposicion en r/theta de la escoria condensada (n12)
+    run_case arc_slag 12
     # (auditoria 18, A18-9) el camino legado de la escoria sigue soportado
     run_case arc_slag_legacy 4
     run_case arc_slag_legacy 1
@@ -569,6 +571,8 @@ full | rebaseline)
         $PY $INT/compare_decomposition.py "$OUT/arc_slag_n1" "$OUT/arc_slag_n4" --rtol 1e-9
     run_script "decomposition_arcslag_legacy" \
         $PY $INT/compare_decomposition.py "$OUT/arc_slag_legacy_n1" "$OUT/arc_slag_legacy_n4" --rtol 1e-9
+    run_script "decomposition_arcslag_rth" \
+        $PY $INT/compare_decomposition.py "$OUT/arc_slag_n1" "$OUT/arc_slag_n12" --rtol 1e-9
     run_script "decomposition_slagbed" \
         $PY $INT/compare_decomposition.py "$OUT/arc_melt_slag_heel_n1" "$OUT/arc_melt_slag_heel_n4" --rtol 1e-7
     run_script "decomposition_slagthick" \
