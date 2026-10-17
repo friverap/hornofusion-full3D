@@ -873,7 +873,8 @@ contains
 
         integer  :: i, j, k, istart, iend, jstart, jend, kstart, kend
         real(dp) :: Cs, Cf, Cb, hA, f, Q, Cg, Tg, Ts, pc, Csol, wet
-        real(dp), allocatable :: qdown(:,:,:)
+        real(dp), allocatable :: qdown(:,:,:), qup(:,:,:)
+        real(dp) :: Tg_dummy
 
         if (m%is_parallel) then
             istart = m%topo%istart; iend = m%topo%iend
@@ -885,6 +886,7 @@ contains
             kstart = 1; kend = m%nz
         end if
         allocate(qdown, mold=slag%m_sl); qdown = 0.0_dp
+        allocate(qup, mold=slag%m_sl); qup = 0.0_dp
 
         do k = kstart, kend
             do j = jstart, jend
@@ -993,6 +995,26 @@ contains
                         call gas_log_exchange(Cg, Tg, Cs, Ts, hA, dt, gas%T(i,j,k), Q)
                         slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
                         call audit_add(AUD_SLAG_GAS, Q)
+                    else if (slag_condensed_on(cfg) .and. m%cell_type(i,j,k+1) /= 0) then
+                        ! (dirigida de bajos A18, B1) escoria condensada SIN gas
+                        ! propio bajo una celda con gas: la superficie de la
+                        ! escoria intercambia por su cara superior (antes la cara
+                        ! acero|gas lo hacia puenteando la escoria; al quitar el
+                        ! puente quedaba sin intercambio). Misma forma log; el
+                        ! dueño de la celda de gas aplica Q en la pasada 3
+                        if (gas%alpha(i,j,k+1) > SMALL_SL) then
+                            pc = 0.0_dp
+                            if (present(sh)) pc = sh%p(i,j,k+1)
+                            Cg = gas_heat_capacity_ref(gas%alpha(i,j,k+1), pc, gas%cp(i,j,k+1), &
+                                                       m%vol(i,j,k+1), cfg)
+                            Tg = max(gas%T(i,j,k+1), T_MIN_GAS)
+                            Ts = slag%E_sl(i,j,k) / Cs
+                            hA = cfg%h_contact_sl * m%Az(i,j,k)
+                            call gas_log_exchange(Cg, Tg, Cs, Ts, hA, dt, Tg_dummy, Q)
+                            slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
+                            qup(i,j,k) = Q
+                            call audit_add(AUD_SLAG_GAS, Q)
+                        end if
                     end if
                     slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / Cs
                 end do
@@ -1011,7 +1033,23 @@ contains
                 end do
             end do
         end do
-        deallocate(qdown)
+        ! pasada 3: el gas de ARRIBA cede lo que recibio la escoria sin gas propio
+        ! (inventario log exacto: Q = C_g ln(T_g/T_nuevo))
+        call mpi_exchange_halos_3d(qup, m%topo)
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (m%cell_type(i,j,k-1) == 0) cycle
+                    if (qup(i,j,k-1) == 0.0_dp) cycle
+                    pc = 0.0_dp
+                    if (present(sh)) pc = sh%p(i,j,k)
+                    Cg = gas_heat_capacity_ref(gas%alpha(i,j,k), pc, gas%cp(i,j,k), m%vol(i,j,k), cfg)
+                    if (Cg > 0.0_dp) gas%T(i,j,k) = max(gas%T(i,j,k), T_MIN_GAS) * exp(-qup(i,j,k-1) / Cg)
+                end do
+            end do
+        end do
+        deallocate(qdown, qup)
     end subroutine slag_energy
 
 end module mod_slag_3d
