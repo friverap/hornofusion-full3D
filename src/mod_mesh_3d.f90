@@ -222,8 +222,10 @@ contains
                   nr_global*nth_global*nz_global
         end if
         
-        print '(A,I4,A,I6,A,I6,A,I6,A,I10)', ' [MESH] Rank ', m%topo%rank, &
-              ' local: ', m%nr, ' x ', m%ntheta, ' x ', m%nz, ' = ', m%ncells
+        ! (bajo N-B16) solo rank 0 imprime (antes cada rank su bloque)
+        if (m%topo%rank == 0) &
+            print '(A,I4,A,I6,A,I6,A,I6,A,I10)', ' [MESH] Rank ', m%topo%rank, &
+                  ' local: ', m%nr, ' x ', m%ntheta, ' x ', m%nz, ' = ', m%ncells
               
         ! Exchange cell_type halos
         call mpi_exchange_halos_3d_int(m%cell_type, m%topo)
