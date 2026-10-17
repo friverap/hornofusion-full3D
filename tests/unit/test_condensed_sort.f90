@@ -15,6 +15,9 @@
 !     a la cima en un paso).
 ! (6) gas bajo la interfaz (celda 4, alpha_g 0.1, escoria en 5): se compacta
 !     hacia la cima de la escoria, energia y masas exactas.
+! (7) (auditoria 18, A18-4) fundido PENDIENTE 0.1 en la celda de interfaz:
+!     la compactacion le deja ese hueco (alpha_l + alpha_sl = 0.9) y el gas
+!     complemento no lo rellena (alpha_g = 0: es volumen del liquido).
 !===============================================================================
 program test_condensed_sort
     use mod_constants
@@ -31,7 +34,7 @@ program test_condensed_sort
     type(solid_t)  :: sol
     type(slag_t)   :: slag
     type(shared_t) :: sh
-    real(dp), allocatable :: al0(:,:,:), as0(:,:,:), T0(:,:,:), E0(:,:,:)
+    real(dp), allocatable :: al0(:,:,:), as0(:,:,:), T0(:,:,:), E0(:,:,:), apd(:,:,:)
     real(dp) :: est0, est1, esl0, esl1, msl0, msl1, err_c
     integer  :: i, j, k, nr, nth, nz
     logical  :: ok
@@ -45,7 +48,7 @@ program test_condensed_sort
     call shared_allocate(sh, mesh)
     call fields_initialize_all(liq, gas, sol, slag, sh, mesh, cfg)
     nr = mesh%nr; nth = mesh%ntheta; nz = mesh%nz
-    allocate(al0, as0, T0, E0, mold=liq%alpha)
+    allocate(al0, as0, T0, E0, apd, mold=liq%alpha)
     ok = .true.
 
     ! ---- (1) ordenada ----
@@ -155,6 +158,25 @@ program test_condensed_sort
         print '(A,3ES10.3)', '   FAIL caso 6: energia/masa: ', (est1-est0)/est0, (esl1-esl0)/esl0, (msl1-msl0)/msl0
         ok = .false.
     end if
+
+    ! ---- (7) fundido pendiente en la interfaz ----
+    call setcol([1.0_dp,1.0_dp,1.0_dp,0.8_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp], &
+                [0.0_dp,0.0_dp,0.0_dp,0.0_dp,1.0_dp,0.4_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp])
+    apd = 0.0_dp; apd(:,:,4) = 0.1_dp
+    gas%alpha(:,:,4) = 0.2_dp - 0.1_dp      ! el volfix de la prefusion ya reservo el pendiente
+    call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh, a_pend=apd)
+    do j = 1, nth
+        do i = 1, nr
+            if (mesh%cell_type(i,j,4) == 0) cycle
+            if (abs(liq%alpha(i,j,4) + slag%alpha_sl(i,j,4) - 0.9_dp) > 1.0e-12_dp .or. &
+                gas%alpha(i,j,4) > 1.0e-12_dp) then
+                print '(A,2F10.6)', '   FAIL caso 7: el pendiente no se respeto: ', &
+                    liq%alpha(i,j,4) + slag%alpha_sl(i,j,4), gas%alpha(i,j,4)
+                ok = .false.; exit
+            end if
+        end do
+        if (.not. ok) exit
+    end do
 
     if (ok) then
         print '(A)', ' PASS test_condensed_sort (ordenada intacta; pelicula baja con alpha_c y energia exactas; segmentos aislados; fuente al volumen de su masa)'

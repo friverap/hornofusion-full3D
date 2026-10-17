@@ -60,7 +60,7 @@ program eaf_3d_simulator
     type(mesh_t)          :: mesh
     type(phase_t)         :: liq, gas
     type(phase_t)         :: liq_old, gas_old
-    real(dp), allocatable :: sort_a(:,:,:), sort_t(:,:,:)   ! (Plan H P5) delta del reordenamiento
+    real(dp), allocatable :: sort_a(:,:,:), sort_t(:,:,:), sort_p(:,:,:)   ! (Plan H P5) delta del reordenamiento
     type(solid_t)         :: sol
     type(slag_t)          :: slag
     type(shared_t)        :: sh
@@ -560,7 +560,6 @@ program eaf_3d_simulator
         ! condensado de cada iteracion externa parte de el
         if (slag_condensed_on(cfg)) then
             if (.not. allocated(ws_sp_asl)) then
-                allocate(sort_a, sort_t, mold=liq%alpha)
                 allocate(ws_sp_asl, ws_sp_es, mold=slag%alpha_sl)
                 allocate(ws_sp_mx, mold=slag%m_X)
             end if
@@ -570,8 +569,13 @@ program eaf_3d_simulator
             ! de paso; acero
             ! remapeado con su T (energia exacta) -> liq_old lo sigue (la
             ! quimica ya mantenia liq_old = liq en alpha)
+            ! (auditoria 18, bajo MPI-1) guarda propia: no depender de ws_sp_*
+            if (.not. allocated(sort_a)) allocate(sort_a, sort_t, sort_p, mold=liq%alpha)
             sort_a = liq%alpha; sort_t = liq%T
-            call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh)
+            ! (A18-4) el fundido pendiente del paso es volumen del liquido
+            sort_p = 0.0_dp
+            where (mesh%cell_type /= 0) sort_p = max(sol%mdot, 0.0_dp) * cfg%dt / (liq%rho * mesh%vol)
+            call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh, a_pend=sort_p)
             liq_old%alpha = liq_old%alpha + (liq%alpha - sort_a)
             liq_old%T = liq_old%T + (liq%T - sort_t)
             ws_sp_asl = slag%alpha_sl

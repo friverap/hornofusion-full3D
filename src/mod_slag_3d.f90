@@ -385,13 +385,20 @@ contains
     ! segmento ya ordenado no se reescribe (sin ruido de redondeo). Patron
     ! invariante MPI: gather global, mismo barrido, escritura de celdas propias.
     !---------------------------------------------------------------------------
-    subroutine slag_condensed_sort(slag, liq, gas, sol, m, cfg, sh)
+    subroutine slag_condensed_sort(slag, liq, gas, sol, m, cfg, sh, a_pend)
         type(slag_t),  intent(inout) :: slag
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
         type(mesh_t),  intent(in)    :: m
         type(config_t),intent(in)    :: cfg
         type(shared_t), intent(inout), optional :: sh
+        ! (auditoria 18, A18-4) volumen del FUNDIDO PENDIENTE del paso
+        ! (max(mdot,0) dt/(rho_l V)): entra a alpha_l en el transporte, asi
+        ! que la compactacion no lo ocupa y el gas complemento no lo rellena
+        ! (sin esto: el gas fantasma de N-M4 en celdas que funden bajo la
+        ! escoria). Solo en la llamada de inicio de paso
+        real(dp), intent(in), optional :: a_pend(-1:,-1:,-1:)
+        real(dp), allocatable :: ap_g(:,:,:)
         ! (compactacion) en los segmentos CON escoria el condensado llena de
         ! abajo arriba hasta la capacidad de cada celda (liq_cap(alpha_s,0)): el
         ! gas atrapado bajo la escoria sube a la cima del segmento (el transporte
@@ -416,6 +423,8 @@ contains
         allocate(tmp, mold=slag%m_sl)
         allocate(ss_g(m%nr_g, m%nth_g, m%nz_g), acn(m%nr_g, m%nth_g, m%nz_g))
         call gather_global_field(sol%alpha_s, ss_g, m)
+        allocate(ap_g(m%nr_g, m%nth_g, m%nz_g)); ap_g = 0.0_dp
+        if (present(a_pend)) call gather_global_field(a_pend, ap_g, m)
         call gather_global_field(liq%alpha, al_g, m)
         call gather_global_field(liq%T, tl_g, m)
         call gather_global_field(slag%alpha_sl, as_g, m)
@@ -487,7 +496,7 @@ contains
                         ! hacia arriba sobre las celdas de gas de la columna
                         capsum = 0.0_dp
                         do kk = kc, k2
-                            capsum = capsum + liq_cap(ss_g(i,j,kk), 0.0_dp) * m%vol_global(i,j,kk)
+                            capsum = capsum + max(0.0_dp, liq_cap(ss_g(i,j,kk), 0.0_dp) - ap_g(i,j,kk)) * m%vol_global(i,j,kk)
                         end do
                         k2e = k2
                         do while (vcond > capsum * (1.0_dp + 1.0e-14_dp) .and. k2e < m%nz_g)
@@ -495,7 +504,7 @@ contains
                             k2e = k2e + 1
                             acn(i,j,k2e) = al_g(i,j,k2e) + as_g(i,j,k2e)
                             vcond = vcond + acn(i,j,k2e) * m%vol_global(i,j,k2e)
-                            capsum = capsum + liq_cap(ss_g(i,j,k2e), 0.0_dp) * m%vol_global(i,j,k2e)
+                            capsum = capsum + max(0.0_dp, liq_cap(ss_g(i,j,k2e), 0.0_dp) - ap_g(i,j,k2e)) * m%vol_global(i,j,k2e)
                         end do
                         if (k2e > k2) then
                             k2 = k2e
@@ -506,7 +515,7 @@ contains
                         ! hueco): solo se reordena con las alpha_c de cada celda
                         if (vcond <= capsum * (1.0_dp + 1.0e-14_dp)) then
                             do kk = kc, k2
-                                capk = liq_cap(ss_g(i,j,kk), 0.0_dp) * m%vol_global(i,j,kk)
+                                capk = max(0.0_dp, liq_cap(ss_g(i,j,kk), 0.0_dp) - ap_g(i,j,kk)) * m%vol_global(i,j,kk)
                                 if (kk == k2) capk = vcond
                                 capk = max(min(capk, vcond), 0.0_dp)
                                 acn(i,j,kk) = capk / m%vol_global(i,j,kk)
@@ -601,7 +610,7 @@ contains
                     end if
                     ! gas: complemento (compactacion), auditado como el volfix
                     ag_new = max(0.0_dp, 1.0_dp - sol%alpha_s(il,jl,kl) - liq%alpha(il,jl,kl) &
-                                          - slag%alpha_sl(il,jl,kl))
+                                          - slag%alpha_sl(il,jl,kl) - ap_g(i,j,k))
                     if (ag_new /= gas%alpha(il,jl,kl)) then
                         pc = 0.0_dp
                         if (present(sh)) pc = sh%p(il,jl,kl)
@@ -630,7 +639,7 @@ contains
         call mpi_exchange_halos_3d(liq%alpha, m%topo)
         call mpi_exchange_halos_3d(liq%T, m%topo)
         call mpi_exchange_halos_3d(gas%alpha, m%topo)
-        deallocate(al_g, tl_g, as_g, ms_g, es_g, x_g, tmp, al_n, tl_n, as_n, ms_n, es_n, x_n, chg, ss_g, acn)
+        deallocate(al_g, tl_g, as_g, ms_g, es_g, x_g, tmp, al_n, tl_n, as_n, ms_n, es_n, x_n, chg, ss_g, acn, ap_g)
     end subroutine slag_condensed_sort
 
     !---------------------------------------------------------------------------
