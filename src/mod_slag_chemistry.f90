@@ -186,6 +186,9 @@ contains
                                 slag%m_X(i,j,k,SL_FEO) + dm_feo
                             slag%m_sl(i,j,k) = slag%m_sl(i,j,k) + dm_feo
                             slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + dm_feo * cfg%cp_slag * tsl_r + q_rx
+                            ! (dirigida A19, B3) T coherente para la reduccion de la
+                            ! misma celda (tasa, h_react, e_fe y add_fe la leen)
+                            slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / (slag%m_sl(i,j,k) * cfg%cp_slag)
                             ! O2 consumido: sumidero adicional de especies
                             sh%S_O2_src(i,j,k) = sh%S_O2_src(i,j,k) - &
                                 dm_o2 / (vol * cfg%dt)
