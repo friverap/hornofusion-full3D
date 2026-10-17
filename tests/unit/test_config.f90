@@ -80,6 +80,24 @@ program test_config
     open(newunit=iu, file=tmpfile, status='old')
     close(iu, status='delete')
 
+    ! (bajo N-B10, dirigida A18 B3) T_ref_boussinesq sigue al T_liquidus LEIDO
+    ! salvo que se fije explicitamente (aunque sea igual al default)
+    open(newunit=iu, file=tmpfile, status='replace')
+    write(iu, '(A)') 'T_liquidus = 1790.0'
+    close(iu)
+    call config_set_defaults(cfg)
+    call config_read(cfg, tmpfile)
+    if (abs(cfg%T_ref_boussinesq - 1790.0_dp) > 1e-12_dp) call fail('T_ref_boussinesq sigue a T_liquidus', ok)
+    open(newunit=iu, file=tmpfile, status='replace')
+    write(iu, '(A)') 'T_liquidus = 1790.0'
+    write(iu, '(A)') 'T_ref_boussinesq = 1809.0'
+    close(iu)
+    call config_set_defaults(cfg)
+    call config_read(cfg, tmpfile)
+    if (abs(cfg%T_ref_boussinesq - 1809.0_dp) > 1e-12_dp) call fail('T_ref_boussinesq explicito se respeta', ok)
+    open(newunit=iu, file=tmpfile, status='old')
+    close(iu, status='delete')
+
     if (ok) then
         print '(A)', ' PASS test_config'
     else

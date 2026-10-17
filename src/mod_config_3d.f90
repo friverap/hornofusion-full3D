@@ -5,6 +5,8 @@ module mod_config_3d
     use mod_constants
     use mod_types_3d
     implicit none
+    ! (dirigida de bajos A18, B3) T_ref_boussinesq EXPLICITO en el config leido
+    logical, save, private :: tref_set = .false.
 
 contains
 
@@ -222,10 +224,8 @@ contains
         integer :: iu, ios
         character(len=512) :: line, key, val
         integer :: eq_pos, cpos
-        real(dp) :: tref0, tliq0
-
         ! (bajo N-B10) T_ref_boussinesq por defecto SIGUE a T_liquidus del config
-        tref0 = cfg%T_ref_boussinesq; tliq0 = cfg%T_liquidus
+        tref_set = .false.
         open(newunit=iu, file=trim(filename), status='old', iostat=ios)
         if (ios /= 0) then
             if (cfg_root()) print '(A,A)', ' [CONFIG] ERROR: cannot open config file: ', trim(filename)
@@ -266,7 +266,7 @@ contains
         if (cfg%T_ref_boussinesq < 0.0_dp) cfg%T_ref_boussinesq = cfg%T_liquidus
         ! (N-B10) sin T_ref_boussinesq explicito, la referencia es el T_liquidus
         ! LEIDO (antes quedaba el del default aunque el config lo cambiara)
-        if (cfg%T_ref_boussinesq == tref0 .and. tref0 == tliq0) cfg%T_ref_boussinesq = cfg%T_liquidus
+        if (.not. tref_set) cfg%T_ref_boussinesq = cfg%T_liquidus
     end subroutine config_read
 
     ! Posicion del primer '#' o '!' precedido de blanco/tabulador (0 si no hay)
@@ -326,7 +326,7 @@ contains
         case ('rho_steel');  call parse_real(val, key, cfg%rho_steel)
         case ('T_solidus');  call parse_real(val, key, cfg%T_solidus)
         case ('T_liquidus'); call parse_real(val, key, cfg%T_liquidus)
-        case ('T_ref_boussinesq'); call parse_real(val, key, cfg%T_ref_boussinesq)
+        case ('T_ref_boussinesq'); call parse_real(val, key, cfg%T_ref_boussinesq); tref_set = .true.
         case ('cp_s');       call parse_real(val, key, cfg%cp_s)
         case ('cp_l');       call parse_real(val, key, cfg%cp_l)
         case ('h_fusion');   call parse_real(val, key, cfg%h_fusion)
