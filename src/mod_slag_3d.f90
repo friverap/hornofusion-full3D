@@ -931,6 +931,9 @@ contains
                     ! (dirigida A18, M1) con acero propio RESUELTO: una traza de
                     ! acero en la celda de interfaz (nivel cruzando una cara) no
                     ! le quita el contacto al baño de abajo
+                    ! (dirigida A19, B1) en modo condensado el acero propio cuenta
+                    ! solo si esta RESUELTO (una traza no es contacto escoria-baño)
+                    if (slag_condensed_on(cfg) .and. liq%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) Cf = 0.0_dp
                     if (Cf > 0.0_dp .and. (Cf >= Cb .or. (slag_condensed_on(cfg) .and. &
                         liq%alpha(i,j,k) >= ALPHA_FLOW_CUTOFF))) then
                         Cf = liq%alpha(i,j,k) * liq%rho(i,j,k) * liq%cp(i,j,k) * m%vol(i,j,k)
@@ -992,7 +995,7 @@ contains
                     top_face = .false.
                     if (slag_condensed_on(cfg) .and. m%cell_type(i,j,k+1) /= 0) then
                         top_face = slag%alpha_sl(i,j,k+1) < ALPHA_FLOW_CUTOFF .and. &
-                                   gas%alpha(i,j,k+1) > SMALL_SL .and. &
+                                   gas%alpha(i,j,k+1) >= ALPHA_FLOW_CUTOFF .and. &
                                    gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF
                     end if
                     if (gas%alpha(i,j,k) > SMALL_SL .and. .not. top_face) then
