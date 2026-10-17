@@ -73,7 +73,7 @@ module mod_continuity
 
 contains
 
-    subroutine solve_volume_fraction(liq, gas, sol, alpha_slag, alpha_old, m, cfg, asl_adv, slq_adv)
+    subroutine solve_volume_fraction(liq, gas, sol, alpha_slag, alpha_old, m, cfg, asl_adv, slq_adv, a_in_add)
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
         ! Fracción de escoria: participa en la restricción de volumen
@@ -99,6 +99,10 @@ contains
         ! (masa por flujos vs alpha_sl, que se cancela a redondeo) creaba
         ! o destruia energia sin auditar (arc_slag 10 s: 1.3e6 J)
         real(dp), intent(inout), optional :: slq_adv(-1:,-1:,-1:,:)
+        ! (Plan H, auditoria P4 M2) lo que se suma a liq%alpha de entrada para
+        ! el iterado anterior del diagnostico D1 (vol_dalpha): con el
+        ! condensado, liq%alpha llega con el ACERO y el resultado es alpha_c
+        real(dp), intent(in), optional :: a_in_add(-1:,-1:,-1:)
         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
         real(dp), allocatable :: qtmp(:,:,:)
         logical :: adv, advq
@@ -273,6 +277,7 @@ contains
         ! D1: iterado ENTRANTE (el alpha con el que se armo el Poisson de
         ! esta iteracion externa) para medir el desfase alpha-p
         allocate(a_in, mold=liq%alpha); a_in = liq%alpha
+        if (present(a_in_add)) a_in = a_in + a_in_add
         allocate(in_tot, in_ok, mold=liq%alpha); in_tot = 0.0_dp; in_ok = 0.0_dp
         allocate(unl_vol, mold=liq%alpha); unl_vol = 0.0_dp
         vol_dalpha = 0.0_dp; vol_lim = 0.0_dp; vol_unl = 0.0_dp
@@ -1099,7 +1104,8 @@ contains
         rl = cfg%rho_steel
         ! condensado a volumen + escoria (y su E_sl, m_X) advectada con la
         ! composicion ACTUAL del dador en cada movimiento
-        call solve_volume_fraction(liq, gas, sol, zero, ac_old, m, cfg, asl_adv=asl, slq_adv=slq)
+        call solve_volume_fraction(liq, gas, sol, zero, ac_old, m, cfg, asl_adv=asl, slq_adv=slq, &
+                                   a_in_add=slag%alpha_sl)
         ! liq%alpha = alpha_c^{n+1}; asl = alpha_sl^{n+1}; ws_Fr = masa condensada
         ! (x rho_l); ws_Fsl = volumen de escoria x rho_l (mismas unidades)
 
