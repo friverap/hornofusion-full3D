@@ -164,7 +164,15 @@ program test_condensed_sort
                 [0.0_dp,0.0_dp,0.0_dp,0.0_dp,1.0_dp,0.4_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp])
     apd = 0.0_dp; apd(:,:,4) = 0.1_dp
     gas%alpha(:,:,4) = 0.2_dp - 0.1_dp      ! el volfix de la prefusion ya reservo el pendiente
+    call totals(est0, esl0, msl0)
     call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh, a_pend=apd)
+    call totals(est1, esl1, msl1)
+    ! (auditoria 19, tests) conservacion: un sort que convirtiera escoria en
+    ! acero o perdiera masa pasaba el caso
+    if (abs(est1-est0) > 1.0e-13_dp*est0 .or. abs(esl1-esl0) > 1.0e-13_dp*esl0 .or. abs(msl1-msl0) > 1.0e-13_dp*msl0) then
+        print '(A,3ES10.3)', '   FAIL caso 7: energia/masa: ', (est1-est0)/est0, (esl1-esl0)/esl0, (msl1-msl0)/msl0
+        ok = .false.
+    end if
     do j = 1, nth
         do i = 1, nr
             if (mesh%cell_type(i,j,4) == 0) cycle
