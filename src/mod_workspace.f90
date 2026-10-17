@@ -277,6 +277,15 @@ module mod_workspace
     logical, allocatable :: ws_gas_reach(:,:,:)
     logical, save :: ws_gas_perc_valid = .false.
 
+    ! (Plan H, M17-PV1) VISTA CONDENSADA acero+escoria: dentro de la ventana de
+    ! multiphase_iteration liq%alpha/rho (y los de liq_old) son los del
+    ! condensado; las copias del acero se guardan aqui y se restauran exactas.
+    ! ws_wc: peso propio del condensado [N/m3] = (a_l w_l(T_l) + a_sl rho_sl g)/a_c
+    logical, save :: ws_cond_on = .false.
+    real(dp), allocatable :: ws_al_st(:,:,:), ws_rl_st(:,:,:)
+    real(dp), allocatable :: ws_al_st_old(:,:,:), ws_rl_st_old(:,:,:)
+    real(dp), allocatable :: ws_wc(:,:,:)
+
 contains
 
     !---------------------------------------------------------------------------
@@ -312,6 +321,61 @@ contains
         real(dp), intent(in) :: rho, T, beta, Tref
         liq_own_weight = GRAVITY * rho * (1.0_dp - beta * (T - Tref))
     end function liq_own_weight
+
+    ! (Plan H) peso propio del liquido de la hidrodinamica: con la vista
+    ! condensada activa, el del condensado (ws_wc); sin ella, el del acero
+    ! (la MISMA expresion de liq_own_weight: camino legado bit a bit)
+    pure real(dp) function liq_w(rho, T, beta, Tref, ii, jj, kk)
+        real(dp), intent(in) :: rho, T, beta, Tref
+        integer, intent(in)  :: ii, jj, kk
+        if (ws_cond_on) then
+            liq_w = ws_wc(ii,jj,kk)
+        else
+            liq_w = liq_own_weight(rho, T, beta, Tref)
+        end if
+    end function liq_w
+
+    ! (Plan H) entra en la vista condensada: guarda el acero de liq y liq_old y
+    ! pone alpha = a_l + a_sl, rho = (a_l rho_l + a_sl rho_sl)/a_c (rho_l si
+    ! a_c = 0); a_sl y a_sl_old son la escoria actual y la de inicio de paso.
+    ! ws_wc con el Boussinesq del acero (T_l) y el peso de la escoria.
+    subroutine cond_view_enter(liq, liq_old, a_sl, a_sl_old, rho_sl, beta, Tref)
+        type(phase_t), intent(inout) :: liq, liq_old
+        real(dp), intent(in) :: a_sl(-1:,-1:,-1:), a_sl_old(-1:,-1:,-1:)
+        real(dp), intent(in) :: rho_sl, beta, Tref
+        real(dp) :: ac
+        integer :: i, j, k
+        ws_al_st = liq%alpha;     ws_rl_st = liq%rho
+        ws_al_st_old = liq_old%alpha; ws_rl_st_old = liq_old%rho
+        do k = lbound(ws_wc,3), ubound(ws_wc,3)
+            do j = lbound(ws_wc,2), ubound(ws_wc,2)
+                do i = lbound(ws_wc,1), ubound(ws_wc,1)
+                    ac = ws_al_st(i,j,k) + a_sl(i,j,k)
+                    if (ac > 0.0_dp) then
+                        ws_wc(i,j,k) = (ws_al_st(i,j,k) * liq_own_weight(ws_rl_st(i,j,k), liq%T(i,j,k), beta, Tref) &
+                                        + a_sl(i,j,k) * rho_sl * GRAVITY) / ac
+                        liq%rho(i,j,k) = (ws_al_st(i,j,k) * ws_rl_st(i,j,k) + a_sl(i,j,k) * rho_sl) / ac
+                    else
+                        ws_wc(i,j,k) = liq_own_weight(ws_rl_st(i,j,k), liq%T(i,j,k), beta, Tref)
+                    end if
+                    liq%alpha(i,j,k) = ac
+                    ac = ws_al_st_old(i,j,k) + a_sl_old(i,j,k)
+                    if (ac > 0.0_dp) liq_old%rho(i,j,k) = (ws_al_st_old(i,j,k) * ws_rl_st_old(i,j,k) &
+                                                            + a_sl_old(i,j,k) * rho_sl) / ac
+                    liq_old%alpha(i,j,k) = ac
+                end do
+            end do
+        end do
+        ws_cond_on = .true.
+    end subroutine cond_view_enter
+
+    ! (Plan H) sale de la vista: restituye EXACTOS alpha y rho del acero
+    subroutine cond_view_exit(liq, liq_old)
+        type(phase_t), intent(inout) :: liq, liq_old
+        liq%alpha = ws_al_st;     liq%rho = ws_rl_st
+        liq_old%alpha = ws_al_st_old; liq_old%rho = ws_rl_st_old
+        ws_cond_on = .false.
+    end subroutine cond_view_exit
 
     ! Peso de celda que entra en el W_f de la fuerza balanceada [N/m3]: sin
     ! fuerza balanceada, alpha_l w_l del liquido CONTINUO; con ella (lbf), el
@@ -425,6 +489,11 @@ contains
         allocate(ws_mQ_r, ws_mQ_th, ws_mQ_z, ws_mW, ws_mKl, ws_mKg, mold=ws_aW)
         ws_mQ_r = 0.0_dp; ws_mQ_th = 0.0_dp; ws_mQ_z = 0.0_dp; ws_mW = 0.0_dp
         ws_mKl = 0.0_dp; ws_mKg = 0.0_dp
+        if (.not. allocated(ws_wc)) then
+            allocate(ws_al_st, ws_rl_st, ws_al_st_old, ws_rl_st_old, ws_wc, mold=ws_aW)
+            ws_al_st = 0.0_dp; ws_rl_st = 0.0_dp; ws_al_st_old = 0.0_dp
+            ws_rl_st_old = 0.0_dp; ws_wc = 0.0_dp
+        end if
     end subroutine ensure_workspace
 
 end module mod_workspace

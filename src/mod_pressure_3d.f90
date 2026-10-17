@@ -95,7 +95,7 @@ contains
 
     subroutine solve_pressure_correction(liq, gas, gas_T_ref, sh, m, cfg, &
                                           residual)
-        use mod_workspace, only: ensure_workspace, own_weight_face, liq_own_weight, mix_cell_weight, &
+        use mod_workspace, only: ensure_workspace, own_weight_face, liq_own_weight, liq_w, mix_cell_weight, &
                                  liq_cont_fallback, bed_rel_face, ws_cc, ws_cc_new, ws_cc_drop, ws_qin_cap, ws_qin_step, ws_p_n, aW => ws_aW, &
             ws_trg, ws_trl, ws_f231_excl, ws_f231_step, ws_pea_kv, ws_pea_al, ws_pea_ag, ws_peal_r, ws_peal_th, ws_peal_z, ws_peag_r, ws_peag_th, ws_peag_z, &
             aE => ws_aE, aS => ws_aS, aN => ws_aN, aB => ws_aB, &
@@ -985,7 +985,7 @@ contains
             integer, intent(in) :: ii, jj, kk
             ! (auditoria 6) mod_workspace::mix_cell_weight, la MISMA que momento
             cell_wp = mix_cell_weight(liq%alpha(ii,jj,kk), &
-                liq_own_weight(liq%rho(ii,jj,kk), liq%T(ii,jj,kk), cfg%beta_expansion, cfg%T_ref_boussinesq), &
+                liq_w(liq%rho(ii,jj,kk), liq%T(ii,jj,kk), cfg%beta_expansion, cfg%T_ref_boussinesq, ii, jj, kk), &
                 gas%alpha(ii,jj,kk), gas%rho(ii,jj,kk), act_l(ii,jj,kk), lbf)
         end function cell_wp
 
@@ -1004,8 +1004,8 @@ contains
             else
                 bed_rel_fp = bed_rel_face(.false., ii, jj, ka, kb, &
                     liq%alpha(ii,jj,ka), liq%alpha(ii,jj,kb), liq%alpha(ii,jj,ka), liq%alpha(ii,jj,kb), &
-                    liq_own_weight(liq%rho(ii,jj,ka), liq%T(ii,jj,ka), cfg%beta_expansion, cfg%T_ref_boussinesq), &
-                    liq_own_weight(liq%rho(ii,jj,kb), liq%T(ii,jj,kb), cfg%beta_expansion, cfg%T_ref_boussinesq), &
+                    liq_w(liq%rho(ii,jj,ka), liq%T(ii,jj,ka), cfg%beta_expansion, cfg%T_ref_boussinesq, ii, jj, ka), &
+                    liq_w(liq%rho(ii,jj,kb), liq%T(ii,jj,kb), cfg%beta_expansion, cfg%T_ref_boussinesq, ii, jj, kb), &
                     liq_weight_f(ii, jj, ka, kb), lbf)
             end if
         end function bed_rel_fp

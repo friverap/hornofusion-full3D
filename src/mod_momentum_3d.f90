@@ -84,7 +84,7 @@ contains
                                          alpha_q, drag_coef, is_gas, comp, residual, &
                                          alpha_old, rho_old, mdot_m)
         use mod_workspace, only: ensure_workspace, own_weight_face, ws_liq_cont, ws_liq_cont_valid, &
-                                 liq_own_weight, mix_cell_weight, liq_cont_fallback, bed_rel_face, &
+                                 liq_own_weight, liq_w, mix_cell_weight, liq_cont_fallback, bed_rel_face, &
             ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, ws_trg, ws_trl, &
             ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_valid, ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bed_valid, &
             ws_ud_r, ws_ud_th, ws_ud_z, ws_pv_active, ws_pv_valid, &
@@ -632,7 +632,7 @@ contains
             if (is_gas) then
                 own_w = GRAVITY * ph%rho(ii,jj,kk)
             else
-                own_w = liq_own_weight(ph%rho(ii,jj,kk), ph%T(ii,jj,kk), cfg%beta_expansion, cfg%T_ref_boussinesq)
+                own_w = liq_w(ph%rho(ii,jj,kk), ph%T(ii,jj,kk), cfg%beta_expansion, cfg%T_ref_boussinesq, ii, jj, kk)
             end if
         end function own_w
 
@@ -734,11 +734,11 @@ contains
             ! (auditoria 6) mod_workspace::mix_cell_weight, la MISMA que el Poisson
             if (is_gas) then
                 cell_w = mix_cell_weight(ph_other%alpha(ii,jj,kk), &
-                    liq_own_weight(ph_other%rho(ii,jj,kk), ph_other%T(ii,jj,kk), cfg%beta_expansion, cfg%T_ref_boussinesq), &
+                    liq_w(ph_other%rho(ii,jj,kk), ph_other%T(ii,jj,kk), cfg%beta_expansion, cfg%T_ref_boussinesq, ii, jj, kk), &
                     ph%alpha(ii,jj,kk), ph%rho(ii,jj,kk), cont_ok(ii,jj,kk), lbf_m)
             else
                 cell_w = mix_cell_weight(ph%alpha(ii,jj,kk), &
-                    liq_own_weight(ph%rho(ii,jj,kk), ph%T(ii,jj,kk), cfg%beta_expansion, cfg%T_ref_boussinesq), &
+                    liq_w(ph%rho(ii,jj,kk), ph%T(ii,jj,kk), cfg%beta_expansion, cfg%T_ref_boussinesq, ii, jj, kk), &
                     ph_other%alpha(ii,jj,kk), ph_other%rho(ii,jj,kk), cont_ok(ii,jj,kk), lbf_m)
             end if
         end function cell_w
