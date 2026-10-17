@@ -490,7 +490,7 @@ contains
     ! escoria MAS BAJO (kb = su celda inferior, kt = la superior):
     !   - O2: el remanente del paso del gas de kt si esta resuelto
     !     (alpha_g >= ALPHA_FLOW_CUTOFF), si no el de kt+1 (gas libre encima);
-    !   - Fe: del acero de kb si esta resuelto, si no del baño de kb-1;
+    !   - Fe: del acero de kb hasta su cota y el resto del baño de kb-1;
     !   - FeO, su masa y su energia (dato coherente, auditoria 19) a la
     !     escoria de kb, con las MISMAS cotas que el estencil local (Fe
     !     extraible F_MAX_FE del acero de origen; termica sobre la escoria de kb).
@@ -511,15 +511,14 @@ contains
         type(config_t), intent(in)    :: cfg
         real(dp),       intent(in)    :: c0
         ! planos 2D: gas de kt, O2 (kg/s) en kt y kt+1 (y si kt+1 existe),
-        ! acero y Fe extraible en kb y kb-1, cota termica de la escoria de kb
+        ! Fe extraible en kb y kb-1, cota termica de la escoria de kb
         integer, parameter :: P_AG_KT = 1, P_O2_KT = 2, P_O2_KT1 = 3, P_OK_KT1 = 4, &
-                              P_AL_KB = 5, P_CAP_KB = 6, P_AL_KBM = 7, P_CAP_KBM = 8, &
-                              P_QLIM = 9, NPL = 9
+                              P_CAP_KB = 5, P_CAP_KBM = 6, P_QLIM = 7, NPL = 7
         real(dp), allocatable :: mask(:,:,:), pl(:,:,:)
         integer,  allocatable :: kb_g(:,:), kt_g(:,:)
-        integer  :: i, j, k, ig, jg, i0, j0, k0, kg, kb, kt, ko, ks, kl, ierr
+        integer  :: i, j, k, ig, jg, i0, j0, k0, kg, kb, kt, ko, kl, ierr
         integer  :: istart, iend, jstart, jend, kstart, kend
-        real(dp) :: o2_rate, cap, dm_feo, dm_fe, dm_o2, q_rx, q_lim, tsl_r, e_fe, da
+        real(dp) :: o2_rate, cap, dm_feo, dm_fe, dm_o2, q_rx, q_lim, tsl_r, dm_fe_kb
 
         if (m%is_parallel) then
             istart = m%topo%istart; iend = m%topo%iend
@@ -588,12 +587,10 @@ contains
                         pl(ig,jg,P_OK_KT1) = 1.0_dp
                     end if
                     if (kg == kb) then
-                        pl(ig,jg,P_AL_KB)  = liq%alpha(i,j,k)
                         pl(ig,jg,P_CAP_KB) = F_MAX_FE * liq%alpha(i,j,k) * liq%rho(i,j,k) * m%vol(i,j,k)
                         pl(ig,jg,P_QLIM)   = slag%m_sl(i,j,k) * cfg%cp_slag * DT_MAX_SLAG
                     end if
                     if (kg == kb - 1 .and. liq%alpha(i,j,k) > SMALL_SL) then
-                        pl(ig,jg,P_AL_KBM)  = liq%alpha(i,j,k)
                         pl(ig,jg,P_CAP_KBM) = F_MAX_FE * liq%alpha(i,j,k) * liq%rho(i,j,k) * m%vol(i,j,k)
                     end if
                 end do
@@ -613,13 +610,11 @@ contains
                 if (pl(ig,jg,P_AG_KT) < ALPHA_FLOW_CUTOFF .and. pl(ig,jg,P_OK_KT1) > 0.5_dp) then
                     ko = kt + 1; o2_rate = pl(ig,jg,P_O2_KT1)
                 end if
-                if (pl(ig,jg,P_AL_KB) >= ALPHA_FLOW_CUTOFF) then
-                    ks = kb; cap = pl(ig,jg,P_CAP_KB)
-                else if (pl(ig,jg,P_AL_KBM) > SMALL_SL) then
-                    ks = kb - 1; cap = pl(ig,jg,P_CAP_KBM)
-                else
-                    cycle
-                end if
+                ! (dirigida I1, MEDIO-2) Fe del acero de kb y del baño de kb-1
+                ! con la suma de sus cotas (antes una sola fuente por umbral:
+                ! la cota saltaba ~100 veces con alpha_l(kb) en torno a 0.01)
+                cap = pl(ig,jg,P_CAP_KB) + pl(ig,jg,P_CAP_KBM)
+                if (cap <= 0.0_dp) cycle
                 dm_feo = cfg%slag_eta_feo * o2_rate * (MW_FEO / (0.5_dp * MW_O2_S)) * cfg%dt
                 dm_fe  = min(dm_feo * MW_FE / MW_FEO, cap)
                 dm_feo = dm_fe * MW_FEO / MW_FE
@@ -633,16 +628,11 @@ contains
                 if (dm_feo <= SMALL) cycle
                 dm_o2 = dm_feo * (0.5_dp * MW_O2_S) / MW_FEO
 
-                ! Fe sale del acero de origen a su entalpia (cp_l T + C0)
-                kl = ks - k0 + 1
-                if (kl >= kstart .and. kl <= kend) then
-                    e_fe = dm_fe * (liq%cp(i,j,kl) * liq%T(i,j,kl) + c0)
-                    da = dm_fe / (liq%rho(i,j,kl) * m%vol(i,j,kl))
-                    liq%alpha(i,j,kl)     = max(0.0_dp, liq%alpha(i,j,kl) - da)
-                    liq_old%alpha(i,j,kl) = max(0.0_dp, liq_old%alpha(i,j,kl) - da)
-                    call audit_add(AUD_FE_YIELD, dm_fe)
-                    call audit_add(AUD_SLAG_OX_E, -e_fe)
-                end if
+                ! Fe sale del acero a su entalpia (cp_l T + C0): primero de kb
+                ! hasta su cota, el resto del baño de kb-1
+                dm_fe_kb = min(dm_fe, pl(ig,jg,P_CAP_KB))
+                call take_fe(i, j, kb - k0 + 1, dm_fe_kb)
+                call take_fe(i, j, kb - 1 - k0 + 1, dm_fe - dm_fe_kb)
                 ! FeO a la escoria de kb a SU temperatura + el exotermico
                 kl = kb - k0 + 1
                 if (kl >= kstart .and. kl <= kend) then
@@ -662,6 +652,19 @@ contains
         deallocate(mask, pl, kb_g, kt_g)
 
     contains
+
+        ! Fe que sale del acero de la celda local (ii,jj,kk) si es propia
+        subroutine take_fe(ii, jj, kk, dm)
+            integer,  intent(in) :: ii, jj, kk
+            real(dp), intent(in) :: dm
+            real(dp) :: da
+            if (dm <= 0.0_dp .or. kk < kstart .or. kk > kend) return
+            da = dm / (liq%rho(ii,jj,kk) * m%vol(ii,jj,kk))
+            liq%alpha(ii,jj,kk)     = max(0.0_dp, liq%alpha(ii,jj,kk) - da)
+            liq_old%alpha(ii,jj,kk) = max(0.0_dp, liq_old%alpha(ii,jj,kk) - da)
+            call audit_add(AUD_FE_YIELD, dm)
+            call audit_add(AUD_SLAG_OX_E, -dm * (liq%cp(ii,jj,kk) * liq%T(ii,jj,kk) + c0))
+        end subroutine take_fe
 
         ! O2 remanente del paso en la celda [kg/(m3 s)] (como el estencil local)
         real(dp) function o2_remaining(ii, jj, kk) result(r)

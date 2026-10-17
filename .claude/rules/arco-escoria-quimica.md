@@ -196,7 +196,8 @@ textos que describen la cesion en el derrame y la recolocacion por
   (Plan I, I1, `slag_oxidation_column`): O₂ del gas del tope del tramo más
   bajo (o de la celda de encima), Fe del acero de la interfaz (o del baño de
   abajo), FeO a la escoria de la interfaz; mismas cotas; sustituye al estencil
-  local (no contar dos veces el O₂). Test `test_slag_ox_column`. `slag_in_volume = false` recupera la capa legada (con el
+  local (no contar dos veces el O₂). Fe de kb hasta su cota y el resto de
+  kb−1 (sin umbral que haga saltar la cota). Test `test_slag_ox_column`. `slag_in_volume = false` recupera la capa legada (con el
   hueco fantasma de gas F2.21 descrito en el plan). Con el condensado la escoria
   ya tiene transporte LATERAL (antes solo columnas). Sin modelar: viscosidad
   propia de la escoria (P5b opcional).
