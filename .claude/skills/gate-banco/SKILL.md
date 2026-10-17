@@ -1,10 +1,10 @@
 ---
 name: gate-banco
 description: Corre un banco de tests/integration/configs con overrides (p.ej. t_final, slag_in_volume) en el scratchpad y resume el gate (u_liq, vol_lim, u_gas, p por segundo; volfix; capa de escoria) con check_audit y check_slag_bed. Usala para validar un cambio de modelo en un regimen concreto antes de la matriz.
-argument-hint: "<banco> [ranks] [clave=valor ...]"
+argument-hint: "<banco> <ranks> [clave=valor ...]"
 ---
 
-Gate del banco `$0` con `$1` ranks (si no se da: 4) y los overrides que sigan en `$ARGUMENTS`.
+Gate del banco `$0` con `$1` ranks (OBLIGATORIO: si el segundo argumento no es un entero, pide los ranks; usa 4 para los bancos de la matriz) y los overrides `clave=valor` que vengan DESPUES de banco y ranks en `$ARGUMENTS`.
 
 1. Sin simulaciones en curso (las corridas son secuenciales).
 2. Directorio `<scratch>/gate_$0_<etiqueta>`: copia

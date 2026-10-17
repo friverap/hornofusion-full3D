@@ -20,17 +20,17 @@ make clean
 # Test suite (see tests/README.md; XFAILs esperados en tests/xfail.list)
 make test-quick   # gate por commit (~1.5 min): corrida fría + bath_test + arc_melt + bed_bath_rest + invariantes + golden
 make test-full    # gate por etapa (~5-10 min): unit + matriz MPI + simetría
-make test-unit    # unit tests Fortran (TDMA, malla, entalpía, flujos de cara)
+make test-unit    # unit tests Fortran (tests/unit/*.f90: kernels, escoria condensada, config...; tope UNIT_TIMEOUT)
 STAGE=vN make test-rebaseline   # regenerar golden tras un cambio numérico intencional
 
 # Production run (mesh 60×120×84, 5040 s simulated)
-mkdir -p output_prod
+mkdir -p output_prod2
 make clean && make opt
 mpirun -n 12 ./bin/eaf3d_mpi input/config_production_full.dat 2>&1 | tee run_production.log
-tail -f output_prod/monitor.log   # progress: step, time, solid mass, residuals
+tail -f output_prod2/monitor.log   # progress: step, time, solid mass, residuals
 
 # Inspect output
-h5ls -r output_prod/eaf3d_00000200.h5
+h5ls -r output_prod2/eaf3d_00000200.h5
 
 # Post-processing (Python 3, needs h5py/matplotlib; pyvista/skimage for some)
 python3 postprocess/plot_insights.py [output_dir] [plots_dir]
