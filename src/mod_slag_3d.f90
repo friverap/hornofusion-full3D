@@ -875,6 +875,7 @@ contains
         real(dp) :: Cs, Cf, Cb, hA, f, Q, Cg, Tg, Ts, pc, Csol, wet
         real(dp), allocatable :: qdown(:,:,:), qup(:,:,:)
         real(dp) :: Tg_dummy
+        logical  :: top_face
 
         if (m%is_parallel) then
             istart = m%topo%istart; iend = m%topo%iend
@@ -980,7 +981,16 @@ contains
                     ! Q con exp(-Q/C_g) y Q de Cs (Teq - Ts) dejaba el gas a 3 K
                     ! cuando C_g << Cs: el residuo del Newton, escalado con Cs,
                     ! era enorme frente a C_g.)
-                    if (gas%alpha(i,j,k) > SMALL_SL) then
+                    ! (auditoria 19, fisica B1) la escoria TOPE con solo una traza
+                    ! de gas propio (< ALPHA_FLOW_CUTOFF) intercambia con el gas
+                    ! libre de arriba por su cara, no con la traza
+                    top_face = .false.
+                    if (slag_condensed_on(cfg) .and. m%cell_type(i,j,k+1) /= 0) then
+                        top_face = slag%alpha_sl(i,j,k+1) < ALPHA_FLOW_CUTOFF .and. &
+                                   gas%alpha(i,j,k+1) > SMALL_SL .and. &
+                                   gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF
+                    end if
+                    if (gas%alpha(i,j,k) > SMALL_SL .and. .not. top_face) then
                         pc = 0.0_dp
                         if (present(sh)) pc = sh%p(i,j,k)
                         Cg = gas_heat_capacity_ref(gas%alpha(i,j,k), pc, gas%cp(i,j,k), &
@@ -995,7 +1005,7 @@ contains
                         call gas_log_exchange(Cg, Tg, Cs, Ts, hA, dt, gas%T(i,j,k), Q)
                         slag%E_sl(i,j,k) = slag%E_sl(i,j,k) + Q
                         call audit_add(AUD_SLAG_GAS, Q)
-                    else if (slag_condensed_on(cfg) .and. m%cell_type(i,j,k+1) /= 0) then
+                    else if (top_face) then
                         ! (auditoria 19, ALTO: regresion de 29fd409) solo si esta
                         ! celda es el TOPE de la escoria (sin escoria resuelta
                         ! encima): si la de arriba tiene escoria, ESA escoria ya
