@@ -244,6 +244,7 @@ contains
         ! Mascara de cara del liquido (A4-1; ver mod_workspace): caras
         ! (k|k+1) con k = 0..nz (la cara inferior de la celda 1 usa el halo)
         ws_bedl_f = 0.0_dp
+        ws_bedg_f = 0.0_dp      ! (bajo B7-7) como ws_bedl_f: caras saltadas sin rancio
         do k = 0, m%nz
             do j = 1, m%ntheta
                 do i = 1, m%nr
