@@ -22,5 +22,6 @@
         "monitor_freq": 500
       }
     }
-  ]
+  ],
+  "binary": "campaigns/bin/eaf3d_b1_f277872_opt"
 }

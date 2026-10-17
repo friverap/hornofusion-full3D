@@ -783,8 +783,16 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   RECHAZADO: cerrar la cara en el Poisson (u_liq 25 m/s, gas 300), ceder la
   escoria en el limitador (todo o solo la interfaz: el gas a 300 m/s por la
   creación/destrucción de gas de slag_buoyancy fuera del Poisson) y dejar libre
-  la celda de la superficie (gas 300, p 1.4 MPa). Ruta: meter α_sl y su cambio
-  por paso en la restricción de volumen del Poisson. No afecta a producción
+  la celda de la superficie (gas 300, p 1.4 MPa). CAUSA localizada (oct-2026,
+  diagnóstico por celda): en la celda de interfaz (α_g 0) el Poisson ventea por
+  su cara superior un gas FANTASMA del canal residual F2.21 (2.5e-4 m³/s en
+  arc_slag) que equilibra la entrada de líquido que el limitador bloquea. Quitar
+  el canal en celdas con escoria (5.º intento) es PEOR: u_liq 49 m/s, gas 300,
+  p en P_HYDRO_CAP desde el primer segundo (la celda queda sin ningún grado de
+  libertad de volumen). Usar en el transporte el α de cara del Poisson en las
+  caras con escoria no cambia nada (el bloqueo viene del gas). Ruta: meter α_sl
+  y su cambio por paso en la restricción de volumen del Poisson (la escoria
+  como volumen desplazable, no como hueco fantasma de gas). No afecta a producción
   (sin escoria inicial) ni a B1. Sin modelar: transporte lateral.
 - **Régimen de PASO válido del modelo de dos fluidos (auditoría 12, M12-2)**:
   dt de unos pocos ms con CFL ≤ 1 (los parámetros de B1: dt_0 2 ms, dt_min
