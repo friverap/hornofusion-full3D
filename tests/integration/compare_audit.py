@@ -58,6 +58,16 @@ def main():
     if not steps or any(s not in B for s in steps):
         print(f"FAIL: pasos del reinicio {steps[:3]}... no estan todos en la continua")
         sys.exit(1)
+    # (bajo B6-10) y al reves: un audit de reinicio TRUNCADO (le faltan pasos
+    # finales de la continua) o sin la fila N del arranque no es un reinicio
+    # bit a bit aunque lo que tenga coincida
+    missing = sorted(s for s in B if s > args.from_step and s not in A)
+    if missing:
+        print(f"FAIL: al audit del reinicio le faltan pasos de la continua: {missing[:5]}")
+        sys.exit(1)
+    if args.from_step not in A or args.from_step not in B:
+        print(f"FAIL: falta la fila del paso de arranque {args.from_step} (fila 0 del reinicio)")
+        sys.exit(1)
     # (B5-21) las dos cabeceras deben ser la MISMA: una columna de un solo
     # lado es un binario distinto o un audit truncado, no algo que ignorar
     ca, cb = list(A[steps[0]].keys()), list(B[steps[0]].keys())
