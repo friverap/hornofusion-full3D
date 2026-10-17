@@ -231,13 +231,17 @@ contains
     ! gana el liquido (E_iph_gas = -E_iph_liq; la identidad de la interfase
     ! sigue cerrando). La radiacion entre la superficie y el gas la lleva la DO.
     !---------------------------------------------------------------------------
-    subroutine compute_gas_liquid_heat(liq, gas, sol, m, cfg, sh)
+    subroutine compute_gas_liquid_heat(liq, gas, sol, m, cfg, sh, a_sl)
         type(phase_t), intent(inout) :: liq, gas
         type(solid_t), intent(in)    :: sol
         type(mesh_t), intent(in)     :: m
         type(config_t), intent(in)   :: cfg
         ! (auditoria 5, B5-3) p para la capacidad de referencia del gas (log)
         type(shared_t), intent(in), optional :: sh
+        ! (auditoria 18, fisica B1) escoria CONDENSADA: una cara con escoria
+        ! resuelta en cualquiera de sus celdas no es superficie libre acero|gas
+        ! (la escoria los separa y su intercambio es slag_energy)
+        real(dp), intent(in), optional :: a_sl(-1:,-1:,-1:)
         integer  :: i, j, k, jm, jp, kl, kg, sweep, k_off
         real(dp) :: al, ag, as, cg, cl, G, f, q, d, dp_, k_mol, urel, xb, f_disp, wet
         real(dp) :: fbed, G_in, G_out, a_fs, Cg_log, Tg_new, pc, fb2
@@ -388,6 +392,9 @@ contains
                         cont = (al >= ALPHA_LIQ_CONT)
                     end if
                     if (.not. cont .or. al <= 1.0e-6_dp .or. ag <= 1.0e-6_dp) cycle
+                    if (present(a_sl)) then
+                        if (a_sl(i,j,kl) >= ALPHA_FLOW_CUTOFF .or. a_sl(i,j,kg) >= ALPHA_FLOW_CUTOFF) cycle
+                    end if
                     a_fs = abs(liq%alpha(i,j,k) - liq%alpha(i,j,k+1)) * m%Az(i,j,k) * (1.0_dp - fb2)
                     if (a_fs <= 0.0_dp) cycle
                     cl = al * liq%rho(i,j,kl) * liq%cp(i,j,kl) * m%vol(i,j,kl)

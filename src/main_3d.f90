@@ -710,7 +710,11 @@ program eaf_3d_simulator
             ! iteracion externa (halos de alpha ya intercambiados)
             call liquid_continuity_mask(liq, sol, mesh, ws_liq_cont)
             ws_liq_cont_valid = .true.
-            call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg, sh)
+            if (slag_condensed_on(cfg)) then
+                call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg, sh, slag%alpha_sl)
+            else
+                call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg, sh)
+            end if
             call phase_exchange_halos(liq, mesh)
             call phase_exchange_halos(gas, mesh)
         end if
