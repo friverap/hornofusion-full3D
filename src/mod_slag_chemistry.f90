@@ -500,7 +500,11 @@ contains
     ! dueño) en planos 2D con una suma global exacta; mismo calculo en todos
     ! los ranks y cada uno escribe sus celdas propias. La alpha_sl no cambia
     ! (como el estencil local): el reordenamiento del paso siguiente la deriva
-    ! de la masa.
+    ! de la masa. (dirigida I1, BAJO-5) corre ANTES de congelar el hueco de la
+    ! reduccion: el Fe oxidado de kb ya libero su volumen y la reduccion puede
+    ! ocuparlo aunque el FeO nuevo aun no figure en alpha_sl (Sigma alpha > 1
+    ! en kb hasta el sort, que extiende el tramo sobre el gas; solo queda si la
+    ! columna no tiene gas hasta el techo).
     !---------------------------------------------------------------------------
     subroutine slag_oxidation_column(slag, liq, liq_old, gas, sh, m, cfg, c0)
         use mpi
