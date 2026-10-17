@@ -308,7 +308,7 @@ def main():
         if per_phase and energy_on:
             cg = sum(r.get("E_conv_gas", 0.0) for r in steps)
             oc = sum(r.get("E_out_conv", 0.0) for r in steps)
-            cp_g = float(read_config(args.config).get("cp_gas", 1200.0)) if args.config else 1200.0
+            cp_g = float(read_config(args.config).get("cp_gas", 1000.0)) if args.config else 1000.0   # (B6-8) default del codigo: CP_GAS = 1000
             print(f"  INFO  conv_gas  E_conv_gas - venteo = {cg - oc:.3e} J; / (cp {cp_g:.0f} x masa EOS {resid:.3e} kg) = "
                   f"{(cg - oc) / max(cp_g * abs(resid), 1e-30):.1f} K equivalentes")
     # -- rad_closure (A4-5) --------------------------------------------------
