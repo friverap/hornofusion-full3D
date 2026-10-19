@@ -413,22 +413,25 @@ contains
     end function liq_cap
 
     ! Piso de gas de poro de una celda (F2.7) en RAMPA sobre alpha_s (B1
-    ! 19-oct-2026): 0 bajo ALPHA_BED, lineal hasta ALPHA_PORE_GAS en
-    ! 2*ALPHA_BED. Con el interruptor en ALPHA_BED, la celda del lecho que
-    ! funde por debajo liberaba el 1.5 % de volumen en UN paso; el liquido de
-    ! encima lo llenaba y, sobre chatarra compactada que no drena, la celda
-    ! quedaba llena y sin gas: 122 kPa y gas a 300 m/s (diag_241b, celda
-    ! (5,59,2) a 241.38 s; las 4 rafagas de 225-242.5 s tienen esa firma).
-    ! Con la rampa el gas se libera a la tasa de fusion (~4000 pasos). Es el
-    ! water packing de los codigos de sistemas (RELAP5, SPACE): una
-    ! transicion de cierre nunca es un interruptor. Bajo ALPHA_BED nada
-    ! cambia; en la banda el piso solo BAJA (abre hueco, no derrama).
+    ! 19-oct-2026): ALPHA_PORE_GAS en el lecho (alpha_s >= ALPHA_BED, como
+    ! siempre) y lineal hasta 0 en ALPHA_BED/2. Con el interruptor en
+    ! ALPHA_BED, la celda que funde por debajo liberaba el 1.5 % de volumen
+    ! en UN paso; el liquido de encima lo llenaba y, sobre chatarra
+    ! compactada que no drena, la celda quedaba llena y sin gas: 122 kPa y
+    ! gas a 300 m/s (diag_241b, celda (5,59,2) a 241.38 s; las 4 rafagas de
+    ! 225-242.5 s tienen esa firma). Es el water packing de los codigos de
+    ! sistemas (RELAP5, SPACE): una transicion de cierre nunca es un
+    ! interruptor. La rampa va POR DEBAJO de ALPHA_BED: en el lecho el gas de
+    ! poro debe seguir por encima de ALPHA_FLOW_CUTOFF (F2.7, la celda del
+    ! lecho nunca sellada); la rampa por encima (ALPHA_BED..2 ALPHA_BED)
+    ! sellaba 21 celdas del lecho y llevo el juez a 2 MPa en 15 s
+    ! (judge_poreramp, 4547861).
     pure elemental function pore_floor(as) result(f)
         real(dp), intent(in) :: as
         real(dp) :: f
         f = 0.0_dp
         if (pore_floor_on) &
-            f = ALPHA_PORE_GAS * min(1.0_dp, max(0.0_dp, (as - ALPHA_BED) / ALPHA_BED))
+            f = ALPHA_PORE_GAS * min(1.0_dp, max(0.0_dp, (as - 0.5_dp * ALPHA_BED) / (0.5_dp * ALPHA_BED)))
     end function pore_floor
 
     !---------------------------------------------------------------------------

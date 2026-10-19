@@ -190,8 +190,7 @@ contains
         ! Lecho del GAS (A3-1): flotacion relativa solo para el gas que es
         ! fluido del acople (percola y esta en ws_pv_active) Y que es la fase
         ! CONTINUA del poro: peso 0 en el piso residual pore_floor(alpha_s)
-        ! (poro saturado; ALPHA_PORE_GAS en el lecho pleno, rampa desde
-        ! ALPHA_BED) y 1 desde el piso + ALPHA_PORE_GAS, lineal entre ambos
+        ! (poro saturado; ALPHA_PORE_GAS en todo el lecho) y 1 desde el piso + ALPHA_PORE_GAS, lineal entre ambos
         ! (mezcla, no interruptor). El gas residual del poro saturado esta por encima de
         ! ALPHA_FLOW_CUTOFF a proposito (F2.7) y percola: con la forma
         ! clasica era una BOMBA de alpha_g (rho_l - rho_g) g que quitaba a la

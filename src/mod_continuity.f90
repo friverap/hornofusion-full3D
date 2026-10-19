@@ -598,8 +598,8 @@ contains
                         ! ALPHA_CUTOFF mandaba al clip la cascada del lecho
                         ! por 1e-6 de escoria, auditoria dirigida 16). Fuera
                         ! del lecho no hay poro reservado: identico.
-                        if (alpha_slag(i,j,k+1) > 0.0_dp .and. pore_floor_on .and. &
-                            sol%alpha_s(i,j,k+1) >= ALPHA_BED) then
+                        if (alpha_slag(i,j,k+1) > 0.0_dp .and. &
+                            pore_floor(sol%alpha_s(i,j,k+1)) > 0.0_dp) then
                             ! rampa ABSOLUTA (dirigida 17): la proporcional al
                             ! llenado dejaba poro abierto en la interfaz
                             ! acero+escoria (caso 12) y era singular en costras
