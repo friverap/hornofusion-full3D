@@ -1,0 +1,50 @@
+# Banco ecs_slag (Plan I, I2; auditoria general 2 del Plan I, M2): carga
+# continua ECS sobre un baño de 274 t con una capa GRUESA de escoria
+# condensada (40 t: acero hasta ~k5, escoria en el resto de k5 y en k6). Con
+# slag_in_volume la chatarra ATRAVIESA la escoria: se apoya en el tope del
+# acero y slag_condensed_sort sube la escoria desplazada. Isotermo, sin
+# arco, fusion, radiacion ni quimica: el solido solo cambia por la carga y el
+# contacto escoria-chatarra (check_ecs.py --slag). nz = 16 para que n12
+# (2x3x2) corte r (indice global de la banda, M38) y n9 (1x3x3) corte z
+# dentro de la escoria. CIFRAS ESTIMADAS: medir el paso 0 (k0, alpha_sl en
+# k0) y ajustar antes de fijar golden y umbrales.
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+dt = 0.01
+t_final = 0.6
+adaptive_dt = false
+charge_bucket1 = false
+t_bucket2_charge = 1.0e30
+heel_mass = 274000.0
+heel_T = 1850.0
+T_initial = 1850.0
+T_ambient = 1850.0
+solve_flow = true
+solve_energy = true
+solve_melting = false
+solve_turb = false
+solve_radiation = false
+solve_chemistry = false
+solve_arc = false
+solve_multiphase = true
+alpha_p = 0.7
+max_outer = 10
+max_inner_mom = 3
+max_inner_pres = 400
+audit_freq = 1
+output_freq = 10
+monitor_freq = 10
+solve_slag = true
+slag_in_volume = true
+m_slag_init = 40000.0
+solve_ecs = true
+ecs_rate = 1.0e4
+ecs_theta_center = 0.0
+ecs_theta_width = 0.8
+ecs_r_inner = 2.4
+ecs_vfrac = 0.55
+ecs_T_charge = 1500.0
+ecs_carbon_frac = 0.008

@@ -1,0 +1,40 @@
+# Banco cold_bucket2_slag (Plan I, I2; auditoria general 2 del Plan I, M4):
+# cesta 2 (receta por defecto) sobre un baño de 274 t con 40 t de escoria
+# condensada. Con slag_in_volume la cesta se apoya en el tope del ACERO y
+# atraviesa la escoria; con la fusion activa la chatarra de abajo funde y el
+# colapso deja caer la de arriba DENTRO de la escoria (hueco 1 - alpha_l,
+# soporte a_sup): el unico banco que ejerce el colapso que atraviesa la
+# escoria. Sin arco, radiacion ni quimica. n9 (1x3x3) corta z entre el tope
+# del acero y el primer nivel cargado. CIFRAS ESTIMADAS: medir y ajustar.
+nr = 12
+ntheta = 24
+nz = 16
+stretch_r = 1.0
+stretch_z = 1.0
+dt = 0.01
+t_final = 0.3
+adaptive_dt = false
+charge_bucket1 = false
+t_bucket2_charge = 0.1
+heel_mass = 274000.0
+heel_T = 1850.0
+T_initial = 1500.0
+T_ambient = 1850.0
+solve_flow = true
+solve_energy = true
+solve_melting = true
+solve_turb = false
+solve_radiation = false
+solve_chemistry = false
+solve_arc = false
+solve_multiphase = true
+alpha_p = 0.7
+max_outer = 10
+max_inner_mom = 3
+max_inner_pres = 400
+audit_freq = 1
+output_freq = 5
+monitor_freq = 5
+solve_slag = true
+slag_in_volume = true
+m_slag_init = 40000.0
