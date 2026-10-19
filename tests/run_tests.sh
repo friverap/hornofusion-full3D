@@ -469,10 +469,14 @@ full | rebaseline)
     run_script "chem_slag_elements" \
         $PY $INT/check_chem.py "$OUT/slag_chem_test_n8" --config "$CFG/slag_chem_test.dat" --slag
     run_script "slag_chem_flow" \
-        $PY $INT/check_slag_chem.py "$OUT/slag_chem_flow_n4" --config "$CFG/slag_chem_flow.dat"
+        $PY $INT/check_slag_chem.py "$OUT/slag_chem_flow_n4" --config "$CFG/slag_chem_flow.dat" \
+        --mtol 1e-10
+    # (Plan I, general 2 M5) slag_mass medido 6.4e-12 (flow) y 1.6e-10
+    # (thick) antes de I1: --mtol con margen; --min-yield se sube tras medir
+    # I1 (sin I1: flow 0.989, thick 0.626 kg) a max(1.2 | 0.8, 0.6 x medido)
     run_script "slag_chem_thick" \
         $PY $INT/check_slag_chem.py "$OUT/slag_chem_thick_n4" --config "$CFG/slag_chem_thick.dat" --min-return 0.5 \
-        --min-yield 0.3
+        --min-yield 0.3 --mtol 1e-9
     # escoria por columna global (auditoria A14): invariante a la descomposicion
     # ECS con r DESCOMPUESTO (12 ranks -> 2x3x2): antes de la auditoria M38
     # la carga no se depositaba (indice radial local tomado como global)

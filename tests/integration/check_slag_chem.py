@@ -7,7 +7,8 @@
   slag_mass  : dm_sl == dm_FeO_neto - dm_C_consumido + adiciones
   activity   : la quimica corrio (m_fe_yield > 0)
 
-Uso: check_slag_chem.py RUNDIR --config CFG [--xfail ids]
+Uso: check_slag_chem.py RUNDIR --config CFG [--min-yield kg] [--min-return kg]
+     [--mtol rel] [--xfail ids]
 """
 import argparse
 import csv
@@ -33,6 +34,10 @@ def main():
     ap.add_argument("--min-return", type=float, default=None)
     # (auditoria 19, M19-4) umbral de la actividad de oxidacion por banco
     ap.add_argument("--min-yield", type=float, default=0.5)
+    # (auditoria general 2 del Plan I, M5) tolerancia relativa de slag_mass
+    # por banco (por defecto 1e-6, la historica); los gates del Plan I la
+    # exigen a 1e-10
+    ap.add_argument("--mtol", type=float, default=1e-6)
     args = ap.parse_args()
 
     rows = [{k: safe_float(v) for k, v in r.items()}
@@ -96,7 +101,7 @@ def main():
                f"|m_slag_clip| acumulado {sabs:.3e} kg (max 1e-9 del inventario)")
     expected_dm_sl = feo_from_yield - feo_reduced - c_consumed + flux - sclip
     err2 = abs(dm_sl - expected_dm_sl) / max(abs(expected_dm_sl), 1.0)
-    chk.report("slag_mass", err2 <= 1e-6,
+    chk.report("slag_mass", err2 <= args.mtol,
                f"dm_slag={dm_sl:.4f} vs esperado={expected_dm_sl:.4f} kg "
                f"(err {err2:.3e})")
 
