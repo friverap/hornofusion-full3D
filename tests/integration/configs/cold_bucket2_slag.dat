@@ -1,11 +1,13 @@
-# Banco cold_bucket2_slag (Plan I, I2; auditoria general 2 del Plan I, M4):
-# cesta 2 (receta por defecto) sobre un baño de 274 t con 40 t de escoria
-# condensada. Con slag_in_volume la cesta se apoya en el tope del ACERO y
-# atraviesa la escoria; con la fusion activa la chatarra de abajo funde y el
-# colapso deja caer la de arriba DENTRO de la escoria (hueco 1 - alpha_l,
-# soporte a_sup): el unico banco que ejerce el colapso que atraviesa la
-# escoria. Sin arco, radiacion ni quimica. n9 (1x3x3) corta z entre el tope
-# del acero y el primer nivel cargado. CIFRAS ESTIMADAS: medir y ajustar.
+# Banco cold_bucket2_slag (Plan I, I2; auditoria general 2 del Plan I, M4 y
+# M1 de su dirigida): cesta 2 (receta por defecto, ~66 t a 0.5) sobre un baño
+# de 274 t con 60 t de escoria condensada (k6 LLENA, sin gas). Con
+# slag_in_volume la cesta se apoya en el tope del ACERO (k5) y ocupa la
+# escoria de k6 (solape 0.5): slag_condensed_sort sube la escoria desplazada
+# en el paso de carga. Sin fusion (en 0.2 s la chatarra no funde lo bastante
+# para que haya colapso: el colapso que atraviesa la escoria lo cubre el caso
+# 3 de test_scrap_collapse; en integracion queda sin banco), sin arco,
+# radiacion ni quimica. n9 (1x3x3) corta z entre el tope del acero y el primer
+# nivel cargado. CIFRAS ESTIMADAS: medir y ajustar.
 nr = 12
 ntheta = 24
 nz = 16
@@ -22,7 +24,7 @@ T_initial = 1500.0
 T_ambient = 1850.0
 solve_flow = true
 solve_energy = true
-solve_melting = true
+solve_melting = false
 solve_turb = false
 solve_radiation = false
 solve_chemistry = false
@@ -37,4 +39,4 @@ output_freq = 5
 monitor_freq = 5
 solve_slag = true
 slag_in_volume = true
-m_slag_init = 40000.0
+m_slag_init = 60000.0

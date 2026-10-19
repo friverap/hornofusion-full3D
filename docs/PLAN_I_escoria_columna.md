@@ -124,8 +124,8 @@ los tests bit a bit. Falta EJECUTAR (gates de abajo).
    Re-medir kb/kt con I1 antes de fijar los np.
 5. Reinicio con escoria en el tramo con oxidación: `slag_chem_flow` 4→4 (ya
    existe) y 4→7 (rtol 1e-10); thick con `output_freq` 15 y 4→12.
-6. Banco nuevo `ecs_slag` (config ya en tests/integration/configs, cifras
-   estimadas: medir el paso 0): n1/n9/n12 (nz 16: n12 corta r, n9 corta z
+6. Banco nuevo `ecs_slag` (config ya en tests/integration/configs, 60 t de
+   escoria con k0 llena y 20 kg/paso; cifras estimadas: medir el paso 0): n1/n9/n12 (nz 16: n12 corta r, n9 corta z
    en la escoria), `decomposition_ecs_slag` rtol 1e-9 al principio (con flujo
    la invarianza medida es 1e-10..1e-13) y luego ~10× lo medido; reinicio
    9→9 y 9→12; `check_slag_bed`; `--clip-abs-max 3e-4` en el audit.
@@ -134,10 +134,17 @@ los tests bit a bit. Falta EJECUTAR (gates de abajo).
    nulo), masa de escoria con el clip, nada pendiente, base = k0 con escoria
    resuelta. Si con `solve_energy` actúa la interfase (E_iph_sol ≠ 0), la
    guarda lo dirá: entonces sumar esa columna a la identidad.
-8. Banco `cold_bucket2_slag` (config ya creada, con fusión: único banco que
-   ejerce el colapso que atraviesa la escoria): n1/n9, `check_slag_bed`,
-   base de la cesta, `decomposition_bucket2_slag` rtol 1e-7, reinicios 9→9
-   cruzando la carga (paso 5) y después (15).
+8. Banco `cold_bucket2_slag` (config ya creada; 60 t de escoria, k6 llena;
+   sin fusión): la cesta 2 atraviesa una capa sin gas y el sort sube la
+   escoria en el paso de carga. n1/n9, `check_slag_bed`, base de la cesta,
+   `decomposition_bucket2_slag` rtol 1e-7, reinicios 9→9 cruzando la carga
+   (paso 5) y después (15). El colapso que atraviesa la escoria solo lo
+   cubre el caso 3 de `test_scrap_collapse` (en 0.2 s nada funde lo bastante;
+   un banco de integración exigiría una fusión larga): hueco conocido.
+   Notas: en la franja de redondeo del sort (vtol) la última celda puede
+   quedar con Σα − 1 ≤ 1e-10·V_col/V_k2; los allreduce de bud/dvb del ECS son
+   sumas parciales por rank (no bit a bit entre descomposiciones cuando el
+   presupuesto limita; cabe en el rtol 1e-9 de `decomposition_ecs_slag`).
 9. `arc_melt_slag_n4` y `arc_melt_slag_heel_n1/n4`: solo ven trazas de
    escoria (α_sl ≤ 0.015); probable bit a bit; `decomposition_slagbed`.
 10. `make test-full` y `STAGE=v128 make test-rebaseline` (cambian seguro

@@ -99,9 +99,11 @@ def check_slag_mode(args, cfg_get, rows, steps, first, last, fed, e_fed, de, chk
     def tot(col):
         return sum(r.get(col, 0.0) for r in steps)
 
+    # (dirigida general 2, B1) todas las rutas del solido del audit
     others = {c: tot(c) for c in ("m_melted", "m_resolid", "m_C_oxid", "m_charge_in",
                                    "E_rad_sol", "E_arc_direct_sol", "E_chem_sol",
-                                   "E_iph_sol")}
+                                   "E_iph_sol", "E_mc_deposit", "E_melt_from_solid",
+                                   "E_resolid", "m_resid_closed", "E_resid_closed")}
     bad = {c: v for c, v in others.items() if v != 0.0}
     chk.report("ecs_slag_guard", not bad,
                "sin otras rutas del solido" if not bad else f"rutas activas: {bad}")
