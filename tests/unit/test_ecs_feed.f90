@@ -222,6 +222,40 @@ program test_ecs_feed
         ok = .false.
     end if
 
+    ! ---- parte 5 (dirigida corta, BAJO-1): escoria llena en 4..7 con chatarra
+    ! 0.5 de la cesta (solape), gas en 8..10 (k0 = 8) y una carga que agota el
+    ! presupuesto: tras el sort ninguna celda pasa de 1 (el deficit de abajo
+    ! incluye el poro que el sort reserva en el lecho). Cobertura, no regresion:
+    ! en esta malla el poro reservado de mas sobre k0 compensa el que faltaba
+    ! abajo y la version anterior tambien pasa (comprobado)
+    call setup_slag_bed()
+    slag%alpha_sl(:,:,8) = 0.0_dp
+    where (mesh%cell_type == 0) slag%alpha_sl = 0.0_dp
+    slag%m_sl = slag%alpha_sl * cfg%rho_slag * mesh%vol
+    slag%E_sl = slag%m_sl * cfg%cp_slag * 1850.0_dp
+    sol%alpha_s(:,:,4:7) = 0.5_dp
+    where (mesh%cell_type == 0) sol%alpha_s = 0.0_dp
+    sol%m_s = sol%alpha_s * cfg%rho_steel * mesh%vol
+    sol%E_s = sol%m_s * 1.0e5_dp
+    gas%alpha = max(0.0_dp, 1.0_dp - liq%alpha - slag%alpha_sl - sol%alpha_s)
+    where (mesh%cell_type == 0) gas%alpha = 0.0_dp
+    call ecs_feed(sol, gas, liq, mesh, cfg, 1.0e5_dp, DT, sh, slag)
+    call slag_condensed_sort(slag, liq, gas, sol, mesh, cfg, sh)
+    over = 0.0_dp
+    do k = 1, mesh%nz
+        do j = 1, mesh%ntheta
+            do i = 1, mesh%nr
+                if (mesh%cell_type(i,j,k) == 0) cycle
+                over = max(over, sol%alpha_s(i,j,k) + liq%alpha(i,j,k) + slag%alpha_sl(i,j,k) - 1.0_dp)
+            end do
+        end do
+    end do
+    if (over > 1.0e-12_dp .or. .not. m_ecs_pending > 0.0_dp) then
+        print '(A,2ES12.4)', '   FAIL parte 5: sobrellenado tras agotar el presupuesto (Sigma alpha - 1, pendiente): ', &
+            over, m_ecs_pending
+        ok = .false.
+    end if
+
     if (ok) then
         print '(A,F10.1,A)', ' PASS test_ecs_feed (', fed, ' kg cargados)'
     else

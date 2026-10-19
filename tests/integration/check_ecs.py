@@ -133,6 +133,7 @@ def check_slag_mode(args, cfg_get, rows, steps, first, last, fed, e_fed, de, chk
         ag0 = h0["fields/alpha_gas"][()]
         lid = h1["restart/layer_id"][()]
         as1 = h1["fields/alpha_solid"][()]
+        as0 = h0["fields/alpha_solid"][()]
     tc, tw, ri = cfg_get("ecs_theta_center"), cfg_get("ecs_theta_width"), cfg_get("ecs_r_inner")
     nz, nth, nr = ct.shape
     ncol, nbad, nslag, ndisp = 0, 0, 0, 0
@@ -157,7 +158,8 @@ def check_slag_mode(args, cfg_get, rows, steps, first, last, fed, e_fed, de, chk
                 nslag += 1
             # (dirigida general 2, M3) la chatarra DESPLAZO escoria: en alguna
             # celda supera el gas que habia al inicio
-            if any(as1[k, j, i] > ag0[k, j, i] + 1e-9 for k in ks):
+            # (dirigida corta, BAJO-3) la chatarra NUEVA (no la que ya habia)
+            if any(as1[k, j, i] - as0[k, j, i] > ag0[k, j, i] + 1e-9 for k in ks):
                 ndisp += 1
             if min(ks) != k0:
                 nbad += 1

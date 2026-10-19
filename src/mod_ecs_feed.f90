@@ -13,7 +13,7 @@
 !      (idénticos en todos los ranks); el dueño computa su capacidad local
 !      C_cell = rho_steel * max(0, min(ecs_vfrac - alpha_s, alpha_g)) * V
 !      (con la escoria CONDENSADA, Plan I I2: alpha_g + alpha_sl y el
-!      presupuesto de gas libre de la columna, ver mas abajo).
+!      presupuesto de volumen libre de la columna, ver mas abajo).
 !   3. C_glob = allreduce_sum; el depósito es PROPORCIONAL:
 !      dm_cell = dm_nivel * C_cell / C_glob  (<= C_cell por construcción).
 !   4. Si el nivel se llena, se sube al siguiente; si el horno se llena,
@@ -74,8 +74,9 @@ contains
         real(dp) :: ag_old, pc, dmg, deg
         logical  :: thru
         ! (auditoria general Plan I, MEDIO-1) presupuesto de VOLUMEN por
-        ! columna con thru: la chatarra nueva no supera el gas libre de la
-        ! columna desde la base (descontado el piso de poro): asi el sort
+        ! columna con thru: la chatarra nueva no supera el VOLUMEN LIBRE de la
+        ! columna (con signo y descontado el poro desde la base k0, mas los
+        ! deficits por solape bajo k0 con el poro del lecho): asi el sort
         ! siempre puede subir la escoria desplazada y nunca queda un
         ! sobrellenado que el transporte recortaria (clip). Lo que no cabe
         ! queda pendiente, como con el techo
@@ -183,7 +184,10 @@ contains
                             bud(ig,jg) = bud(ig,jg) + (vfree &
                                 - merge(ALPHA_PORE_GAS, 0.0_dp, pore_floor_on)) * m%vol(i,jl,kl)
                         else
-                            bud(ig,jg) = bud(ig,jg) + min(0.0_dp, vfree) * m%vol(i,jl,kl)
+                            ! (dirigida corta, BAJO-1) con el poro que el sort
+                            ! reserva en las celdas de lecho (liq_cap)
+                            bud(ig,jg) = bud(ig,jg) + min(0.0_dp, liq_cap(sol%alpha_s(i,jl,kl), 0.0_dp) &
+                                - liq%alpha(i,jl,kl) - slag%alpha_sl(i,jl,kl)) * m%vol(i,jl,kl)
                         end if
                     end do
                 end do
