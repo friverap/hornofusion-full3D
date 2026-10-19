@@ -21,6 +21,8 @@
 ! (slag_condensed_sort) sube la escoria desplazada: masa y energia de la
 ! escoria exactas, Sigma alpha <= 1 y la base de la chatarra en el tope del
 ! acero (antes quedaba flotando sobre la escoria, aislada del baño).
+! Caso 4: chatarra dispersa del ECS (alpha_s 0.03) dentro de la escoria no
+! es lecho: la cesta 2 se apoya igual en el tope del acero.
 !===============================================================================
 program test_charge_slag
     use mod_constants
@@ -209,6 +211,44 @@ program test_charge_slag
         abs(sum(slag%E_sl(1:nr,1:nth,1:nz)) - esl0) > 1.0e-12_dp * esl0) then
         print '(A,2ES12.4)', '   FAIL caso 3: masa/energia de escoria no conservadas: ', &
             sum(slag%m_sl(1:nr,1:nth,1:nz)) - msl0, sum(slag%E_sl(1:nr,1:nth,1:nz)) - esl0
+        ok = .false.
+    end if
+
+    ! caso 4 (general 2 del Plan I, BAJO-4): chatarra DISPERSA del ECS (alpha_s
+    ! 0.03 < ALPHA_SCRAP_SURF) dentro de la escoria (celda ks+2): no es lecho;
+    ! la cesta 2 se apoya igual en el tope del acero
+    sol%alpha_s = 0.0_dp; sol%m_s = 0.0_dp; sol%E_s = 0.0_dp; sol%m_C = 0.0_dp
+    liq%alpha = al
+    slag%alpha_sl = 0.0_dp; slag%m_X = 0.0_dp
+    do k = ks + 1, ks + 3
+        slag%alpha_sl(:,:,k) = 1.0_dp
+    end do
+    sol%alpha_s(:,:,ks + 2) = 0.03_dp; slag%alpha_sl(:,:,ks + 2) = 0.97_dp
+    where (mesh%cell_type == 0)
+        slag%alpha_sl = 0.0_dp; sol%alpha_s = 0.0_dp
+    end where
+    sol%m_s = sol%alpha_s * cfg%rho_steel * mesh%vol
+    sol%E_s = sol%m_s * 1.0e5_dp
+    slag%m_sl = slag%alpha_sl * cfg%rho_slag * mesh%vol
+    slag%E_sl = slag%m_sl * cfg%cp_slag * 1850.0_dp
+    gas%alpha = max(0.0_dp, 1.0_dp - liq%alpha - slag%alpha_sl - sol%alpha_s)
+    where (mesh%cell_type == 0) gas%alpha = 0.0_dp
+    if (.not. allocated(ms0)) allocate(ms0, mold=sol%m_s)
+    ms0 = sol%m_s
+    call charge_scrap(sol, gas, mesh, cfg, 2, sh, slag)
+    z_scrap_low = huge(1.0_dp)
+    do k = 1, nz
+        do j = 1, nth
+            do i = 1, nr
+                if (mesh%cell_type(i,j,k) == 0) cycle
+                if (sol%m_s(i,j,k) > ms0(i,j,k) * (1.0_dp + 1.0e-12_dp) + 1.0e-12_dp) &
+                    z_scrap_low = min(z_scrap_low, mesh%zf(k-1))
+            end do
+        end do
+    end do
+    if (abs(z_scrap_low - mesh%zf(ks)) > 1.0e-12_dp) then
+        print '(A,2F8.4)', '   FAIL caso 4: la chatarra dispersa en la escoria hizo de lecho (base, tope del acero): ', &
+            z_scrap_low, mesh%zf(ks)
         ok = .false.
     end if
 

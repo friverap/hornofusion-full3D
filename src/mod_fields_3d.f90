@@ -574,8 +574,20 @@ contains
         ! Find starting z for charge (above existing material)
         ! In parallel: need global z_top
         z_top = 0.0_dp
+        ! (Plan I, general 2 BAJO-4) con la escoria CONDENSADA la cesta 2 usa el
+        ! umbral de soporte del colapso dentro de la escoria (ALPHA_SCRAP_SURF):
+        ! la chatarra dispersa del ECS en la escoria no es lecho (si no, la
+        ! cesta se apoyaba encima y el colapso la bajaba al paso siguiente)
+        thru = .false.
+        if (bucket > 1 .and. present(slag)) thru = slag_condensed_on(cfg)
+        allocate(cont(istart:iend, jstart:jend))
         do k = kend, kstart, -1
-            if (any(sol%alpha_s(istart:iend,jstart:jend,k) > ALPHA_BED)) then
+            cont = ALPHA_BED
+            if (thru) then
+                where (slag%alpha_sl(istart:iend,jstart:jend,k) >= ALPHA_FLOW_CUTOFF) &
+                    cont = max(ALPHA_BED, ALPHA_SCRAP_SURF)
+            end if
+            if (any(sol%alpha_s(istart:iend,jstart:jend,k) > cont)) then
                 z_top = m%zf(k)
                 exit
             end if
@@ -590,9 +602,6 @@ contains
         ! 1 (arranque con el talon) no cambia. (Plan I, I2) con la escoria
         ! CONDENSADA solo cuenta el acero: la chatarra atraviesa la escoria
         if (bucket > 1) then
-            thru = .false.
-            if (present(slag)) thru = slag_condensed_on(cfg)
-            allocate(cont(istart:iend, jstart:jend))
             do k = kend, kstart, -1
                 cont = 1.0_dp - gas%alpha(istart:iend,jstart:jend,k) - sol%alpha_s(istart:iend,jstart:jend,k)
                 if (thru) cont = cont - slag%alpha_sl(istart:iend,jstart:jend,k)
@@ -602,8 +611,8 @@ contains
                     exit
                 end if
             end do
-            deallocate(cont)
         end if
+        deallocate(cont)
         
         ! Global max z_top across all processes
         if (m%is_parallel) then
