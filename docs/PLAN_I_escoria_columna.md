@@ -90,6 +90,12 @@ los tests bit a bit. Falta EJECUTAR (gates de abajo).
 ## Gates tras B1 (en orden, uno por uno)
 
 1. `make test-unit` (los 5 tests de arriba y el resto sin regresión).
+   HECHO el 18-oct-2026 con B1 en curso (autorizado por el usuario: solo los
+   unit tests, singleton, nice 19, binarios del árbol aparte): 41/41 PASS.
+   Oxidación por columna: caso 2 = 3.09× el estencil local (O2 de la celda y
+   de la de encima); test_condensed_sort caso 8 emite el aviso de
+   sobrellenado esperado (x1.46). Repetirlo con `make test-unit` tras B1 (el
+   binario de tests/bin).
 2. `/verificacion-bitwise` de lo que debe quedar idéntico: `slag_chem_test`
    n1/n8/n9 (legado), `ecs_test` n1/n8/n12, `cold_bucket2_n4`,
    `arc_slag_legacy`; `arc_slag` y `slag_rest` solo cambiarían con
