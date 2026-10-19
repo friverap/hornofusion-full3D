@@ -114,8 +114,9 @@ contains
         ! halos: con la escoria condensada el CO solo se queda en una celda
         ! cuyo gas conecta hacia ARRIBA (sin escoria resuelta encima). El gas
         ! de poro (ALPHA_PORE_GAS = 0.015 >= ALPHA_FLOW_CUTOFF) de chatarra
-        ! sumergida en la escoria esta aislado: el sort lo compactaba y
-        ! destruia el CO con sus especies. Copia de entrada: el mismo valor en
+        ! sumergida en la escoria esta AISLADO: el CO no llega al gas libre
+        ! (con el piso de poro el sort conserva ese gas; sin el, con
+        ! pc_gas_spring o el modelo de mezcla, lo compactaba con su CO). Copia de entrada: el mismo valor en
         ! la propia celda y en el halo (invariante a la descomposicion)
         real(dp), allocatable :: asl0(:,:,:)
         real(dp) :: dm_fe_req, o_own, o_below, o_up, b_up, gas_after
@@ -373,7 +374,11 @@ contains
                             end if
                             ! (dirigida general, BAJO-3) en el techo fisico se
                             ! deposita igual (como la pasada 3): co_up del tope
-                            ! nadie lo consumia y se borraba sin auditar
+                            ! nadie lo consumia y se borraba sin auditar. (general
+                            ! 2, BAJO-2, aceptado) sin gas en el techo el solver de
+                            ! especies descarta la fuente (cuenta en m_gas_rxn):
+                            ! solo con escoria hasta el techo = sobrellenado,
+                            ! que ya hace fallar el harness con [SLAG] AVISO
                             if (gas_after >= ALPHA_CUTOFF .or. (k == kend .and. at_zmax)) then
                                 sh%S_CO_src(i,j,k) = sh%S_CO_src(i,j,k) + &
                                     dm_co / (vol * cfg%dt)

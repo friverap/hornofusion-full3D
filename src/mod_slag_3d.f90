@@ -518,10 +518,12 @@ contains
                         ! inalcanzable; con la chatarra que atraviesa la escoria
                         ! (Plan I, I2; dirigidas H2 y M1) un horno sobrellenado
                         ! deja un solape: se compacta igual con las capacidades
-                        ! ESCALADAS por vcond/capsum (el exceso repartido en
-                        ! proporcion al hueco de cada celda, nunca concentrado
-                        ! en una) y se avisa una vez. Sin hueco alguno no se
-                        ! compacta
+                        ! ESCALADAS por el sobrellenado SOLO en las celdas con
+                        ! chatarra (en proporcion a su hueco) y se avisa una vez.
+                        ! Con una sola celda de chatarra de hueco pequeño el
+                        ! exceso se concentra ahi (general 2, BAJO-3, aceptado:
+                        ! estado de error que hace fallar el harness). Sin hueco
+                        ! alguno no se compacta
                         fover = 1.0_dp; capS = capsum
                         ! (general 2, BAJO-1) tolerancia ABSOLUTA de redondeo
                         ! (1e-10 del volumen de la columna) para declarar el

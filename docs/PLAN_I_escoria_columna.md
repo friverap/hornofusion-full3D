@@ -57,7 +57,12 @@ el gas, auditado como volfix), conservando masa, E_sl y m_X.
   de volumen por columna igual al gas libre desde la base menos el piso de
   poro (allreduce 2D decrementado por nivel): nunca sobrellena; lo que no
   cabe queda pendiente. La superficie ya es el tope del acero.
-- Cesta 2: cota de carga = tope del ACERO.
+- Cesta 2: cota de carga = tope del ACERO (máximo GLOBAL de la cima del
+  lecho y del tope del acero, como antes: si queda chatarra alta en alguna
+  columna la cesta va sobre ella en todas); dentro de la escoria la chatarra
+  dispersa (α_s ≤ ALPHA_SCRAP_SURF) no es lecho, como en el colapso.
+- Presupuesto del ECS: volumen LIBRE real (1 − α_s − α_l − α_sl − poro, con
+  signo) desde la base: ve el solape de una cesta 2 del mismo paso.
 - Colapso: hueco 1 − α_l (la escoria no es soporte ni ocupa el hueco).
 - Sort: si una columna no cabe ni hasta el techo (estado de error), compacta
   con las capacidades escaladas por el sobrellenado, avisa `[SLAG] AVISO`
@@ -86,6 +91,12 @@ los tests bit a bit. Falta EJECUTAR (gates de abajo).
   piso de poro cuando α_s cruza ALPHA_BED dentro de la escoria (gas 0.015·V
   auditado como volfix): acotados; rampas solo si el juez estadístico de B6
   los señala.
+- Solo en un horno SOBRELLENADO (estado de error que ya hace fallar el
+  harness con `[SLAG] AVISO`): el exceso puede concentrarse en una celda con
+  chatarra y el CO depositado en un techo sin gas lo descarta el solver de
+  especies (queda en m_gas_rxn). El FeO de la oxidación por columna y el
+  fundido pendiente que llegan tras el ECS solo pueden sobrellenar una
+  columna con el presupuesto agotado (techo a ≤ 4 celdas).
 
 ## Gates tras B1 (en orden, uno por uno)
 
@@ -96,6 +107,7 @@ los tests bit a bit. Falta EJECUTAR (gates de abajo).
    de la de encima); test_condensed_sort caso 8 emite el aviso de
    sobrellenado esperado (x1.46). Repetirlo con `make test-unit` tras B1 (el
    binario de tests/bin).
+1b. `make test-quick` antes de la verificación bit a bit.
 2. `/verificacion-bitwise` de lo que debe quedar idéntico: `slag_chem_test`
    n1/n8/n9 (legado), `ecs_test` n1/n8/n12, `cold_bucket2_n4`,
    `arc_slag_legacy`; `arc_slag` y `slag_rest` solo cambiarían con
@@ -104,20 +116,32 @@ los tests bit a bit. Falta EJECUTAR (gates de abajo).
    α_sl(kb); subir `--min-yield` claramente por encima de 0.99 kg (el
    condensado SIN I1), p.ej. 0.6 × lo medido; `fe_element`/`slag_mass` a
    1e-10 y `check_audit`.
-4. Descomposición de I1: `slag_chem_flow` n1 con `decomposition_slagflow`
-   y `slag_chem_thick` con un np cuyo corte en z caiga en la interfaz medida
-   (n7, n12 o n9 según kb), rtol 1e-7 (n4 corta lejos de la interfaz).
-5. Reinicio con escoria en el tramo con oxidación (`slag_chem_flow` 4→4 ya
-   existe; añadir uno con np distinto).
-6. Banco nuevo `ecs_slag` (baño con capa condensada gruesa, `solve_ecs`):
-   n1/n8/n12 con `decomposition_ecs_slag` a 1e-12, reinicio, invariantes.
-7. `check_ecs.py --slag` (H4): masa con las columnas de fusión, energía por
-   la identidad de `check_audit`, masa/energía de escoria, `m_ecs_pending`
-   = 0, base de `layer_id == ID_ECS` = tope del acero + 1 en la banda.
-8. Banco `cold_bucket2_slag` (cesta 2 de toneladas sobre capa condensada).
-9. `arc_melt_slag_n4` y `arc_melt_slag_heel_n1/n4`: el colapso que atraviesa
-   la escoria cambia volfix/jumps; si superan su techo, diagnosticar (nunca
-   subirlo sin causa); `decomposition_slagbed`.
+4. Descomposición de I1 (general 2, M1; interfaz medida en v127: thick
+   kb−1 = 18, kb = 19, kt = 20, kt+1 = 21; flow kb = kt = 3, kt+1 = 4): thick
+   n1 frente a n7 (1x1x7, corta 18|19 = kb−1|kb) y n12 (1x2x6, corta 20|21 =
+   kt|kt+1 y θ); flow n1 frente a n7 (corta 2|3) y n5 (corta 3|4); rtol
+   1e-7. n4 y n9 cortan lejos de la interfaz (no prueban los planos 2D).
+   Re-medir kb/kt con I1 antes de fijar los np.
+5. Reinicio con escoria en el tramo con oxidación: `slag_chem_flow` 4→4 (ya
+   existe) y 4→7 (rtol 1e-10); thick con `output_freq` 15 y 4→12.
+6. Banco nuevo `ecs_slag` (config ya en tests/integration/configs, cifras
+   estimadas: medir el paso 0): n1/n9/n12 (nz 16: n12 corta r, n9 corta z
+   en la escoria), `decomposition_ecs_slag` rtol 1e-9 al principio (con flujo
+   la invarianza medida es 1e-10..1e-13) y luego ~10× lo medido; reinicio
+   9→9 y 9→12; `check_slag_bed`; `--clip-abs-max 3e-4` en el audit.
+7. `check_ecs.py ecs_slag_n9 --slag` (HECHO el script, probado en seco):
+   guarda de otras rutas del sólido, dE_sol = E_ecs_in − E_slag_sol (no
+   nulo), masa de escoria con el clip, nada pendiente, base = k0 con escoria
+   resuelta. Si con `solve_energy` actúa la interfase (E_iph_sol ≠ 0), la
+   guarda lo dirá: entonces sumar esa columna a la identidad.
+8. Banco `cold_bucket2_slag` (config ya creada, con fusión: único banco que
+   ejerce el colapso que atraviesa la escoria): n1/n9, `check_slag_bed`,
+   base de la cesta, `decomposition_bucket2_slag` rtol 1e-7, reinicios 9→9
+   cruzando la carga (paso 5) y después (15).
+9. `arc_melt_slag_n4` y `arc_melt_slag_heel_n1/n4`: solo ven trazas de
+   escoria (α_sl ≤ 0.015); probable bit a bit; `decomposition_slagbed`.
 10. `make test-full` y `STAGE=v128 make test-rebaseline` (cambian seguro
     `slag_chem_flow_n4`, `slag_chem_thick_n1/n4`; probable
     `arc_melt_slag*`; nuevos `ecs_slag_*`, `cold_bucket2_slag_n4`).
+11. Juez estadístico con escoria (tipo B6, varias trayectorias) para los
+    saltos aceptados (kt, piso de poro) antes de usar el Plan I en campaña.
