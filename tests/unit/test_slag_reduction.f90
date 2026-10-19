@@ -12,7 +12,7 @@
 !   3. (auditoria general Plan I, fisica MEDIO-1) escoria CONDENSADA con
 !      chatarra sumergida: celda 5 con escoria 0.5 + chatarra 0.485 + gas de
 !      poro 0.015 (>= ALPHA_FLOW_CUTOFF) bajo escoria llena (6) y gas (7+):
-!      el gas de poro esta aislado (el sort lo compactaria con su CO): el CO
+!      el gas de poro esta AISLADO (el CO no llegaria al gas libre): el CO
 !      de la 5 sube al gas que conecta con el libre (k >= 6: la cima de la
 !      escoria, con el gas que libera su reduccion, y encima), conservado.
 !===============================================================================
