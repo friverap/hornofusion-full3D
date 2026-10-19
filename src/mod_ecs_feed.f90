@@ -129,7 +129,7 @@ contains
             h_glob = h_loc
             call MPI_Allreduce(MPI_IN_PLACE, h_glob, size(h_glob), &
                                MPI_DOUBLE_PRECISION, MPI_MAX, &
-                               MPI_COMM_WORLD, ierr)
+                               m%topo%comm_cart, ierr)
         else
             h_glob = h_loc
         end if
@@ -168,14 +168,18 @@ contains
                         ! (dirigida general, BAJO-1/2) suma CON SIGNO: el poro
                         ! se reserva en TODA celda desde la base (una celda de
                         ! escoria llena que pasa a lecho en esta llamada lo
-                        ! exige) y solo si el piso de poro esta activo
-                        bud(ig,jg) = bud(ig,jg) + (gas%alpha(i,jl,kl) &
+                        ! exige) y solo si el piso de poro esta activo.
+                        ! (general 2, BAJO-1 / MPI B1) VOLUMEN LIBRE real
+                        ! 1 - as - al - asl, no alpha_g: un solape previo del
+                        ! mismo paso (cesta 2 antes del sort) cuenta negativo
+                        bud(ig,jg) = bud(ig,jg) + (1.0_dp - sol%alpha_s(i,jl,kl) &
+                            - liq%alpha(i,jl,kl) - slag%alpha_sl(i,jl,kl) &
                             - merge(ALPHA_PORE_GAS, 0.0_dp, pore_floor_on)) * m%vol(i,jl,kl)
                     end do
                 end do
             end do
             if (m%is_parallel) call MPI_Allreduce(MPI_IN_PLACE, bud, size(bud), &
-                MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+                MPI_DOUBLE_PRECISION, MPI_SUM, m%topo%comm_cart, ierr)
             bud = max(0.0_dp, bud)
         end if
 
@@ -269,7 +273,7 @@ contains
             ! presupuesto restante de cada columna (volumen ya colocado)
             if (thru) then
                 if (m%is_parallel) call MPI_Allreduce(MPI_IN_PLACE, dvb, size(dvb), &
-                    MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+                    MPI_DOUBLE_PRECISION, MPI_SUM, m%topo%comm_cart, ierr)
                 bud = max(0.0_dp, bud - dvb)
             end if
         end do

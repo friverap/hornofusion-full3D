@@ -13,7 +13,8 @@
 ! apoya en el tope del acero y el reordenamiento sube la escoria desplazada
 ! (masa y energía de la escoria exactas, Sigma alpha <= 1, nada pendiente).
 ! Parte 3: escoria hasta el techo: sin gas en la columna la carga queda
-! pendiente (presupuesto de volumen por columna; nunca sobrellena).
+! pendiente (presupuesto de volumen por columna; nunca sobrellena). Parte 4:
+! solape previo de la cesta 2 en el mismo paso: tampoco carga.
 !===============================================================================
 program test_ecs_feed
     use mod_constants
@@ -197,6 +198,24 @@ program test_ecs_feed
         abs(m_ecs_pending - MDOT2 * DT) > 1.0e-12_dp * MDOT2 * DT) then
         print '(A,2ES12.4)', '   FAIL parte 3: sin gas en la columna la carga debia quedar pendiente (depositado, pendiente): ', &
             sum(sol%m_s(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz)), m_ecs_pending
+        ok = .false.
+    end if
+
+    ! ---- parte 4 (general 2 del Plan I, BAJO-1): la cesta 2 del MISMO paso ya
+    ! metio chatarra 0.5 en k = 4..10 (solape con la escoria de 4..8, antes del
+    ! sort): el volumen libre de la columna es negativo y el ECS no carga
+    ! (con el presupuesto por gas cargaba sobre el gas de 9-10 y sobrellenaba)
+    call setup_slag_bed()
+    sol%alpha_s(:,:,4:mesh%nz) = 0.5_dp
+    where (mesh%cell_type == 0) sol%alpha_s = 0.0_dp
+    gas%alpha = max(0.0_dp, 1.0_dp - liq%alpha - slag%alpha_sl - sol%alpha_s)
+    where (mesh%cell_type == 0) gas%alpha = 0.0_dp
+    m0 = sum(sol%m_s(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz))
+    call ecs_feed(sol, gas, liq, mesh, cfg, MDOT2, DT, sh, slag)
+    if (sum(sol%m_s(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz)) /= m0 .or. &
+        abs(m_ecs_pending - MDOT2 * DT) > 1.0e-12_dp * MDOT2 * DT) then
+        print '(A,2ES12.4)', '   FAIL parte 4: con el solape previo la carga debia quedar pendiente (depositado, pendiente): ', &
+            sum(sol%m_s(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz)) - m0, m_ecs_pending
         ok = .false.
     end if
 

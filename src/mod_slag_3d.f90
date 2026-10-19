@@ -407,7 +407,7 @@ contains
         ! succion de F2.16). El gas reubicado se audita como el volfix.
         real(dp), allocatable :: ss_g(:,:,:), acn(:,:,:)
         real(dp) :: vcond, capk, ag_new, dmg, deg, pc, fdil, capsum, as_m
-        real(dp) :: fover, capS
+        real(dp) :: fover, capS, vtol
         logical, save :: warned_overfill = .false.
         logical  :: has_slag
         integer  :: k2e, kc
@@ -523,7 +523,15 @@ contains
                         ! en una) y se avisa una vez. Sin hueco alguno no se
                         ! compacta
                         fover = 1.0_dp; capS = capsum
-                        if (vcond > capsum * (1.0_dp + 1.0e-14_dp)) then
+                        ! (general 2, BAJO-1) tolerancia ABSOLUTA de redondeo
+                        ! (1e-10 del volumen de la columna) para declarar el
+                        ! sobrellenado: el resto minimo va a la ultima celda
+                        vtol = 0.0_dp
+                        do kk = kc, k2
+                            vtol = vtol + m%vol_global(i,j,kk)
+                        end do
+                        vtol = 1.0e-10_dp * vtol
+                        if (vcond > capsum * (1.0_dp + 1.0e-14_dp) + vtol) then
                             ! (fisica BAJO-2) el exceso va solo a las celdas con
                             ! CHATARRA (de donde viene el solape), nunca al baño
                             capS = 0.0_dp
