@@ -408,10 +408,28 @@ contains
     pure elemental function liq_cap(as, asl) result(c)
         real(dp), intent(in) :: as, asl
         real(dp) :: c
-        c = 1.0_dp - as - asl
-        if (as >= ALPHA_BED .and. pore_floor_on) c = c - ALPHA_PORE_GAS
+        c = 1.0_dp - as - asl - pore_floor(as)
         c = max(c, 0.0_dp)
     end function liq_cap
+
+    ! Piso de gas de poro de una celda (F2.7) en RAMPA sobre alpha_s (B1
+    ! 19-oct-2026): 0 bajo ALPHA_BED, lineal hasta ALPHA_PORE_GAS en
+    ! 2*ALPHA_BED. Con el interruptor en ALPHA_BED, la celda del lecho que
+    ! funde por debajo liberaba el 1.5 % de volumen en UN paso; el liquido de
+    ! encima lo llenaba y, sobre chatarra compactada que no drena, la celda
+    ! quedaba llena y sin gas: 122 kPa y gas a 300 m/s (diag_241b, celda
+    ! (5,59,2) a 241.38 s; las 4 rafagas de 225-242.5 s tienen esa firma).
+    ! Con la rampa el gas se libera a la tasa de fusion (~4000 pasos). Es el
+    ! water packing de los codigos de sistemas (RELAP5, SPACE): una
+    ! transicion de cierre nunca es un interruptor. Bajo ALPHA_BED nada
+    ! cambia; en la banda el piso solo BAJA (abre hueco, no derrama).
+    pure elemental function pore_floor(as) result(f)
+        real(dp), intent(in) :: as
+        real(dp) :: f
+        f = 0.0_dp
+        if (pore_floor_on) &
+            f = ALPHA_PORE_GAS * min(1.0_dp, max(0.0_dp, (as - ALPHA_BED) / ALPHA_BED))
+    end function pore_floor
 
     !---------------------------------------------------------------------------
     ! Velocidad terminal de una gota de liquido en el gas local (Schiller-

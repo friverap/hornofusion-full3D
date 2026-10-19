@@ -610,7 +610,7 @@ contains
                             ! celda de escoria hasta su liq_cap, nunca la cruza
                             room_up = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k+1) &
                                       - slag_vs_steel(alpha_slag(i,j,k+1)) - liq%alpha(i,j,k+1) &
-                                      - ALPHA_PORE_GAS * fslag) * m%vol(i,j,k+1) / m%vol(i,j,k)
+                                      - pore_floor(sol%alpha_s(i,j,k+1)) * fslag) * m%vol(i,j,k+1) / m%vol(i,j,k)
                         end if
                         ws_lim(i,j,k) = min(give, room_up)
                         ! (auditoria 8) una celda de arriba LLENA DE LIQUIDO no
