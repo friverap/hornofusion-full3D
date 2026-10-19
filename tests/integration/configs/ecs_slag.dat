@@ -1,6 +1,10 @@
 # Banco ecs_slag (Plan I, I2; auditoria general 2 del Plan I, M2): carga
 # continua ECS sobre un baño de 274 t con una capa GRUESA de escoria
-# condensada (40 t: acero hasta ~k5, escoria en el resto de k5 y en k6). Con
+# condensada (60 t: acero hasta ~41 % de k5, escoria en el resto de k5, k6
+# LLENA y ~9 % de k7: la celda k0 = 6 no tiene gas y la chatarra tiene que
+# desplazar escoria; con 40 t k6 tenia 47 % de gas y la chatarra nunca la
+# tocaba, dirigida general 2 A1). 20 kg/paso: la superficie sube un nivel
+# cada ~22 pasos (alpha_s > 0.05), sin llegar al techo en 0.6 s. Con
 # slag_in_volume la chatarra ATRAVIESA la escoria: se apoya en el tope del
 # acero y slag_condensed_sort sube la escoria desplazada. Isotermo, sin
 # arco, fusion, radiacion ni quimica: el solido solo cambia por la carga y el
@@ -39,9 +43,9 @@ output_freq = 10
 monitor_freq = 10
 solve_slag = true
 slag_in_volume = true
-m_slag_init = 40000.0
+m_slag_init = 60000.0
 solve_ecs = true
-ecs_rate = 1.0e4
+ecs_rate = 2.0e3
 ecs_theta_center = 0.0
 ecs_theta_width = 0.8
 ecs_r_inner = 2.4
