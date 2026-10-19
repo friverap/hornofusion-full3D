@@ -201,13 +201,16 @@ program test_ecs_feed
         ok = .false.
     end if
 
-    ! ---- parte 4 (general 2 del Plan I, BAJO-1): la cesta 2 del MISMO paso ya
-    ! metio chatarra 0.5 en k = 4..10 (solape con la escoria de 4..8, antes del
-    ! sort): el volumen libre de la columna es negativo y el ECS no carga
-    ! (con el presupuesto por gas cargaba sobre el gas de 9-10 y sobrellenaba)
+    ! ---- parte 4 (general 2 del Plan I, BAJO-1 y M2 de su dirigida): la cesta
+    ! 2 del MISMO paso ya metio chatarra 0.5 en k = 4..8 (solape con la escoria,
+    ! antes del sort; queda BAJO la superficie del ECS, k0 = 9): el deficit de
+    ! 0.5 V por celda supera el gas libre de 9-10 y el ECS no carga (con el
+    ! presupuesto por gas desde k0 cargaba en 9-10 y el sort sobrellenaba)
     call setup_slag_bed()
-    sol%alpha_s(:,:,4:mesh%nz) = 0.5_dp
+    sol%alpha_s(:,:,4:8) = 0.5_dp
     where (mesh%cell_type == 0) sol%alpha_s = 0.0_dp
+    sol%m_s = sol%alpha_s * cfg%rho_steel * mesh%vol
+    sol%E_s = sol%m_s * 1.0e5_dp
     gas%alpha = max(0.0_dp, 1.0_dp - liq%alpha - slag%alpha_sl - sol%alpha_s)
     where (mesh%cell_type == 0) gas%alpha = 0.0_dp
     m0 = sum(sol%m_s(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz))

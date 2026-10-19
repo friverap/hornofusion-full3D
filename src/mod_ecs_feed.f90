@@ -80,6 +80,7 @@ contains
         ! sobrellenado que el transporte recortaria (clip). Lo que no cabe
         ! queda pendiente, como con el techo
         real(dp), allocatable :: bud(:,:), dvb(:,:)
+        real(dp) :: vfree
 
         real(dp), allocatable :: h_loc(:,:), h_glob(:,:)
         integer,  allocatable :: k0_glob(:,:)
@@ -164,7 +165,7 @@ contains
                         ig = m%topo%iglobal_start + i - 1
                         kg = m%topo%kglobal_start + kl - 1
                         if (.not. in_band(ig,jg)) cycle
-                        if (m%cell_type(i,jl,kl) == 0 .or. kg < k0_glob(ig,jg)) cycle
+                        if (m%cell_type(i,jl,kl) == 0) cycle
                         ! (dirigida general, BAJO-1/2) suma CON SIGNO: el poro
                         ! se reserva en TODA celda desde la base (una celda de
                         ! escoria llena que pasa a lecho en esta llamada lo
@@ -172,9 +173,18 @@ contains
                         ! (general 2, BAJO-1 / MPI B1) VOLUMEN LIBRE real
                         ! 1 - as - al - asl, no alpha_g: un solape previo del
                         ! mismo paso (cesta 2 antes del sort) cuenta negativo
-                        bud(ig,jg) = bud(ig,jg) + (1.0_dp - sol%alpha_s(i,jl,kl) &
-                            - liq%alpha(i,jl,kl) - slag%alpha_sl(i,jl,kl) &
-                            - merge(ALPHA_PORE_GAS, 0.0_dp, pore_floor_on)) * m%vol(i,jl,kl)
+                        ! (dirigida general 2, M2) por DEBAJO de la base solo
+                        ! cuentan los DEFICITS (solape de una cesta 2 del mismo
+                        ! paso bajo la superficie del ECS: el sort tambien tiene
+                        ! que subir esa escoria); el gas de abajo no cuenta
+                        vfree = 1.0_dp - sol%alpha_s(i,jl,kl) - liq%alpha(i,jl,kl) &
+                              - slag%alpha_sl(i,jl,kl)
+                        if (kg >= k0_glob(ig,jg)) then
+                            bud(ig,jg) = bud(ig,jg) + (vfree &
+                                - merge(ALPHA_PORE_GAS, 0.0_dp, pore_floor_on)) * m%vol(i,jl,kl)
+                        else
+                            bud(ig,jg) = bud(ig,jg) + min(0.0_dp, vfree) * m%vol(i,jl,kl)
+                        end if
                     end do
                 end do
             end do
