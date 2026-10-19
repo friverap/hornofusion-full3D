@@ -15,6 +15,8 @@ auditoria general 2, M3/H4):
   ecs_slag_mass  : dm_slag + sum(m_slag_clip) == 0 (la escoria desplazada se
                    reordena, no se crea ni destruye)
   ecs_pending    : nada pendiente en el ultimo snapshot
+  ecs_displaced  : en alguna columna la chatarra final supera el gas inicial
+                   de su celda (desplazo escoria: el caso ejerce I2)
   ecs_base       : en cada columna de la banda con carga, la celda mas baja
                    con layer_id == ID_ECS es k0 (la de encima del tope del
                    acero/chatarra/tazon del snapshot 0) y alguna k0 empezo
@@ -126,10 +128,12 @@ def check_slag_mode(args, cfg_get, rows, steps, first, last, fed, e_fed, de, chk
         as0 = h0["fields/alpha_solid"][()]
         al0 = h0["fields/alpha_liquid"][()]
         asl0 = h0["fields/alpha_slag"][()]
+        ag0 = h0["fields/alpha_gas"][()]
         lid = h1["restart/layer_id"][()]
+        as1 = h1["fields/alpha_solid"][()]
     tc, tw, ri = cfg_get("ecs_theta_center"), cfg_get("ecs_theta_width"), cfg_get("ecs_r_inner")
     nz, nth, nr = ct.shape
-    ncol, nbad, nslag = 0, 0, 0
+    ncol, nbad, nslag, ndisp = 0, 0, 0, 0
     msgs = []
     for j in range(nth):
         dth = math.atan2(math.sin(th[j] - tc), math.cos(th[j] - tc))
@@ -149,6 +153,10 @@ def check_slag_mode(args, cfg_get, rows, steps, first, last, fed, e_fed, de, chk
             ncol += 1
             if k0 < nz and asl0[k0, j, i] >= 0.01:
                 nslag += 1
+            # (dirigida general 2, M3) la chatarra DESPLAZO escoria: en alguna
+            # celda supera el gas que habia al inicio
+            if any(as1[k, j, i] > ag0[k, j, i] + 1e-9 for k in ks):
+                ndisp += 1
             if min(ks) != k0:
                 nbad += 1
                 if len(msgs) < 3:
@@ -156,6 +164,9 @@ def check_slag_mode(args, cfg_get, rows, steps, first, last, fed, e_fed, de, chk
     chk.report("ecs_base", ncol > 0 and nbad == 0 and nslag > 0,
                f"{ncol} columnas con carga, {nbad} con base distinta de k0 {msgs}, "
                f"{nslag} con escoria resuelta en k0 al inicio (debe ser > 0)")
+    chk.report("ecs_displaced", ndisp > 0,
+               f"{ndisp} columnas donde la chatarra supera el gas inicial (desplazo "
+               f"escoria; debe ser > 0, si no el caso no ejerce I2)")
 
 
 if __name__ == "__main__":
