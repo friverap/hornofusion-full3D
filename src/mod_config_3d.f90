@@ -104,7 +104,7 @@ contains
         cfg%mixture_model = .false.       ! Plan G (oct-2026): en evaluacion
         cfg%tol_alpha_mix = 1.0e-4_dp
         cfg%mix_eps_perm_min = 0.0_dp
-        cfg%pc_drift_source = .false.     ! Plan E E2 (10-oct-2026): sin efecto medible en el banco con E1 (e12ns); off
+        cfg%pc_drift_source = .true.      ! Plan E E2: ON desde 20-oct-2026 (juez B1 275-300 s: p_max 1.1 MPa -> < 95 kPa); el banco e12ns no lo veia
         cfg%pc_spill_source = .false.
         cfg%n_pc_max = 1
         cfg%tol_alpha_pc = 1.0e-6_dp
