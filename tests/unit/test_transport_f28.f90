@@ -18,6 +18,8 @@
 !      solo es vertical).
 !   4. Cara continuo|continuo ENLAZADA (lk = 1): B no la toca.
 !   5. ws_Fc_valid = .false.: B inerte.
+!   6. Caras r y theta continuo|continuo sin enlace: tampoco transportan
+!      (auditoria 20, M20-5: el test solo cubria z).
 !===============================================================================
 program test_transport_f28
     use mod_constants
@@ -27,7 +29,7 @@ program test_transport_f28
     use mod_mesh_3d, only: mesh_generate_parallel
     use mod_fields_3d
     use mod_continuity, only: solve_volume_fraction
-    use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fz, ws_Fc_z, ws_Fc_af_z, ws_Fc_valid, ws_Fc_lk_r, &
+    use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, ws_Fc_z, ws_Fc_af_z, ws_Fc_valid, ws_Fc_lk_r, &
                              ws_Fc_lk_th, ws_Fc_lk_z, ws_liq_cont_valid
     implicit none
 
@@ -105,6 +107,22 @@ program test_transport_f28
     cfg%pc_transport_f28 = .true.
     call solve_volume_fraction(liq, gas, sol, slag%alpha_sl, a_old, mesh, cfg)
     if (ws_Fz(3,4,2) >= 0.0_dp) call fail('caso 5: B actuo sin flujos del Poisson')
+
+    ! ---- caso 6: caras r y theta continuo|continuo sin enlace ----
+    call setup(0.8_dp)
+    liq%alpha(4,4,2) = 0.8_dp; liq%alpha(3,5,2) = 0.8_dp; a_old = liq%alpha
+    liq%uz = 0.0_dp; liq%ur = -0.5_dp; liq%uth = -0.5_dp
+    cfg%pc_transport_f28 = .true.
+    call solve_volume_fraction(liq, gas, sol, slag%alpha_sl, a_old, mesh, cfg)
+    if (ws_Fr(3,4,2) /= 0.0_dp) call fail('caso 6: la cara r sin enlace transporto')
+    if (ws_Fth(3,4,2) /= 0.0_dp) call fail('caso 6: la cara theta sin enlace transporto')
+    call setup(0.8_dp)
+    liq%alpha(4,4,2) = 0.8_dp; liq%alpha(3,5,2) = 0.8_dp; a_old = liq%alpha
+    liq%uz = 0.0_dp; liq%ur = -0.5_dp; liq%uth = -0.5_dp
+    cfg%pc_transport_f28 = .false.
+    call solve_volume_fraction(liq, gas, sol, slag%alpha_sl, a_old, mesh, cfg)
+    if (ws_Fr(3,4,2) == 0.0_dp .or. ws_Fth(3,4,2) == 0.0_dp) &
+        call fail('caso 6: sin B las caras r/theta no transportan (caso mal puesto)')
 
     call mpi_finalize_topology(mesh%topo)
     if (ok) then
