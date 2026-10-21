@@ -131,6 +131,20 @@ contains
             ws_liq_room = 1.0_dp
         end where
         end if
+        ! Plan J-B: con el transporte sujeto al cierre F2.8 el hueco se congela
+        ! al INICIO del paso (alpha^n). Con el del iterado la cara se cerraba,
+        ! la receptora no se llenaba, se reabria en la iteracion siguiente y
+        ! se volvia a llenar: ciclo entre iteraciones externas (bed_drain:
+        ! vol_dalpha_outer 3e-6 -> 1e-2 m3, balance de energia por paso x9)
+        if (cfg%pc_transport_f28) then
+            if (cond) then
+                where (sol%alpha_s >= ALPHA_BED) &
+                    ws_liq_room = liq_cap(sol%alpha_s, 0.0_dp) - liq_old%alpha   ! vista: acero+escoria
+            else
+                where (sol%alpha_s >= ALPHA_BED) &
+                    ws_liq_room = liq_cap(sol%alpha_s, slag%alpha_sl) - liq_old%alpha
+            end if
+        end if
         ws_liq_room_valid = .true.
         call compute_liquid_drift(liq, gas, sol, m, cfg, liq_old)
 
@@ -498,6 +512,8 @@ contains
             call phase_exchange_halos(liq, m)
             call phase_exchange_halos(gas, m)
             if (cfg%n_pc_max > 1) then
+                ! (con pc_transport_f28 el hueco queda congelado en alpha^n)
+                if (.not. cfg%pc_transport_f28) then
                 ! (auditoria 4, B4-11) el hueco de poro que ve la pasada
                 ! siguiente (fsat, limitador de F2.8, F2.29) es el de la alpha
                 ! recien transportada; las mascaras de CARA (ws_bedl_f) siguen
@@ -514,6 +530,7 @@ contains
                 elsewhere
                     ws_liq_room = 1.0_dp
                 end where
+                end if
                 end if
                 dalpha_loc = maxval(abs(liq%alpha(istart:iend,jstart:jend,kstart:kend) &
                                       - a_prev(istart:iend,jstart:jend,kstart:kend)))

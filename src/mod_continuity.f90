@@ -175,7 +175,7 @@ contains
         else
             call liquid_continuity_mask(liq, sol, m, cont)
         end if
-        call face_fluxes_noalpha_all(liq, m, ur_e, uth_e, uz_e, cont, Gr, Gth, Gz)
+        call face_fluxes_noalpha_all(liq, m, ur_e, uth_e, uz_e, cont, Gr, Gth, Gz, cfg%pc_transport_f28)
         else
             ur_e = 0.0_dp; uth_e = 0.0_dp; uz_e = 0.0_dp
             Gr = 0.0_dp; Gth = 0.0_dp; Gz = 0.0_dp; cont = .true.
@@ -1454,13 +1454,14 @@ contains
     ! solenoidal aunque p haya convergido: un charco puro en reposo se
     ! llenaba y drenaba solo (bath_test: d alpha 4.7e-2/s, |u_l| 0.7 m/s).
     !---------------------------------------------------------------------------
-    subroutine face_fluxes_noalpha_all(liq, m, ur_e, uth_e, uz_e, cont, Gr, Gth, Gz)
+    subroutine face_fluxes_noalpha_all(liq, m, ur_e, uth_e, uz_e, cont, Gr, Gth, Gz, f28)
         type(phase_t), intent(in) :: liq
         type(mesh_t), intent(in)  :: m
         real(dp), intent(in)      :: ur_e(-1:,-1:,-1:), uth_e(-1:,-1:,-1:)
         real(dp), intent(in)      :: uz_e(-1:,-1:,-1:)
         logical,  intent(in)      :: cont(-1:,-1:,-1:)
         real(dp), intent(out)     :: Gr(-1:,-1:,-1:), Gth(-1:,-1:,-1:), Gz(-1:,-1:,-1:)
+        logical, intent(in), optional :: f28
 
         integer  :: i, j, k
         integer  :: istart, iend, jstart, jend, kstart, kend
@@ -1496,6 +1497,18 @@ contains
                     if (ws_Fc_lk_z(i,j,k) == 1) &
                         Gz(i,j,k) = conservative_noalpha(ws_Fc_z(i,j,k), &
                             ws_Fc_af_z(i,j,k), liq%rho(i,j,k), liq%rho(i,j,k+1), Ft)
+                    ! Plan J-B: cara continuo|continuo que el Poisson NO enlazo
+                    ! (F2.8: receptora sin hueco) no transporta liquido
+                    if (present(f28)) then
+                        if (f28) then
+                            if (cont(i,j,k) .and. cont(i+1,j,k) .and. ws_Fc_lk_r(i,j,k) /= 1 &
+                                .and. m%cell_type(i+1,j,k) /= 0) Gr(i,j,k) = 0.0_dp
+                            if (cont(i,j,k) .and. cont(i,j+1,k) .and. ws_Fc_lk_th(i,j,k) /= 1 &
+                                .and. m%cell_type(i,j+1,k) /= 0) Gth(i,j,k) = 0.0_dp
+                            if (cont(i,j,k) .and. cont(i,j,k+1) .and. ws_Fc_lk_z(i,j,k) /= 1 &
+                                .and. m%cell_type(i,j,k+1) /= 0) Gz(i,j,k) = 0.0_dp
+                        end if
+                    end if
                 end do
             end do
         end do
