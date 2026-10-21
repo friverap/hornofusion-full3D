@@ -9,10 +9,19 @@
   bed_drain_rate la velocidad vertical media (ponderada por masa) del liquido
                  en los snapshots con t >= --t-rate es <= -(--min-speed) m/s:
                  medido 0.52-0.62 m/s (A3-1; 0.50 con la rampa del lecho M3-2) frente a 0.40-0.44 antes.
+  bed_drain_outer  max vol_dalpha_outer del audit <= --max-vdo m3 (auditoria 20,
+                 M20-5): con Plan J-B el hueco de poro se congela en alpha^n;
+                 sin el congelado la cara se cierra y reabre entre iteraciones
+                 externas (medido: 2.5e-2 frente a 1.45e-4).
+  bed_drain_unlinked  suma de |vol_unlinked| <= --max-unlinked m3 (M20-5): sin
+                 J-B el transporte rellena caras que el Poisson cerro (medido:
+                 5.0 frente a 0.12).
 
-Uso: check_drain.py RUNDIR [--min-drop 0.19] [--min-speed 0.42] [--xfail ids]
+Uso: check_drain.py RUNDIR [--min-drop 0.19] [--min-speed 0.42] [--max-vdo 2e-3]
+     [--max-unlinked 1.0] [--xfail ids]
 """
 import argparse
+import csv
 import os
 import sys
 
@@ -40,6 +49,8 @@ def main():
     ap.add_argument("--t-rate", type=float, default=0.15)
     # (M4-17) cota superior: sin Ergun el liquido caeria libre (>> 1 m/s)
     ap.add_argument("--max-speed", type=float, default=1.0)
+    ap.add_argument("--max-vdo", type=float, default=2.0e-3)
+    ap.add_argument("--max-unlinked", type=float, default=1.0)
     ap.add_argument("--xfail", default="")
     a = ap.parse_args()
     chk = Checker(parse_xfail_arg(a.xfail))
@@ -66,6 +77,14 @@ def main():
     chk.report("bed_drain_rate", bool(speeds) and vmin >= a.min_speed and vmax <= a.max_speed,
                f"velocidad media de drenaje {vmin:.3f}..{vmax:.3f} m/s en {len(speeds)} snapshots "
                f"(t >= {a.t_rate}; minimo {a.min_speed}, maximo {a.max_speed})")
+    with open(os.path.join(a.rundir, "audit.csv")) as fh:
+        rows = list(csv.DictReader(fh, skipinitialspace=True))[1:]
+    vdo = max(abs(float(r["vol_dalpha_outer"])) for r in rows)
+    chk.report("bed_drain_outer", vdo <= a.max_vdo,
+               f"max vol_dalpha_outer {vdo:.3e} m3 (maximo {a.max_vdo:.1e})")
+    unl = sum(abs(float(r["vol_unlinked"])) for r in rows)
+    chk.report("bed_drain_unlinked", unl <= a.max_unlinked,
+               f"suma |vol_unlinked| {unl:.3e} m3 (maximo {a.max_unlinked:.1e})")
     chk.exit()
 
 
