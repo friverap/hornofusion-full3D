@@ -32,7 +32,7 @@ program eaf_3d_simulator
     use mod_continuity
     use mod_multiphase
     use mod_mixture_3d
-    use mod_workspace, only: ensure_workspace, ws_sp_asl, ws_sp_es, ws_sp_mx, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new, ws_cc_drop, ws_p_n, ws_Fg_valid, &
+    use mod_workspace, only: ensure_workspace, ws_liq_cont_prev, ws_sp_asl, ws_sp_es, ws_sp_mx, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new, ws_cc_drop, ws_p_n, ws_Fg_valid, &
                              ws_liq_cont, ws_liq_cont_valid
     use mod_solid_phase
     use mod_melting_3d
@@ -723,7 +723,11 @@ program eaf_3d_simulator
             ! (auditoria 4, B4-7) mascara de liquido continuo con la alpha FINAL
             ! del paso: la de ws_liq_cont era la del inicio de la ultima
             ! iteracion externa (halos de alpha ya intercambiados)
-            call liquid_continuity_mask(liq, sol, mesh, ws_liq_cont)
+            ! (histeresis de la pelicula) prev es la mascara de la ultima
+            ! iteracion externa, tomada con la vista condensada acero+escoria;
+            ! aqui liq%alpha es solo acero: con escoria la pelicula que era
+            ! continua se queda con acero >= 0.01, como antes del cambio
+            call liquid_continuity_mask(liq, sol, mesh, ws_liq_cont, ws_liq_cont_prev)
             ws_liq_cont_valid = .true.
             if (slag_condensed_on(cfg)) then
                 call compute_gas_liquid_heat(liq, gas, sol, mesh, cfg, sh, slag%alpha_sl)

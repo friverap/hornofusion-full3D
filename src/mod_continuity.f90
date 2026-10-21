@@ -1392,18 +1392,38 @@ contains
     ! 300 m/s a t = 0.8 s). Un nivel, sin propagacion: la superficie ocupa
     ! una capa de celdas. Se evalua tambien en halos (funcion local de alpha
     ! y alpha_s ya intercambiados) => coherente entre ranks sin intercambio.
+    ! HISTERESIS de la pelicula (prev = mascara de la iteracion anterior,
+    ! ws_liq_cont_prev; va en el snapshot): entra con alpha_l >=
+    ! 2*ALPHA_FLOW_CUTOFF y se queda mientras alpha_l >= ALPHA_FLOW_CUTOFF.
+    ! Sin ella la pelicula que rondaba 0.01 (0.00999 <-> 0.01019) cambiaba de
+    ! clase cada paso sobre una celda del lecho saturada (gas en el piso de
+    ! poro) cuya UNICA conexion era esa cara: la conductancia saltaba x12 y
+    ! la correccion de presion oscilaba +-4e4 Pa, gas a 300 m/s (juez E2,
+    ! 282.73 s, celda (1,36,3)). Es la misma falla que motivo la regla de
+    ! superficie con el umbral 0.3; nunca deja continuo bajo el corte.
+    ! Dentro del lecho (alpha_s >= ALPHA_BED) la regla elemental sigue con
+    ! un solo umbral (aceptado, auditoria dirigida de la histeresis): la
+    ! banda ahi cambiaria la pelicula que percola por todo el lecho (Bug
+    ! 15/16), no solo la superficie; no observado en los jueces de B1.
     !---------------------------------------------------------------------------
-    subroutine liquid_continuity_mask(liq, sol, m, cont)
+    subroutine liquid_continuity_mask(liq, sol, m, cont, prev)
         type(phase_t), intent(in) :: liq
         type(solid_t), intent(in) :: sol
         type(mesh_t), intent(in)  :: m
         logical, intent(out)      :: cont(-1:,-1:,-1:)
+        logical, intent(in), optional :: prev(-1:,-1:,-1:)
         integer :: k, klo, khi
+        real(dp), allocatable :: a_film(:,:)
         cont = liq_continuous(liq%alpha, sol%alpha_s)
         klo = lbound(cont,3) + 1; khi = ubound(cont,3)
+        allocate(a_film(lbound(cont,1):ubound(cont,1), lbound(cont,2):ubound(cont,2)))
         do k = khi, klo, -1
+            a_film = ALPHA_FLOW_CUTOFF        ! sin historia: regla de un umbral
+            if (present(prev)) then
+                where (.not. prev(:,:,k)) a_film = 2.0_dp * ALPHA_FLOW_CUTOFF
+            end if
             where (.not. cont(:,:,k) .and. m%cell_type(:,:,k) /= 0 &
-                   .and. liq%alpha(:,:,k) >= ALPHA_FLOW_CUTOFF &
+                   .and. liq%alpha(:,:,k) >= a_film &
                    .and. m%cell_type(:,:,k-1) /= 0 &
                    .and. liq_continuous(liq%alpha(:,:,k-1), sol%alpha_s(:,:,k-1)) &
                    .and. liq%alpha(:,:,k-1) >= ALPHA_LIQ_CONT)

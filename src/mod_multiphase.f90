@@ -107,7 +107,7 @@ contains
         end if
         if (cond) call cond_view_enter(liq, liq_old, slag%alpha_sl, ws_sp_asl, cfg%rho_slag, &
                                        cfg%beta_expansion, cfg%T_ref_boussinesq, cfg%mu_slag)
-        call liquid_continuity_mask(liq, sol, m, ws_liq_cont)
+        call liquid_continuity_mask(liq, sol, m, ws_liq_cont, ws_liq_cont_prev)
         ! mascara del lecho (N-C1): misma regla que liq_continuous, halos
         ! incluidos (sol%alpha_s ya intercambiado; los halos fisicos tienen
         ! cell_type = 0)

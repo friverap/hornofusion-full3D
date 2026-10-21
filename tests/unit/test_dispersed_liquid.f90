@@ -26,6 +26,12 @@
 !      (b) Con la regla antigua (mascara invalida: alpha >= 0.01 entra),
 !          la gota a -20 m/s multiplica p_max por > 10: es la punta de
 !          rho_l*u^2 que rompio B1.
+!   5. Histeresis de la pelicula de superficie (liquid_continuity_mask,
+!      juez E2 de B1, 282.73 s): bano 0.7 en k=1..2, pelicula en k=3.
+!      Sin historia (prev ausente) entra con 0.01: 0.015 -> continua.
+!      Con prev: 0.015 no continua antes -> dispersa (entra con 0.02);
+!      0.015 continua antes -> se queda; 0.0099 continua antes -> sale
+!      (nunca continuo bajo el corte); 0.025 no continua antes -> entra.
 !   4. Acople gas-gota FISICO: gota dispersa alpha_l=0.005 a su drift (-u_t)
 !      y K = a_l*(rho_l-rho_g)*g/u_t (arrastre = peso a velocidad terminal,
 !      implicito): el cambio de velocidad del gas en un paso es
@@ -42,7 +48,7 @@ program test_dispersed_liquid
     use mod_fields_3d
     use mod_momentum_3d, only: solve_momentum_3d
     use mod_pressure_3d, only: solve_pressure_correction
-    use mod_continuity, only: compute_liquid_drift
+    use mod_continuity, only: compute_liquid_drift, liquid_continuity_mask
     use mod_drag_ergun, only: compute_ergun_drag
     use mod_workspace, only: ensure_workspace, ws_liq_cont, ws_liq_cont_valid, ws_Fg_valid
     implicit none
@@ -54,6 +60,7 @@ program test_dispersed_liquid
     type(slag_t)   :: slag
     type(shared_t) :: sh
     real(dp), allocatable :: Kz(:,:,:), drag(:,:,:), p_ref(:,:,:)
+    logical, allocatable  :: cmask(:,:,:), pmask(:,:,:)
     real(dp) :: u_t, r1, r2, r3, res, pscale
     integer  :: nr, nth, nz, ic, jc, kc
     logical  :: ok
@@ -79,10 +86,10 @@ program test_dispersed_liquid
     ic = 3; jc = 4; kc = 5
 
     ! ---- caso 1: predicado ----
-    if (liq_continuous(0.05_dp, 0.0_dp))       call fail('0.05 sin chatarra deberia ser disperso')
-    if (.not. liq_continuous(0.5_dp, 0.0_dp))  call fail('0.5 sin chatarra deberia ser continuo')
-    if (.not. liq_continuous(0.05_dp, 0.3_dp)) call fail('0.05 con chatarra deberia ser continuo')
-    if (liq_continuous(0.005_dp, 0.3_dp))      call fail('0.005 con chatarra deberia ser disperso')
+    if (liq_continuous(0.05_dp, 0.0_dp))       call fail('caso 1: 0.05 sin chatarra deberia ser disperso')
+    if (.not. liq_continuous(0.5_dp, 0.0_dp))  call fail('caso 1: 0.5 sin chatarra deberia ser continuo')
+    if (.not. liq_continuous(0.05_dp, 0.3_dp)) call fail('caso 1: 0.05 con chatarra deberia ser continuo')
+    if (liq_continuous(0.005_dp, 0.3_dp))      call fail('caso 1: 0.005 con chatarra deberia ser disperso')
 
     ! ---- caso 2: momento drift-flux ----
     sol%alpha_s = 0.0_dp; sol%mdot = 0.0_dp; slag%alpha_sl = 0.0_dp
@@ -171,6 +178,27 @@ program test_dispersed_liquid
         ok = .false.
     end if
 
+    ! ---- Caso 5: histeresis de la pelicula de superficie ----
+    allocate(cmask, mold=ws_liq_cont); allocate(pmask, mold=ws_liq_cont)
+    sol%alpha_s = 0.0_dp
+    liq%alpha = 0.0_dp; liq%alpha(:, :, 1:2) = 0.7_dp
+    liq%alpha(ic,jc,3) = 0.015_dp
+    call liquid_continuity_mask(liq, sol, mesh, cmask)
+    if (.not. cmask(ic,jc,3)) call fail('caso 5a: sin historia, pelicula 0.015 debe ser continua')
+    pmask = .false.
+    call liquid_continuity_mask(liq, sol, mesh, cmask, pmask)
+    if (cmask(ic,jc,3)) call fail('caso 5b: pelicula 0.015 nueva debe esperar a 0.02')
+    pmask = .true.
+    call liquid_continuity_mask(liq, sol, mesh, cmask, pmask)
+    if (.not. cmask(ic,jc,3)) call fail('caso 5c: pelicula 0.015 continua debe quedarse')
+    liq%alpha(ic,jc,3) = 0.0099_dp
+    call liquid_continuity_mask(liq, sol, mesh, cmask, pmask)
+    if (cmask(ic,jc,3)) call fail('caso 5d: pelicula 0.0099 bajo el corte debe salir')
+    liq%alpha(ic,jc,3) = 0.025_dp; pmask = .false.
+    call liquid_continuity_mask(liq, sol, mesh, cmask, pmask)
+    if (.not. cmask(ic,jc,3)) call fail('caso 5e: pelicula 0.025 debe entrar')
+    if (cmask(ic,jc,4) .or. .not. cmask(ic,jc,2)) call fail('caso 5f: solo una capa de pelicula')
+
     if (ok) then
         print '(A)', ' PASS test_dispersed_liquid'
     else
@@ -183,7 +211,7 @@ contains
 
     subroutine fail(msg)
         character(len=*), intent(in) :: msg
-        print '(A,A)', '   FAIL caso 1: ', msg
+        print '(A,A)', '   FAIL ', msg
         ok = .false.
     end subroutine fail
 
