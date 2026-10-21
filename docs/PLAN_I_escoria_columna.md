@@ -112,6 +112,10 @@ los tests bit a bit. Falta EJECUTAR (gates de abajo).
    n1/n8/n9 (legado), `ecs_test` n1/n8/n12, `cold_bucket2_n4`,
    `arc_slag_legacy`; `arc_slag` y `slag_rest` solo cambiarían con
    sobrellenado (si cambian, diagnosticar).
+   **Nota (auditoría 20, 21-oct):** el golden v128 (8b50511) YA incluye el
+   cambio numérico de I1/I2 (v127 era anterior al Plan I), aunque su mensaje
+   lo atribuye solo a E2/J-B; los gates 2 y 4–9 siguen sin ejecutar. El
+   `--min-yield` del gate 3 se subió en 9b78456 (flow 4.1, thick 1.5 kg).
 3. `slag_chem_flow_n4` y `slag_chem_thick_n1/n4`: medir el Fe oxidado y
    α_sl(kb); subir `--min-yield` claramente por encima de 0.99 kg (el
    condensado SIN I1), p.ej. 0.6 × lo medido; `fe_element`/`slag_mass` a
