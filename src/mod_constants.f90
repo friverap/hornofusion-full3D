@@ -74,7 +74,8 @@ module mod_constants
     ! antes era el literal 1e-2 en una docena de sitios.
     real(dp), parameter :: ALPHA_BED = 1.0e-2_dp
     ! Gas RESIDUAL de poro (Plan C F2.7): en una celda del LECHO (alpha_s >=
-    ! 1e-2) el liquido no puede ocupar todo el hueco; queda al menos
+    ! ALPHA_BED; desde 6314031 en rampa desde ALPHA_BED/2, ver pore_floor)
+    ! el liquido no puede ocupar todo el hueco; queda al menos
     ! ALPHA_PORE_GAS de gas (> ALPHA_FLOW_CUTOFF, asi el gas sigue activo en
     ! el Poisson y la celda nunca queda sellada hidraulicamente). Sin esto,
     ! el fundido que percola desde un charco llenaba el poro hasta expulsar

@@ -521,3 +521,35 @@ guarda sin leer su causa.
   inundado = 22 kPa): medir exceso sobre la hidrostática saturada
   (`scratchpad/cand/pexcess.py`), p > 100 kPa, gas > 200 y centinelas
   (`regime2.py`).
+
+## Oct-2026 (B1 241–285 s): rampa del piso de poro, película con histéresis, E2 y J-B
+
+- **Rampa del piso de poro POR DEBAJO de ALPHA_BED (6314031)**: `pore_floor(as)`
+  sube de 0 en ALPHA_BED/2 a `ALPHA_PORE_GAS` en ALPHA_BED, y `liq_cap` la
+  resta (limitador y derrame). Causa: con el interruptor en ALPHA_BED una celda
+  que fundía de 0.0101 a 0.0099 liberaba de golpe 0.015 de hueco: ráfagas de
+  B1 a 241 s. La rampa POR ENCIMA (ALPHA_BED → 2 ALPHA_BED, 4547861) llevó el
+  juez a 2 MPa: no usarla. **Abierto (auditoría 20, A20-2)**: `ws_liq_room`,
+  `fsat_cell` y `ws_bed` siguen con el escalón en ALPHA_BED; en la banda el
+  limitador recorta y el Poisson no cierra.
+- **Película de superficie con HISTÉRESIS (3c4bf52)**: una celda de película
+  nueva entra con α_l ≥ 2·ALPHA_FLOW_CUTOFF y una que ya era continua se queda
+  con ≥ ALPHA_FLOW_CUTOFF (`liquid_continuity_mask(..., prev)`, con
+  `ws_liq_cont_prev`, que va en el snapshot). Causa: la película que alternaba
+  continua/dispersa cada paso (juez E2 282.73 s, celda (1,36,3)) hacía saltar
+  la conductancia de su fila (ráfagas de gas). Las llamadas del lazo pasan
+  `ws_liq_cont_prev`; la mezcla (Plan G) no.
+- **E2 `pc_drift_source` ON (a8a0df1)**: el volumen de líquido que entró por
+  caras SIN enlace del Poisson en el último transporte del paso es fuente
+  conocida del Poisson de la iteración siguiente (`ws_pc_unl`, drift-flux de
+  Manninen). Juez B1 275–300 s: p_max 1.1 MPa → < 95 kPa. No actúa en el
+  outer 1 de cada paso (abierto, B20-4).
+- **J-B `pc_transport_f28` ON (2f0529b)**: una cara continuo|continuo que el
+  Poisson dejó sin enlace (F2.8: receptora sin hueco) TAMPOCO transporta α
+  (antes la rellenaba la velocidad de centro y el defecto se volvía un pozo de
+  presión: B1 281 s, −82 kPa). El hueco de poro se CONGELA en α^n durante el
+  paso: con el del iterado la cara cerraba, la receptora no se llenaba, reabría
+  y se llenaba (ciclo entre outers; bed_drain energy_balance_step ×8.9). En la
+  vista condensada `liq_old%alpha` ya es acero+escoria (no sumar `ws_sp_asl`).
+  Abiertos: celda que se llena dentro del paso queda abierta hasta el siguiente;
+  fsat/F2.31 también ven el hueco congelado (M20-2).

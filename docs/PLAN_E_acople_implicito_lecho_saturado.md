@@ -148,7 +148,7 @@ en `true` para el desarrollo; el juez decide los defaults.
   métrica corregida en `regime2.py`/`b1_regime_table.py`.) Detalle
   y mecanismo en dev-history `2026-10-10_plan_e_lecho_saturado.md`.
 - Consolidación: `pc_sat_open` default `false` (banco `bed_flood.dat` lo
-  activa), E2/lazo quedan en claves `false`, golden v37. Segunda lección de
+  activa), E2/lazo quedan en claves `false`, golden v37. (Actualización 20-oct-2026: E2 `pc_drift_source` pasó a `true` en a8a0df1, juez B1 275–300 s; ver `.claude/rules/acople-pv.md`.) Segunda lección de
   método, idéntica a la de Plan D: el banco de 4 celdas NO predice B1 — y
   esta vez tampoco la coincidencia en tres descomposiciones del banco.
 - Lo que el fallo enseña (§5, riesgo "bolsa", confirmado): abrir la cara del
