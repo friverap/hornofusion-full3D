@@ -61,6 +61,12 @@ gas toca la cota en 2 filas de 5001 (277.5 y 288.7 s); presión y líquido nunca
 continuo|disperso intacta, cara enlazada no se corta, inerte sin
 `ws_Fc_valid`, caras r y θ). Mutaciones verificadas.
 
+## Límite conocido (B20-8)
+J-B solo actúa en caras continuo|continuo. Una cara continuo|disperso hacia
+una celda llena (la auditoría 20 lo señaló con α_s > 0.975, donde la receptora
+no entra en la máscara de continuidad) no se corta: su entrada la sigue
+acotando el limitador de α con `liq_cap`, como antes de J-B.
+
 ## Pendiente (auditoría 20)
 - M20-2: separar el hueco congelado (`face_open`, J-B) del hueco del iterado
   (fsat, F2.31, `fs_full`).
