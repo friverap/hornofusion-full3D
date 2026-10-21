@@ -426,7 +426,10 @@ contains
     ! poro debe seguir por encima de ALPHA_FLOW_CUTOFF (F2.7, la celda del
     ! lecho nunca sellada); la rampa por encima (ALPHA_BED..2 ALPHA_BED)
     ! sellaba 21 celdas del lecho y llevo el juez a 2 MPa en 15 s
-    ! (judge_poreramp, 4547861).
+    ! (judge_poreramp, 4547861). El hueco de la banda (ALPHA_BED/2..ALPHA_BED)
+    ! lo ve SOLO el limitador: llevarlo al Poisson (F2.8 cerrando caras hacia
+    ! la banda) dio 13-33 % de pasos en centinela en B1 255-258 s frente a 0 %
+    ! (auditoria 20, A20-2 rechazado; campaigns/b1/a202_*).
     pure elemental function pore_floor(as) result(f)
         real(dp), intent(in) :: as
         real(dp) :: f
