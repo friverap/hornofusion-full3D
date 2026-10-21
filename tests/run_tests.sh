@@ -42,7 +42,7 @@ run_case_restart_from() {
         echo "FAIL: la corrida $name -n $np terminó con error (ver $dir/run.log)"
         tail -5 "$dir/run.log"; note_fail; return 1
     fi
-    if grep -q '\[CONFIG\] WARNING\|\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[SLAG\] AVISO\|\[RESTART\] AVISO' "$dir/run.log"; then
+    if grep -q '\[CONFIG\] WARNING\|\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[SLAG\] AVISO\|\[RESTART\] AVISO\|\[CONFIG\] AVISO\|\[INPUT\] AVISO' "$dir/run.log"; then
         echo "FAIL: aviso en $name -n $np:"; grep 'WARNING\|AVISO' "$dir/run.log" | head -3
         note_fail; return 1
     fi
@@ -79,9 +79,9 @@ run_case() {
     # slag_chem_flow corria con res 2.3e-2 (tol 1e-8) y nadie lo veia
     # (M4-20) tambien la DO sin converger, carga/ECS sin espacio y avisos
     # del reinicio
-    if grep -q '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[SLAG\] AVISO\|\[RESTART\] AVISO' "$dir/run.log"; then
+    if grep -q '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[SLAG\] AVISO\|\[RESTART\] AVISO\|\[CONFIG\] AVISO\|\[INPUT\] AVISO' "$dir/run.log"; then
         echo "FAIL: aviso del solver/carga en $name -n $np:"
-        grep '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[SLAG\] AVISO\|\[RESTART\] AVISO' "$dir/run.log" | head -3
+        grep '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[SLAG\] AVISO\|\[RESTART\] AVISO\|\[CONFIG\] AVISO\|\[INPUT\] AVISO' "$dir/run.log" | head -3
         note_fail
         return 1
     fi
@@ -128,9 +128,9 @@ run_restart_case() {
         note_fail
         return 1
     fi
-    if grep -q '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[SLAG\] AVISO\|\[RESTART\] AVISO' "$dir/run.log"; then
+    if grep -q '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[SLAG\] AVISO\|\[RESTART\] AVISO\|\[CONFIG\] AVISO\|\[INPUT\] AVISO' "$dir/run.log"; then
         echo "FAIL: aviso en el reinicio $base n$np:"
-        grep '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[SLAG\] AVISO\|\[RESTART\] AVISO' "$dir/run.log" | head -3
+        grep '\[CG\] AVISO\|\[ALPHA\] AVISO\|\[DO\] AVISO\|\[CHARGE\] WARNING\|\[ECS\] AVISO\|\[SLAG\] AVISO\|\[RESTART\] AVISO\|\[CONFIG\] AVISO\|\[INPUT\] AVISO' "$dir/run.log" | head -3
         note_fail
         return 1
     fi
