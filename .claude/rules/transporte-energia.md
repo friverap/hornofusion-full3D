@@ -67,6 +67,9 @@ guarda sin leer su causa.
   dos celdas de la cara
   → el fundido que no cabe se ACUMULA encima en vez de recortarse (B1 v8
   perdía 4.4 t en 427 s por el clip). Los flujos efectivos promediados
+  (Plan J-B, `pc_transport_f28` ON: una cara continuo|continuo que el
+  Poisson dejó sin enlazar por F2.8 lleva G = 0 en r, θ y z; el hueco
+  de poro que lo decide está congelado en α^n)
   quedan en `ws_Fr/ws_Fth/ws_Fz` (`ws_flux_valid`) y la energía del
   líquido los REUTILIZA: nunca recalcular flujos del líquido en la
   energía si el transporte de α ya los produjo. El exceso residual se
