@@ -449,6 +449,27 @@ def main():
                    f"dm_sol={dm_s:.4e} vs cargas+ECS-fundido+resolid-Cox="
                    f"{exp_s:.4e} kg, err rel={err_s:.3e} (max {tol_s:.3e})")
 
+    # -- mass_slag (auditoria 21, M21-C1): inventario de la escoria ----------
+    # dm_slag = FeO oxidado - FeO reducido - C consumido + adiciones - clip
+    # (misma identidad que check_slag_chem slag_mass; ECS, cesta y sort no
+    # cambian m_sl). Antes solo la verificaban los checkers de banco en
+    # algunas corridas: ecs_slag_n12, arc_slag_n12, ... quedaban sin ella
+    if "m_slag" in last and max(abs(first["m_slag"]), abs(last["m_slag"])) > 0.0:
+        MW_FE, MW_FEO, MW_C = 0.05585, 0.07185, 0.012   # = mod_slag_chemistry
+        dm_x = last["m_slag"] - first["m_slag"]
+        feo_ox = sum(r.get("m_fe_yield", 0.0) for r in steps) * MW_FEO / MW_FE
+        feo_red = sum(r.get("m_fe_return", 0.0) for r in steps) * MW_FEO / MW_FE
+        flux_x = sum(r.get("m_flux_in", 0.0) for r in steps)
+        sclip_x = sum(r.get("m_slag_clip", 0.0) for r in steps)
+        exp_x = feo_ox - feo_red - feo_red * MW_C / MW_FEO + flux_x - sclip_x
+        den_x = max(abs(feo_ox) + abs(feo_red) + abs(flux_x) + abs(sclip_x), abs(dm_x), 1.0)
+        inv_x = max(abs(first["m_slag"]), abs(last["m_slag"]))
+        tol_x = args.mtol + mtol_inv * inv_x / den_x
+        err_x = abs(dm_x - exp_x) / den_x
+        chk.report("mass_slag", err_x <= tol_x,
+                   f"dm_slag={dm_x:.4e} vs FeO ox-red-C+adic-clip={exp_x:.4e} kg, "
+                   f"err rel={err_x:.3e} (max {tol_x:.3e})")
+
     # -- centinelas (M3-9): nunca se tocan en regimen sano -------------------
     if "p_max" in last and "u_gas_max" in last:
         pm = max(r["p_max"] for r in steps)
