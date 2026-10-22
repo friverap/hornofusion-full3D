@@ -135,7 +135,7 @@ contains
         ! al INICIO del paso (alpha^n). Con el del iterado la cara se cerraba,
         ! la receptora no se llenaba, se reabria en la iteracion siguiente y
         ! se volvia a llenar: ciclo entre iteraciones externas (bed_drain:
-        ! vol_dalpha_outer 3e-6 -> 1e-2 m3, balance de energia por paso x9)
+        ! vol_dalpha_outer 1.45e-4 -> 2.5e-2 m3 en n1, balance de energia por paso x9)
         if (cfg%pc_transport_f28) then
             if (cond) then
                 where (sol%alpha_s >= ALPHA_BED) &

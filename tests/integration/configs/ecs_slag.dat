@@ -10,8 +10,9 @@
 # arco, fusion, radiacion ni quimica: el solido solo cambia por la carga y el
 # contacto escoria-chatarra (check_ecs.py --slag). nz = 16 para que n12
 # (2x3x2) corte r (indice global de la banda, M38) y n9 (1x3x3) corte z
-# dentro de la escoria. CIFRAS ESTIMADAS: medir el paso 0 (k0, alpha_sl en
-# k0) y ajustar antes de fijar golden y umbrales.
+# dentro de la escoria. MEDIDO (21-oct, golden v129; PLAN_I gates 5-8):
+# masa/energia del ECS a 1e-16, 16 columnas con base k0 y desplazamiento;
+# descomposicion 1.4e-6 (n9) / 6.0e-6 (n12) en velocidades.
 nr = 12
 ntheta = 24
 nz = 16

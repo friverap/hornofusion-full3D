@@ -3,7 +3,7 @@
 Estado (21-oct-2026): **J-B en commit y ON por defecto** (`pc_transport_f28`,
 2f0529b; golden v128 en 8b50511, que además lleva I1/I2 del Plan I —ver
 `PLAN_I_escoria_columna.md`). J-1 rechazado con datos. Pendientes en
-`AUDITORIA_20_2026-10-21.md` (M20-2, M20-3, M20-5).
+`AUDITORIA_20_2026-10-21.md`, todos cerrados (ver abajo).
 
 ## Causa (medida, B1 281 s, −82 kPa)
 Celda de poro saturado del lecho: F2.8 cerraba en el Poisson las caras del
@@ -30,7 +30,8 @@ cerraba con un pozo de presión (rastreo del agente, 20-oct; sonda `[PROBE-P]`,
 Primera versión: `bed_drain` energy_balance_step ×8.9 (gap ~2.5e4 J/paso).
 Causa: `ws_liq_room` se recalculaba en cada outer con la α del iterado → la
 cara se cerraba, la receptora no se llenaba, se reabría en el outer siguiente;
-`vol_dalpha_outer` de 3e-6 a 9.6e-3 m³. Arreglo: con `pc_transport_f28` el
+`vol_dalpha_outer` sube (bed_drain n1: 2.5e-2 m³ sin el congelado frente a
+1.45e-4 con él; sin J-B el nivel era ~3e-6). Arreglo: con `pc_transport_f28` el
 hueco de poro se CONGELA en α^n al inicio del paso (`mod_multiphase.f90`) y no
 se actualiza dentro del bucle `n_pc_max > 1`. En la vista condensada (Plan H)
 `liq_old%alpha` ya incluye la escoria: no sumar `ws_sp_asl` (hallazgo ALTO de
@@ -67,8 +68,11 @@ una celda llena (la auditoría 20 lo señaló con α_s > 0.975, donde la recepto
 no entra en la máscara de continuidad) no se corta: su entrada la sigue
 acotando el limitador de α con `liq_cap`, como antes de J-B.
 
-## Pendiente (auditoría 20)
-- M20-2: separar el hueco congelado (`face_open`, J-B) del hueco del iterado
-  (fsat, F2.31, `fs_full`).
-- M20-3: signo de `face_open` que cambia entre outers (latch por paso).
-- M20-5: caso `n_pc_max > 1` y gate de `vol_dalpha_outer` en `bed_drain`.
+## Cerrados (auditoría 20)
+- M20-2: separar el hueco congelado (`face_open`, J-B) del del iterado (fsat,
+  F2.31, `fs_full`): PROBADO Y NO ADOPTADO, empeora el pozo de 281 s.
+- M20-3: el enlace cambia entre correcciones en ~1 % de las caras, sin
+  relación con las ráfagas: medido sin acción.
+- M20-5: caso 6 (r, θ) de `test_transport_f28` y gates `bed_drain_outer` /
+  `bed_drain_unlinked` en `check_drain.py`; `n_pc_max > 1` sin cubrir (no es
+  default).

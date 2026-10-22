@@ -7,7 +7,8 @@
 # para que haya colapso: el colapso que atraviesa la escoria lo cubre el caso
 # 3 de test_scrap_collapse; en integracion queda sin banco), sin arco,
 # radiacion ni quimica. n9 (1x3x3) corta z entre el tope del acero y el primer
-# nivel cargado. CIFRAS ESTIMADAS: medir y ajustar.
+# nivel cargado. MEDIDO (21-oct, golden v129): clip de escoria 2.4e-11 kg de
+# 6e4; descomposicion n9 1.9e-6 (u_z del gas); reinicios 5 y 15 bit a bit.
 nr = 12
 ntheta = 24
 nz = 16

@@ -3,9 +3,10 @@
 # receta que bed_flood (lecho denso abajo, suelto arriba) a 1700 K sin heel ni
 # arco: la palanca funde ~48 % en el paso 1 y deja liquido continuo en los poros
 # (alpha_l >= 0.01 en el lecho). Criterio (check_drain.py): el centroide
-# vertical del liquido baja >= 0.1 m entre el primer snapshot con liquido y el
-# ultimo. Medido: 0.23 m con la flotacion relativa del lecho; 0.02 m sin ella
-# (el liquido quedaba colgado: el bug N-C1).
+# vertical del liquido baja >= 0.19 m (--min-drop) entre el primer snapshot con
+# liquido y el ultimo, velocidad media 0.42..1.0 m/s, y (auditoria 20, M20-5)
+# vol_dalpha_outer y vol_unlinked acotados. Medido: 0.21-0.23 m con la
+# flotacion relativa del lecho; 0.02 m sin ella (el bug N-C1).
 nr = 12
 ntheta = 24
 nz = 16
