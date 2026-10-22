@@ -586,3 +586,11 @@ guarda sin leer su causa.
   iteración externa.
 - `u_liq_max ≥ 20` del audit es líquido DISPERSO (ya documentado arriba):
   no reportarlo como centinela.
+- **Corrector interno α↔p `n_pc_max = 3` (código existente, sin cambios)
+  PROBADO EN B1 Y NO ADOPTADO**: empeora desde el primer segundo. 340–342 s:
+  28.9 % centinela (base 0.3 %), p_max 1.5 MPa; 342–344 s 39.5 % (base 2.5 %);
+  342.45–342.56 s 24.7 % (base 3.7 %). La variante con momento congelado
+  (α re-transportada con flujos de una presión aún no convergida) amplifica
+  el ciclo en vez de amortiguarlo. Converger α con p exige un acople
+  implícito de verdad (α y p en el mismo sistema o con la linealización
+  ∂α/∂p en la fila), no iterar el segregado.
