@@ -561,3 +561,28 @@ guarda sin leer su causa.
   celda que se llena dentro del paso queda abierta hasta el siguiente; el
   enlace cambia entre correcciones en ~1 % de las caras, sin relación con las
   ráfagas (M20-3, medido sin acción).
+
+## 22-oct-2026 (B1 258–345 s): presión total en las aberturas y F2.31 por paso
+
+- **Aberturas del techo con presión total (`pc_outlet_total_pressure`, ON,
+  8f568fc, golden v131)**: la ráfaga de gas de 258.5 s era reflujo sin freno
+  por el agujero del electrodo 2. Quitada (gas 66 vs 300 m/s). Pendiente M3:
+  el gas aspirado entra con la T y composición de la celda.
+- **Juez largo `judge_otp_280` (280→345.5 s, detenido)**: el muro sigue. A
+  342.5 s, celdas del FONDO (k = 1) del baño con chatarra residual sumergida
+  (α_s 0.013–0.08 ≥ ALPHA_BED, α_g en el piso 0.015) ciclan en 2 pasos (α_g
+  0.015 ↔ 0.02, p ±40–90 kPa) y escalan a 1.06 MPa a 345 s. Sonda en
+  (10,60,2): F2.31 excluye el gas en el TERCER outer porque su demanda
+  (ρ_g − ρ_eos(p^n))/ρ_g crece dentro del paso con el error de presión (src
+  1.5e-5 → 2.3e-3 > cg·P_VENT 2.0e-3); la fila pierde la conductancia del gas
+  (aP/12) y salta a 413 kPa.
+- **F2.31 decidido una vez por paso (`pc_f231_step_freeze`) PROBADO Y NO
+  ADOPTADO**: quita el pico de 342.535 s (413 → 101 kPa) y mejora 340–344 s,
+  pero el ciclo de 2 pasos del piso sigue creciendo y a 344.83 s se traba en
+  2 MPa (344–346 s: 34 % centinela frente a 6.7 %). Parche no versionado.
+  Quinta regla local sobre la misma familia (D, E, F, G): confirma la lección
+  de Plan D — el ciclo α–p del poro sumergido no se cura clasificando; hace
+  falta converger transporte de α + limitador con la presión dentro de la
+  iteración externa.
+- `u_liq_max ≥ 20` del audit es líquido DISPERSO (ya documentado arriba):
+  no reportarlo como centinela.
