@@ -12,10 +12,11 @@
   bed_drain_outer  max vol_dalpha_outer del audit <= --max-vdo m3 (auditoria 20,
                  M20-5): con Plan J-B el hueco de poro se congela en alpha^n;
                  sin el congelado la cara se cierra y reabre entre iteraciones
-                 externas (medido: 2.5e-2 frente a 1.45e-4).
+                 externas (medido en n1 y en n4, el del harness, 21-oct:
+                 2.5e-2 frente a 1.45e-4).
   bed_drain_unlinked  suma de |vol_unlinked| <= --max-unlinked m3 (M20-5): sin
                  J-B el transporte rellena caras que el Poisson cerro (medido:
-                 5.0 frente a 0.12).
+                 5.0 frente a 0.12; igual en n1 y n4).
 
 Uso: check_drain.py RUNDIR [--min-drop 0.19] [--min-speed 0.42] [--max-vdo 2e-3]
      [--max-unlinked 1.0] [--xfail ids]
