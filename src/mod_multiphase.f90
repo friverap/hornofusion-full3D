@@ -501,7 +501,9 @@ contains
                 ! (Plan H) fuera de la vista: transporte condensado acero+escoria
                 ! desde el estado de inicio de paso (liq_old acero, ws_sp_*)
                 call cond_view_exit(liq, liq_old)
-                if (cfg%n_pc_max > 1) a_prev = liq%alpha
+                ! (auditoria 21, B21-F2) el criterio mide el CONDENSADO: una
+                ! pasada que solo mueve escoria no esta convergida
+                if (cfg%n_pc_max > 1) a_prev = liq%alpha + slag%alpha_sl
                 call solve_condensed_fraction(liq, gas, sol, slag, ws_sp_asl, ws_sp_es, &
                                               ws_sp_mx, liq_old%alpha, m, cfg)
             else
@@ -532,6 +534,7 @@ contains
                 end where
                 end if
                 end if
+                if (cond) a_prev = a_prev - slag%alpha_sl
                 dalpha_loc = maxval(abs(liq%alpha(istart:iend,jstart:jend,kstart:kend) &
                                       - a_prev(istart:iend,jstart:jend,kstart:kend)))
                 if (m%is_parallel) then
