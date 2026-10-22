@@ -32,7 +32,7 @@ program eaf_3d_simulator
     use mod_continuity
     use mod_multiphase
     use mod_mixture_3d
-    use mod_workspace, only: ensure_workspace, ws_liq_cont_prev, ws_sp_asl, ws_sp_es, ws_sp_mx, ws_Tsrc, ws_flux_valid, ws_cc, ws_cc_new, ws_cc_drop, ws_p_n, ws_Fg_valid, &
+    use mod_workspace, only: ensure_workspace, ws_liq_cont_prev, ws_sp_asl, ws_sp_es, ws_sp_mx, ws_Tsrc, ws_flux_valid, ws_Fc_valid, ws_cc, ws_cc_new, ws_cc_drop, ws_p_n, ws_Fg_valid, &
                              ws_liq_cont, ws_liq_cont_valid
     use mod_solid_phase
     use mod_melting_3d
@@ -568,8 +568,11 @@ program eaf_3d_simulator
         ! paso (el momento del liquido los usa desde la 2a iteracion externa,
         ! M24); los del paso anterior no se arrastran: no son estado del
         ! snapshot y romperian el reinicio bit a bit. Igual los del gas (M24)
+        ! y los conservativos del Poisson (auditoria 20, B20-1: sin esto un paso
+        ! sin Poisson leeria los ws_Fc del paso anterior en el transporte)
         ws_flux_valid = .false.
         ws_Fg_valid = .false.
+        ws_Fc_valid = .false.
         ! (Plan H) estado de la escoria al INICIO del paso: el transporte
         ! condensado de cada iteracion externa parte de el
         if (slag_condensed_on(cfg)) then
