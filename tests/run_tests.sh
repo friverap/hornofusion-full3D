@@ -504,6 +504,10 @@ full | rebaseline)
         $PY $INT/check_slag_bed.py "$OUT/ecs_slag_n9"
     run_script "bucket2_slag_bed" \
         $PY $INT/check_slag_bed.py "$OUT/cold_bucket2_slag_n9"
+    # (auditoria 21, B21-C2) la cesta ATRAVIESA la escoria (I2): 288 de 576
+    # celdas de escoria reciben chatarra; con thru = .false. 0 (mutacion)
+    run_script "bucket2_slag_through" \
+        $PY $INT/check_bucket2.py "$OUT/cold_bucket2_slag_n9" --pre 5 --post 15
     run_script "decomposition_ecs_slag" \
         $PY $INT/compare_decomposition.py "$OUT/ecs_slag_n1" "$OUT/ecs_slag_n9" --rtol 2e-5
     run_script "decomposition_ecs_slag_r" \
