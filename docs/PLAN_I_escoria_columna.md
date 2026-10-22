@@ -126,6 +126,16 @@ los tests bit a bit. Falta EJECUTAR (gates de abajo).
    kt|kt+1 y θ); flow n1 frente a n7 (corta 2|3) y n5 (corta 3|4); rtol
    1e-7. n4 y n9 cortan lejos de la interfaz (no prueban los planos 2D).
    Re-medir kb/kt con I1 antes de fijar los np.
+   **HECHO (21-oct, HEAD f57e950):** kb/kt sin cambio con I1 (thick 19/20,
+   flow 3/3, índices desde 1). thick n1 frente a n7 (1x1x7) 4.6e-8 y n12
+   (1x2x6) 2.2e-8: PASA 1e-7. flow NO llega a 1e-7 con ninguna
+   descomposición, tampoco la que corta lejos (n4 1x2x2: X_C 4.3e-6; n5,
+   corte kt|kt+1: 4.7e-6; n7, corte kb−1|kb: S_chem 3.2e-5). El exceso de n7
+   es el TDMA de especies con 2 barridos (`max_inner_mom = 2` del banco,
+   halos entre barridos): con 30 barridos S_chem cae a 1.1e-7 e Y_CO de 5.4e-6
+   a 3.2e-7; X_C ~5e-6 queda igual en todas (nivel del banco con flujo).
+   `slag_oxidation_column` es invariante por construcción (un dueño por
+   valor de plano, suma de ceros). Sin defecto del Plan I.
 5. Reinicio con escoria en el tramo con oxidación: `slag_chem_flow` 4→4 (ya
    existe) y 4→7 (rtol 1e-10); thick con `output_freq` 15 y 4→12.
 6. Banco nuevo `ecs_slag` (config ya en tests/integration/configs, 60 t de
