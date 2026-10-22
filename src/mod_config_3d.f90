@@ -104,6 +104,7 @@ contains
         cfg%mixture_model = .false.       ! Plan G (oct-2026): en evaluacion
         cfg%tol_alpha_mix = 1.0e-4_dp
         cfg%mix_eps_perm_min = 0.0_dp
+        cfg%pc_outlet_total_pressure = .true.    ! ON desde 21-oct-2026: rafaga de gas de B1 258.5 s (reflujo por el agujero del electrodo 2) 0.5 % -> 0 % centinela
         cfg%pc_drift_source = .true.      ! Plan E E2: ON desde 20-oct-2026 (juez B1 275-300 s: p_max 1.1 MPa -> < 95 kPa); el banco e12ns no lo veia
         cfg%pc_spill_source = .false.
         cfg%pc_transport_f28 = .true.     ! Plan J-B: ON desde 21-oct-2026 (ventana B1 280-281.6 s: centinela 2.6 % -> 0 %)
@@ -356,6 +357,7 @@ contains
         case ('tol_alpha_mix'); call parse_real(val, key, cfg%tol_alpha_mix)
         case ('mix_eps_perm_min'); call parse_real(val, key, cfg%mix_eps_perm_min)
         case ('pc_drift_source'); cfg%pc_drift_source = parse_bool(val)
+        case ('pc_outlet_total_pressure'); cfg%pc_outlet_total_pressure = parse_bool(val)
         case ('pc_transport_f28'); cfg%pc_transport_f28 = parse_bool(val)
         case ('pc_spill_source'); cfg%pc_spill_source = parse_bool(val)
         case ('n_pc_max'); call parse_int(val, key, cfg%n_pc_max)

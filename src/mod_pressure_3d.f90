@@ -888,6 +888,55 @@ contains
                 end do
             end do
         end block
+
+        !-------------------------------------------------------------------
+        ! Aberturas del techo (agujeros de los electrodos, Dirichlet pp = 0)
+        ! con REFLUJO: presion TOTAL ambiente, p = p0 - 1/2 rho_g u_in^2 si el
+        ! gas entra (u_in > 0, ver abajo), p0 si sale (totalPressure +
+        ! pressureInletOutletVelocity de OpenFOAM; "backflow" de las salidas
+        ! de presion de Fluent). Con p = 0 fijo en la celda el caudal de
+        ! entrada no tenia freno: el chorro bajaba la presion debajo y se
+        ! realimentaba hasta U_GAS_MAX (B1 258.52-258.56 s: borde del agujero
+        ! del electrodo 2, chorro de 2 m a 290 m/s con 1.4 kPa de succion;
+        ! Bernoulli da ~110 m/s). Sub-relajado con alpha_p, por iteracion.
+        !-------------------------------------------------------------------
+        ! (dirigida) solo donde el gas del Poisson se corrige (dos fluidos,
+        ! gas_in_poisson; la mezcla resuelve su presion aparte); u_in acotada
+        ! a U_GAS_MAX (cap_gas_velocity corre despues) y p a P_HYDRO_CAP: la
+        ! salida es el ancla del nivel de presion; un NaN no se escribe. Una
+        ! abertura sin gas (alpha_g < ALPHA_FLOW_CUTOFF) no se relaja y conserva
+        ! el valor que tenga (Dirichlet fijo, como sin la clave): p0 es la
+        ! columna de GAS y alli no hay gas que refluya
+        if (cfg%pc_outlet_total_pressure .and. at_zmax .and. cfg%solve_multiphase &
+            .and. cfg%gas_in_poisson .and. .not. cfg%mixture_model .and. ws_Fg_valid) then
+            block
+            real(dp) :: u_in, p_new
+            k = kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (.not. any(m%is_electrode(i,j,k,:))) cycle
+                    if (gas%alpha(i,j,k) < ALPHA_FLOW_CUTOFF) cycle
+                    ! velocidad de ENTRADA = masa que la celda de salida inyecta
+                    ! netamente al dominio por sus caras (la abertura absorbe
+                    ! el desbalance; mismo criterio que m_gas_out del audit)
+                    ! sobre rho_g y el area de la abertura; u_z de centro no
+                    ! vale: en el borde del agujero el gas entra de lado
+                    u_in = outlet_inflow_velocity(ws_Fg_r(i,j,k), ws_Fg_r(i-1,j,k), ws_Fg_th(i,j,k), &
+                        ws_Fg_th(i,j-1,k), ws_Fg_z(i,j,k-1), gas%rho(i,j,k), m%vol(i,j,k), m%zf(k) - m%zf(k-1))
+                    ! referencia p0: la columna de gas de media celda sobre el
+                    ! centro (la de initialize_hydrostatic_pressure con la
+                    ! cara superior a 0): en reposo el objetivo es el valor
+                    ! inicial y el Dirichlet no se mueve (relajar hacia 0
+                    ! desequilibraba slag_rest y bath_test_stretch)
+                    p_new = outlet_total_pressure(sh%p(i,j,k), &
+                        gas%rho(i,j,k) * GRAVITY * (m%zf(k) - m%z(k)), gas%rho(i,j,k), u_in, cfg%alpha_p)
+                    if (p_new /= p_new) cycle
+                    sh%p(i,j,k) = p_new
+                end do
+            end do
+            end block
+        end if
         call mpi_exchange_halos_3d(sh%p, m%topo)
 
         deallocate(gpr, gpth, gpz, act_l, act_g, ag_eff, sealed, lcoef, gadv, qin_g, su_cc)
@@ -1856,5 +1905,35 @@ contains
 
     end subroutine correct_velocities
 
+    !---------------------------------------------------------------------------
+    ! Presion de una abertura del techo con reflujo (pc_outlet_total_pressure):
+    ! objetivo p0 - 1/2 rho u_in^2 con u_in = velocidad de ENTRADA (<= 0: el gas
+    ! sale y el objetivo es p0), u_in acotada a U_GAS_MAX y el objetivo a
+    ! -P_HYDRO_CAP; sub-relajado con a_p sobre p_old en forma incremental (exacta
+    ! si p_old ya es el objetivo: en reposo el ancla no se mueve ni 1 ulp).
+    ! Con NaN en p0, rho o u_in el resultado es NaN (max() de gfortran lo
+    ! tragaria): quien llama no lo escribe (test_outlet_total_pressure)
+    !---------------------------------------------------------------------------
+    pure real(dp) function outlet_total_pressure(p_old, p0, rho, u_in, a_p) result(p_new)
+        real(dp), intent(in) :: p_old, p0, rho, u_in, a_p
+        real(dp) :: u, t
+        u = min(U_GAS_MAX, max(0.0_dp, u_in))
+        t = p0 - 0.5_dp * rho * u**2
+        if (t == t) t = max(-P_HYDRO_CAP, t)
+        if (u_in /= u_in) t = u_in
+        p_new = p_old + a_p * (t - p_old)
+    end function outlet_total_pressure
+
+    !---------------------------------------------------------------------------
+    ! Velocidad de ENTRADA por la abertura de una celda de salida del techo: la
+    ! masa que la celda inyecta netamente al dominio por sus caras (fe, fn de
+    ! cara +; fw, fs de cara -; fb la cara inferior, todos positivos hacia +;
+    ! la abertura absorbe el desbalance, = -m_gas_out del audit) sobre rho y el
+    ! area de la abertura (vol/dz). > 0 entra gas, < 0 sale
+    !---------------------------------------------------------------------------
+    pure real(dp) function outlet_inflow_velocity(fe, fw, fn, fs, fb, rho, vol, dz) result(u_in)
+        real(dp), intent(in) :: fe, fw, fn, fs, fb, rho, vol, dz
+        u_in = (fe - fw + fn - fs - fb) * dz / max(rho * vol, SMALL)
+    end function outlet_inflow_velocity
 
 end module mod_pressure_3d
