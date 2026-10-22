@@ -598,6 +598,11 @@ contains
         if (cfg%n_pc_max > 1 .and. cfg_root()) print '(A)', &
             ' [CONFIG] NOTA: n_pc_max > 1: la cancelacion del Rhie-Chow (bed_rel_f/bed_rel_fp con ' // &
             'own_weight_face) no es exacta desde la segunda pasada (auditoria 5, B5-8)'
+        ! (auditoria 21, B21-F1) el cierre de caras por ws_lim_step no esta
+        ! congelado por paso: con el corte de J-B la cara cierra, la receptora
+        ! deja de recibir, ws_lim_step vuelve a 1 y reabre (ciclo entre outers)
+        call require(.not. (cfg%pc_limiter_faces .and. cfg%pc_transport_f28), &
+                     'pc_limiter_faces es incompatible con pc_transport_f28', ok)
         if (cfg%solve_ecs) then
             call require(cfg%ecs_vfrac > 0.0_dp .and. cfg%ecs_vfrac <= 1.0_dp, &
                          'ecs_vfrac must be in (0, 1]', ok)
