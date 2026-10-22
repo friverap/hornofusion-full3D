@@ -272,6 +272,9 @@ contains
             call solve_alpha_bounded_implicit(liq, gas, sol, alpha_slag, &
                                               alpha_old, m, cfg, ur_e, uth_e, uz_e)
             ws_lim_step_valid = .false.
+            ! (auditoria 21, B21-P2) la fuente E2 de un transporte anterior no
+            ! corresponde a estos flujos
+            ws_pc_unl_valid = .false.
             if (adv) then
                 ! (Plan H, auditoria P4 M3) sin flujos de cara la escoria no se
                 ! mueve: queda en su celda acotada por el condensado nuevo (lo
