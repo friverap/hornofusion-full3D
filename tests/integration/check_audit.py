@@ -410,12 +410,16 @@ def main():
                f"resolid={m_res:.3e}, clip={m_clip:.3e}), "
                f"err rel={err:.3e} (max {tol_l:.3e})")
     # -- alpha_clip (M3-5): el recorte auditado tiene cota --------------------
-    chk.report("alpha_clip", abs(m_clip) <= args.ctol * max(abs(m_melt), 1.0),
-               f"clip auditado {m_clip:.3e} kg sobre fundido {m_melt:.3e} kg "
-               f"(max {args.ctol} relativo)")
+    # (auditoria 21, B21-C1) cota sobre la suma de |clip| por paso: el recorte
+    # final mete clip NEGATIVO cuando a_pre < 0 (congelacion + salida) y con
+    # la suma con signo un +X y un -X se cancelaban
+    m_clip_abs = sum(abs(r["m_alpha_clip"]) for r in steps)
+    chk.report("alpha_clip", m_clip_abs <= args.ctol * max(abs(m_melt), 1.0),
+               f"sum|clip| auditado {m_clip_abs:.3e} kg (neto {m_clip:.3e}) sobre fundido "
+               f"{m_melt:.3e} kg (max {args.ctol} relativo)")
     if args.clip_abs_max is not None:
-        chk.report("alpha_clip_bounded", abs(m_clip) <= args.clip_abs_max,
-                   f"clip auditado {m_clip:.3e} kg (techo {args.clip_abs_max:.1e} kg)")
+        chk.report("alpha_clip_bounded", m_clip_abs <= args.clip_abs_max,
+                   f"sum|clip| auditado {m_clip_abs:.3e} kg (techo {args.clip_abs_max:.1e} kg)")
     if any("m_steel_deficit" in r for r in steps):
         chk.report("steel_deficit_bounded", m_def <= args.ctol * max(abs(m_melt) + abs(m_res), 1.0),
                    f"acero creado por deficit de congelacion {m_def:.3e} kg (max {args.ctol} relativo)")
