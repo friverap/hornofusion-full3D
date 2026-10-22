@@ -134,10 +134,12 @@ run_restart_case() {
         note_fail
         return 1
     fi
-    local rtol=1e-12
-    [ "$np" = "$npb" ] || rtol=1e-10   # (medido 8.5e-13; antes 1e-3)
+    # (auditoria 21, B21-P3) con el mismo n de ranks BIT A BIT (rtol 0;
+    # medido 0.0 en todos) y tambien el estado entre pasos de /restart
+    local rtol=0
+    [ "$np" = "$npb" ] || rtol=1e-10   # (medido 3.9e-14; antes 1e-3)
     run_script "restart_${base}_n${npb}_to_n${np}" \
-        $PY $INT/compare_decomposition.py "$dir" "$src" --rtol $rtol
+        $PY $INT/compare_decomposition.py "$dir" "$src" --rtol $rtol --with-restart
     # (auditoria 4, B4-19) el tramo reanudado pasa los mismos gates que una
     # corrida y su audit.csv coincide con el de la continua
     check_invariants_case "$dir" "$base"

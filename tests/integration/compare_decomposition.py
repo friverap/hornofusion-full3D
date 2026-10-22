@@ -12,12 +12,18 @@ barridos fijos no convergidos); la tolerancia arranca en 1e-3 (post C1.2)
 y se endurece a 1e-6 tras la Etapa 2 subiendo iteraciones internas en el
 config de test, nunca aflojando la tolerancia.
 
+Con --with-restart compara ademas el grupo /restart del snapshot (estado
+entre pasos: liq_cont_prev, comp_carry, layer_id, m_C, Tg_end, ...): el gate
+de reinicio (auditoria 21, B21-P3) exige que ese estado tambien coincida.
+
 Uso: compare_decomposition.py DIR_A DIR_B [--rtol 1e-3] [--floor 1e-10]
+                              [--with-restart]
 """
 import argparse
 import os
 import sys
 
+import h5py
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -30,12 +36,19 @@ def main():
     ap.add_argument("dir_b")
     ap.add_argument("--rtol", type=float, default=1e-3)
     ap.add_argument("--floor", type=float, default=1e-10)
+    ap.add_argument("--with-restart", action="store_true")
     args = ap.parse_args()
 
     fa = snapshots(args.dir_a)[-1]
     fb = snapshots(args.dir_b)[-1]
     fields_a, _, meta_a = load_snapshot(fa)
     fields_b, _, meta_b = load_snapshot(fb)
+    if args.with_restart:
+        for path, fields in ((fa, fields_a), (fb, fields_b)):
+            with h5py.File(path, "r") as h:
+                if "restart" in h:
+                    for name, ds in h["restart"].items():
+                        fields["rst:" + name] = np.asarray(ds[()], dtype=float)
 
     if int(meta_a["step"]) != int(meta_b["step"]):
         print(f"FAIL: pasos finales distintos ({meta_a['step']} vs "
