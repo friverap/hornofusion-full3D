@@ -24,5 +24,12 @@ Auditoria dirigida de `$ARGUMENTS` (si no se da rango: el ultimo commit,
    dirigida corta del propio arreglo.
 4. Hallazgos que no se corrigen: medirlos o documentar la causa (xfail con
    causa en `tests/xfail.list`, o el plan/auditoria correspondiente).
-5. Si el cambio toca la ruta legada con escoria apagada, cierra con
+5. Registro (harness co-investigador): cada hallazgo entra a
+   `research/ledger.jsonl` como `--tipo resultado --estado propuesta` con su
+   id (A1, M2...) en el enunciado y el workstream del cambio; al verificarse
+   el arreglo, un evento `--ref` con `--estado soportada` y la evidencia (test
+   que falla sin el arreglo, comando). «¿Cuántos hallazgos van resueltos?» se
+   contesta con `ledger.py open`, distinguiendo aplicado, verificado y
+   cerrado (commit con compuerta, `/workstream`).
+6. Si el cambio toca la ruta legada con escoria apagada, cierra con
    `/verificacion-bitwise`.

@@ -11,5 +11,12 @@ golden=$(ls tests/golden/metrics_v*.json 2>/dev/null | sed 's/.*metrics_v\([0-9]
 running=$(pgrep -fl 'eaf3d' 2>/dev/null | grep -v -e pgrep -e estado_sesion | head -3)
 [ -z "$running" ] && running="ninguna"
 ctx="EAF3D (estado al iniciar): rama ${branch}, HEAD ${head}; ${dirty} archivo(s) versionado(s) modificado(s); golden vigente v${golden}. Corridas EAF3D activas: ${running//$'\n'/; }. El hook guard_corridas bloquea make/mpirun y escrituras en bin/ mientras haya una corrida activa (corridas solo secuenciales)."
+# harness co-investigador (research/README.md): lo abierto y lo refutado del
+# registro, para que la sesion no reconstruya el estado de memoria
+if [ -f scripts/research/ledger.py ] && [ -f research/ledger.jsonl ]; then
+    reg=$(python3 scripts/research/ledger.py open 2>&1 | head -14)
+    chk=$(python3 scripts/research/ledger.py check 2>&1 | tail -1)
+    ctx="${ctx} Registro research/ (${chk}): ${reg//$'\n'/ | }. Reporta estados SOLO desde el registro (/estado); commits de src/ y tests/ pasan por la compuerta guard_cierre (/workstream)."
+fi
 jq -n --arg c "$ctx" '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $c}}'
 exit 0

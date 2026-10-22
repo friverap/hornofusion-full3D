@@ -76,6 +76,21 @@ Detailed docs, read before non-trivial changes: `docs/ARCHITECTURE.md` (modules,
   persiste entre pasos entra al snapshot de reinicio en el mismo commit.
 - Documentacion y comentarios en espanol.
 
+## Harness co-investigador (`research/`)
+
+Replica de *AI co-mathematician* (arXiv 2605.06651); convenciones en
+`research/README.md`. Ciclo: `/pregunta` (pregunta y metas aprobadas) →
+`/preregistro` (prediccion con criterio numerico ANTES de correr) →
+experimento → `research/ws/<WS>/report.md` (afirmaciones `{C-nnn}`, fuente
+de cada numero) → `/workstream` (panel auditor-eaf3d + revisor-evidencia +
+revisor-refutador, unanimidad, max 3 rondas) → `make test-quick` →
+commit. El hook `guard_cierre.sh` bloquea commits de `src/`/`tests/` sin esa
+compuerta para el diff exacto; `research/ledger.jsonl` es append-only
+(`scripts/research/ledger.py`). Estados al usuario SOLO desde el registro
+(`/estado`): aplicado ≠ verificado ≠ cerrado. Un resultado que no cumple su
+criterio pre-registrado es `refutada`; cambiar el criterio exige `enmienda`
+con motivo y antes del veredicto.
+
 ## Convenciones numericas (indice)
 
 El detalle de cada convencion, con su causa medida, esta en `.claude/rules/`
