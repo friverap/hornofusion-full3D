@@ -1,0 +1,17 @@
+{
+ "ws": "WS-K1",
+ "meta": "G1",
+ "estado": "abierto",
+ "ronda": 0,
+ "numerico": true,
+ "prediccion": "C-025",
+ "diff_sha": null,
+ "test_quick": null,
+ "revisores": {
+  "auditor-eaf3d": null,
+  "revisor-evidencia": null,
+  "revisor-refutador": null
+ },
+ "creado": "2026-10-22T17:31:49-06:00",
+ "actualizado": "2026-10-22T17:32:08-06:00"
+}
