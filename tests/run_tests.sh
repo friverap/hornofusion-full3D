@@ -625,6 +625,11 @@ full | rebaseline)
     # congelacion y la descomposicion que parte r
     run_restart_case bed_drain 4 4 150
     run_restart_case bath_freeze 4 4 50
+    # (auditoria 20, B20-6) reinicio con PELICULA en la banda de histeresis
+    # [ALPHA_FLOW_CUTOFF, 2 ALPHA_FLOW_CUTOFF) sobre el bano (20 celdas con
+    # liq_cont_prev en el paso 750): sin restaurar la mascara previa del
+    # snapshot el reinicio difiere 1.0 en u_z del gas (mutacion medida)
+    run_restart_case bed_flood 4 4 750
     run_restart_case cold_10step 12 12 5
     # (M3-10) reinicios de ECS, escoria con flujo+quimica+especies, y n8 -> n12
     run_restart_case ecs_test 8 8 10
