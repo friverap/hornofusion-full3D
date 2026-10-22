@@ -138,6 +138,10 @@ run_restart_case() {
     # medido 0.0 en todos) y tambien el estado entre pasos de /restart
     local rtol=0
     [ "$np" = "$npb" ] || rtol=1e-10   # (medido 3.9e-14; antes 1e-3)
+    # el audit conserva su tolerancia (compare_audit escala un piso de
+    # inventario con 1/rtol: no admite 0)
+    local artol=1e-12
+    [ "$np" = "$npb" ] || artol=1e-10
     run_script "restart_${base}_n${npb}_to_n${np}" \
         $PY $INT/compare_decomposition.py "$dir" "$src" --rtol $rtol --with-restart
     # (auditoria 4, B4-19) el tramo reanudado pasa los mismos gates que una
@@ -147,7 +151,7 @@ run_restart_case() {
     # sobre una ventana corta no tiene el S_gas de los primeros pasos
     check_audit_if_present "$dir" "audit_restart_${base}" "$(audit_extra_args "$base")" "$base"
     run_script "restart_audit_${base}_n${npb}_to_n${np}" \
-        $PY $INT/compare_audit.py "$dir" "$src" --from-step "$st" --rtol $rtol $( [ "$np" = "$npb" ] || echo --decomp )
+        $PY $INT/compare_audit.py "$dir" "$src" --from-step "$st" --rtol $artol $( [ "$np" = "$npb" ] || echo --decomp )
 }
 
 # run_wallstop_case <base> <np>  (auditoria 16, M16-I2)
