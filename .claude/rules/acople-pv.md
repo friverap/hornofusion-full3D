@@ -529,9 +529,12 @@ guarda sin leer su causa.
   resta (limitador y derrame). Causa: con el interruptor en ALPHA_BED una celda
   que fundía de 0.0101 a 0.0099 liberaba de golpe 0.015 de hueco: ráfagas de
   B1 a 241 s. La rampa POR ENCIMA (ALPHA_BED → 2 ALPHA_BED, 4547861) llevó el
-  juez a 2 MPa: no usarla. **Abierto (auditoría 20, A20-2)**: `ws_liq_room`,
-  `fsat_cell` y `ws_bed` siguen con el escalón en ALPHA_BED; en la banda el
-  limitador recorta y el Poisson no cierra.
+  juez a 2 MPa: no usarla. El hueco de la banda (ALPHA_BED/2..ALPHA_BED) lo ve
+  SOLO el limitador: `ws_liq_room`, `fsat_cell` y `ws_bed` siguen con el
+  escalón en ALPHA_BED A PROPÓSITO. Llevarlo al Poisson (F2.8 cerrando caras
+  hacia la banda) se probó y se RECHAZÓ (auditoría 20, A20-2, 4645f55): B1
+  255–258 s 12–33 % de pasos en centinela frente a 0 %. El desfase
+  limitador/Poisson en la banda se acepta (el derrame sube lo recortado).
 - **Película de superficie con HISTÉRESIS (3c4bf52)**: una celda de película
   nueva entra con α_l ≥ 2·ALPHA_FLOW_CUTOFF y una que ya era continua se queda
   con ≥ ALPHA_FLOW_CUTOFF (`liquid_continuity_mask(..., prev)`, con
@@ -543,7 +546,8 @@ guarda sin leer su causa.
   caras SIN enlace del Poisson en el último transporte del paso es fuente
   conocida del Poisson de la iteración siguiente (`ws_pc_unl`, drift-flux de
   Manninen). Juez B1 275–300 s: p_max 1.1 MPa → < 95 kPa. No actúa en el
-  outer 1 de cada paso (abierto, B20-4).
+  outer 1 de cada paso (su fuente es del transporte del paso; el residual del
+  outer 1 es coherente con eso: B20-4, cerrado sin cambio).
 - **J-B `pc_transport_f28` ON (2f0529b)**: una cara continuo|continuo que el
   Poisson dejó sin enlace (F2.8: receptora sin hueco) TAMPOCO transporta α
   (antes la rellenaba la velocidad de centro y el defecto se volvía un pozo de
@@ -551,5 +555,9 @@ guarda sin leer su causa.
   paso: con el del iterado la cara cerraba, la receptora no se llenaba, reabría
   y se llenaba (ciclo entre outers; bed_drain energy_balance_step ×8.9). En la
   vista condensada `liq_old%alpha` ya es acero+escoria (no sumar `ws_sp_asl`).
-  Abiertos: celda que se llena dentro del paso queda abierta hasta el siguiente;
-  fsat/F2.31 también ven el hueco congelado (M20-2).
+  Que fsat/F2.31/fs_full vean también el hueco congelado es A PROPÓSITO:
+  separarlos del de las caras (M20-2) se probó y empeoró el pozo de 281 s
+  (0.5 % centinela, p_max 156 kPa frente a 0 % y 94 kPa); no repetir. La
+  celda que se llena dentro del paso queda abierta hasta el siguiente; el
+  enlace cambia entre correcciones en ~1 % de las caras, sin relación con las
+  ráfagas (M20-3, medido sin acción).
