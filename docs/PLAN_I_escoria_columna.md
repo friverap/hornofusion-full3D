@@ -165,7 +165,9 @@ los tests bit a bit. Falta EJECUTAR (gates de abajo).
    Reinicios ecs 9→9 (paso 30) y cesta 9→9 (5 y 15): BIT A BIT (0.0). Los
    reinicios con distinto nº de ranks (ecs 9→12, flow 4→7) dan lo mismo que
    la corrida continua con esa descomposición: el snapshot está completo.
-   Pendiente del plan: thick con `output_freq` 15 y 4→12.
+   thick con `output_freq` 15, reinicio desde el paso 15: 4→4 bit a bit,
+   4→12 2.2e-8 (T_sl, rtol 1e-7). Gates 1-10 hechos; queda el 11 (juez
+   estadístico con escoria antes de usar el Plan I en campaña).
    **Gate 2 HECHO (21-oct):** 788287c frente a 15816f4 (punta de plan-i), rtol
    0: slag_chem_test n1/n8/n9, ecs_test n1/n8/n12, cold_bucket2 n4,
    arc_slag_legacy n4, arc_slag n4 y slag_rest n4 idénticos.
