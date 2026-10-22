@@ -105,6 +105,12 @@ class LedgerTest(unittest.TestCase):
         subprocess.run(["git", "-C", self.d, "add", "src/a.f90"], check=True)
         r = self.run_l("gate", "WS-T", ok=False)
         self.assertIn("diff_sha", r.stdout)
+        # re-aprobado el diff nuevo, el test_quick viejo no cuenta
+        self.run_l("ws-set", "WS-T", "diff_sha=auto")
+        r = self.run_l("gate", "WS-T", ok=False)
+        self.assertIn("test_quick", r.stdout)
+        self.run_l("ws-set", "WS-T", "test_quick=ok")
+        self.run_l("gate", "WS-T")
 
 
 if __name__ == "__main__":

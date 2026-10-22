@@ -249,6 +249,8 @@ def cmd_ws_set(a):
                 sys.exit(f"revisor desconocido {r}")
             st["revisores"][r] = {"veredicto": v, "ronda": st.get("ronda", 0)}
             continue
+        if k == "test_quick":
+            st["test_quick_sha"] = staged_sha()   # el ok vale solo para ESTE diff
         if k == "ronda":
             v = int(v)
         if k == "numerico":
@@ -266,7 +268,7 @@ def gate_errors(st, sha, ev):
         e.append(f"estado '{st.get('estado')}' (se exige 'aprobado')")
     if st.get("diff_sha") != sha:
         e.append("diff_sha no coincide con el diff staged de src/ y tests/ (la aprobacion es de OTRO diff)")
-    if st.get("test_quick") != "ok":
+    if st.get("test_quick") != "ok" or st.get("test_quick_sha") != sha:
         e.append("falta test_quick=ok sobre este diff")
     ronda = st.get("ronda")
     for r in REVISORES:
