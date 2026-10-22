@@ -597,6 +597,35 @@ full | rebaseline)
         $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n9" --rtol 1e-7
     run_script "decomposition_freeze" \
         $PY $INT/compare_decomposition.py "$OUT/bath_freeze_n1" "$OUT/bath_freeze_n4" --rtol 1e-5
+    # (auditoria 21, B21-T6) TODOS los pares de descomposicion, medido en la
+    # matriz de HEAD 032bc3d (golden v130), peor campo y su tolerancia:
+    #   arc_melt_n1 vs arc_melt_n4                     2.461e-13 (tol 1e-11, T_gas)
+    #   arc_melt_slag_heel_n1 vs arc_melt_slag_heel_n4 2.203e-10 (tol 1e-07, velocity_z_liquid)
+    #   arc_noscrap_n1 vs arc_noscrap_n4               6.147e-14 (tol 1e-11, S_rad)
+    #   arc_slag_legacy_n1 vs arc_slag_legacy_n4       1.687e-10 (tol 1e-09, T_gas)
+    #   arc_slag_n1 vs arc_slag_n12                    1.491e-13 (tol 1e-09, S_rad)
+    #   arc_slag_n1 vs arc_slag_n4                     1.385e-13 (tol 1e-09, G_rad)
+    #   bath_fill_n1 vs bath_fill_n4                   6.627e-09 (tol 1e-07, alpha_solid)
+    #   bath_freeze_n1 vs bath_freeze_n4               6.315e-08 (tol 1e-05, velocity_z_gas)
+    #   bath_freeze_n1 vs bath_freeze_n9               1.234e-08 (tol 1e-05, velocity_z_gas)
+    #   bath_test_n1 vs bath_test_n12                  2.964e-10 (tol 1e-08, velocity_z_gas)
+    #   bath_test_n1 vs bath_test_n4                   3.617e-10 (tol 1e-08, velocity_z_gas)
+    #   bed_bath_rest_n1 vs bed_bath_rest_n4           7.010e-09 (tol 1e-07, velocity_z_gas)
+    #   bed_drain_n1 vs bed_drain_n12                  9.908e-05 (tol 0.001, velocity_z_gas)
+    #   bed_drain_n1 vs bed_drain_n4                   7.780e-05 (tol 0.0005, velocity_z_gas)
+    #   cold_10step_n1 vs cold_10step_n12              3.324e-13 (tol 1e-10, velocity_r_gas)
+    #   cold_10step_n1 vs cold_10step_n8               3.433e-14 (tol 1e-10, G_rad)
+    #   cold_10step_n4 vs cold_10step_n8               3.011e-14 (tol 1e-10, G_rad)
+    #   cold_bucket2_slag_n1 vs cold_bucket2_slag_n9   1.947e-06 (tol 2e-05, velocity_z_gas)
+    #   ecs_slag_n1 vs ecs_slag_n12                    5.989e-06 (tol 6e-05, velocity_z_gas)
+    #   ecs_slag_n1 vs ecs_slag_n9                     1.405e-06 (tol 2e-05, velocity_z_liquid)
+    #   ecs_test_n1 vs ecs_test_n8                     2.049e-16 (tol 1e-12, alpha_solid)
+    #   ecs_test_n12 vs ecs_test_n1                    2.049e-16 (tol 1e-12, alpha_solid)
+    #   melt_forced_n1 vs melt_forced_n8               6.225e-11 (tol 1e-08, alpha_solid)
+    #   slag_chem_test_n1 vs slag_chem_test_n8         3.555e-09 (tol 1e-07, Y_CO)
+    #   slag_chem_test_n1 vs slag_chem_test_n9         3.553e-09 (tol 1e-07, Y_CO)
+    #   slag_chem_thick_n1 vs slag_chem_thick_n12      2.169e-08 (tol 1e-07, T_slag)
+    #   slag_chem_thick_n1 vs slag_chem_thick_n4       4.783e-08 (tol 1e-07, T_slag)
     # (M3-10) tolerancias ~100x lo medido entonces. Re-medido en la
     # auditoria 20 (M20-7, golden v128, HEAD d9112ef): drenaje 7.8e-5 (6.4x;
     # el 7e-6 de M3-10 ya no vale desde la rampa/J-B), llenado 6.6e-9,
