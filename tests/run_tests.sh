@@ -559,8 +559,10 @@ full | rebaseline)
         $PY $INT/compare_decomposition.py "$OUT/slag_chem_test_n1" "$OUT/slag_chem_test_n9" --rtol 1e-7
     run_script "decomposition_freeze" \
         $PY $INT/compare_decomposition.py "$OUT/bath_freeze_n1" "$OUT/bath_freeze_n4" --rtol 1e-5
-    # (M3-10) tolerancias ~100x lo medido: drenaje 7e-6, llenado 1e-6, arco
-    # con bano 4e-14, fusion forzada 1e-10
+    # (M3-10) tolerancias ~100x lo medido entonces. Re-medido en la
+    # auditoria 20 (M20-7, golden v128, HEAD d9112ef): drenaje 7.8e-5 (6.4x;
+    # el 7e-6 de M3-10 ya no vale desde la rampa/J-B), llenado 6.6e-9,
+    # arco con bano 6.1e-14, fusion forzada 6.2e-11
     run_script "decomposition_drain" \
         $PY $INT/compare_decomposition.py "$OUT/bed_drain_n1" "$OUT/bed_drain_n4" --rtol 5e-4
     run_script "decomposition_fill" \
@@ -572,7 +574,8 @@ full | rebaseline)
     # (A4-7) medido 2.4e-8 (n1 frente a n4, golden v92; 2e-9 en A4-7) y 1.4e-13 (B5-19: margen 4x, no 50x)
     run_script "decomposition_bedbath" \
         $PY $INT/compare_decomposition.py "$OUT/bed_bath_rest_n1" "$OUT/bed_bath_rest_n4" --rtol 1e-7
-    # (oct-2026) medido 1.3e-10 (T_gas); Y_* solo donde hay gas
+    # (oct-2026) medido 1.3e-10 (T_gas); Y_* solo donde hay gas. M20-7:
+    # arc_slag 1.4e-13 (n4) / 1.5e-13 (n12); arc_slag_legacy 1.7e-10 (5.9x)
     run_script "decomposition_arcslag" \
         $PY $INT/compare_decomposition.py "$OUT/arc_slag_n1" "$OUT/arc_slag_n4" --rtol 1e-9
     run_script "decomposition_arcslag_legacy" \
@@ -581,6 +584,9 @@ full | rebaseline)
         $PY $INT/compare_decomposition.py "$OUT/arc_slag_n1" "$OUT/arc_slag_n12" --rtol 1e-9
     run_script "decomposition_slagbed" \
         $PY $INT/compare_decomposition.py "$OUT/arc_melt_slag_heel_n1" "$OUT/arc_melt_slag_heel_n4" --rtol 1e-7
+    # M20-7: medido 4.8e-8 (T_slag, margen 2.1x): el mas justo de la matriz;
+    # un cambio que lo cruce debe diagnosticarse (orden de sumas en la
+    # quimica de escoria gruesa), no resolverse subiendo la tolerancia
     run_script "decomposition_slagthick" \
         $PY $INT/compare_decomposition.py "$OUT/slag_chem_thick_n1" "$OUT/slag_chem_thick_n4" --rtol 1e-7
     run_script "decomposition_arcmelt" \
