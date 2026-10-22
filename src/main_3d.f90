@@ -380,8 +380,9 @@ program eaf_3d_simulator
             mdot_ecs = interpolate_rate(ecs_prof, time)
             call ecs_feed(sol, gas, liq, mesh, cfg, mdot_ecs, cfg%dt, sh, slag)
             call solid_exchange_halos(sol, mesh)
-            if (mesh%is_parallel) &
-                call mpi_exchange_halos_3d(gas%alpha, mesh%topo)
+            ! (auditoria 21, B21-P1) sin el if: en serie el intercambio hace
+            ! el relleno periodico en theta (como B4-1 con las Y)
+            call mpi_exchange_halos_3d(gas%alpha, mesh%topo)
         end if
 
         ! Update electrode V/I from profile
