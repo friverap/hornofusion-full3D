@@ -594,3 +594,15 @@ guarda sin leer su causa.
   el ciclo en vez de amortiguarlo. Converger α con p exige un acople
   implícito de verdad (α y p en el mismo sistema o con la linealización
   ∂α/∂p en la fila), no iterar el segregado.
+- **Mismo mecanismo en 284.3 s y 294.1 s** (diag_g284b, diag_g294b): 284 s =
+  celda de chatarra compactada (α_s 0.975, gas en el piso) que cada 4 pasos se
+  rellena de golpe desde la celda de líquido puro de abajo (−99 kPa, gas a
+  −300 m/s por arriba); 294 s = celda sumergida junto al eje con α_s 0.011
+  (ciclo de 2 pasos, −85/+183 kPa). Las tres paradas de B1 son una familia.
+- **H0 del Plan K CONFIRMADO** (sonda temporal del limitador en (10,60,2),
+  diag_h0lim): desde 342.506 s el limitador alterna por PASO (idéntico en los
+  5 outers): pasos pares la entrada pedida 91→107 contra hueco ~27 ⇒ s 0.60→0.49;
+  impares la celda queda en su tope y la cara se cierra (entrada 0). La
+  demanda crece paso a paso. Complementariedad con retraso ⇒ Plan K
+  (docs/PLAN_K_limitador_en_poisson.md): restricción α_l ≤ cap dentro del Poisson
+  como conjunto activo.
