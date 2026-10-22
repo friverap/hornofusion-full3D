@@ -360,6 +360,10 @@ full | rebaseline)
     # (auditoria 18, A1) quimica con capa de escoria condensada gruesa
     run_case slag_chem_thick 4
     run_case slag_chem_thick 1
+    # (auditoria 21, M21-P2) n12 = 1x2x6 corta z en 20|21 (kt|kt+1 de la capa,
+    # interfaz kb 19 / kt 20) y theta: los planos de un dueno de la oxidacion
+    # por columna (I1) a traves de ranks
+    run_case slag_chem_thick 12
     # (Plan I, gates 6-8; auditoria 20, A20-1) ECS que desplaza una capa de
     # escoria (60 t, k0 llena) y cesta 2 que la atraviesa: n9 corta z en la
     # escoria, n12 corta r
@@ -417,6 +421,10 @@ full | rebaseline)
     # drenaje del lecho (B_f por caras), el llenado del bano, el arco con bano
     # (kbath / P_elec / Lorentz) y la fusion forzada
     run_case bed_drain 1
+    # (auditoria 21, M21-P1) n12 = 2x3x2 (la descomposicion de produccion)
+    # corta r en un caso con lecho y liquido: J-B, E2 (vol_unlinked lee
+    # ws_Fc_lk_r del halo) e histeresis en la cara r de bloque
+    run_case bed_drain 12
     run_case bath_fill 1
     run_case arc_noscrap 1
     run_case melt_forced 1
@@ -589,8 +597,11 @@ full | rebaseline)
     # arco con bano 6.1e-14, fusion forzada 6.2e-11
     run_script "decomposition_drain" \
         $PY $INT/compare_decomposition.py "$OUT/bed_drain_n1" "$OUT/bed_drain_n4" --rtol 5e-4
+    run_script "decomposition_drain_r" \
+        $PY $INT/compare_decomposition.py "$OUT/bed_drain_n1" "$OUT/bed_drain_n12" --rtol 1e-3
+    # (auditoria 21, M21-T3) fill medido 6.6e-9: rtol 1e-7 (antes 1e-4, 15 000x)
     run_script "decomposition_fill" \
-        $PY $INT/compare_decomposition.py "$OUT/bath_fill_n1" "$OUT/bath_fill_n4" --rtol 1e-4
+        $PY $INT/compare_decomposition.py "$OUT/bath_fill_n1" "$OUT/bath_fill_n4" --rtol 1e-7
     run_script "decomposition_arc_bath" \
         $PY $INT/compare_decomposition.py "$OUT/arc_noscrap_n1" "$OUT/arc_noscrap_n4" --rtol 1e-11
     run_script "decomposition_melt" \
@@ -613,6 +624,9 @@ full | rebaseline)
     # quimica de escoria gruesa), no resolverse subiendo la tolerancia
     run_script "decomposition_slagthick" \
         $PY $INT/compare_decomposition.py "$OUT/slag_chem_thick_n1" "$OUT/slag_chem_thick_n4" --rtol 1e-7
+    # (M21-P2) medido 2.2e-8 (21-oct)
+    run_script "decomposition_slagthick_iface" \
+        $PY $INT/compare_decomposition.py "$OUT/slag_chem_thick_n1" "$OUT/slag_chem_thick_n12" --rtol 1e-7
     run_script "decomposition_arcmelt" \
         $PY $INT/compare_decomposition.py "$OUT/arc_melt_n1" "$OUT/arc_melt_n4" --rtol 1e-11
     # Reinicio desde snapshot: mismo numero de ranks y distinto (lectura por
