@@ -360,6 +360,14 @@ full | rebaseline)
     # (auditoria 18, A1) quimica con capa de escoria condensada gruesa
     run_case slag_chem_thick 4
     run_case slag_chem_thick 1
+    # (Plan I, gates 6-8; auditoria 20, A20-1) ECS que desplaza una capa de
+    # escoria (60 t, k0 llena) y cesta 2 que la atraviesa: n9 corta z en la
+    # escoria, n12 corta r
+    run_case ecs_slag 1
+    run_case ecs_slag 9
+    run_case ecs_slag 12
+    run_case cold_bucket2_slag 1
+    run_case cold_bucket2_slag 9
     # Bug 19 (Plan C, F0): bancos del bano de liquido puro — reposo (n1/n4)
     # y llenado por fusion (n4). Sus checks propios (bath:*) llevan xfail
     # con causa hasta F1/F2; los invariantes duros (nan/bounds) NO.
@@ -478,6 +486,22 @@ full | rebaseline)
     run_script "slag_chem_thick" \
         $PY $INT/check_slag_chem.py "$OUT/slag_chem_thick_n4" --config "$CFG/slag_chem_thick.dat" --min-return 0.5 \
         --min-yield 1.5 --mtol 1e-9
+    # (Plan I, gates 6-8) masa/energia del ECS con escoria exactas (1e-16),
+    # nada pendiente, base = k0 con escoria; orden acero|escoria y clip.
+    # Descomposicion ~10x lo medido el 21-oct (velocidades: ecs n9 1.4e-6,
+    # n12 6.0e-6, cesta 1.9e-6; alpha_slag 1.3e-9; masas exactas)
+    run_script "ecs_slag" \
+        $PY $INT/check_ecs.py "$OUT/ecs_slag_n9" --config "$CFG/ecs_slag.dat" --slag
+    run_script "ecs_slag_bed" \
+        $PY $INT/check_slag_bed.py "$OUT/ecs_slag_n9"
+    run_script "bucket2_slag_bed" \
+        $PY $INT/check_slag_bed.py "$OUT/cold_bucket2_slag_n9"
+    run_script "decomposition_ecs_slag" \
+        $PY $INT/compare_decomposition.py "$OUT/ecs_slag_n1" "$OUT/ecs_slag_n9" --rtol 2e-5
+    run_script "decomposition_ecs_slag_r" \
+        $PY $INT/compare_decomposition.py "$OUT/ecs_slag_n1" "$OUT/ecs_slag_n12" --rtol 6e-5
+    run_script "decomposition_bucket2_slag" \
+        $PY $INT/compare_decomposition.py "$OUT/cold_bucket2_slag_n1" "$OUT/cold_bucket2_slag_n9" --rtol 2e-5
     # escoria por columna global (auditoria A14): invariante a la descomposicion
     # ECS con r DESCOMPUESTO (12 ranks -> 2x3x2): antes de la auditoria M38
     # la carga no se depositaba (indice radial local tomado como global)
@@ -613,6 +637,11 @@ full | rebaseline)
     run_restart_case cold_10step 8 12 5
     # (A4-7) reinicio a MITAD de la fusion progresiva (paso 100 de 200)
     run_restart_case arc_melt 4 4 100
+    # (Plan I, gates 6/8) reinicios con escoria desplazada por el ECS y
+    # cruzando la carga de la cesta 2 (paso 5) y despues (15): bit a bit
+    run_restart_case ecs_slag 9 9 30
+    run_restart_case cold_bucket2_slag 9 9 5
+    run_restart_case cold_bucket2_slag 9 9 15
     # (auditoria 16, M16-I2) parada por tiempo de reloj + reanudacion
     run_wallstop_case cold_10step 8
 

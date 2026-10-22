@@ -155,6 +155,18 @@ los tests bit a bit. Falta EJECUTAR (gates de abajo).
    (paso 5) y después (15). El colapso que atraviesa la escoria solo lo
    cubre el caso 3 de `test_scrap_collapse` (en 0.2 s nada funde lo bastante;
    un banco de integración exigiría una fusión larga): hueco conocido.
+   **HECHO gates 5-8 (21-oct, golden v129):** `ecs_slag` n1/n9/n12 y
+   `cold_bucket2_slag` n1/n9 en la matriz. check_ecs --slag n9: masa del ECS
+   err 5.7e-16, energía 1.7e-16 (E_slag_sol −6.6e5 J, no nulo), escoria
+   dm + clip 1.5e-11 kg de 6e4, nada pendiente, 16 columnas con base k0 y 16
+   con desplazamiento (I2 ejercido). check_slag_bed: orden y masa en ambos
+   (clip 8.6e-14 y 2.4e-11 kg). Descomposición: velocidades 1.4e-6 (ecs n9),
+   6.0e-6 (n12), 1.9e-6 (cesta n9); α_sl 1.3e-9; rtol 2e-5/6e-5/2e-5 (~10×).
+   Reinicios ecs 9→9 (paso 30) y cesta 9→9 (5 y 15): BIT A BIT (0.0). Los
+   reinicios con distinto nº de ranks (ecs 9→12, flow 4→7) dan lo mismo que
+   la corrida continua con esa descomposición: el snapshot está completo.
+   Pendiente del plan: thick con `output_freq` 15 y 4→12, y gate 2 (bit a bit
+   frente al árbol previo al Plan I).
    Notas: en la franja de redondeo del sort (vtol) la última celda puede
    quedar con Σα − 1 ≤ 1e-10·V_col/V_k2; los allreduce de bud/dvb del ECS son
    sumas parciales por rank (no bit a bit entre descomposiciones cuando el
