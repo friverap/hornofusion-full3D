@@ -54,7 +54,7 @@ def scan(d):
             uph = np.maximum(uph, np.where(closed, approach, 0.0))
     pabs = np.where(fl, np.abs(d['pressure']), 0.0)
     kp = np.unravel_index(np.argmax(pabs), pabs.shape)
-    return pabs.max(), kp, uph, int(closed.sum())
+    return pabs.max(), kp, uph, int(closed.sum()), float(a_s[kp])
 
 def near(uph, kp):
     k, j, i = kp; nk, nj, ni = uph.shape
@@ -67,7 +67,7 @@ def step_of(f):
 
 def save(f, s, out):
     np.savez_compressed(os.path.join(out, '%08d.npz' % step_of(f)), pmax=s[0], kp=np.array(s[1]),
-                        uph=s[2].astype(np.float32), nclosed=s[3])
+                        uph=s[2].astype(np.float32), nclosed=s[3], as_kp=s[4])
 
 def stream(dd, pidfile):
     out = os.path.join(dd, 'phantom'); os.makedirs(out, exist_ok=True)
@@ -90,7 +90,8 @@ def summaries(dd):
     if npz:
         S = []
         for f in npz:
-            z = np.load(f); S.append((float(z['pmax']), tuple(int(x) for x in z['kp']), z['uph'], int(z['nclosed'])))
+            z = np.load(f); S.append((float(z['pmax']), tuple(int(x) for x in z['kp']), z['uph'], int(z['nclosed']),
+                      float(z['as_kp']) if 'as_kp' in z else float('nan')))
         return [step_of(f) for f in npz], S
     files = sorted(glob.glob(dd.rstrip('/') + '/eaf3d_*.h5'))
     return [step_of(f) for f in files], [scan(load(f)) for f in files]
@@ -111,7 +112,7 @@ def main(dirs):
             u_loc = max(near(S[m][2], S[n][1]) for m in prev)
             hit = u_loc > U_PH; tot_ev += 1; tot_pre += hit
             print(f'   evento paso {steps[n]} max|p| {S[n][0]:.3g} celda[k,j,i] {S[n][1]} previos {len(prev)} '
-                  f'u_ph_local_max {u_loc:.2f} -> {"PRECURSOR" if hit else "no"}')
+                  f'u_ph_local_max {u_loc:.2f} alpha_s {S[n][4]:.4f} -> {"PRECURSOR" if hit else "no"}')
         quiet = [n for n, s in enumerate(S) if s[0] < P_QUIET]
         for n in quiet:
             prev = [m for m in range(n) if 0 < steps[n] - steps[m] <= WIN]
