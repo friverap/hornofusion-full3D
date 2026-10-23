@@ -1,0 +1,26 @@
+--- a/src/mod_pressure_3d.f90 (v2)	2026-10-22 18:12:29
++++ b/src/mod_pressure_3d.f90 (v2 sin A2)
+@@ -1014,7 +1014,7 @@
+             s_ai = 1.0_dp
+             na_asm = 0
+             conv = .false.
+-            unl_on = cfg%pc_drift_source .and. ws_pc_unl_valid .and. ws_pc_unl_id == probe_current_step()
++            unl_on = .false.   ! EXPERIMENTO P-a: sin A2
+             ! caras + de las celdas propias; las - de la primera celda propia
+             ! estan en el halo
+             call mpi_exchange_halos_3d(Fs_r,  m%topo); call mpi_exchange_halos_3d(ac_r,  m%topo)
+@@ -1177,12 +1177,10 @@
+             rbar = 0.5_dp * (liq%rho(i,j,k) + liq%rho(inb,jnb,knb))
+             if (q > 0.0_dp) then
+                 fac = 1.0_dp
+-                if (a_f > SMALL) fac = liq%alpha(inb,jnb,knb) / a_f * rbar / max(liq%rho(i,j,k), SMALL)
+-                qin = qin + q * fac
++                qin = qin + q * fac   ! EXPERIMENTO P-a: sin A2 (factor 1)
+             else if (q < 0.0_dp) then
+                 fac = 1.0_dp
+-                if (a_f > SMALL) fac = liq%alpha(i,j,k) / a_f * rbar / max(liq%rho(i,j,k), SMALL)
+-                qout = qout - q * fac * s_nb
++                qout = qout - q * fac * s_nb   ! EXPERIMENTO P-a: sin A2 (factor 1)
+             end if
+         end subroutine acc_face
+ 

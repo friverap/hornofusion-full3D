@@ -1,0 +1,373 @@
+diff --git a/src/mod_config_3d.f90 b/src/mod_config_3d.f90
+index 412cfd5..d63ce9c 100644
+--- a/src/mod_config_3d.f90
++++ b/src/mod_config_3d.f90
+@@ -109,6 +109,9 @@ contains
+         cfg%pc_spill_source = .false.
+         cfg%pc_transport_f28 = .true.     ! Plan J-B: ON desde 21-oct-2026 (ventana B1 280-281.6 s: centinela 2.6 % -> 0 %)
+         cfg%n_pc_max = 1
++        cfg%pc_alpha_implicit = .false.
++        cfg%pc_ai_max_it = 8
++        cfg%pc_ai_tol = 1.0e-6_dp
+         cfg%tol_alpha_pc = 1.0e-6_dp
+         ! dt adaptativo <= safety * tau_interfase (0 = desactivado): evita
+         ! operar en el régimen de clamp/equilibrio local (S5-dpart, B1)
+@@ -361,6 +364,9 @@ contains
+         case ('pc_transport_f28'); cfg%pc_transport_f28 = parse_bool(val)
+         case ('pc_spill_source'); cfg%pc_spill_source = parse_bool(val)
+         case ('n_pc_max'); call parse_int(val, key, cfg%n_pc_max)
++        case ('pc_alpha_implicit'); cfg%pc_alpha_implicit = parse_bool(val)
++        case ('pc_ai_max_it'); call parse_int(val, key, cfg%pc_ai_max_it)
++        case ('pc_ai_tol'); call parse_real(val, key, cfg%pc_ai_tol)
+         case ('tol_alpha_pc'); call parse_real(val, key, cfg%tol_alpha_pc)
+         case ('iph_dt_safety'); call parse_real(val, key, cfg%iph_dt_safety)
+         case ('probe_step_from'); call parse_int(val, key, cfg%probe_step_from)
+@@ -532,6 +538,10 @@ contains
+                      'alpha_u must be in (0, 1]', ok)
+         call require(cfg%n_pc_max >= 1 .and. cfg%tol_alpha_pc > 0.0_dp, &
+                      'n_pc_max must be >= 1 and tol_alpha_pc > 0', ok)
++        call require(cfg%pc_ai_max_it >= 1 .and. cfg%pc_ai_tol > 0.0_dp, &
++                     'pc_ai_max_it must be >= 1 and pc_ai_tol > 0', ok)
++        call require(.not. (cfg%pc_alpha_implicit .and. cfg%n_pc_max > 1), &
++                     'pc_alpha_implicit is incompatible with n_pc_max > 1', ok)
+         call require(cfg%alpha_p > 0.0_dp .and. cfg%alpha_p <= 1.0_dp, &
+                      'alpha_p must be in (0, 1]', ok)
+         call require(cfg%alpha_T > 0.0_dp .and. cfg%alpha_T <= 1.0_dp, &
+diff --git a/src/mod_pressure_3d.f90 b/src/mod_pressure_3d.f90
+index 3c1948e..153449c 100644
+--- a/src/mod_pressure_3d.f90
++++ b/src/mod_pressure_3d.f90
+@@ -58,6 +58,8 @@ module mod_pressure_3d
+     ! reemplaza al ancla big-coefficient (cuyo hoyuelo en la celda (1,1,1)
+     ! rompía la simetría 120° con el gas activo).
+     real(dp), parameter :: PP_COMPLIANCE = 1.0e-6_dp
++    ! Plan K: solves del conjunto activo y cuantos llegaron al tope sin converger (diagnostico)
++    integer, save :: ai_ncalls = 0, ai_nfail = 0
+ 
+     ! Cap de la fuente de compresibilidad: no se puede exigir ventear más
+     ! de esta fracción de la masa de gas de la celda por paso. Sin cap,
+@@ -177,7 +179,16 @@ contains
+         logical  :: probe_here, probe_own
+         real(dp) :: su_liq_p, su_gas_p, su_comp_p
+         logical  :: at_rmin, at_rmax, at_zmin, at_zmax
+-
++        ! Plan K (pc_alpha_implicit): copias de la matriz antes de las BC y
++        ! caras de liquido de FLUJO FIJO (fx = 1, caudal Qf hacia la celda del
++        ! lecho que no tiene hueco para todo lo que le pide la presion)
++        logical  :: ai_on, ai_fixed
++        real(dp), allocatable :: aW0(:,:,:), aE0(:,:,:), aS0(:,:,:), aN0(:,:,:), &
++                                 aB0(:,:,:), aT0(:,:,:), aP0(:,:,:), Su0(:,:,:)
++        real(dp), allocatable :: fx_r(:,:,:), fx_th(:,:,:), fx_z(:,:,:)
++        real(dp), allocatable :: Qf_r(:,:,:), Qf_th(:,:,:), Qf_z(:,:,:)
++
++        ai_fixed = .false.
+         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+         call physical_boundary_flags(m, at_rmin, at_rmax, at_zmin, at_zmax)
+ 
+@@ -733,6 +744,13 @@ contains
+                 ' | aPuz=', liq%aP_uz(pi_,pj_,pk_), ' aPuz_T=', liq%aP_uz(pi_,pj_,pk_+1), ' aPur_W=', liq%aP_ur(pi_-1,pj_,pk_), &
+                 ' aPur=', liq%aP_ur(pi_,pj_,pk_), ' aPuth=', liq%aP_uth(pi_,pj_,pk_)
+         end if
++        ! Plan K: matriz y fuente ANTES de las BC (el conjunto activo las
++        ! rehace desde aqui en cada iteracion)
++        ai_on = cfg%pc_alpha_implicit .and. ws_liq_room_valid
++        if (ai_on) then
++            allocate(aW0, aE0, aS0, aN0, aB0, aT0, aP0, Su0, mold=sh%pp)
++            aW0 = aW; aE0 = aE; aS0 = aS; aN0 = aN; aB0 = aB; aT0 = aT; aP0 = aP; Su0 = Su
++        end if
+         ! Pressure BCs
+         call apply_pressure_bc(aW, aE, aS, aN, aB, aT, aP, Su, m)
+ 
+@@ -775,6 +793,12 @@ contains
+         ! antes del CG; cg_res queda como diagnostico del solver lineal)
+         if (cg_res /= cg_res) residual = cg_res   ! NaN del CG: propagarlo
+ 
++        ! Plan K: limitador de hueco del lecho dentro del Poisson
++        if (ai_on) then
++            call alpha_implicit_active_set()
++            deallocate(aW0, aE0, aS0, aN0, aB0, aT0, aP0, Su0)
++        end if
++
+         !-------------------------------------------------------------------
+         ! Flujos CONSERVATIVOS (volumetricos, m3/s) del liquido por las caras
+         ! + (Bug 19, F1/F2): Q = Q* + a_nb (pp_P - pp_nb). Es el flujo cuya divergencia el CG
+@@ -794,6 +818,11 @@ contains
+                         ac_th(i,j,k) * (sh%pp(i,j,k) - sh%pp(i,j+1,k))
+                     if (ws_Fc_lk_z(i,j,k) == 1) ws_Fc_z(i,j,k) = Fs_z(i,j,k) + &
+                         ac_z(i,j,k) * (sh%pp(i,j,k) - sh%pp(i,j,k+1))
++                    if (ai_fixed) then
++                        if (fx_r(i,j,k) > 0.5_dp)  ws_Fc_r(i,j,k)  = Qf_r(i,j,k)
++                        if (fx_th(i,j,k) > 0.5_dp) ws_Fc_th(i,j,k) = Qf_th(i,j,k)
++                        if (fx_z(i,j,k) > 0.5_dp)  ws_Fc_z(i,j,k)  = Qf_z(i,j,k)
++                    end if
+                 end do
+             end do
+         end do
+@@ -807,6 +836,8 @@ contains
+         call mpi_exchange_halos_3d(ws_Fc_af_th, m%topo)
+         call mpi_exchange_halos_3d(ws_Fc_af_z,  m%topo)
+         ws_Fc_valid = .true.
++        if (allocated(fx_r)) deallocate(fx_r, fx_th, fx_z, Qf_r, Qf_th, Qf_z)
++        ai_fixed = .false.
+ 
+         ! Flujos de MASA conservativos del GAS (auditoria M24, gas): el
+         ! volumetrico corregido por la densidad del DADOR. El momento del gas
+@@ -947,6 +978,244 @@ contains
+ 
+     contains
+ 
++        !-----------------------------------------------------------------------
++        ! Plan K (docs/PLAN_K_limitador_en_poisson.md): la restriccion
++        ! alpha_l <= liq_cap de las celdas del LECHO (la que el limitador de
++        ! hueco del transporte aplica un paso despues) entra al Poisson como
++        ! conjunto activo (complementariedad hueco >= 0 ⊥ entrada; primal-dual
++        ! de Hintermuller-Ito-Kunisch 2002, aparicion de fases de Lauser et al.
++        ! 2011). Con el pp del ultimo CG:
++        !   s_i = min(1, (hueco_i V/dt + salidas_i) / entradas_i)   (lecho)
++        ! con los caudales de liquido de cara ABIERTA Q = Fs + ac (pp_P - pp_N)
++        ! y las salidas escaladas por el s de la receptora (como el limitador).
++        ! Toda cara de liquido que ENTRA a una celda con s < 1 pasa a flujo
++        ! fijo Qf = s Q (su conductancia sale de la matriz, el caudal va a Su
++        ! de las dos celdas: la matriz sigue simetrica). Se itera hasta que el
++        ! conjunto y s no cambian; momento congelado, p y u se corrigen UNA vez.
++        ! Con el conjunto vacio el resultado es bit a bit el de la clave off.
++        !-----------------------------------------------------------------------
++        subroutine alpha_implicit_active_set()
++            use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d_int
++            real(dp), allocatable :: Qo_r(:,:,:), Qo_th(:,:,:), Qo_z(:,:,:), s_ai(:,:,:), s_nw(:,:,:)
++            ! candidatas de la pasada (cx, cq); fx/Qf son las ENSAMBLADAS en el
++            ! ultimo CG y son las que se exportan (auditoria K, M1/M2)
++            real(dp), allocatable :: cx_r(:,:,:), cx_th(:,:,:), cx_z(:,:,:), cq_r(:,:,:), cq_th(:,:,:), cq_z(:,:,:)
++            integer  :: ias, nchg, ia, na_asm
++            real(dp) :: ds, ds_g, chg, chg_g, qin, qout, cap, na, na_g, gsum, asum
++            logical  :: unl_on, conv
++
++            allocate(Qo_r, Qo_th, Qo_z, s_ai, s_nw, mold=sh%pp)
++            allocate(cx_r, cx_th, cx_z, cq_r, cq_th, cq_z, mold=sh%pp)
++            allocate(fx_r, fx_th, fx_z, Qf_r, Qf_th, Qf_z, mold=sh%pp)
++            fx_r = 0.0_dp; fx_th = 0.0_dp; fx_z = 0.0_dp
++            Qf_r = 0.0_dp; Qf_th = 0.0_dp; Qf_z = 0.0_dp
++            cx_r = 0.0_dp; cx_th = 0.0_dp; cx_z = 0.0_dp
++            cq_r = 0.0_dp; cq_th = 0.0_dp; cq_z = 0.0_dp
++            s_ai = 1.0_dp
++            na_asm = 0
++            conv = .false.
++            unl_on = cfg%pc_drift_source .and. ws_pc_unl_valid .and. ws_pc_unl_id == probe_current_step()
++            ! caras + de las celdas propias; las - de la primera celda propia
++            ! estan en el halo
++            call mpi_exchange_halos_3d(Fs_r,  m%topo); call mpi_exchange_halos_3d(ac_r,  m%topo)
++            call mpi_exchange_halos_3d(Fs_th, m%topo); call mpi_exchange_halos_3d(ac_th, m%topo)
++            call mpi_exchange_halos_3d(Fs_z,  m%topo); call mpi_exchange_halos_3d(ac_z,  m%topo)
++            call mpi_exchange_halos_3d(ws_Fc_af_r,  m%topo)
++            call mpi_exchange_halos_3d(ws_Fc_af_th, m%topo)
++            call mpi_exchange_halos_3d(ws_Fc_af_z,  m%topo)
++            call mpi_exchange_halos_3d_int(ws_Fc_lk_r,  m%topo)
++            call mpi_exchange_halos_3d_int(ws_Fc_lk_th, m%topo)
++            call mpi_exchange_halos_3d_int(ws_Fc_lk_z,  m%topo)
++
++            do ias = 1, cfg%pc_ai_max_it
++                ! (a) caudales de cara abierta con el pp actual
++                Qo_r = 0.0_dp; Qo_th = 0.0_dp; Qo_z = 0.0_dp
++                do k = kstart, kend
++                    do j = jstart, jend
++                        do i = istart, iend
++                            if (m%cell_type(i,j,k) == 0) cycle
++                            if (ws_Fc_lk_r(i,j,k) == 1) Qo_r(i,j,k) = Fs_r(i,j,k) + &
++                                ac_r(i,j,k) * (sh%pp(i,j,k) - sh%pp(i+1,j,k))
++                            if (ws_Fc_lk_th(i,j,k) == 1) Qo_th(i,j,k) = Fs_th(i,j,k) + &
++                                ac_th(i,j,k) * (sh%pp(i,j,k) - sh%pp(i,j+1,k))
++                            if (ws_Fc_lk_z(i,j,k) == 1) Qo_z(i,j,k) = Fs_z(i,j,k) + &
++                                ac_z(i,j,k) * (sh%pp(i,j,k) - sh%pp(i,j,k+1))
++                        end do
++                    end do
++                end do
++                call mpi_exchange_halos_3d(Qo_r,  m%topo)
++                call mpi_exchange_halos_3d(Qo_th, m%topo)
++                call mpi_exchange_halos_3d(Qo_z,  m%topo)
++
++                ! (b) factor del limitador de un paso en VOLUMEN DEL TRANSPORTE
++                !     (auditoria K, A2: el transporte mueve Q alpha_dador/a_f
++                !     rho_media/rho_receptora, mas la entrada no enlazada de E2).
++                !     Jacobi: salidas con el s de la receptora de la pasada
++                !     anterior. Solo celdas del lecho con gas en el acople y
++                !     conductancia de gas (A1: sin ella la fila no puede
++                !     desplazar el gas que el hueco supone)
++                s_nw = 1.0_dp
++                do k = kstart, kend
++                    do j = jstart, jend
++                        do i = istart, iend
++                            if (m%cell_type(i,j,k) == 0) cycle
++                            if (ws_liq_room(i,j,k) >= 1.0_dp) cycle      ! fuera del lecho
++                            if (.not. act_g(i,j,k) .or. sealed(i,j,k)) cycle
++                            asum = aW0(i,j,k) + aE0(i,j,k) + aS0(i,j,k) + aN0(i,j,k) + aB0(i,j,k) + aT0(i,j,k)
++                            gsum = asum - lcoef(i,j,k)
++                            if (gsum <= 1.0e-9_dp * asum) cycle
++                            qin = 0.0_dp; qout = 0.0_dp
++                            call acc_face( Qo_r(i-1,j,k), i-1,j,k, ws_Fc_af_r(i-1,j,k), s_ai(i-1,j,k), qin, qout)
++                            call acc_face(-Qo_r(i,j,k),   i+1,j,k, ws_Fc_af_r(i,j,k),   s_ai(i+1,j,k), qin, qout)
++                            call acc_face( Qo_th(i,j-1,k), i,j-1,k, ws_Fc_af_th(i,j-1,k), s_ai(i,j-1,k), qin, qout)
++                            call acc_face(-Qo_th(i,j,k),   i,j+1,k, ws_Fc_af_th(i,j,k),   s_ai(i,j+1,k), qin, qout)
++                            call acc_face( Qo_z(i,j,k-1), i,j,k-1, ws_Fc_af_z(i,j,k-1), s_ai(i,j,k-1), qin, qout)
++                            call acc_face(-Qo_z(i,j,k),   i,j,k+1, ws_Fc_af_z(i,j,k),   s_ai(i,j,k+1), qin, qout)
++                            if (unl_on) then
++                                if (ws_pc_unl(i,j,k) > 0.0_dp) then
++                                    qin = qin + ws_pc_unl(i,j,k)
++                                else
++                                    qout = qout - ws_pc_unl(i,j,k)
++                                end if
++                            end if
++                            cap = max(0.0_dp, ws_liq_room(i,j,k)) * m%vol(i,j,k) / cfg%dt
++                            if (qin > SMALL) s_nw(i,j,k) = min(1.0_dp, max(0.0_dp, cap + qout) / qin)
++                        end do
++                    end do
++                end do
++                call mpi_exchange_halos_3d(s_nw, m%topo)
++                ds = maxval(abs(s_nw(istart:iend,jstart:jend,kstart:kend) - &
++                                s_ai(istart:iend,jstart:jend,kstart:kend)))
++                s_ai = s_nw
++
++                ! (c) candidatas: caras que ENTRAN a una celda con s < 1 - tol
++                !     (M3: umbral, no un interruptor en 1 - 1e-16)
++                chg = 0.0_dp; na = 0.0_dp
++                do k = kstart, kend
++                    do j = jstart, jend
++                        do i = istart, iend
++                            if (m%cell_type(i,j,k) == 0) cycle
++                            call fix_face(Qo_r(i,j,k), s_ai(i,j,k), s_ai(i+1,j,k), cx_r(i,j,k), cq_r(i,j,k))
++                            call fix_face(Qo_th(i,j,k), s_ai(i,j,k), s_ai(i,j+1,k), cx_th(i,j,k), cq_th(i,j,k))
++                            call fix_face(Qo_z(i,j,k), s_ai(i,j,k), s_ai(i,j,k+1), cx_z(i,j,k), cq_z(i,j,k))
++                            if (cx_r(i,j,k) /= fx_r(i,j,k)) chg = chg + 1.0_dp
++                            if (cx_th(i,j,k) /= fx_th(i,j,k)) chg = chg + 1.0_dp
++                            if (cx_z(i,j,k) /= fx_z(i,j,k)) chg = chg + 1.0_dp
++                            na = na + cx_r(i,j,k) + cx_th(i,j,k) + cx_z(i,j,k)
++                        end do
++                    end do
++                end do
++                if (m%is_parallel) then
++                    call mpi_allreduce_max(ds, ds_g, m%topo)
++                    call mpi_allreduce_sum(chg, chg_g, m%topo)
++                    call mpi_allreduce_sum(na, na_g, m%topo)
++                else
++                    ds_g = ds; chg_g = chg; na_g = na
++                end if
++                nchg = nint(chg_g); ia = nint(na_g)
++                if (probe_active_now(cfg) .and. ((.not. m%is_parallel) .or. m%topo%rank == 0)) &
++                    write(*,'(A,I9,A,I3,A,I6,A,I6,A,ES10.3)') '[PROBE-AI] paso', probe_current_step(), &
++                        ' it', ias, ' caras_fijas', ia, ' cambios', nchg, ' ds', ds_g
++                ! conjunto vacio y nada ensamblado: el CG base ya es la solucion
++                if (ia == 0 .and. na_asm == 0) then
++                    conv = .true.; exit
++                end if
++                ! convergido: el pp del ultimo CG es el del conjunto ensamblado
++                if (ias > 1 .and. nchg == 0 .and. ds_g < cfg%pc_ai_tol) then
++                    conv = .true.; exit
++                end if
++                ! tope: se exporta el conjunto ENSAMBLADO (el que resolvio el CG)
++                if (ias == cfg%pc_ai_max_it) exit
++
++                ! (d) ensamblar las candidatas y nuevo CG (arranque en caliente)
++                fx_r = cx_r; fx_th = cx_th; fx_z = cx_z
++                Qf_r = cq_r; Qf_th = cq_th; Qf_z = cq_z
++                call mpi_exchange_halos_3d(fx_r,  m%topo); call mpi_exchange_halos_3d(Qf_r,  m%topo)
++                call mpi_exchange_halos_3d(fx_th, m%topo); call mpi_exchange_halos_3d(Qf_th, m%topo)
++                call mpi_exchange_halos_3d(fx_z,  m%topo); call mpi_exchange_halos_3d(Qf_z,  m%topo)
++                na_asm = ia
++                aW = aW0; aE = aE0; aS = aS0; aN = aN0; aB = aB0; aT = aT0; aP = aP0; Su = Su0
++                do k = kstart, kend
++                    do j = jstart, jend
++                        do i = istart, iend
++                            if (m%cell_type(i,j,k) == 0) cycle
++                            if ((.not. act_l(i,j,k) .and. .not. act_g(i,j,k)) .or. sealed(i,j,k)) cycle
++                            if (fx_r(i,j,k) > 0.5_dp) call drop_face(aE(i,j,k), aP(i,j,k), Su(i,j,k), ac_r(i,j,k), Fs_r(i,j,k) - Qf_r(i,j,k))
++                            if (fx_r(i-1,j,k) > 0.5_dp) call drop_face(aW(i,j,k), aP(i,j,k), Su(i,j,k), ac_r(i-1,j,k), Qf_r(i-1,j,k) - Fs_r(i-1,j,k))
++                            if (fx_th(i,j,k) > 0.5_dp) call drop_face(aN(i,j,k), aP(i,j,k), Su(i,j,k), ac_th(i,j,k), Fs_th(i,j,k) - Qf_th(i,j,k))
++                            if (fx_th(i,j-1,k) > 0.5_dp) call drop_face(aS(i,j,k), aP(i,j,k), Su(i,j,k), ac_th(i,j-1,k), Qf_th(i,j-1,k) - Fs_th(i,j-1,k))
++                            if (fx_z(i,j,k) > 0.5_dp) call drop_face(aT(i,j,k), aP(i,j,k), Su(i,j,k), ac_z(i,j,k), Fs_z(i,j,k) - Qf_z(i,j,k))
++                            if (fx_z(i,j,k-1) > 0.5_dp) call drop_face(aB(i,j,k), aP(i,j,k), Su(i,j,k), ac_z(i,j,k-1), Qf_z(i,j,k-1) - Fs_z(i,j,k-1))
++                        end do
++                    end do
++                end do
++                call apply_pressure_bc(aW, aE, aS, aN, aB, aT, aP, Su, m)
++                call cg_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, sh%pp, m, &
++                               cfg%max_inner_pres, SOR_TOL_PRESSURE, cg_res, n_iter_cg)
++                if (cg_res /= cg_res) residual = cg_res
++            end do
++            ai_fixed = (na_asm > 0)
++            ai_ncalls = ai_ncalls + 1
++            if (.not. conv) ai_nfail = ai_nfail + 1
++            if (mod(ai_ncalls, 5000) == 0 .and. ((.not. m%is_parallel) .or. m%topo%rank == 0)) &
++                write(*,'(A,I9,A,I9)') '[PLAN-K] solves', ai_ncalls, ' sin converger', ai_nfail
++            if (probe_here) write(*,'(A,I8,A,ES11.3)') '[PROBE-P] paso', probe_current_step(), &
++                ' pp tras conjunto activo=', sh%pp(pi_,pj_,pk_)
++            deallocate(Qo_r, Qo_th, Qo_z, s_ai, s_nw, cx_r, cx_th, cx_z, cq_r, cq_th, cq_z)
++        end subroutine alpha_implicit_active_set
++
++        ! Volumen (m3/s, el del TRANSPORTE) que la cara con caudal de Poisson q
++        ! (> 0 entra) mueve en la celda del lecho (i,j,k): el transporte usa
++        ! G = q rho_media/a_f por alpha del DADOR y lo divide por la rho de la
++        ! celda (conservative_noalpha). Entradas completas; salidas escaladas
++        ! por el s de la receptora
++        subroutine acc_face(q, inb, jnb, knb, a_f, s_nb, qin, qout)
++            real(dp), intent(in)    :: q, a_f, s_nb
++            integer, intent(in)     :: inb, jnb, knb
++            real(dp), intent(inout) :: qin, qout
++            real(dp) :: rbar, fac
++            rbar = 0.5_dp * (liq%rho(i,j,k) + liq%rho(inb,jnb,knb))
++            if (q > 0.0_dp) then
++                fac = 1.0_dp
++                if (a_f > SMALL) fac = liq%alpha(inb,jnb,knb) / a_f * rbar / max(liq%rho(i,j,k), SMALL)
++                qin = qin + q * fac
++            else if (q < 0.0_dp) then
++                fac = 1.0_dp
++                if (a_f > SMALL) fac = liq%alpha(i,j,k) / a_f * rbar / max(liq%rho(i,j,k), SMALL)
++                qout = qout - q * fac * s_nb
++            end if
++        end subroutine acc_face
++
++        ! Cara lo|hi con caudal abierto q (> 0: de lo a hi): candidata a flujo
++        ! fijo si su receptora tiene s < 1 - pc_ai_tol, con Qf = s q
++        subroutine fix_face(q, s_lo, s_hi, fx, qf)
++            real(dp), intent(in)    :: q, s_lo, s_hi
++            real(dp), intent(inout) :: fx, qf
++            real(dp) :: sr
++            sr = 1.0_dp
++            if (q > 0.0_dp) then
++                sr = s_hi
++            else if (q < 0.0_dp) then
++                sr = s_lo
++            end if
++            if (sr < 1.0_dp - cfg%pc_ai_tol) then
++                fx = 1.0_dp; qf = sr * q
++            else
++                fx = 0.0_dp; qf = 0.0_dp
++            end if
++        end subroutine fix_face
++
++        ! Saca de la fila la conductancia de liquido de una cara de flujo fijo
++        ! (coeficiente de vecino y su parte de aP, con la compliance) y pone
++        ! la diferencia de caudal en la fuente
++        subroutine drop_face(anb, apc, suc, ac, dsu)
++            real(dp), intent(inout) :: anb, apc, suc
++            real(dp), intent(in)    :: ac, dsu
++            anb = anb - ac
++            apc = apc - ac * (1.0_dp + PP_COMPLIANCE)
++            suc = suc + dsu
++        end subroutine drop_face
++
+         ! (M11-1pv) aP equivalente del gas tras la eliminacion parcial (pea2 de
+         ! mod_multiphase, MISMA formula y orden de operaciones) con los
+         ! transitorios de ambas fases desplazados a DT_MOB_REF
+diff --git a/src/mod_types_3d.f90 b/src/mod_types_3d.f90
+index c01f606..8c7629e 100644
+--- a/src/mod_types_3d.f90
++++ b/src/mod_types_3d.f90
+@@ -72,6 +72,9 @@ module mod_types_3d
+         logical :: pc_transport_f28   ! Plan J-B: cara continuo|continuo sin enlace del Poisson no transporta liquido
+         logical :: pc_drift_source    ! Plan E E2: goteo disperso/derrame como fuente conocida del Poisson (ws_pc_unl)
+         logical :: pc_outlet_total_pressure  ! aberturas del techo: p = p0 - 1/2 rho u_in^2 si el gas ENTRA (u_in neta; reflujo acotado)
++        logical  :: pc_alpha_implicit ! Plan K: limitador de hueco del lecho dentro del Poisson (conjunto activo de caras de flujo fijo)
++        integer  :: pc_ai_max_it      ! Plan K: iteraciones maximas del conjunto activo por solve
++        real(dp) :: pc_ai_tol         ! Plan K: tolerancia en el factor s del limitador
+         logical :: pc_sat_open        ! Plan E E1: poro saturado = celda incompresible con caras liquido|liquido ABIERTAS (sin cierre F2.8)
+         logical :: pc_gas_spring      ! Plan F (oct-2026): el gas es SIEMPRE fluido del acople P-V (bolsa atrapada = resorte, no pared): sin percolacion F2.16, sin venteo F2.31, sin E1b; caras de liquido abiertas (E1) y sin piso de gas de poro en liq_cap
+         logical :: pc_keep_pore_floor ! Plan F (diagnostico): con pc_gas_spring, conservar el piso ALPHA_PORE_GAS en liq_cap
