@@ -45,7 +45,8 @@ if len(p) >= 3:
     alt = np.mean(d[1:] * d[:-1] < 0)
     osc2 = np.median(np.abs(p[1:-1] - 0.5 * (p[:-2] + p[2:])))
     gh = max(abs(r[5]) for r in rows)
-    print("n=%d p_min=%.1f p_max=%.1f alternancia_dp=%.3f osc2=%.1f grad_hid_max=%.2f"
-          % (len(p), p.min(), p.max(), alt, osc2, gh))
+    agmin = min(r[2] for r in rows)
+    print("n=%d p_min=%.1f p_max=%.1f alternancia_dp=%.3f osc2=%.1f grad_hid_max=%.2f ag_min=%.5f"
+          % (len(p), p.min(), p.max(), alt, osc2, gh, agmin))
 else:
     print("n=%d (insuficiente)" % len(p))
