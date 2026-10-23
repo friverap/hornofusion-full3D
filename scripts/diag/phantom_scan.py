@@ -10,8 +10,12 @@ Precursor local = u_ph > U_PH en un snapshot ANTERIOR (<= WIN pasos) a
 <= DIST celdas (Chebyshev, theta periodico) de la celda de max|p| del evento.
 Control = mismo test en snapshots quietos (max|p| < P_QUIET).
 Uso: phantom_scan.py DIR [DIR...]   (campos HDF5 en orden [k,j,i])
+     phantom_scan.py --stream DIR PIDFILE  escanea cada snapshot al cerrarse, guarda
+         el resumen en DIR/phantom/<paso>.npz y borra el HDF5 (salvo pasos
+         multiplos de 500 y el ultimo); con --stream la evaluacion lee esos
+         resumenes, asi que da lo mismo que sobre los HDF5.
 """
-import glob, re, sys
+import glob, os, re, sys, time
 import numpy as np, h5py
 
 ALPHA_BED, ALPHA_PORE_GAS, ROOM_EPS = 1e-2, 1.5e-2, 1e-4
@@ -58,12 +62,44 @@ def near(uph, kp):
     js = [(j + o) % nj for o in range(-DIST, DIST + 1)]
     return uph[ks][:, js][:, :, is_].max()
 
+def step_of(f):
+    return int(re.search(r'(\d{8})\.(h5|npz)$', f).group(1))
+
+def save(f, s, out):
+    np.savez_compressed(os.path.join(out, '%08d.npz' % step_of(f)), pmax=s[0], kp=np.array(s[1]),
+                        uph=s[2].astype(np.float32), nclosed=s[3])
+
+def stream(dd, pidfile):
+    out = os.path.join(dd, 'phantom'); os.makedirs(out, exist_ok=True)
+    def alive():
+        try: os.kill(int(open(pidfile).read()), 0); return True
+        except Exception: return False
+    while True:
+        running = alive()
+        files = sorted(glob.glob(dd.rstrip('/') + '/eaf3d_*.h5'))
+        done = files if not running else files[:-1]   # el ultimo puede estar escribiendose
+        for f in done:
+            if os.path.exists(os.path.join(out, '%08d.npz' % step_of(f))): continue
+            save(f, scan(load(f)), out)
+            if step_of(f) % 500 and f != files[-1]: os.remove(f)
+        if not running: break
+        time.sleep(5)
+
+def summaries(dd):
+    npz = sorted(glob.glob(os.path.join(dd, 'phantom', '*.npz')))
+    if npz:
+        S = []
+        for f in npz:
+            z = np.load(f); S.append((float(z['pmax']), tuple(int(x) for x in z['kp']), z['uph'], int(z['nclosed'])))
+        return [step_of(f) for f in npz], S
+    files = sorted(glob.glob(dd.rstrip('/') + '/eaf3d_*.h5'))
+    return [step_of(f) for f in files], [scan(load(f)) for f in files]
+
 def main(dirs):
     tot_ev = tot_pre = tot_q = tot_qpre = 0
     for dd in dirs:
-        files = sorted(glob.glob(dd.rstrip('/') + '/eaf3d_*.h5'))
-        steps = [int(re.search(r'(\d{8})\.h5$', f).group(1)) for f in files]
-        S = [scan(load(f)) for f in files]
+        steps, S = summaries(dd)
+        files = steps
         uglob = [s[2].max() for s in S]
         peaks = [n for n, s in enumerate(S) if s[0] > P_PEAK]
         events = [n for n in peaks if not any(0 < steps[n] - steps[m] <= GAP for m in peaks if m < n)]
@@ -86,4 +122,7 @@ def main(dirs):
           f'control quieto {tot_q} con precursor {tot_qpre} ({100*tot_qpre/max(tot_q,1):.1f} %)')
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    if sys.argv[1] == '--stream':
+        stream(sys.argv[2], sys.argv[3])
+    else:
+        main(sys.argv[1:])
