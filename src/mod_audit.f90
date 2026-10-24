@@ -30,7 +30,7 @@ module mod_audit
     private
 
     public :: audit_init, audit_write_step, audit_add, audit_accumulate, audit_peek
-    public :: audit_set_energy, gas_inventory_cell, gas_heat_capacity_ref, gas_log_exchange
+    public :: audit_set_energy, eq_residual, gas_inventory_cell, gas_heat_capacity_ref, gas_log_exchange
     public :: AUD_ARC_DIRECT, AUD_ARC_DISCARD, AUD_MC_DEPOSIT
     public :: AUD_ALPHA_CLIP_MASS, AUD_MELT_MASS, AUD_RESOLID_MASS
     public :: AUD_MELT_E_SOLID, AUD_SLAG_INTERCEPT, AUD_SLAG_GAS, AUD_SLAG_LIQ, AUD_GAS_OUT, AUD_GAS_RXN, AUD_GAS_VOLFIX_E
@@ -39,6 +39,7 @@ module mod_audit
     public :: AUD_FE_YIELD, AUD_FE_RETURN, AUD_SLAG_OX_E, AUD_SLAG_RED_E
     public :: AUD_RAD_FOAM
     public :: AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
+    public :: AUD_ABS_LIQ_HOOK, AUD_RELAX_LIQ, AUD_RELAX_GAS
     public :: AUD_RESID_MASS, AUD_RESID_E, AUD_SPILL_MASS
     public :: AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
     public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2, AUD_GAS_VOLFIX, AUD_SLAG_TCLIP, AUD_MIX_INIT
@@ -151,7 +152,23 @@ module mod_audit
     ! cancelar el clip por desborde en los techos)
     integer, parameter :: AUD_STEEL_DEF_MASS  = 57
     integer, parameter :: AUD_STEEL_DEF_E     = 58
-    integer, parameter :: N_AUD = 58
+    ! DIAGNOSTICO (WS-K3, C-096..C-098): absorbido del LIQUIDO segun su hook
+    ! (eeq(1,1); antes no se escribia) y RESIDUO del enunciado discreto que
+    ! queda en pie por fase, dt sum R(Tk) = absorbido - (arco + rad + quim +
+    ! conv - pared + masa) del hook de la ultima iteracion externa. Con la
+    ! sub-relajacion de T (alpha_T < 1) el campo guardado Tk no cumple la
+    ! ecuacion y la diferencia es energia que el inventario pierde o gana:
+    ! en B1 con alpha_T 0.7, ~-60 J/paso del liquido. Banco (C-096, C-098,
+    ! C-103): neto ~-2..-4 J/paso con 0.85-1.0, pero con 0.85 la std por
+    ! paso es 105 J (0.25 J con 1.0). Incluye tambien la convergencia interna
+    ! incompleta (R(Tk) es lineal en Tk). El reparto por fase solo vale en dos
+    ! fluidos: con mixture_model el intercambio gas-liquido entre el solve y
+    ! la relajacion no lo ve el hook (solo la suma tiene sentido).
+    ! NO entran a la identidad: la cuentan, no la cierran.
+    integer, parameter :: AUD_ABS_LIQ_HOOK    = 59
+    integer, parameter :: AUD_RELAX_LIQ       = 60
+    integer, parameter :: AUD_RELAX_GAS       = 61
+    integer, parameter :: N_AUD = 61
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -297,6 +314,15 @@ contains
         eeq(q,7) = e_mass
     end subroutine audit_set_energy
 
+    ! Residuo del enunciado discreto de la fase q (1 liquido, 2 gas) que dejo
+    ! el hook: absorbido - (arco + rad + quim + conv - pared + masa); eeq(q,5)
+    ! ya es la contribucion convectiva con signo de entrada (-s_conv)
+    pure real(dp) function eq_residual(q)
+        integer, intent(in) :: q
+        eq_residual = eeq(q,1) - (eeq(q,2) + eeq(q,3) + eeq(q,4) + eeq(q,5) &
+                                  - eeq(q,6) + eeq(q,7))
+    end function eq_residual
+
     !---------------------------------------------------------------------------
     ! (auditoria 19, tests B6) lectura del contador acumulado desde la ultima
     ! fila escrita (para los unit tests de las rutas auditadas)
@@ -377,7 +403,7 @@ contains
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
                 'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq,m_gas_out,m_gas_rxn,E_gas_volfix,' // &
-                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip,E_slag_sol,m_steel_deficit,E_steel_deficit'
+                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip,E_slag_sol,m_steel_deficit,E_steel_deficit,E_abs_liq_hook,E_relax_liq,E_relax_gas'
             close(iu)
         end if
         acc = 0.0_dp
@@ -541,7 +567,8 @@ contains
                 ',', a(AUD_SLAG_GAS), ',', a(AUD_SLAG_LIQ), &
                 ',', a(AUD_GAS_OUT), ',', a(AUD_GAS_RXN), ',', a(AUD_GAS_VOLFIX_E), &
                 ',', a(AUD_VF_O2), ',', a(AUD_VF_CO), ',', a(AUD_VF_CO2), &
-                ',', a(AUD_GAS_CCDROP), ',', a(AUD_SLAG_CLIP_MASS), ',', a(AUD_SLAG_CLIP_E), ',', a(AUD_SLAG_SOL), ',', a(AUD_STEEL_DEF_MASS), ',', a(AUD_STEEL_DEF_E)
+                ',', a(AUD_GAS_CCDROP), ',', a(AUD_SLAG_CLIP_MASS), ',', a(AUD_SLAG_CLIP_E), ',', a(AUD_SLAG_SOL), ',', a(AUD_STEEL_DEF_MASS), ',', a(AUD_STEEL_DEF_E), &
+                ',', a(AUD_ABS_LIQ_HOOK), ',', a(AUD_RELAX_LIQ), ',', a(AUD_RELAX_GAS)
             close(iu)
         end if
     end subroutine audit_write_step
@@ -706,6 +733,9 @@ contains
         acc(AUD_CONV_LIQ) = acc(AUD_CONV_LIQ) + eeq(1,5)
         acc(AUD_CONV_GAS) = acc(AUD_CONV_GAS) + eeq(2,5)
         acc(AUD_ABS_GAS_HOOK) = acc(AUD_ABS_GAS_HOOK) + eeq(2,1)
+        acc(AUD_ABS_LIQ_HOOK) = acc(AUD_ABS_LIQ_HOOK) + eeq(1,1)
+        acc(AUD_RELAX_LIQ) = acc(AUD_RELAX_LIQ) + eq_residual(1)
+        acc(AUD_RELAX_GAS) = acc(AUD_RELAX_GAS) + eq_residual(2)
         eeq = 0.0_dp
     end subroutine audit_accumulate
 

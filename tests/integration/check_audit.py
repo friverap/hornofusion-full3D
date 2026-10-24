@@ -263,6 +263,15 @@ def main():
                    f"{S_gas:.3e} + xtol {args.xtol} x S_ext {S_ext:.3e} + htol "
                    f"{args.htol} x S_int {S_int:.3e}), "
                    f"gap/permitido={ratio:.3e}")
+        # (WS-K3, C-096..C-098) residuo del enunciado discreto que deja en pie
+        # la sub-relajacion de T (alpha_T < 1): energia que el inventario
+        # pierde o gana sin termino fisico. DIAGNOSTICO: no entra a la
+        # identidad (la cerraria escondiendo la perdida), solo la atribuye.
+        if "E_relax_liq" in last:
+            rl = sum(r.get("E_relax_liq", 0.0) for r in steps)
+            rg = sum(r.get("E_relax_gas", 0.0) for r in steps)
+            print(f"  INFO  energy_relax  residuo del enunciado (sub-relajacion): liquido {rl:.3e} J, "
+                  f"gas {rg:.3e} J; gap - residuos = {gap - rl - rg:.3e} J (gap {gap:.3e} J)")
     # (auditoria 18, A18-3) techo POR PASO de los ajustes no fisicos de la
     # escoria: |E_slag_tclip| + |E_slag_clip| de un paso <= 1e-4 del
     # inventario de la escoria (medido: arc_melt_slag 6e-6 en el peor paso,

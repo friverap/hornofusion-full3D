@@ -139,6 +139,22 @@ guarda sin leer su causa.
   (energy_audit_hook, linearización de Newton en T_it del ensamblado); el
   balance se escala contra el throughput bruto. arc_budget cierra a 1.0000
   con `E_mc_lost` (beams que escapan).
+- **Residuo de la SUB-RELAJACIÓN de T (WS-K3/WS-K4, C-095..C-103, 24-oct-2026)**:
+  el campo que queda en pie es el relajado `Tk = αT T* + (1−αT) Tpre`, que no
+  cumple el enunciado discreto; el hook evalúa cada término exacto en Tk y la
+  identidad supone residuo 0. Con `alpha_T` 0.7 en B1 el líquido pierde
+  ~−60 J/paso (280–345 s: energy_balance 1.7–2.3× lo permitido); banco de 220
+  pasos: neto 0.85 → −2.1, 1.0 → −3.8, 0.7 con max_outer 10 → −89. NO es
+  lineal en (1−αT) (C-097 refutada en C-098). Con 0.85 se cierra el NETO, no
+  cada paso: std por paso 105 J frente a 0.25 J con 1.0 (C-103); de ahí el
+  FAIL de energy_balance_step en el juez C-100. El remanente de ~−3.7 J/paso
+  queda FUERA de E_relax_liq (bench_relaxcol: gap − columna −833 J, std 0.23 J;
+  C-102/C-103), así que NO es residuo del TDMA (R(Tk) lineal: caería dentro);
+  sin atribuir (candidatos: celdas con alpha < ALPHA_CUTOFF o guarda). Columnas
+  diagnósticas (WS-K4) `E_relax_liq`/`E_relax_gas` (y `E_abs_liq_hook`; reparto por fase solo en
+  dos fluidos, no con mixture_model): fuera de la identidad a
+  propósito (la cerrarían escondiendo la pérdida); `check_audit` las
+  reporta como INFO `energy_relax`. Hueco por fase: `scripts/diag/energy_gap.py`.
 - **Radiación DO**: proyecciones de cara integradas exactas en cilíndricas
   (cierre a máquina); NO es invariante a rotaciones de 120° (efecto de rayos
   de la cuadratura S4) — el config de simetría corre con radiación off.

@@ -88,3 +88,6 @@ Generado por `scripts/make_audit_glossary.py` desde el encabezado de `src/mod_au
 | `E_slag_sol` | C | Heat from the slag to the scrap by contact in the bed (condensed slag in the pores; internal between inventories, diagnostic) [J] |
 | `m_steel_deficit` | C | Steel mass created by the freezing deficit of the condensed transport (freezing sink larger than the cell steel; audit 19, M19-C2) [kg] |
 | `E_steel_deficit` | C | Enthalpy of m_steel_deficit [J] |
+| `E_abs_liq_hook` | D | Heat absorbed by the liquid equation according to its own hook, last outer iteration [J] (WS-K3) |
+| `E_relax_liq` | D | Residual of the liquid discrete energy statement on the standing field Tk (T under-relaxation + incomplete inner solve; per-phase split valid only in two-fluid mode, not with mixture_model): absorbed - (arc + rad + chem + conv - wall + mass) of the hook [J]; energy the inventory gains/loses with no physical term, NOT in the identity (WS-K3/WS-K4, C-096..C-103) |
+| `E_relax_gas` | D | Same residual for the gas equation [J] (WS-K3) |
