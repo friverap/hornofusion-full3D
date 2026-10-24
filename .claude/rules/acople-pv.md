@@ -263,6 +263,14 @@ guarda sin leer su causa.
   misma función (la cancelación del Rhie–Chow lo exige). **`ALPHA_BED`
   (1e-2) es la única definición del umbral de lecho (B4-26)**; mismo valor
   que `ALPHA_FLOW_CUTOFF` a propósito.
+- **VIGENCIA de los fracasos (23-oct-2026, C-089)**: lo medido ANTES de las
+  auditorías 3–21 (13–21 oct; hallazgos ALTO corregidos en presión, multifase,
+  momento y continuidad) es condicional al código de su fecha: desde el cierre
+  de Plan D hay 238 commits de `src/` (89 en esos módulos). Planes D, E, F y G
+  NO están refutados para el código actual hasta repetirlos en un banco
+  vigente (claves aún en `mod_config_3d`). Vigentes: F2.31 por paso y
+  `n_pc_max = 3` (22-oct), Plan K (23-oct). El «no reintentar» de abajo se lee
+  con esta salvedad.
 - **Lo que NO funcionó en la ventana 280–370 s (oct-2026)**: la salvaguarda de
   water packing de RELAP5 §3.4.6 / TRACE cap. 2 (F2.32, archivada en
   dev-history) casi no se activa — la succión del piso del lecho no es water
