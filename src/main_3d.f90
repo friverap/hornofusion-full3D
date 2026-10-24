@@ -333,6 +333,8 @@ program eaf_3d_simulator
 
         step = step + 1
         time = time + cfg%dt
+        ! (WS-K5) masa del gas por celda al inicio del paso: balance por celda
+        if (cfg%audit_freq > 0) call audit_gas_cells(0, liq, gas, sol, slag, sh, mesh, cfg)
         dt_step = cfg%dt
         last_step = (cfg%t_final - time <= 1.0e-6_dp * cfg%dt)
         audit_written = .false.
@@ -789,6 +791,8 @@ program eaf_3d_simulator
             call phase_exchange_halos(liq, mesh)
             call phase_exchange_halos(gas, mesh)
         end if
+        ! (WS-K5) balance de masa del gas por celda con la rho FINAL (la de m_gas)
+        if (cfg%audit_freq > 0) call audit_gas_cells(1, liq, gas, sol, slag, sh, mesh, cfg)
         ! (auditoria 16, M16-I2) parada por tiempo de reloj: decision GLOBAL
         ! (max entre ranks) ANTES del audit, para que este paso cierre el
         ! intervalo del audit como cualquier snapshot (B4-4); el snapshot lo

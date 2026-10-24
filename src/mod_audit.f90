@@ -40,6 +40,8 @@ module mod_audit
     public :: AUD_RAD_FOAM
     public :: AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
     public :: AUD_ABS_LIQ_HOOK, AUD_RELAX_LIQ, AUD_RELAX_GAS
+    public :: AUD_MG_ERR_FREE, AUD_MG_ERR_MULTI, AUD_MG_ERR_ABS, AUD_MG_ERR_OUT, AUD_MG_SKIP
+    public :: audit_gas_cells, gas_cell_class
     public :: AUD_RESID_MASS, AUD_RESID_E, AUD_SPILL_MASS
     public :: AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
     public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2, AUD_GAS_VOLFIX, AUD_SLAG_TCLIP, AUD_MIX_INIT
@@ -168,7 +170,38 @@ module mod_audit
     integer, parameter :: AUD_ABS_LIQ_HOOK    = 59
     integer, parameter :: AUD_RELAX_LIQ       = 60
     integer, parameter :: AUD_RELAX_GAS       = 61
-    integer, parameter :: N_AUD = 61
+    ! DIAGNOSTICO (WS-K5, C-106..C-110): balance de masa del gas POR CELDA en
+    ! el paso, e = (a rho V)^fin - (a rho V)^ini - dt sum caras ws_Fg - rxn,
+    ! fuera de las celdas outlet (su e es el venteo). Separa donde la EOS
+    ! reescribe masa: celdas de gas LIBRE (sin liquido ni solido: ahi solo
+    ! queda la convergencia del lazo externo) y celdas MULTIFASE (el
+    ! complemento alpha_g = 1 - sum crea gas donde el liquido se retira y lo
+    ! destruye donde entra, sin flujo de gas que lo lleve: N-M4). B1 280 s,
+    ! 59 pasos, 20 externas: libre +2e-5 kg, multifase -8.7e-4 kg con
+    ! |e| 1.6e-2 kg (errores grandes que se compensan). OJO: e INCLUYE el
+    ! volfix de la celda (gas desplazado por fusion, carga, ECS, escoria),
+    ! que no se separa por clase: libre + multi + outlet = EOS - venteo +
+    ! volfix. Solo donde |volfix| << |multi| (B1 280 s: 1.3e-5 frente a
+    ! 8.7e-4) multi se lee como masa reescrita (cold_bucket2: multi -10.4 kg
+    ! es casi todo volfix -10.5). HIPOTESIS (C-110,
+    ! propuesta): el piso multifase es el complemento; alternativa abierta,
+    ! transporte por caras no enlazadas (ws_Fg_lk = 0). NO entran a mass_gas.
+    integer, parameter :: AUD_MG_ERR_FREE     = 62
+    integer, parameter :: AUD_MG_ERR_MULTI    = 63
+    integer, parameter :: AUD_MG_ERR_ABS      = 64
+    ! e de las celdas OUTLET (su balance no cierra por construccion: la masa
+    ! que les entra es el venteo) y pasos sin balance (ws_Fg no valido:
+    ! mezcla, sin multifase). Identidad de cierre, al redondeo:
+    !   EOS - (libre + multi + outlet) = venteo - volfix
+    ! (las caras interiores se cancelan; check_audit la imprime)
+    integer, parameter :: AUD_MG_ERR_OUT      = 65
+    integer, parameter :: AUD_MG_SKIP         = 66
+    integer, parameter :: N_AUD = 66
+    ! masa del gas por celda y su clase al inicio del paso (audit_gas_cells
+    ! modo 0); no es estado entre pasos: se recaptura al inicio de cada paso
+    real(dp), allocatable, save :: mg_ini(:,:,:)
+    integer, allocatable, save  :: mg_cls0(:,:,:)
+    logical, save :: mg_ini_ok = .false.
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
     ! Integrales de fuente acumuladas POR PASO entre escrituras (9..16 del
@@ -403,7 +436,7 @@ contains
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
                 'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq,m_gas_out,m_gas_rxn,E_gas_volfix,' // &
-                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip,E_slag_sol,m_steel_deficit,E_steel_deficit,E_abs_liq_hook,E_relax_liq,E_relax_gas'
+                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip,E_slag_sol,m_steel_deficit,E_steel_deficit,E_abs_liq_hook,E_relax_liq,E_relax_gas,m_gas_err_free,m_gas_err_multi,m_gas_err_abs,m_gas_err_out,m_gas_cells_skip'
             close(iu)
         end if
         acc = 0.0_dp
@@ -568,7 +601,9 @@ contains
                 ',', a(AUD_GAS_OUT), ',', a(AUD_GAS_RXN), ',', a(AUD_GAS_VOLFIX_E), &
                 ',', a(AUD_VF_O2), ',', a(AUD_VF_CO), ',', a(AUD_VF_CO2), &
                 ',', a(AUD_GAS_CCDROP), ',', a(AUD_SLAG_CLIP_MASS), ',', a(AUD_SLAG_CLIP_E), ',', a(AUD_SLAG_SOL), ',', a(AUD_STEEL_DEF_MASS), ',', a(AUD_STEEL_DEF_E), &
-                ',', a(AUD_ABS_LIQ_HOOK), ',', a(AUD_RELAX_LIQ), ',', a(AUD_RELAX_GAS)
+                ',', a(AUD_ABS_LIQ_HOOK), ',', a(AUD_RELAX_LIQ), ',', a(AUD_RELAX_GAS), &
+                ',', a(AUD_MG_ERR_FREE), ',', a(AUD_MG_ERR_MULTI), ',', a(AUD_MG_ERR_ABS), &
+                ',', a(AUD_MG_ERR_OUT), ',', a(AUD_MG_SKIP)
             close(iu)
         end if
     end subroutine audit_write_step
@@ -738,6 +773,113 @@ contains
         acc(AUD_RELAX_GAS) = acc(AUD_RELAX_GAS) + eq_residual(2)
         eeq = 0.0_dp
     end subroutine audit_accumulate
+
+    !---------------------------------------------------------------------------
+    ! Clase de una celda para el balance de masa del gas: 0 outlet (sumidero,
+    ! su e es el venteo), 1 gas libre (sin liquido, escoria NI solido),
+    ! 2 multifase. asl es la escoria en volumen (Plan H): fuera de la vista
+    ! condensada liq%alpha no la incluye y el complemento tambien actua ahi.
+    !---------------------------------------------------------------------------
+    pure integer function gas_cell_class(al, asl, as, is_out)
+        real(dp), intent(in) :: al, asl, as
+        logical, intent(in)  :: is_out
+        if (is_out) then
+            gas_cell_class = 0
+        else if (al < ALPHA_FLOW_CUTOFF .and. asl < ALPHA_FLOW_CUTOFF .and. as < ALPHA_FLOW_CUTOFF) then
+            gas_cell_class = 1
+        else
+            gas_cell_class = 2
+        end if
+    end function gas_cell_class
+
+    !---------------------------------------------------------------------------
+    ! Balance de masa del gas POR CELDA (WS-K5). mode 0 al INICIO del paso
+    ! guarda a rho V y la clase; mode 1 al FINAL (tras la ultima EOS, el
+    ! estado que escribe m_gas) acumula e = d(a rho V) - dt sum ws_Fg - rxn.
+    ! Una celda es libre solo si lo es al inicio Y al final del paso (la
+    ! clase de un solo instante atribuia al gas libre el cambio de fase de
+    ! la celda). Sin ws_Fg valido (mezcla, sin multifase) cuenta el paso en
+    ! m_gas_cells_skip y no acumula: las columnas valdrian 0 en silencio.
+    !---------------------------------------------------------------------------
+    subroutine audit_gas_cells(mode, liq, gas, sol, slag, sh, m, cfg)
+        integer, intent(in)        :: mode
+        type(phase_t), intent(in)  :: liq, gas
+        type(solid_t), intent(in)  :: sol
+        type(slag_t), intent(in)   :: slag
+        type(shared_t), intent(in) :: sh
+        type(mesh_t), intent(in)   :: m
+        type(config_t), intent(in) :: cfg
+        integer  :: i, j, k, e, c, istart, iend, jstart, jend, kstart, kend
+        real(dp) :: fl, rx, ee, asl
+        logical  :: is_out, at_rmin_aud, at_rmax_aud, at_zmin_aud, at_zmax_aud
+
+        call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
+        call physical_boundary_flags(m, at_rmin_aud, at_rmax_aud, at_zmin_aud, at_zmax_aud)
+        if (mode == 0) then
+            if (.not. allocated(mg_ini)) allocate(mg_ini, mold=gas%alpha)
+            if (.not. allocated(mg_cls0)) allocate(mg_cls0(lbound(gas%alpha,1):ubound(gas%alpha,1), &
+                lbound(gas%alpha,2):ubound(gas%alpha,2), lbound(gas%alpha,3):ubound(gas%alpha,3)))
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        mg_ini(i,j,k) = gas%alpha(i,j,k) * gas%rho(i,j,k) * m%vol(i,j,k)
+                        mg_cls0(i,j,k) = gas_cell_class(liq%alpha(i,j,k), slag_vol(i,j,k), &
+                                                        sol%alpha_s(i,j,k), outlet(i,j,k))
+                    end do
+                end do
+            end do
+            mg_ini_ok = .true.
+            return
+        end if
+        if (.not. (mg_ini_ok .and. ws_Fg_valid .and. cfg%solve_flow .and. cfg%solve_multiphase)) then
+            ! un contador por paso (lo suma solo el rank 0 tras la reduccion)
+            if ((.not. m%is_parallel) .or. m%topo%rank == 0) acc(AUD_MG_SKIP) = acc(AUD_MG_SKIP) + 1.0_dp
+            mg_ini_ok = .false.
+            return
+        end if
+        mg_ini_ok = .false.
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    is_out = outlet(i,j,k)
+                    c = gas_cell_class(liq%alpha(i,j,k), slag_vol(i,j,k), sol%alpha_s(i,j,k), is_out)
+                    if (c == 1 .and. mg_cls0(i,j,k) == 2) c = 2
+                    fl = cfg%dt * ( ws_Fg_r(i-1,j,k) * ws_Fg_lk_r(i-1,j,k) - ws_Fg_r(i,j,k) * ws_Fg_lk_r(i,j,k) &
+                                  + ws_Fg_th(i,j-1,k) * ws_Fg_lk_th(i,j-1,k) - ws_Fg_th(i,j,k) * ws_Fg_lk_th(i,j,k) &
+                                  + ws_Fg_z(i,j,k-1) * ws_Fg_lk_z(i,j,k-1) - ws_Fg_z(i,j,k) * ws_Fg_lk_z(i,j,k) )
+                    rx = (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) * m%vol(i,j,k) * cfg%dt
+                    ee = gas%alpha(i,j,k) * gas%rho(i,j,k) * m%vol(i,j,k) - mg_ini(i,j,k) - fl - rx
+                    select case (c)
+                    case (0)
+                        acc(AUD_MG_ERR_OUT) = acc(AUD_MG_ERR_OUT) + ee
+                        cycle
+                    case (1)
+                        acc(AUD_MG_ERR_FREE) = acc(AUD_MG_ERR_FREE) + ee
+                    case default
+                        acc(AUD_MG_ERR_MULTI) = acc(AUD_MG_ERR_MULTI) + ee
+                    end select
+                    acc(AUD_MG_ERR_ABS) = acc(AUD_MG_ERR_ABS) + abs(ee)
+                end do
+            end do
+        end do
+    contains
+        ! outlet: misma definicion que m_gas_out (celdas de electrodo del techo)
+        logical function outlet(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            outlet = .false.
+            if (kk == m%nz .and. at_zmax_aud) then
+                do e = 1, N_ELECTRODES
+                    if (m%is_electrode(ii,jj,kk,e)) outlet = .true.
+                end do
+            end if
+        end function outlet
+        real(dp) function slag_vol(ii, jj, kk)
+            integer, intent(in) :: ii, jj, kk
+            slag_vol = 0.0_dp
+            if (allocated(slag%alpha_sl)) slag_vol = slag%alpha_sl(ii,jj,kk)
+        end function slag_vol
+    end subroutine audit_gas_cells
 
     !---------------------------------------------------------------------------
     logical function is_writer(m)

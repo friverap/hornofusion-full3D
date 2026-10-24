@@ -1,0 +1,238 @@
+== corrida cold_10step -n 8
+[invariants] tests/out/cold_10step_n8
+  (3 snapshots)
+  PASS  nan  F_lorentz_r step 0: 0 no-finitos
+  PASS  alpha_bounds  step 0: min=0.000e+00 max=1.000000
+  PASS  sum_alpha  step 0: max|sum_alpha - (1 activa / 0 inactiva)| = 0.000e+00
+  PASS  T_liquid_bound  step 0: [300.0, 300.0] K
+  PASS  T_solid_bound  step 0: [300.0, 300.0] K
+  PASS  T_gas_bound  step 0: min=300.0 fuera_arco_max=300.0 arco_max=300.0 K
+  PASS  Y_bounds  step 0
+  PASS  turb_positive  step 10
+  PASS  slag_comp  step 0: max sum X = 0.000000
+[audit] tests/out/cold_10step_n8 (10 pasos)
+  PASS  energy_balance_step  peor paso 9: gap/permitido = 1.350e-02 (etol_step 0.1 x S_gas + xtol 1e-09 x S_ext + htol_step 5e-05 x S_int, piso 1e-8 E_tot; por paso desde el 2)
+  PASS  energy_balance  dE=1.5078e+07 J, E_iny=1.5082e+07 J, gap=-4.740e+03 J, permitido=2.030e+05 J (etol 0.02 x S_gas 1.015e+07 + xtol 1e-09 x S_ext 1.542e+07 + htol 0.0001 x S_int 1.257e+04), gap/permitido=2.334e-02
+  INFO  energy_relax  residuo del enunciado (sub-relajacion): liquido 0.000e+00 J, gas -4.470e+03 J; gap - residuos = -2.700e+02 J (gap -4.740e+03 J)
+  PASS  slag_adjust_cum  |E_slag_tclip| + |E_slag_clip| acumulado 0.000e+00 J sobre S_ext 1.542e+07 J (max 1e-2 S_ext + 1 J)
+  PASS  mass_gas  dm_gas=-1.8747e+01 vs -venteo+volfix+reacciones=-1.8004e+01 kg (venteo 1.799e+01, volfix -1.176e-02, rxn 0.000e+00); EOS reescribe -7.430e-01 kg = 3.963e-02 rel (max 0.5)
+  INFO  mass_gas_cells  por celda: gas libre -5.970e-01 kg, multifase -4.494e-03 kg (|e| 8.373e+00), outlet -1.815e+01; cierre EOS - celdas - venteo + volfix = -3.355e-15 kg (sobre |EOS| 7.430e-01); tasa EOS -1.762e-02 /s por kg de gas
+  INFO  mass_gas_cells  AVISO volfix -1.176e-02 kg >= 10 % de multifase: la columna mezcla volfix y EOS, no se lee como piso
+  INFO  conv_gas  E_conv_gas - venteo = -8.300e+06 J; / (cp 1000 x masa EOS -7.430e-01 kg) = -11171.2 K equivalentes
+  PASS  rad_closure  sum rad fases + pared = -1.111e+03 J sobre 3.308e+05 (max 0.05)
+  PASS  arc_budget  recibida/P_arc·dt = 1.0000000 (descartada 0.000e+00 J, tol 1e-05)
+  PASS  mc_lost_bound  E_mc_lost 2.074e+06 J = 0.126 del arco (max 0.4)
+  PASS  mass_liq  dm_liq=0.0000e+00 vs fundido-resolid-clip=0.0000e+00 kg (fundido=0.000e+00, resolid=0.000e+00, clip=0.000e+00), err rel=0.000e+00 (max 1.000e-09)
+  PASS  alpha_clip  sum|clip| auditado 0.000e+00 kg (neto 0.000e+00) sobre fundido 0.000e+00 kg (max 1e-06 relativo)
+  PASS  steel_deficit_bounded  acero creado por deficit de congelacion 0.000e+00 kg (max 1e-06 relativo)
+  PASS  ccdrop_bounded  |m_gas_ccdrop| acumulado 8.736e-18 kg sobre m_gas 2.108e+02 kg (max 2e-2)
+  PASS  mass_sol  dm_sol=0.0000e+00 vs cargas+ECS-fundido+resolid-Cox=0.0000e+00 kg, err rel=0.000e+00 (max 1.990e-09)
+  PASS  sentinel_p  p_max 2.214e+03 Pa (P_HYDRO_CAP 2.0e+06)
+  PASS  sentinel_gas  u_gas_max 82.4 m/s (U_GAS_MAX 300)
+  PASS  regime_p  p_max 2.214e+03 Pa (max 5.0e+05)
+  PASS  regime_gas  u_gas_max 82.4 m/s (max 200)
+[metrics] comparando contra metrics_v131.json (rtol 1e-12)
+  PASS  cold_10step_n8: peor métrica - (err rel 0.000e+00)
+== reinicio cold_10step desde paso 5 (n8 -> n8)
+[decomposition] cold_10step_n8_to_n8_s5 vs cold_10step_n8 (step 10)
+      F_lorentz_r            err_rel_Linf = 0.000e+00
+      F_lorentz_th           err_rel_Linf = 0.000e+00
+      F_lorentz_z            err_rel_Linf = 0.000e+00
+      G_rad                  err_rel_Linf = 0.000e+00
+      S_CO_src               err_rel_Linf = 0.000e+00
+      S_arc                  err_rel_Linf = 0.000e+00
+      S_chem                 err_rel_Linf = 0.000e+00
+      S_rad                  err_rel_Linf = 0.000e+00
+      T_gas                  err_rel_Linf = 0.000e+00
+      T_liquid               err_rel_Linf = 0.000e+00
+      T_slag                 err_rel_Linf = 0.000e+00
+      T_solid                err_rel_Linf = 0.000e+00
+      X_C                    err_rel_Linf = 0.000e+00
+      X_CaO                  err_rel_Linf = 0.000e+00
+      X_FeO                  err_rel_Linf = 0.000e+00
+      X_MgO                  err_rel_Linf = 0.000e+00
+      X_SiO2                 err_rel_Linf = 0.000e+00
+      Y_CO                   err_rel_Linf = 0.000e+00
+      Y_CO2                  err_rel_Linf = 0.000e+00
+      Y_O2                   err_rel_Linf = 0.000e+00
+      alpha_foam             err_rel_Linf = 0.000e+00
+      alpha_gas              err_rel_Linf = 0.000e+00
+      alpha_liquid           err_rel_Linf = 0.000e+00
+      alpha_slag             err_rel_Linf = 0.000e+00
+      alpha_solid            err_rel_Linf = 0.000e+00
+      epsilon                err_rel_Linf = 0.000e+00
+      mass_solid             err_rel_Linf = 0.000e+00
+      pressure               err_rel_Linf = 0.000e+00
+      rst:E_slag             err_rel_Linf = 0.000e+00
+      rst:E_solid            err_rel_Linf = 0.000e+00
+      rst:Tg_end             err_rel_Linf = 0.000e+00
+      rst:alpha_foam_rst     err_rel_Linf = 0.000e+00
+      rst:comp_carry         err_rel_Linf = 0.000e+00
+      rst:layer_id           err_rel_Linf = 0.000e+00
+      rst:liq_cont_prev      err_rel_Linf = 0.000e+00
+      rst:m_C                err_rel_Linf = 0.000e+00
+      rst:m_C_slag           err_rel_Linf = 0.000e+00
+      rst:m_CaO              err_rel_Linf = 0.000e+00
+      rst:m_FeO              err_rel_Linf = 0.000e+00
+      rst:m_MgO              err_rel_Linf = 0.000e+00
+      rst:m_SiO2             err_rel_Linf = 0.000e+00
+      rst:m_slag             err_rel_Linf = 0.000e+00
+      rst:mu_eff_liquid      err_rel_Linf = 0.000e+00
+      rst:mu_t               err_rel_Linf = 0.000e+00
+      rst:rho_gas            err_rel_Linf = 0.000e+00
+      tke                    err_rel_Linf = 0.000e+00
+      velocity_r_gas         err_rel_Linf = 0.000e+00
+      velocity_r_liquid      err_rel_Linf = 0.000e+00
+      velocity_th_gas        err_rel_Linf = 0.000e+00
+      velocity_th_liquid     err_rel_Linf = 0.000e+00
+      velocity_z_gas         err_rel_Linf = 0.000e+00
+      velocity_z_liquid      err_rel_Linf = 0.000e+00
+  PASS  peor campo:  (0.000e+00, tol 0.0)
+[invariants] tests/out/restart/cold_10step_n8_to_n8_s5
+  (2 snapshots)
+  PASS  nan  F_lorentz_r step 5: 0 no-finitos
+  PASS  alpha_bounds  step 5: min=0.000e+00 max=1.000000
+  PASS  sum_alpha  step 5: max|sum_alpha - (1 activa / 0 inactiva)| = 0.000e+00
+  PASS  T_liquid_bound  step 5: [300.0, 300.0] K
+  PASS  T_solid_bound  step 5: [300.0, 306.8] K
+  PASS  T_gas_bound  step 5: min=300.0 fuera_arco_max=357.6 arco_max=1531.7 K
+  PASS  Y_bounds  step 5
+  PASS  turb_positive  step 10
+  PASS  slag_comp  step 5: max sum X = 0.000000
+[audit] tests/out/restart/cold_10step_n8_to_n8_s5 (5 pasos)
+  PASS  energy_balance_step  peor paso 9: gap/permitido = 1.350e-02 (etol_step 0.1 x S_gas + xtol 1e-09 x S_ext + htol_step 5e-05 x S_int, piso 1e-8 E_tot; por paso desde el 2)
+  PASS  energy_balance  dE=7.5560e+06 J, E_iny=7.5602e+06 J, gap=-4.130e+03 J, permitido=1.015e+05 J (etol 0.02 x S_gas 5.074e+06 + xtol 1e-09 x S_ext 7.888e+06 + htol 0.0001 x S_int 9.992e+03), gap/permitido=4.070e-02
+  INFO  energy_relax  residuo del enunciado (sub-relajacion): liquido 0.000e+00 J, gas -3.880e+03 J; gap - residuos = -2.494e+02 J (gap -4.130e+03 J)
+  PASS  slag_adjust_cum  |E_slag_tclip| + |E_slag_clip| acumulado 0.000e+00 J sobre S_ext 7.888e+06 J (max 1e-2 S_ext + 1 J)
+  PASS  mass_gas  dm_gas=-9.6163e+00 vs -venteo+volfix+reacciones=-9.6613e+00 kg (venteo 9.661e+00, volfix 0.000e+00, rxn 0.000e+00); EOS reescribe 4.498e-02 kg = 4.655e-03 rel (max 0.5)
+  INFO  mass_gas_cells  por celda: gas libre 6.824e-02 kg, multifase 4.519e-03 kg (|e| 1.804e-01), outlet -9.689e+00; cierre EOS - celdas - venteo + volfix = -3.553e-15 kg (sobre |EOS| 4.498e-02); tasa EOS 2.230e-03 /s por kg de gas
+  INFO  conv_gas  E_conv_gas - venteo = -4.870e+06 J; / (cp 1000 x masa EOS 4.498e-02 kg) = -108286.1 K equivalentes
+  PASS  rad_closure  sum rad fases + pared = -1.107e+03 J sobre 3.249e+05 (max 0.05)
+  PASS  arc_budget  recibida/P_arc·dt = 1.0000000 (descartada 0.000e+00 J, tol 1e-05)
+  PASS  mc_lost_bound  E_mc_lost 1.039e+06 J = 0.126 del arco (max 0.4)
+  PASS  mass_liq  dm_liq=0.0000e+00 vs fundido-resolid-clip=0.0000e+00 kg (fundido=0.000e+00, resolid=0.000e+00, clip=0.000e+00), err rel=0.000e+00 (max 1.000e-09)
+  PASS  alpha_clip  sum|clip| auditado 0.000e+00 kg (neto 0.000e+00) sobre fundido 0.000e+00 kg (max 1e-06 relativo)
+  PASS  steel_deficit_bounded  acero creado por deficit de congelacion 0.000e+00 kg (max 1e-06 relativo)
+  PASS  ccdrop_bounded  |m_gas_ccdrop| acumulado 3.425e-18 kg sobre m_gas 2.017e+02 kg (max 2e-2)
+  PASS  mass_sol  dm_sol=0.0000e+00 vs cargas+ECS-fundido+resolid-Cox=0.0000e+00 kg, err rel=0.000e+00 (max 1.990e-09)
+  PASS  sentinel_p  p_max 2.214e+03 Pa (P_HYDRO_CAP 2.0e+06)
+  PASS  sentinel_gas  u_gas_max 82.4 m/s (U_GAS_MAX 300)
+  PASS  regime_p  p_max 2.214e+03 Pa (max 5.0e+05)
+  PASS  regime_gas  u_gas_max 82.4 m/s (max 200)
+[audit-restart] cold_10step_n8_to_n8_s5 vs cold_10step_n8 (5 filas, 92 columnas)
+  PASS  peor columna: - (0.000e+00, tol 1e-12)
+== corrida bath_test -n 4
+[invariants] tests/out/bath_test_n4
+  (11 snapshots)
+  PASS  nan  F_lorentz_r step 0: 0 no-finitos
+  PASS  alpha_bounds  step 0: min=0.000e+00 max=1.000000
+  PASS  sum_alpha  step 0: max|sum_alpha - (1 activa / 0 inactiva)| = 0.000e+00
+  PASS  T_liquid_bound  step 100: [1850.0, 1850.0] K
+  PASS  T_solid_bound  step 0: [1850.0, 1850.0] K
+  PASS  T_gas_bound  step 100: min=1850.0 fuera_arco_max=1850.0 arco_max=1850.0 K
+  PASS  Y_bounds  step 0
+  PASS  turb_positive  step 0
+  PASS  slag_comp  step 0: max sum X = 0.000000
+[audit] tests/out/bath_test_n4 (100 pasos)
+  PASS  energy_balance_step  peor paso 5: gap/permitido = 4.234e-07 (etol_step 0.1 x S_gas + xtol 1e-09 x S_ext + htol_step 5e-05 x S_int, piso 1e-8 E_tot; por paso desde el 2)
+  PASS  energy_balance  dE=-1.2206e-04 J, E_iny=-1.9254e-18 J, gap=-1.221e-04 J, permitido=3.841e-10 J (etol 0.02 x S_gas 1.920e-08 + xtol 1e-09 x S_ext 1.050e-16 + htol 0.0001 x S_int 0.000e+00), gap/permitido=1.221e-04
+  INFO  energy_relax  residuo del enunciado (sub-relajacion): liquido 7.534e-05 J, gas 1.415e-08 J; gap - residuos = -1.974e-04 J (gap -1.221e-04 J)
+  PASS  slag_adjust_cum  |E_slag_tclip| + |E_slag_clip| acumulado 0.000e+00 J sobre S_ext 1.050e-16 J (max 1e-2 S_ext + 1 J)
+  PASS  mass_gas  dm_gas=1.1337e-07 vs -venteo+volfix+reacciones=1.6794e-07 kg (venteo -1.679e-07, volfix 0.000e+00, rxn 0.000e+00); EOS reescribe -5.458e-08 kg = 1.893e-07 rel (max 0.5)
+  INFO  mass_gas_cells  por celda: gas libre -2.513e-09 kg, multifase -5.206e-08 kg (|e| 5.532e-08), outlet 1.679e-07; cierre EOS - celdas - venteo + volfix = 6.627e-15 kg (sobre |EOS| 5.458e-08); tasa EOS -1.893e-09 /s por kg de gas
+  INFO  conv_gas  E_conv_gas - venteo = 3.107e-01 J; / (cp 1000 x masa EOS -5.458e-08 kg) = 5692.9 K equivalentes
+  PASS  arc_budget  (sin potencia de arco: no aplica)
+  PASS  mass_liq  dm_liq=-1.1642e-09 vs fundido-resolid-clip=0.0000e+00 kg (fundido=0.000e+00, resolid=0.000e+00, clip=0.000e+00), err rel=1.164e-09 (max 5.129e-09)
+  PASS  alpha_clip  sum|clip| auditado 0.000e+00 kg (neto 0.000e+00) sobre fundido 0.000e+00 kg (max 1e-06 relativo)
+  PASS  steel_deficit_bounded  acero creado por deficit de congelacion 0.000e+00 kg (max 1e-06 relativo)
+  PASS  ccdrop_bounded  |m_gas_ccdrop| acumulado 0.000e+00 kg sobre m_gas 2.883e+01 kg (max 2e-2)
+  PASS  mass_sol  dm_sol=0.0000e+00 vs cargas+ECS-fundido+resolid-Cox=0.0000e+00 kg, err rel=0.000e+00 (max 1.000e-09)
+  PASS  sentinel_p  p_max 8.056e+04 Pa (P_HYDRO_CAP 2.0e+06)
+  PASS  sentinel_gas  u_gas_max 0.0 m/s (U_GAS_MAX 300)
+  PASS  regime_p  p_max 8.056e+04 Pa (max 5.0e+05)
+  PASS  regime_gas  u_gas_max 0.0 m/s (max 200)
+[bath] tests/out/bath_test_n4
+  PASS  bath_hydrostatic  err 4.600e-12 de rho g H = 7.207e+04 Pa (p fondo-tope medida 6.177e+04, esperada 6.177e+04, g_eff/g 0.995)
+  PASS  bath_rest  max |u_l| en celdas puras = 1.919e-11 m/s
+  PASS  bath_alpha_frozen  max |d alpha_l| en celdas puras = 3.264e-11
+  PASS  bath_mass  m_liq 274000.000 -> 274000.000 kg (err 4.249e-15)
+  PASS  bath_p_bounded  p_max 8.056e+04 Pa (3x ferro = 2.162e+05)
+  PASS  bath_gas_bounded  u_gas_max 0.0 m/s (max 100)
+[metrics] comparando contra metrics_v131.json (rtol 1e-12)
+  PASS  bath_test_n4: peor métrica - (err rel 0.000e+00)
+== corrida arc_melt -n 4
+[invariants] tests/out/arc_melt_n4
+  (9 snapshots)
+  PASS  nan  F_lorentz_r step 0: 0 no-finitos
+  PASS  alpha_bounds  step 0: min=0.000e+00 max=1.000000
+  PASS  sum_alpha  step 0: max|sum_alpha - (1 activa / 0 inactiva)| = 0.000e+00
+  PASS  T_liquid_bound  step 25: [300.0, 1550.0] K
+  PASS  T_solid_bound  step 200: [1546.4, 1600.0] K
+  PASS  T_gas_bound  step 0: min=300.0 fuera_arco_max=300.0 arco_max=300.0 K
+  PASS  Y_bounds  step 0
+  PASS  turb_positive  step 0
+  PASS  slag_comp  step 0: max sum X = 0.000000
+[audit] tests/out/arc_melt_n4 (200 pasos)
+  PASS  energy_balance_step  peor paso 150: gap/permitido = 2.331e-01 (etol_step 0.1 x S_gas + xtol 1e-09 x S_ext + htol_step 5e-05 x S_int, piso 1e-8 E_tot; por paso desde el 2)
+  PASS  energy_balance  dE=7.8270e+07 J, E_iny=7.8283e+07 J, gap=-1.242e+04 J, permitido=1.332e+06 J (etol 0.02 x S_gas 6.639e+07 + xtol 1e-09 x S_ext 2.247e+08 + htol 0.0001 x S_int 4.397e+07), gap/permitido=9.322e-03
+  INFO  energy_relax  residuo del enunciado (sub-relajacion): liquido -4.095e+02 J, gas -8.345e+03 J; gap - residuos = -3.665e+03 J (gap -1.242e+04 J)
+  PASS  slag_adjust_cum  |E_slag_tclip| + |E_slag_clip| acumulado 0.000e+00 J sobre S_ext 2.247e+08 J (max 1e-2 S_ext + 1 J)
+  PASS  mass_gas  dm_gas=-1.1473e+02 vs -venteo+volfix+reacciones=-9.9536e+01 kg (venteo 9.949e+01, volfix -4.785e-02, rxn 0.000e+00); EOS reescribe -1.519e+01 kg = 1.324e-01 rel (max 0.5)
+  INFO  mass_gas_cells  por celda: gas libre -1.380e+01 kg, multifase -1.166e+00 kg (|e| 2.584e+01), outlet -9.976e+01; cierre EOS - celdas - venteo + volfix = -6.036e-13 kg (sobre |EOS| 1.519e+01); tasa EOS -3.604e-02 /s por kg de gas
+  INFO  conv_gas  E_conv_gas - venteo = -1.188e+08 J; / (cp 1000 x masa EOS -1.519e+01 kg) = -7822.1 K equivalentes
+  PASS  rad_closure  sum rad fases + pared = 4.650e+04 J sobre 7.039e+07 (max 0.05)
+  PASS  arc_budget  recibida/P_arc·dt = 1.0000000 (descartada 0.000e+00 J, tol 1e-05)
+  PASS  mc_lost_bound  E_mc_lost 2.070e+07 J = 0.125 del arco (max 0.4)
+  PASS  mass_liq  dm_liq=3.7071e+01 vs fundido-resolid-clip=3.7071e+01 kg (fundido=3.713e+01, resolid=6.215e-02, clip=0.000e+00), err rel=1.910e-16 (max 1.000e-09)
+  PASS  alpha_clip  sum|clip| auditado 0.000e+00 kg (neto 0.000e+00) sobre fundido 3.713e+01 kg (max 1e-06 relativo)
+  PASS  steel_deficit_bounded  acero creado por deficit de congelacion 0.000e+00 kg (max 1e-06 relativo)
+  PASS  ccdrop_bounded  |m_gas_ccdrop| acumulado 3.583e-18 kg sobre m_gas 2.108e+02 kg (max 2e-2)
+  PASS  mass_sol  dm_sol=-3.7071e+01 vs cargas+ECS-fundido+resolid-Cox=-3.7071e+01 kg, err rel=1.167e-12 (max 1.027e-09)
+  PASS  sentinel_p  p_max 5.629e+03 Pa (P_HYDRO_CAP 2.0e+06)
+  PASS  sentinel_gas  u_gas_max 94.7 m/s (U_GAS_MAX 300)
+  PASS  regime_p  p_max 5.629e+03 Pa (max 5.0e+05)
+  PASS  regime_gas  u_gas_max 94.7 m/s (max 200)
+[arcmelt] tests/out/arc_melt_n4
+  PASS  arcmelt_progressive  0.62 de los pasos funden (min 0.4); el mayor paso funde 0.012 del total (max 0.1)
+  PASS  arcmelt_mass  m_liq final 37.1 kg (min 25.0)
+[metrics] comparando contra metrics_v131.json (rtol 1e-12)
+  PASS  arc_melt_n4: peor métrica - (err rel 0.000e+00)
+== corrida bed_bath_rest -n 4
+[invariants] tests/out/bed_bath_rest_n4
+  (11 snapshots)
+  PASS  nan  F_lorentz_r step 0: 0 no-finitos
+  PASS  alpha_bounds  step 0: min=0.000e+00 max=1.000000
+  PASS  sum_alpha  step 0: max|sum_alpha - (1 activa / 0 inactiva)| = 0.000e+00
+  PASS  T_liquid_bound  step 100: [1850.0, 1850.0] K
+  PASS  T_solid_bound  step 0: [1850.0, 1850.0] K
+  PASS  T_gas_bound  step 100: min=1850.0 fuera_arco_max=1850.0 arco_max=1850.0 K
+  PASS  Y_bounds  step 0
+  PASS  turb_positive  step 0
+  PASS  slag_comp  step 0: max sum X = 0.000000
+[audit] tests/out/bed_bath_rest_n4 (100 pasos)
+  PASS  energy_balance_step  peor paso 35: gap/permitido = 7.479e-08 (etol_step 0.1 x S_gas + xtol 1e-09 x S_ext + htol_step 5e-05 x S_int, piso 1e-8 E_tot; por paso desde el 2)
+  PASS  energy_balance  dE=3.0506e-04 J, E_iny=-8.7720e-06 J, gap=3.138e-04 J, permitido=2.297e-09 J (etol 0.02 x S_gas 1.149e-07 + xtol 1e-09 x S_ext 8.772e-06 + htol 0.0001 x S_int 0.000e+00), gap/permitido=3.138e-04
+  INFO  energy_relax  residuo del enunciado (sub-relajacion): liquido 1.495e-04 J, gas -1.149e-07 J; gap - residuos = 1.644e-04 J (gap 3.138e-04 J)
+  PASS  slag_adjust_cum  |E_slag_tclip| + |E_slag_clip| acumulado 0.000e+00 J sobre S_ext 8.772e-06 J (max 1e-2 S_ext + 1 J)
+  PASS  mass_gas  dm_gas=-5.4612e-04 vs -venteo+volfix+reacciones=-1.0855e-02 kg (venteo 1.086e-02, volfix 0.000e+00, rxn 0.000e+00); EOS reescribe 1.031e-02 kg = 4.444e-02 rel (max 0.5)
+  INFO  mass_gas_cells  por celda: gas libre 1.121e-03 kg, multifase 9.188e-03 kg (|e| 1.147e-02), outlet -1.086e-02; cierre EOS - celdas - venteo + volfix = -2.652e-14 kg (sobre |EOS| 1.031e-02); tasa EOS 8.888e-04 /s por kg de gas
+  INFO  conv_gas  E_conv_gas - venteo = -2.008e+04 J; / (cp 1000 x masa EOS 1.031e-02 kg) = -1948.0 K equivalentes
+  PASS  arc_budget  (sin potencia de arco: no aplica)
+  PASS  mass_liq  dm_liq=-2.0373e-10 vs fundido-resolid-clip=-8.7794e-12 kg (fundido=0.000e+00, resolid=0.000e+00, clip=8.779e-12), err rel=1.949e-10 (max 2.507e-09)
+  PASS  alpha_clip  sum|clip| auditado 8.779e-12 kg (neto 8.779e-12) sobre fundido 0.000e+00 kg (max 1e-06 relativo)
+  PASS  steel_deficit_bounded  acero creado por deficit de congelacion 0.000e+00 kg (max 1e-06 relativo)
+  PASS  ccdrop_bounded  |m_gas_ccdrop| acumulado 0.000e+00 kg sobre m_gas 2.320e+01 kg (max 2e-2)
+  PASS  mass_sol  dm_sol=0.0000e+00 vs cargas+ECS-fundido+resolid-Cox=0.0000e+00 kg, err rel=0.000e+00 (max 6.877e-09)
+  PASS  sentinel_p  p_max 8.748e+04 Pa (P_HYDRO_CAP 2.0e+06)
+  PASS  sentinel_gas  u_gas_max 3.3 m/s (U_GAS_MAX 300)
+  PASS  regime_p  p_max 8.748e+04 Pa (max 5.0e+05)
+  PASS  regime_gas  u_gas_max 3.3 m/s (max 200)
+[bedbath] tests/out/bed_bath_rest_n4
+  PASS  bedbath_alpha_frozen  max |d alpha_l| = 5.914e-07 (max 1e-05)
+  PASS  bedbath_p_bounded  p_max 8.759e+04 Pa (inicial 8.759e+04, factor 1.2)
+  PASS  bedbath_liq_rest  u_liq_max (t >= 0.1) = 0.069 m/s (max 0.1)
+  PASS  bedbath_gas_rest  u_gas_max (t >= 0.1) = 0.262 m/s (max 1.0)
+[metrics] comparando contra metrics_v131.json (rtol 1e-12)
+  PASS  bed_bath_rest_n4: peor métrica - (err rel 0.000e+00)
+------------------------------------------------------------
+TESTS (quick): OK

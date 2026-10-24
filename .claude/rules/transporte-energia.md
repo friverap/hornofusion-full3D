@@ -130,6 +130,26 @@ guarda sin leer su causa.
   (bath_freeze 12 %), el lazo externo truncado y el gas fuera del acople. `E_conv_gas − E_out_conv` es, en
   forma T, la entalpía de esa masa: el «defecto convectivo» del gas no es
   numérico. Gate `mgtol` 0.5 (regresiones); el juez es B1 (N-M4 abierto).
+  **WS-K5 (C-106..C-110, 24-oct-2026)**: en B1 el residuo es una deriva
+  continua (~−5e-5 kg/paso): ~60 % lazo externo truncado (max_outer 5 nunca
+  converge; vive en gas libre y lecho) y un piso ~1/3 que no baja con más
+  externas ni con alpha_T y vive en celdas multifase (errores +5e-3/−6e-3 kg
+  en 59 pasos que se compensan; el neto ≈ −la entrada por el outlet).
+  HIPÓTESIS (C-110, propuesta, no probada contra alternativas): el
+  complemento α_g = 1 − Σ crea gas donde el líquido se retira y lo destruye
+  donde entra, sin flujo de gas; alternativa abierta: transporte por caras
+  no enlazadas (ws_Fg_lk = 0). Hecho medido: el inventario nunca recibe el
+  flujo del outlet, solo cambia por la EOS y el complemento. Columnas
+  diagnósticas `m_gas_err_free`, `m_gas_err_multi`, `m_gas_err_abs`,
+  `m_gas_err_out`, `m_gas_cells_skip` (balance POR CELDA con escoria en la
+  clase y clase de inicio Y fin de paso; cierre EOS − celdas = venteo −
+  volfix al redondeo; e INCLUYE el volfix por celda, que no se separa por
+  clase: `m_gas_err_multi` solo es masa reescrita donde |volfix| << |multi|,
+  p. ej. B1, pero NO en cargas de cesta (cold_bucket2: −10.4 kg ≈ volfix);
+  fuera de mass_gas;
+  INFO `mass_gas_cells` con la tasa por s y por kg de gas, que no depende
+  del largo de la ventana: el cociente de mass_gas sí, y en ventanas largas
+  de B1 tiende a ~1).
 - **Identidad de energía POR PASO (A4-4)**: además de la acumulada, cada paso
   desde el 2 cumple |gap| ≤ 0.1·S_gas + 1e-9·S_ext + 5e-5·S_int (piso
   1e-8·E_tot): el htol acumulado existe para el paso 1 (fusión instantánea
