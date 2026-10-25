@@ -12,7 +12,7 @@ module mod_solid_phase
     use mod_scrap_collapse
     use mod_interphase_ht
     use mod_workspace, only: ensure_workspace, ws_Tsrc
-    use mod_audit, only: audit_add, audit_gas_destroyed, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, AUD_ALPHA_CLIP_MASS, AUD_ALPHA_CLIP_E, &
+    use mod_audit, only: audit_add, audit_gas_destroyed, audit_volfix_cell, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, AUD_ALPHA_CLIP_MASS, AUD_ALPHA_CLIP_E, &
                          gas_inventory_cell
     implicit none
 
@@ -116,6 +116,7 @@ contains
                     ! masa de gas creada/destruida (auditoria, bajos: antes
                     ! sin columna; la masa del gas la fija la EOS)
                     dmg = dmg + (a_new - gas%alpha(i,j,k)) * gas%rho(i,j,k) * m%vol(i,j,k)
+                    call audit_volfix_cell(i, j, k, (a_new - gas%alpha(i,j,k)) * gas%rho(i,j,k) * m%vol(i,j,k))
                     ! energia del gas creado/destruido en la forma del
                     ! INVENTARIO del audit (M4-13): a T fija, inv(nueva)-inv(vieja)
                     pc = 0.0_dp

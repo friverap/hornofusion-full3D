@@ -41,7 +41,7 @@ module mod_audit
     public :: AUD_IPH_SOL, AUD_IPH_GAS, AUD_IPH_LIQ
     public :: AUD_ABS_LIQ_HOOK, AUD_RELAX_LIQ, AUD_RELAX_GAS
     public :: AUD_MG_ERR_FREE, AUD_MG_ERR_MULTI, AUD_MG_ERR_ABS, AUD_MG_ERR_OUT, AUD_MG_SKIP
-    public :: audit_gas_cells, gas_cell_class
+    public :: audit_gas_cells, gas_cell_class, audit_volfix_cell, AUD_MG_VF_CELLS
     public :: AUD_RESID_MASS, AUD_RESID_E, AUD_SPILL_MASS
     public :: AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
     public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2, AUD_GAS_VOLFIX, AUD_SLAG_TCLIP, AUD_MIX_INIT
@@ -178,12 +178,13 @@ module mod_audit
     ! complemento alpha_g = 1 - sum crea gas donde el liquido se retira y lo
     ! destruye donde entra, sin flujo de gas que lo lleve: N-M4). B1 280 s,
     ! 59 pasos, 20 externas: libre +2e-5 kg, multifase -8.7e-4 kg con
-    ! |e| 1.6e-2 kg (errores grandes que se compensan). OJO: e INCLUYE el
+    ! |e| 1.6e-2 kg (errores grandes que se compensan). (WS-K6) e RESTA el
     ! volfix de la celda (gas desplazado por fusion, carga, ECS, escoria),
-    ! que no se separa por clase: libre + multi + outlet = EOS - venteo +
-    ! volfix. Solo donde |volfix| << |multi| (B1 280 s: 1.3e-5 frente a
-    ! 8.7e-4) multi se lee como masa reescrita (cold_bucket2: multi -10.4 kg
-    ! es casi todo volfix -10.5). HIPOTESIS (C-110,
+    ! que las 6 rutas de AUD_GAS_VOLFIX registran por celda con
+    ! audit_volfix_cell: las columnas miden solo la masa que reescriben la
+    ! EOS y el complemento (antes cold_bucket2 daba multi -10.4 kg, casi
+    ! todo volfix). m_gas_vf_cells = suma de lo registrado por celda;
+    ! check_audit exige que iguale a m_gas_volfix. HIPOTESIS (C-110,
     ! propuesta): el piso multifase es el complemento; alternativa abierta,
     ! transporte por caras no enlazadas (ws_Fg_lk = 0). NO entran a mass_gas.
     integer, parameter :: AUD_MG_ERR_FREE     = 62
@@ -192,15 +193,18 @@ module mod_audit
     ! e de las celdas OUTLET (su balance no cierra por construccion: la masa
     ! que les entra es el venteo) y pasos sin balance (ws_Fg no valido:
     ! mezcla, sin multifase). Identidad de cierre, al redondeo:
-    !   EOS - (libre + multi + outlet) = venteo - volfix
+    !   EOS - (libre + multi + outlet) = venteo
     ! (las caras interiores se cancelan; check_audit la imprime)
     integer, parameter :: AUD_MG_ERR_OUT      = 65
     integer, parameter :: AUD_MG_SKIP         = 66
-    integer, parameter :: N_AUD = 66
+    integer, parameter :: AUD_MG_VF_CELLS     = 67
+    integer, parameter :: N_AUD = 67
     ! masa del gas por celda y su clase al inicio del paso (audit_gas_cells
     ! modo 0); no es estado entre pasos: se recaptura al inicio de cada paso
     real(dp), allocatable, save :: mg_ini(:,:,:)
     integer, allocatable, save  :: mg_cls0(:,:,:)
+    ! volfix de la celda en el paso (audit_volfix_cell; se anula en el modo 0)
+    real(dp), allocatable, save :: mg_vf(:,:,:)
     logical, save :: mg_ini_ok = .false.
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
@@ -436,7 +440,7 @@ contains
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
                 'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq,m_gas_out,m_gas_rxn,E_gas_volfix,' // &
-                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip,E_slag_sol,m_steel_deficit,E_steel_deficit,E_abs_liq_hook,E_relax_liq,E_relax_gas,m_gas_err_free,m_gas_err_multi,m_gas_err_abs,m_gas_err_out,m_gas_cells_skip'
+                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip,E_slag_sol,m_steel_deficit,E_steel_deficit,E_abs_liq_hook,E_relax_liq,E_relax_gas,m_gas_err_free,m_gas_err_multi,m_gas_err_abs,m_gas_err_out,m_gas_cells_skip,m_gas_vf_cells'
             close(iu)
         end if
         acc = 0.0_dp
@@ -603,7 +607,7 @@ contains
                 ',', a(AUD_GAS_CCDROP), ',', a(AUD_SLAG_CLIP_MASS), ',', a(AUD_SLAG_CLIP_E), ',', a(AUD_SLAG_SOL), ',', a(AUD_STEEL_DEF_MASS), ',', a(AUD_STEEL_DEF_E), &
                 ',', a(AUD_ABS_LIQ_HOOK), ',', a(AUD_RELAX_LIQ), ',', a(AUD_RELAX_GAS), &
                 ',', a(AUD_MG_ERR_FREE), ',', a(AUD_MG_ERR_MULTI), ',', a(AUD_MG_ERR_ABS), &
-                ',', a(AUD_MG_ERR_OUT), ',', a(AUD_MG_SKIP)
+                ',', a(AUD_MG_ERR_OUT), ',', a(AUD_MG_SKIP), ',', a(AUD_MG_VF_CELLS)
             close(iu)
         end if
     end subroutine audit_write_step
@@ -775,6 +779,19 @@ contains
     end subroutine audit_accumulate
 
     !---------------------------------------------------------------------------
+    ! (WS-K6) Volfix de UNA celda propia (indices locales): las rutas que
+    ! suman AUD_GAS_VOLFIX lo registran tambien aqui con el mismo dm, para
+    ! que el balance por celda lo reste. Antes del primer paso (carga de la
+    ! cesta 1, flotacion inicial) o sin audit no hace nada.
+    !---------------------------------------------------------------------------
+    subroutine audit_volfix_cell(i, j, k, dm)
+        integer, intent(in)  :: i, j, k
+        real(dp), intent(in) :: dm
+        if (.not. allocated(mg_vf)) return
+        mg_vf(i,j,k) = mg_vf(i,j,k) + dm
+    end subroutine audit_volfix_cell
+
+    !---------------------------------------------------------------------------
     ! Clase de una celda para el balance de masa del gas: 0 outlet (sumidero,
     ! su e es el venteo), 1 gas libre (sin liquido, escoria NI solido),
     ! 2 multifase. asl es la escoria en volumen (Plan H): fuera de la vista
@@ -817,6 +834,8 @@ contains
         call physical_boundary_flags(m, at_rmin_aud, at_rmax_aud, at_zmin_aud, at_zmax_aud)
         if (mode == 0) then
             if (.not. allocated(mg_ini)) allocate(mg_ini, mold=gas%alpha)
+            if (.not. allocated(mg_vf)) allocate(mg_vf, mold=gas%alpha)
+            mg_vf = 0.0_dp
             if (.not. allocated(mg_cls0)) allocate(mg_cls0(lbound(gas%alpha,1):ubound(gas%alpha,1), &
                 lbound(gas%alpha,2):ubound(gas%alpha,2), lbound(gas%alpha,3):ubound(gas%alpha,3)))
             do k = kstart, kend
@@ -849,7 +868,9 @@ contains
                                   + ws_Fg_th(i,j-1,k) * ws_Fg_lk_th(i,j-1,k) - ws_Fg_th(i,j,k) * ws_Fg_lk_th(i,j,k) &
                                   + ws_Fg_z(i,j,k-1) * ws_Fg_lk_z(i,j,k-1) - ws_Fg_z(i,j,k) * ws_Fg_lk_z(i,j,k) )
                     rx = (sh%S_CO_src(i,j,k) + sh%S_CO2_src(i,j,k) + sh%S_O2_src(i,j,k)) * m%vol(i,j,k) * cfg%dt
-                    ee = gas%alpha(i,j,k) * gas%rho(i,j,k) * m%vol(i,j,k) - mg_ini(i,j,k) - fl - rx
+                    ee = gas%alpha(i,j,k) * gas%rho(i,j,k) * m%vol(i,j,k) - mg_ini(i,j,k) - fl - rx &
+                       - mg_vf(i,j,k)
+                    acc(AUD_MG_VF_CELLS) = acc(AUD_MG_VF_CELLS) + mg_vf(i,j,k)
                     select case (c)
                     case (0)
                         acc(AUD_MG_ERR_OUT) = acc(AUD_MG_ERR_OUT) + ee

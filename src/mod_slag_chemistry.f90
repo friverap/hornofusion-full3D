@@ -30,7 +30,7 @@ module mod_slag_chemistry
     use mod_constants
     use mod_types_3d
     use mod_slag_3d, only: slag_T_from_E
-    use mod_audit, only: audit_add, AUD_FE_YIELD, AUD_FE_RETURN, &
+    use mod_audit, only: audit_add, audit_volfix_cell, AUD_FE_YIELD, AUD_FE_RETURN, &
                          AUD_SLAG_OX_E, AUD_SLAG_RED_E, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
                          gas_inventory_cell
     use mod_melting_3d, only: liquid_datum_offset
@@ -350,6 +350,7 @@ contains
                                     ag_old = max(gas%alpha(i,j,k), 0.0_dp)
                                     call audit_add(AUD_GAS_VOLFIX, (ag_new - ag_old) &
                                         * gas%rho(i,j,k) * vol)
+                                    call audit_volfix_cell(i, j, k, (ag_new - ag_old) * gas%rho(i,j,k) * vol)
                                     call audit_add(AUD_GAS_VOLFIX_E, &
                                         gas_inventory_cell(ag_new, gas%T(i,j,k), sh%p(i,j,k), &
                                                            gas%cp(i,j,k), vol, cfg) &

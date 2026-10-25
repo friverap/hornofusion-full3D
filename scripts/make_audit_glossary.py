@@ -178,17 +178,19 @@ DEFS = {
                     "in two-fluid mode, not with mixture_model): absorbed - (arc + rad + chem + conv - wall + mass) of the hook [J]; "
                     "energy the inventory gains/loses with no physical term, NOT in the identity (WS-K3/WS-K4, C-096..C-103)"),
     "E_relax_gas": ("D", "Same residual for the gas equation [J] (WS-K3)"),
-    "m_gas_err_free": ("D", "Per-cell gas mass balance error d(alpha rho V) - dt sum F_g - rxn (INCLUDES the cell's "
-                       "volfix: melt/charge/ECS/slag displacement) summed over "
+    "m_gas_err_free": ("D", "Per-cell gas mass balance error d(alpha rho V) - dt sum F_g - rxn - volfix of the cell "
+                       "(melt/charge/ECS/slag displacement, WS-K6) summed over "
                        "free-gas cells (no liquid, slag nor solid at the start AND end of the step); 0 when "
                        "ws_Fg is not valid (mixture model), see m_gas_cells_skip [kg] (WS-K5)"),
-    "m_gas_err_multi": ("D", "Same per-cell error (volfix included, not split by class: read as EOS rewrite only where "
-                        "|volfix| << |this|) over multiphase cells (liquid, slag or solid present): mass "
+    "m_gas_err_multi": ("D", "Same per-cell error (cell volfix subtracted, WS-K6) over multiphase cells (liquid, slag or "
+                        "solid present): mass "
                         "created/destroyed where the complement alpha_g = 1 - sum acts (hypothesis C-110: the complement "
                         "without gas flux, N-M4; alternative: unlinked faces ws_Fg_lk = 0) [kg] (WS-K5)"),
     "m_gas_err_abs": ("D", "Sum of |per-cell gas mass error| over non-outlet cells [kg] (WS-K5)"),
     "m_gas_err_out": ("D", "Same per-cell error over the outlet cells (roof electrode cells, the sink); closure "
-                      "EOS - (free + multi + out) = vent - volfix to round-off [kg] (WS-K5)"),
+                      "EOS - (free + multi + out) = vent to round-off [kg] (WS-K5/WS-K6)"),
+    "m_gas_vf_cells": ("D", "Gas volfix registered per cell by the AUD_GAS_VOLFIX routes "
+                       "(audit_volfix_cell); check mass_gas_vf_cells requires it to equal m_gas_volfix [kg] (WS-K6)"),
     "m_gas_cells_skip": ("D", "Steps without per-cell gas balance (ws_Fg not valid: mixture model or no "
                          "multiphase) [-] (WS-K5)"),
     "E_slag_sol": ("C", "Heat from the slag to the scrap by contact in the bed (condensed slag "

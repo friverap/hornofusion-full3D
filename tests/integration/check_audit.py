@@ -321,10 +321,11 @@ def main():
                    f"dm_gas={dm_g:.4e} vs -venteo+volfix+reacciones="
                    f"{-m_out + m_fix + m_rxn:.4e} kg (venteo {m_out:.3e}, volfix {m_fix:.3e}, "
                    f"rxn {m_rxn:.3e}); EOS reescribe {resid:.3e} kg = {abs(resid) / den_g:.3e} rel (max {args.mgtol})")
-        # (WS-K5) donde se reescribe: balance POR CELDA (fuera de la identidad
-        # de mass_gas, diagnostico). Cierre al redondeo (las caras interiores
-        # se cancelan): EOS - (libre + multi + outlet) = venteo - volfix. La
-        # tasa por segundo y por kg de gas no depende del largo de la ventana
+        # (WS-K5/WS-K6) donde se reescribe: balance POR CELDA (fuera de la
+        # identidad de mass_gas, diagnostico) con el volfix de cada celda
+        # RESTADO. Cierre al redondeo (las caras interiores se cancelan):
+        # EOS - (libre + multi + outlet) = venteo. La tasa por segundo y por
+        # kg de gas no depende del largo de la ventana
         if "m_gas_err_free" in last:
             ef = sum(r.get("m_gas_err_free", 0.0) for r in steps)
             em = sum(r.get("m_gas_err_multi", 0.0) for r in steps)
@@ -336,15 +337,19 @@ def main():
                 print(f"  INFO  mass_gas_cells  sin balance por celda en {nskip:.0f} de {len(steps)} pasos "
                       f"(ws_Fg no valido: mezcla o sin multifase); columnas incompletas")
             else:
-                clos = resid - ef - em - eo - m_out + m_fix
-                print(f"  INFO  mass_gas_cells  por celda: gas libre {ef:.3e} kg, multifase {em:.3e} kg "
-                      f"(|e| {ea:.3e}), outlet {eo:.3e}; cierre EOS - celdas - venteo + volfix = {clos:.3e} kg "
+                clos = resid - ef - em - eo - m_out
+                print(f"  INFO  mass_gas_cells  por celda (sin volfix): gas libre {ef:.3e} kg, multifase {em:.3e} kg "
+                      f"(|e| {ea:.3e}), outlet {eo:.3e}; cierre EOS - celdas - venteo = {clos:.3e} kg "
                       f"(sobre |EOS| {abs(resid):.3e}); tasa EOS {resid / span / max(abs(first['m_gas']), 1e-30):.3e} /s por kg de gas")
-                # las columnas INCLUYEN el volfix por celda (no separado por
-                # clase): si pesa, multifase no es masa reescrita por la EOS
-                if abs(m_fix) > 0.1 * max(abs(em), 1e-30):
-                    print(f"  INFO  mass_gas_cells  AVISO volfix {m_fix:.3e} kg >= 10 % de multifase: "
-                          f"la columna mezcla volfix y EOS, no se lee como piso")
+                # (WS-K6) toda ruta de volfix registra su celda: si una ruta
+                # nueva suma AUD_GAS_VOLFIX sin audit_volfix_cell, su volfix
+                # se cuela en las columnas como masa reescrita
+                if "m_gas_vf_cells" in last:
+                    vfc = sum(r.get("m_gas_vf_cells", 0.0) for r in steps)
+                    vfa = sum(abs(r.get("m_gas_volfix", 0.0)) for r in steps)
+                    chk.report("mass_gas_vf_cells", abs(vfc - m_fix) <= 1e-9 * vfa + 1e-12,
+                               f"volfix registrado por celda {vfc:.6e} kg vs m_gas_volfix {m_fix:.6e} kg "
+                               f"(dif {vfc - m_fix:.2e}; max 1e-9 x sum|volfix| {vfa:.3e} + 1e-12)")
         if per_phase and energy_on:
             cg = sum(r.get("E_conv_gas", 0.0) for r in steps)
             oc = sum(r.get("E_out_conv", 0.0) for r in steps)

@@ -142,11 +142,11 @@ guarda sin leer su causa.
   flujo del outlet, solo cambia por la EOS y el complemento. Columnas
   diagnósticas `m_gas_err_free`, `m_gas_err_multi`, `m_gas_err_abs`,
   `m_gas_err_out`, `m_gas_cells_skip` (balance POR CELDA con escoria en la
-  clase y clase de inicio Y fin de paso; cierre EOS − celdas = venteo −
-  volfix al redondeo; e INCLUYE el volfix por celda, que no se separa por
-  clase: `m_gas_err_multi` solo es masa reescrita donde |volfix| << |multi|,
-  p. ej. B1, pero NO en cargas de cesta (cold_bucket2: −10.4 kg ≈ volfix);
-  fuera de mass_gas;
+  clase y clase de inicio Y fin de paso; cierre al redondeo; **WS-K6**: e RESTA el volfix de cada celda, que las
+  6 rutas de `AUD_GAS_VOLFIX` registran con `audit_volfix_cell` (columna
+  `m_gas_vf_cells`; check `mass_gas_vf_cells` exige que iguale a
+  `m_gas_volfix`: una ruta NUEVA de volfix sin `audit_volfix_cell` lo hace
+  fallar); el cierre queda EOS − celdas = venteo; fuera de mass_gas;
   INFO `mass_gas_cells` con la tasa por s y por kg de gas, que no depende
   del largo de la ventana: el cociente de mass_gas sí, y en ventanas largas
   de B1 tiende a ~1).

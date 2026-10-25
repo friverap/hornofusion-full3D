@@ -15,7 +15,7 @@ module mod_slag_3d
     use mod_parallel_utils, only: gather_global_field, global_to_local, should_print
     use mod_fields_3d, only: slag_exchange_halos
     use mod_melting_3d, only: solid_T_from_enthalpy
-    use mod_audit, only: audit_add, audit_gas_destroyed, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT, AUD_SLAG_TCLIP, &
+    use mod_audit, only: audit_add, audit_gas_destroyed, audit_volfix_cell, AUD_FLUX_MASS, AUD_FLUX_E, AUD_SLAG_INTERCEPT, AUD_SLAG_TCLIP, &
                          AUD_SLAG_GAS, AUD_SLAG_LIQ, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, AUD_SLAG_SOL, &
                          gas_inventory_cell, gas_heat_capacity_ref, gas_log_exchange
     implicit none
@@ -657,6 +657,7 @@ contains
                         pc = 0.0_dp
                         if (present(sh)) pc = sh%p(il,jl,kl)
                         dmg = dmg + (ag_new - gas%alpha(il,jl,kl)) * gas%rho(il,jl,kl) * m%vol(il,jl,kl)
+                        call audit_volfix_cell(il, jl, kl, (ag_new - gas%alpha(il,jl,kl)) * gas%rho(il,jl,kl) * m%vol(il,jl,kl))
                         deg = deg + gas_inventory_cell(ag_new, gas%T(il,jl,kl), pc, gas%cp(il,jl,kl), &
                                                        m%vol(il,jl,kl), cfg) &
                                   - gas_inventory_cell(gas%alpha(il,jl,kl), gas%T(il,jl,kl), pc, &
@@ -864,6 +865,7 @@ contains
                     pc = 0.0_dp
                     if (present(sh)) pc = sh%p(il,jl,kl)
                     dmg = dmg + (ag_new - gas%alpha(il,jl,kl)) * gas%rho(il,jl,kl) * m%vol(il,jl,kl)
+                    call audit_volfix_cell(il, jl, kl, (ag_new - gas%alpha(il,jl,kl)) * gas%rho(il,jl,kl) * m%vol(il,jl,kl))
                     deg = deg + gas_inventory_cell(ag_new, gas%T(il,jl,kl), pc, gas%cp(il,jl,kl), &
                                                    m%vol(il,jl,kl), cfg) &
                               - gas_inventory_cell(gas%alpha(il,jl,kl), gas%T(il,jl,kl), pc, &

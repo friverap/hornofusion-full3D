@@ -35,7 +35,7 @@ module mod_ecs_feed
     use mod_parallel_utils, only: global_to_local
     use mod_mpi_topology, only: mpi_allreduce_sum
     use mod_melting_3d, only: solid_enthalpy, solid_T_from_enthalpy
-    use mod_audit, only: audit_add, AUD_ECS_MASS, AUD_ECS_ENERGY, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
+    use mod_audit, only: audit_add, audit_volfix_cell, AUD_ECS_MASS, AUD_ECS_ENERGY, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
                          gas_inventory_cell, audit_gas_destroyed
     implicit none
 
@@ -278,6 +278,7 @@ contains
                               gas%cp(il,jl,kl), vol, cfg) &
                         - gas_inventory_cell(ag_old, gas%T(il,jl,kl), pc, gas%cp(il,jl,kl), vol, cfg)
                     call audit_add(AUD_GAS_VOLFIX, dmg)
+                    call audit_volfix_cell(il, jl, kl, dmg)
                     call audit_add(AUD_GAS_VOLFIX_E, deg)
                     if (present(sh)) call audit_gas_destroyed(sh, il, jl, kl, -dmg)
                 end do

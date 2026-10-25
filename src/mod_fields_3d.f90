@@ -8,7 +8,7 @@ module mod_fields_3d
     use mod_types_3d
     use mod_mpi_topology
     use mod_melting_3d, only: solid_enthalpy, solid_T_from_enthalpy
-    use mod_audit, only: audit_add, AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
+    use mod_audit, only: audit_add, audit_volfix_cell, AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_GAS_VOLFIX, AUD_GAS_VOLFIX_E, &
                          gas_inventory_cell, audit_gas_destroyed
     use mod_parallel_utils, only: global_to_local, gather_global_field
     implicit none
@@ -775,6 +775,7 @@ contains
                                             - gas_inventory_cell(ag_old, gas%T(i,j,k), pc, &
                                                   gas%cp(i,j,k), m%vol(i,j,k), cfg)
                                         call audit_add(AUD_GAS_VOLFIX, dmg)
+                                        call audit_volfix_cell(i, j, k, dmg)
                                         call audit_add(AUD_GAS_VOLFIX_E, deg)
                                         if (present(sh)) call audit_gas_destroyed(sh, i, j, k, -dmg)
                                     end if

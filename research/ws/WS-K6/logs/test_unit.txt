@@ -1,0 +1,421 @@
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_alpha_limiter tests/unit/test_alpha_limiter.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_alpha_limiter.f90:284:16:
+
+  284 |             if (liq%alpha(3,4,4) /= 0.0_dp) then
+      |                1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_alpha_limiter.f90:300:44:
+
+  300 |             if (liq%alpha(3,4,3) /= al3 .or. liq%alpha(3,4,4) /= 0.0_dp) then
+      |                                            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_alpha_limiter.f90:300:16:
+
+  300 |             if (liq%alpha(3,4,3) /= al3 .or. liq%alpha(3,4,4) /= 0.0_dp) then
+      |                1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_arc_surface tests/unit/test_arc_surface.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_arc_surface.f90:291:34:
+
+  291 |         if (.not. want_scrap .and. e_up_ /= 0.0_dp) call fail('superficie de chatarra donde debia ser bano (W columna)', e_up_)
+      |                                  1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_arc_surface.f90:292:12:
+
+  292 |         if (e_k_ /= 0.0_dp) call fail('potencia a la capa del bano enterrado (W)', e_k_)
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_arc_surface.f90:103:8:
+
+  103 |     if (e_film /= 0.0_dp) call fail('potencia del arco en la pelicula (W)', e_film)
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_arc_surface.f90:142:8:
+
+  142 |     if (e_k /= 0.0_dp) call fail('crater: el arco salta la chatarra y calienta el bano (W)', e_k)
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_bed_buoyancy tests/unit/test_bed_buoyancy.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_bed_rel_face tests/unit/test_bed_rel_face.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_bed_rel_face.f90:98:12:
+
+   98 |         if (v /= 0.0_dp) call fail(msg // ': no es 0 exacto', v)
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_charge_exact tests/unit/test_charge_exact.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_charge_slag tests/unit/test_charge_slag.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_condensed_sort tests/unit/test_condensed_sort.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_condensed_sort.f90:67:68:
+
+   67 |         any(liq%T(1:nr,1:nth,1:nz) /= T0(1:nr,1:nth,1:nz)) .or. any(slag%E_sl(1:nr,1:nth,1:nz) /= E0(1:nr,1:nth,1:nz))) then
+      |                                                                    1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_sort.f90:67:12:
+
+   67 |         any(liq%T(1:nr,1:nth,1:nz) /= T0(1:nr,1:nth,1:nz)) .or. any(slag%E_sl(1:nr,1:nth,1:nz) /= E0(1:nr,1:nth,1:nz))) then
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_sort.f90:66:12:
+
+   66 |         any(slag%alpha_sl(1:nr,1:nth,1:nz) /= as0(1:nr,1:nth,1:nz)) .or. &
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_sort.f90:65:12:
+
+   65 |     if (any(liq%alpha(1:nr,1:nth,1:nz) /= al0(1:nr,1:nth,1:nz)) .or. &
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_sort.f90:103:12:
+
+  103 |     if (any(liq%alpha(1:nr,1:nth,1:2) /= al0(1:nr,1:nth,1:2))) then
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_sort.f90:148:12:
+
+  148 |     if (any(liq%alpha(1:nr,1:nth,1:3) /= al0(1:nr,1:nth,1:3))) then
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_condensed_transport tests/unit/test_condensed_transport.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_condensed_transport.f90:75:60:
+
+   75 |         any(ws_Fr /= Fr1) .or. any(ws_Fth /= Fth1) .or. any(ws_Fz /= Fz1)) then
+      |                                                            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_transport.f90:75:35:
+
+   75 |         any(ws_Fr /= Fr1) .or. any(ws_Fth /= Fth1) .or. any(ws_Fz /= Fz1)) then
+      |                                   1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_transport.f90:75:12:
+
+   75 |         any(ws_Fr /= Fr1) .or. any(ws_Fth /= Fth1) .or. any(ws_Fz /= Fz1)) then
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_transport.f90:74:12:
+
+   74 |         any(gas2%alpha(1:nr,1:nth,1:nz) /= gas%alpha(1:nr,1:nth,1:nz)) .or. &
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_transport.f90:73:12:
+
+   73 |     if (any(liq2%alpha(1:nr,1:nth,1:nz) /= liq%alpha(1:nr,1:nth,1:nz)) .or. &
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_transport.f90:163:71:
+
+  163 |     if (any(ws_Fsl_r /= 0.0_dp) .or. any(ws_Fsl_th /= 0.0_dp) .or. any(ws_Fsl_z /= 0.0_dp)) then
+      |                                                                       1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_transport.f90:163:41:
+
+  163 |     if (any(ws_Fsl_r /= 0.0_dp) .or. any(ws_Fsl_th /= 0.0_dp) .or. any(ws_Fsl_z /= 0.0_dp)) then
+      |                                         1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_transport.f90:163:12:
+
+  163 |     if (any(ws_Fsl_r /= 0.0_dp) .or. any(ws_Fsl_th /= 0.0_dp) .or. any(ws_Fsl_z /= 0.0_dp)) then
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_transport.f90:192:60:
+
+  192 |     if (abs(slag%alpha_sl(i,j,k) - 0.1_dp) > 1.0e-12_dp .or. liq%alpha(i,j,k) /= 0.0_dp .or. &
+      |                                                            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_condensed_view tests/unit/test_condensed_view.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_condensed_view.f90:56:8:
+
+   56 |     if (w0 /= liq_own_weight(liq%rho(1,1,1), liq%T(1,1,1), cfg%beta_expansion, cfg%T_ref_boussinesq)) then
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_view.f90:79:8:
+
+   79 |     if (ws_wc(2,3,3) /= cfg%rho_slag * GRAVITY) then
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_view.f90:82:8:
+
+   82 |     if (liq_w(liq%rho(2,3,3), liq%T(2,3,3), cfg%beta_expansion, cfg%T_ref_boussinesq, 2, 3, 3) /= ws_wc(2,3,3)) then
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_view.f90:87:17:
+
+   87 |         .or. any(liq_old%rho /= ro0) .or. ws_cond_on) then
+      |                 1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_view.f90:86:62:
+
+   86 |     if (any(liq%alpha /= a0) .or. any(liq%rho /= r0) .or. any(liq_old%alpha /= ao0) &
+      |                                                              1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_view.f90:86:38:
+
+   86 |     if (any(liq%alpha /= a0) .or. any(liq%rho /= r0) .or. any(liq_old%alpha /= ao0) &
+      |                                      1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_condensed_view.f90:86:12:
+
+   86 |     if (any(liq%alpha /= a0) .or. any(liq%rho /= r0) .or. any(liq_old%alpha /= ao0) &
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_config tests/unit/test_config.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_cp_eff tests/unit/test_cp_eff.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_dispersed_liquid tests/unit/test_dispersed_liquid.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_do_equilibrium tests/unit/test_do_equilibrium.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_drift_source tests/unit/test_drift_source.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_drift_source.f90:39:17:
+
+   39 |     integer  :: i, j, k, nr, nth, nz, i0, j0, k0
+      |                 1
+Warning: Unused variable 'i' declared at (1) [-Wunused-variable]
+tests/unit/test_drift_source.f90:39:20:
+
+   39 |     integer  :: i, j, k, nr, nth, nz, i0, j0, k0
+      |                    1
+Warning: Unused variable 'j' declared at (1) [-Wunused-variable]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_ecs_feed tests/unit/test_ecs_feed.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_ecs_feed.f90:218:8:
+
+  218 |     if (sum(sol%m_s(1:mesh%nr, 1:mesh%ntheta, 1:mesh%nz)) /= m0 .or. &
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_ergun tests/unit/test_ergun.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_face_flux tests/unit/test_face_flux.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_gas_cell_class tests/unit/test_gas_cell_class.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_gas_liquid_ht tests/unit/test_gas_liquid_ht.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_gas_liquid_ht.f90:45:43:
+
+   45 |     real(dp) :: dpp, kmol, Re, h, a_i, G, f, q, Tg_hand
+      |                                           1
+Warning: Unused variable 'f' declared at (1) [-Wunused-variable]
+tests/unit/test_gas_liquid_ht.f90:45:46:
+
+   45 |     real(dp) :: dpp, kmol, Re, h, a_i, G, f, q, Tg_hand
+      |                                              1
+Warning: Unused variable 'q' declared at (1) [-Wunused-variable]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_gas_percolation tests/unit/test_gas_percolation.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_interphase tests/unit/test_interphase.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_lorentz tests/unit/test_lorentz.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_mesh_metrics tests/unit/test_mesh_metrics.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_mesh_seam tests/unit/test_mesh_seam.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_nan_guard tests/unit/test_nan_guard.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_noflow_mass tests/unit/test_noflow_mass.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_outlet_total_pressure tests/unit/test_outlet_total_pressure.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_outlet_total_pressure.f90:34:8:
+
+   34 |     if (outlet_total_pressure(p0, p0, rho, 0.0_dp, 0.3_dp) /= p0) &
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_outlet_total_pressure.f90:36:8:
+
+   36 |     if (outlet_total_pressure(p0, p0, rho, -50.0_dp, 0.3_dp) /= p0) &
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_outlet_total_pressure.f90:52:8:
+
+   52 |     if (outlet_total_pressure(0.0_dp, p0, 1.0e3_dp, U_GAS_MAX, 1.0_dp) /= -P_HYDRO_CAP) &
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_outlet_total_pressure.f90:58:73:
+
+   58 |         if (outlet_total_pressure(pr, pr, rho, 0.0_dp, 0.7_dp) /= pr .or. &
+      |                                                                         1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_outlet_total_pressure.f90:58:12:
+
+   58 |         if (outlet_total_pressure(pr, pr, rho, 0.0_dp, 0.7_dp) /= pr .or. &
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_outlet_total_pressure.f90:65:8:
+
+   65 |     if (pr == pr) call fail('caso 5: NaN en p0 no se propaga')
+      |        1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_outlet_total_pressure.f90:67:8:
+
+   67 |     if (pr == pr) call fail('caso 5: NaN en u_in no se propaga')
+      |        1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_pea_coeffs tests/unit/test_pea_coeffs.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_pea_coeffs.f90:48:26:
+
+   48 |     if (ale /= 0.0_dp .or. age /= 2.0_dp) then
+      |                          1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_pea_coeffs.f90:48:8:
+
+   48 |     if (ale /= 0.0_dp .or. age /= 2.0_dp) then
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_pea_coeffs.f90:52:26:
+
+   52 |     if (ale /= 1.0_dp .or. age /= 1.0_dp) then
+      |                          1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_pea_coeffs.f90:52:8:
+
+   52 |     if (ale /= 1.0_dp .or. age /= 1.0_dp) then
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_phase_appearance tests/unit/test_phase_appearance.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_poisson_bath tests/unit/test_poisson_bath.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_pore_floor tests/unit/test_pore_floor.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_pore_floor.f90:40:8:
+
+   40 |     if (pore_floor(0.4_dp * ALPHA_BED) /= 0.0_dp) call fail('caso 1: piso /= 0 bajo ALPHA_BED/2')
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_pore_floor.f90:41:8:
+
+   41 |     if (pore_floor(0.5_dp * ALPHA_BED) /= 0.0_dp) call fail('caso 1: piso /= 0 en ALPHA_BED/2')
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_pore_floor.f90:46:61:
+
+   46 |     if (pore_floor(1.5_dp * ALPHA_BED) /= ALPHA_PORE_GAS .or. pore_floor(0.6_dp) /= ALPHA_PORE_GAS) &
+      |                                                             1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_pore_floor.f90:46:8:
+
+   46 |     if (pore_floor(1.5_dp * ALPHA_BED) /= ALPHA_PORE_GAS .or. pore_floor(0.6_dp) /= ALPHA_PORE_GAS) &
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_pore_floor.f90:53:8:
+
+   53 |     if (liq_cap(0.995_dp, 0.0_dp) /= 0.0_dp) call fail('caso 2: liq_cap negativo')
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_pretorius tests/unit/test_pretorius.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_recipe tests/unit/test_recipe.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_relax_residual tests/unit/test_relax_residual.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_residual_closure tests/unit/test_residual_closure.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_residual_closure.f90:94:55:
+
+   94 |     if (abs(sol%m_s(2,4,3) - m0) > 1.0e-12_dp * m0 .or. sol%mdot(2,4,3) /= 0.0_dp) then
+      |                                                       1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_residual_closure.f90:102:8:
+
+  102 |     if (sol%m_s(3,4,3) /= 0.0_dp) then
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_residual_closure.f90:124:73:
+
+  124 |     if (abs(sol%m_s(4,4,3) - 1000.0_dp * m_min) > 1.0e-12_dp * m_min .or. &
+      |                                                                         1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_scrap_collapse tests/unit/test_scrap_collapse.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_sealed_cell tests/unit/test_sealed_cell.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_settling tests/unit/test_settling.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_slag_additions tests/unit/test_slag_additions.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_slag_contact tests/unit/test_slag_contact.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_slag_float tests/unit/test_slag_float.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_slag_ox_column tests/unit/test_slag_ox_column.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_slag_ox_column.f90:213:38:
+
+  213 |                     if (kk /= kb .and. slag%m_X(ii,jj,kk,SL_FEO) /= feo0(ii,jj,kk)) &
+      |                                      1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_slag_ox_column.f90:215:54:
+
+  215 |                     if ((kk < ks1 .or. kk > ks2) .and. liq%alpha(ii,jj,kk) /= al0(ii,jj,kk)) &
+      |                                                      1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_slag_ox_column.f90:217:54:
+
+  217 |                     if ((kk < ko1 .or. kk > ko2) .and. sh%S_O2_src(ii,jj,kk) /= 0.0_dp) &
+      |                                                      1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_slag_ox_column.f90:219:24:
+
+  219 |                     if (liq_old%alpha(ii,jj,kk) /= liq%alpha(ii,jj,kk)) &
+      |                        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_slag_reduction tests/unit/test_slag_reduction.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_slag_reduction.f90:70:8:
+
+   70 |     if (sum(sh%S_CO_src(1:6,1:8,1:5)) /= 0.0_dp) &
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_sn_weights tests/unit/test_sn_weights.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_tdma tests/unit/test_tdma.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_transport_f28 tests/unit/test_transport_f28.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+tests/unit/test_transport_f28.f90:92:8:
+
+   92 |     if (F_off == 0.0_dp) call fail('caso 3: la cara continuo|disperso no transporta (caso mal puesto)')
+      |        1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_transport_f28.f90:93:8:
+
+   93 |     if (ws_Fr(3,4,2) /= F_off) call fail('caso 3: B cambio el goteo continuo|disperso')
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_transport_f28.f90:117:8:
+
+  117 |     if (ws_Fr(3,4,2) /= 0.0_dp) call fail('caso 6: la cara r sin enlace transporto')
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_transport_f28.f90:118:8:
+
+  118 |     if (ws_Fth(3,4,2) /= 0.0_dp) call fail('caso 6: la cara theta sin enlace transporto')
+      |        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_transport_f28.f90:124:35:
+
+  124 |     if (ws_Fr(3,4,2) == 0.0_dp .or. ws_Fth(3,4,2) == 0.0_dp) &
+      |                                   1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+tests/unit/test_transport_f28.f90:124:8:
+
+  124 |     if (ws_Fr(3,4,2) == 0.0_dp .or. ws_Fth(3,4,2) == 0.0_dp) &
+      |        1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -Iobj -o tests/bin/test_velocity_caps tests/unit/test_velocity_caps.f90 obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_probe.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+ PASS test_alpha_limiter
+ PASS test_arc_surface (pelicula no es superficie; crater, pelicula sobre chatarra y lecho inundado son chatarra; bano con chatarra sumergida es bano)
+ PASS test_bed_buoyancy
+ PASS test_bed_rel_face (ceros exactos, valores a mano, sum alpha B = 0, peso de mezcla)
+ PASS test_charge_exact (termina; masa de la receta exacta)
+ PASS test_charge_slag (legado: sobre bano y escoria; condensada: atraviesa la escoria)
+ PASS test_condensed_sort (ordenada intacta; pelicula baja con alpha_c y energia exactas; segmentos aislados; fuente al volumen de su masa)
+ PASS test_condensed_transport (sin escoria bit a bit; traslacion conserva a  1.763E-15)
+ PASS test_condensed_view (ida y vuelta bit a bit; peso condensado err  1.072E-16)
+ PASS test_config
+ PASS test_cp_eff
+ PASS test_dispersed_liquid
+ PASS test_do_equilibrium (S4/S6/S8 + espuma)
+ PASS test_drift_source
+ PASS test_ecs_feed (     400.0 kg cargados)
+ PASS test_ergun
+ PASS test_face_flux  telescopía err =  3.839E-17
+PASS unit:test_gas_cell_class
+ PASS test_gas_liquid_ht
+ PASS test_gas_percolation (la bolsa percola por el gas de piso; mascara independiente del dt >= 2 ms)
+ PASS test_interphase (sin rebase del equilibrio, conservativo, area repartida)
+ PASS test_lorentz (pinch hacia el eje y abajo, analitico, solo baño, rotacional)
+ PASS test_mesh_metrics
+ PASS test_mesh_seam
+ PASS test_nan_guard
+ PASS test_noflow_mass
+PASS unit:test_outlet_total_pressure
+ PASS test_pea_coeffs (aP equivalentes = respuesta exacta del sistema 2x2; limites y degenerados)
+ PASS test_phase_appearance
+ PASS test_poisson_bath
+PASS unit:test_pore_floor
+ PASS test_pretorius (xi ventana =  1.057 s)
+PASS unit:test_recipe
+PASS unit:test_relax_residual
+ PASS test_residual_closure
+ PASS test_scrap_collapse (masa/energia/C exactos, sin compactacion, sin sobrellenado)
+ PASS test_sealed_cell
+ PASS test_settling
+ PASS test_slag_additions (   33.00 kg)
+ PASS test_slag_contact (escoria enterrada sin contacto con el gas; tope por su cara; energia exacta)
+ PASS test_slag_float (la escoria flota sobre el bano dentro de los poros; sin bano, sobre el lecho)
+ PASS test_slag_ox_column (O2 sobre la capa, Fe bajo la capa, Fe/O/energia exactos)
+ PASS test_slag_reduction (CO solo donde queda gas, Sigma alpha <= 1, Fe y CO conservados)
+ PASS test_sn_weights (S4/S6/S8: momentos 0/1/2 OK)
+ PASS test_tdma  err =  2.220E-16
+PASS unit:test_transport_f28
+ PASS test_velocity_caps
+------------------------------------------------------------
+UNIT TESTS: OK
