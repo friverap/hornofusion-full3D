@@ -1,0 +1,16 @@
+{
+ "ws": "WS-K7",
+ "meta": "G3",
+ "estado": "abierto",
+ "ronda": 0,
+ "numerico": true,
+ "prediccion": null,
+ "diff_sha": null,
+ "test_quick": null,
+ "revisores": {
+  "auditor-eaf3d": null,
+  "revisor-evidencia": null,
+  "revisor-refutador": null
+ },
+ "creado": "2026-10-24T18:50:35-06:00"
+}
