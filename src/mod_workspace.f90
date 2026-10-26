@@ -51,6 +51,15 @@ module mod_workspace
     real(dp), allocatable :: ws_pc_unl(:,:,:)
     logical, save :: ws_pc_unl_valid = .false.
     integer, save :: ws_pc_unl_id = -huge(1)
+    ! (WS-K7, C-144) fuente E2 que el ULTIMO Poisson del paso SUMO a Su por
+    ! celda [m3/s]: ws_pc_unl donde la acepto y 0 donde la descarto (celda
+    ! inactiva, fila sellada, celda de salida, guarda apagada). Se anula al
+    ! empezar cada Poisson. Solo la lee el audit (audit_gas_cells modo 1):
+    ! ws_pc_unl lo reescribe el transporte POSTERIOR al Poisson y no es lo
+    ! que el Poisson vio. Vale dentro del paso (id): sin estado en el reinicio.
+    real(dp), allocatable :: ws_pc_unl_used(:,:,:)
+    logical, save :: ws_pc_unl_used_valid = .false.
+    integer, save :: ws_pc_unl_used_id = -huge(1)
     ! Plan D D2.2b: celdas con presion de fluido PARA EL LIQUIDO. Falsa en la
     ! celda cuyo liquido quedo sin ninguna cara abierta en el ultimo Poisson
     ! del paso (hidraulicamente sellada para el liquido, tenga o no gas): es
@@ -498,6 +507,7 @@ contains
         allocate(ws_Fg_lk_th, ws_Fg_lk_z, mold=ws_Fg_lk_r)
         ws_Fg_lk_r = 0; ws_Fg_lk_th = 0; ws_Fg_lk_z = 0
         allocate(ws_pc_unl, mold=ws_aW); ws_pc_unl = 0.0_dp
+        allocate(ws_pc_unl_used, mold=ws_aW); ws_pc_unl_used = 0.0_dp
         allocate(ws_liq_cont(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         ws_liq_cont = .true.
         allocate(ws_liq_cont_prev, ws_pv_active, mold=ws_liq_cont)

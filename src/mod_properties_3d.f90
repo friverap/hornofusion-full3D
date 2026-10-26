@@ -8,6 +8,7 @@
 module mod_properties_3d
     use mod_constants
     use mod_types_3d
+    use mod_audit, only: audit_eos_cell
     implicit none
 
 contains
@@ -19,6 +20,7 @@ contains
         type(config_t), intent(in)    :: cfg
 
         integer :: i, j, k
+        real(dp) :: rho_old
 
         do k = 1, m%nz
             do j = 1, m%ntheta
@@ -36,8 +38,11 @@ contains
                     ! (mod_constants; compresion fisica, auditoria M25).
                     ! El modelo de MEZCLA (opt-in) sigue low-Mach rho(P0, T):
                     ! ver la nota en mod_mixture_3d
+                    rho_old = gas%rho(i,j,k)
                     gas%rho(i,j,k) = gas_eos(cfg%rho_gas, gas%T(i,j,k), &
                                              merge(0.0_dp, sh%p(i,j,k), cfg%mixture_model))
+                    ! (WS-K7) masa de gas que reescribe la EOS en la celda
+                    call audit_eos_cell(i, j, k, gas%alpha(i,j,k) * (gas%rho(i,j,k) - rho_old) * m%vol(i,j,k))
                     gas%cp(i,j,k)  = cfg%cp_gas
                     gas%kth(i,j,k) = cfg%k_gas
                     gas%mu(i,j,k)  = cfg%mu_gas

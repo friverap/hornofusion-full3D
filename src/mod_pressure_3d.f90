@@ -107,6 +107,7 @@ contains
             ws_sat_goff, ws_sat_goff_id, &
             ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
             ws_pc_unl, ws_pc_unl_valid, ws_pc_unl_id, &
+            ws_pc_unl_used, ws_pc_unl_used_valid, ws_pc_unl_used_id, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, &
             ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bed_valid
@@ -208,6 +209,8 @@ contains
         ag_r = 0.0_dp; ag_th = 0.0_dp; ag_z = 0.0_dp
         ws_Fg_r = 0.0_dp; ws_Fg_th = 0.0_dp; ws_Fg_z = 0.0_dp
         ws_Fg_lk_r = 0; ws_Fg_lk_th = 0; ws_Fg_lk_z = 0
+        ! (WS-K7, C-144) E2 aceptada por ESTE Poisson: se rellena abajo
+        ws_pc_unl_used = 0.0_dp; ws_pc_unl_used_valid = .false.
         if (ws_liq_cont_valid) then
             act_l = ws_liq_cont
         else
@@ -647,6 +650,7 @@ contains
                         if (m%cell_type(i,j,k) == 0) cycle
                         if (.not. (act_l(i,j,k) .or. act_g(i,j,k))) cycle
                         Su(i,j,k) = Su(i,j,k) + ws_pc_unl(i,j,k)
+                        ws_pc_unl_used(i,j,k) = ws_pc_unl(i,j,k)
                     end do
                 end do
             end do
@@ -665,6 +669,7 @@ contains
                         aS(i,j,k) = 0.0_dp; aN(i,j,k) = 0.0_dp
                         aB(i,j,k) = 0.0_dp; aT(i,j,k) = 0.0_dp
                         aP(i,j,k) = 1.0_dp; Su(i,j,k) = 0.0_dp
+                        ws_pc_unl_used(i,j,k) = 0.0_dp
                         ! (M6-2) la fila sellada no evacua nada: lo que la
                         ! celda planteo este paso (Su ya incluia la parte
                         ! acotada) se descarta CON registro
@@ -735,6 +740,18 @@ contains
         end if
         ! Pressure BCs
         call apply_pressure_bc(aW, aE, aS, aN, aB, aT, aP, Su, m)
+        ! (WS-K7, C-144) las BC ponen Su = 0 en las celdas de salida (y en
+        ! cell_type 0): ahi la E2 no entro al sistema. Con Su = 0 exacto la
+        ! E2 no evacua nada en ningun caso, asi que la marca es segura.
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (Su(i,j,k) == 0.0_dp) ws_pc_unl_used(i,j,k) = 0.0_dp
+                end do
+            end do
+        end do
+        ws_pc_unl_used_valid = .true.
+        ws_pc_unl_used_id = probe_current_step()
 
         ! Residual de continuidad del iterado entrante (ver flux_ref). Tras
         ! las BC: las celdas de SALIDA (Dirichlet pp = 0 en los agujeros de

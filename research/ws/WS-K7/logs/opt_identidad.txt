@@ -1,0 +1,18 @@
+# Identidad del binario de banco frente al diff staged de src/ (WS-K7, ronda 11)
+Sun Oct 25 18:14:04 CST 2026
+## stat de los fuentes y del binario de banco
+Oct 25 16:57:25 2026 src/mod_audit.f90
+Oct 25 13:04:15 2026 src/mod_pressure_3d.f90
+Oct 25 13:04:15 2026 src/mod_workspace.f90
+Oct 24 18:52:16 2026 src/mod_continuity.f90
+Oct 24 18:52:06 2026 src/mod_properties_3d.f90
+Oct 25 13:06:13 2026 campaigns/bin/eaf3d_k7v5_opt
+## sha256 del diff staged de src/
+0503d1f6301d90191b38d18dd6c752b5e102e81985cd5b648e1d78d36d4c3d60  -
+## make clean && make opt
+rc=0 errores=0
+## sha256
+28a319053b7e6c70b954a74fc87147d05b5471fc83537939913ebe43ca3eac1e  bin/eaf3d_mpi
+28a319053b7e6c70b954a74fc87147d05b5471fc83537939913ebe43ca3eac1e  campaigns/bin/eaf3d_k7v5_opt
+## cmp
+IDENTICOS byte a byte

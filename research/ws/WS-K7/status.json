@@ -1,16 +1,27 @@
 {
  "ws": "WS-K7",
  "meta": "G3",
- "estado": "abierto",
- "ronda": 0,
+ "estado": "aprobado",
+ "ronda": 1,
  "numerico": true,
- "prediccion": null,
- "diff_sha": null,
- "test_quick": null,
+ "prediccion": "C-144",
+ "diff_sha": "aac70f3a0a1e2a3fde97e757280ecf57191b7019b8cfd767af0f26a053f4fd67",
+ "test_quick": "ok",
  "revisores": {
-  "auditor-eaf3d": null,
-  "revisor-evidencia": null,
-  "revisor-refutador": null
+  "auditor-eaf3d": {
+   "veredicto": "aprueba",
+   "ronda": 1
+  },
+  "revisor-evidencia": {
+   "veredicto": "aprueba",
+   "ronda": 1
+  },
+  "revisor-refutador": {
+   "veredicto": "aprueba",
+   "ronda": 1
+  }
  },
- "creado": "2026-10-24T18:50:35-06:00"
+ "creado": "2026-10-24T18:50:35-06:00",
+ "actualizado": "2026-10-26T12:20:53-06:00",
+ "test_quick_sha": "aac70f3a0a1e2a3fde97e757280ecf57191b7019b8cfd767af0f26a053f4fd67"
 }

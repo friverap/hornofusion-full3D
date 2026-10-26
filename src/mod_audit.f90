@@ -23,7 +23,12 @@ module mod_audit
     use mod_types_3d
     use mod_mpi_topology, only: mpi_allreduce_sum, mpi_allreduce_max
     use mod_parallel_utils, only: get_loop_bounds
-    use mod_workspace, only: ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_lk_r, ws_Fg_lk_th, ws_Fg_lk_z, ws_Fg_valid
+    use mod_workspace, only: ws_Fg_r, ws_Fg_th, ws_Fg_z, ws_Fg_lk_r, ws_Fg_lk_th, ws_Fg_lk_z, ws_Fg_valid, &
+                             ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_valid, ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, &
+                             ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_pc_unl, ws_pc_unl_valid, ws_pc_unl_id, &
+                             ws_pc_unl_used, ws_pc_unl_used_valid, ws_pc_unl_used_id, &
+                             ws_lim_step, ws_lim_step_valid, ws_lim_step_id
+    use mod_probe, only: probe_current_step
     use mod_face_flux, only: face_mass_fluxes
     use mod_boundary_3d, only: physical_boundary_flags
     implicit none
@@ -42,6 +47,12 @@ module mod_audit
     public :: AUD_ABS_LIQ_HOOK, AUD_RELAX_LIQ, AUD_RELAX_GAS
     public :: AUD_MG_ERR_FREE, AUD_MG_ERR_MULTI, AUD_MG_ERR_ABS, AUD_MG_ERR_OUT, AUD_MG_SKIP
     public :: audit_gas_cells, gas_cell_class, audit_volfix_cell, AUD_MG_VF_CELLS
+    public :: audit_comp_cell, audit_eos_cell, AUD_MG_COMP, AUD_MG_EOS, AUD_MG_ERR_LIQ, &
+              AUD_MG_ERR_ABS_MULTI, AUD_MG_ERR_REM_ABS, AUD_MG_LIQ_SKIP, AUD_MG_VPOIS_ABS, AUD_MG_VEFF_ABS, &
+              AUD_MG_ERR_ABS_NOGAS, AUD_MG_COMP_ABS, AUD_MG_EOS_ABS, AUD_MG_ERR_LIQ_ALL, AUD_MG_ERR_REM_ABS_ALL, &
+              AUD_MG_COMP_ABS_NOGAS, AUD_MG_ERR_ABS_NOLINK, AUD_MG_CELLS_NOLINK, AUD_MG_E2_NOLINK, &
+              AUD_MG_ERR_LIQ_LK, AUD_MG_ERR_LIQ_UNL, AUD_MG_ERR_LIQ_UNL_ABS, AUD_MG_VPOIS_ABS_NOGAS, &
+              AUD_MG_VEFF_ABS_NOGAS, AUD_MG_REJ_NOGAS, AUD_MG_E2_SKIP
     public :: AUD_RESID_MASS, AUD_RESID_E, AUD_SPILL_MASS
     public :: AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
     public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2, AUD_GAS_VOLFIX, AUD_SLAG_TCLIP, AUD_MIX_INIT
@@ -184,9 +195,10 @@ module mod_audit
     ! audit_volfix_cell: las columnas miden solo la masa que reescriben la
     ! EOS y el complemento (antes cold_bucket2 daba multi -10.4 kg, casi
     ! todo volfix). m_gas_vf_cells = suma de lo registrado por celda;
-    ! check_audit exige que iguale a m_gas_volfix. HIPOTESIS (C-110,
-    ! propuesta): el piso multifase es el complemento; alternativa abierta,
-    ! transporte por caras no enlazadas (ws_Fg_lk = 0). NO entran a mass_gas.
+    ! check_audit exige que iguale a m_gas_volfix. NO entran a mass_gas.
+    ! (WS-K7, C-120) La 'alternativa' de transporte por caras ws_Fg_lk = 0
+    ! es nula: ws_Fg vale 0 ahi (mod_pressure_3d, se anula en cada Poisson y
+    ! solo se escribe con lk = 1).
     integer, parameter :: AUD_MG_ERR_FREE     = 62
     integer, parameter :: AUD_MG_ERR_MULTI    = 63
     integer, parameter :: AUD_MG_ERR_ABS      = 64
@@ -198,13 +210,93 @@ module mod_audit
     integer, parameter :: AUD_MG_ERR_OUT      = 65
     integer, parameter :: AUD_MG_SKIP         = 66
     integer, parameter :: AUD_MG_VF_CELLS     = 67
-    integer, parameter :: N_AUD = 67
+    ! (WS-K7, C-120/C-121) el inventario del gas solo cambia por TRES rutas:
+    ! el complemento alpha_g = 1 - sum tras el transporte del liquido (3
+    ! sitios de mod_continuity, audit_comp_cell: comp = rho_g V d alpha_g),
+    ! la EOS en update_properties (audit_eos_cell: eos = alpha_g V d rho_g) y
+    ! el volfix. Identidad exacta, check mass_gas_rewrites:
+    !   d m_gas = m_gas_comp + m_gas_eos + m_gas_volfix.
+    ! El flujo del gas NUNCA entra al inventario: e = comp + eos - dt sum F_g
+    ! - rxn. Prediccion de la hipotesis C-110 (el piso multifase es el
+    ! complemento SIN flujo de gas que lo lleve): el Poisson balancea el
+    ! liquido que exporta (ws_Fc en caras enlazadas + la fuente E2 que ESE
+    ! Poisson sumo a Su, ws_pc_unl_used, C-144; lk_any solo define la clase
+    ! sin cara enlazada: m_gas_cells_nolink, _err_abs_nolink, _e2_nolink)
+    ! contra el flujo del gas, pero el transporte real mueve ws_Fr/Fth/Fz
+    ! (limitador, caras no enlazadas, derrame); el complemento sigue al
+    ! transporte real. En celdas multifase:
+    !   err_liq = rho_g (V_pois_in - V_eff_in),  e ~= err_liq si H.
+    ! m_gas_err_rem_abs = sum |e - err_liq| frente a m_gas_err_abs_multi.
+    integer, parameter :: AUD_MG_COMP         = 68
+    integer, parameter :: AUD_MG_EOS          = 69
+    integer, parameter :: AUD_MG_ERR_LIQ      = 70
+    integer, parameter :: AUD_MG_ERR_ABS_MULTI = 71
+    integer, parameter :: AUD_MG_ERR_REM_ABS  = 72
+    integer, parameter :: AUD_MG_LIQ_SKIP     = 73
+    ! sanidad de la medida: sum |rho_g V_pois_in| y sum |rho_g V_eff_in| en
+    ! las mismas celdas (si err_liq es pequeno, que se vea que ambos NO lo son)
+    integer, parameter :: AUD_MG_VPOIS_ABS    = 74
+    integer, parameter :: AUD_MG_VEFF_ABS     = 75
+    ! (panel WS-K7, C-124) los cocientes por celda recorren el MISMO conjunto:
+    ! rem_abs suma |e - err_liq| en las celdas donde err_liq se evalua (gas
+    ! al inicio o al final del paso, alpha_g > 0) y |e| (err_liq := 0) en el
+    ! resto de las multifase; m_gas_err_abs_nogas = sum |e| de ese resto
+    integer, parameter :: AUD_MG_ERR_ABS_NOGAS = 76
+    ! (panel WS-K7 ronda 2, R1/R2; ronda 3, R-1 C-133) sum |dm| POR LLAMADA
+    ! del complemento y de la EOS (mg_comp_abs/mg_eos_abs acumulan abs(dm)
+    ! en cada gancho: creacion mas destruccion dentro del paso, sin la
+    ! cancelacion que esconde el neto), y la definicion ORIGINAL de C-121:
+    ! err_liq evaluado en TODAS las celdas multifase, sin filtro de gas
+    integer, parameter :: AUD_MG_COMP_ABS     = 77
+    integer, parameter :: AUD_MG_EOS_ABS      = 78
+    integer, parameter :: AUD_MG_ERR_LIQ_ALL  = 79
+    integer, parameter :: AUD_MG_ERR_REM_ABS_ALL = 80
+    ! (panel ronda 3) sum |dm| por llamada del complemento en las multifase
+    ! SIN gas en los extremos (gas que aparece y se destruye dentro del
+    ! paso, R-1) y sum |e| en las multifase sin ninguna cara enlazada en el
+    ! ultimo Poisson (donde E2 no entra y err_liq = -rho_g V_eff, M1)
+    integer, parameter :: AUD_MG_COMP_ABS_NOGAS = 81
+    integer, parameter :: AUD_MG_ERR_ABS_NOLINK = 82
+    ! cuantas multifase sin cara enlazada hay (por paso, sumadas) y cuanta
+    ! fuente E2 descarto ahi el Poisson, sum |rho_g dt ws_pc_unl| [kg]: el
+    ! peso real del sesgo M1 (si el recuento es 0 la clase esta vacia)
+    integer, parameter :: AUD_MG_CELLS_NOLINK = 83
+    integer, parameter :: AUD_MG_E2_NOLINK    = 84
+    ! (quinto ciclo, C-144; panel M-1) V_pois usa la E2 que el ULTIMO Poisson
+    ! acepto (ws_pc_unl_used), no la del transporte posterior. Como unl_vol se
+    ! construye con los MISMOS Fw..Ft que ws_Fr (caras no enlazadas), con la
+    ! E2 del transporte N la parte no enlazada se cancelaba y err_liq se
+    ! reducia a las caras enlazadas. Reparto exacto:
+    !   err_liq_unl = rho_g dt (E2_used - ws_pc_unl(N))  [desfase E2 Poisson
+    !                 frente a transporte; 0 al converger; -rho_g unl(N) dt si
+    !                 el Poisson no acepto nada]
+    !   err_liq_lk  = err_liq - err_liq_unl               [caras enlazadas:
+    !                 limitador, alpha dador/a_f, rho_cara/rho_celda, derrame]
+    ! (R1) en las multifase SIN gas: sum|rho_g V_pois|, sum|rho_g V_eff| y la
+    ! entrada enlazada planeada que el limitador no admitio,
+    !   rej = rho_g (1 - ws_lim_step) dt sum_caras max(Fc entrante, 0).
+    integer, parameter :: AUD_MG_ERR_LIQ_LK   = 85
+    integer, parameter :: AUD_MG_ERR_LIQ_UNL  = 86
+    integer, parameter :: AUD_MG_ERR_LIQ_UNL_ABS = 87
+    integer, parameter :: AUD_MG_VPOIS_ABS_NOGAS = 88
+    integer, parameter :: AUD_MG_VEFF_ABS_NOGAS  = 89
+    integer, parameter :: AUD_MG_REJ_NOGAS    = 90
+    integer, parameter :: AUD_MG_E2_SKIP      = 91
+    integer, parameter :: N_AUD = 91
     ! masa del gas por celda y su clase al inicio del paso (audit_gas_cells
     ! modo 0); no es estado entre pasos: se recaptura al inicio de cada paso
     real(dp), allocatable, save :: mg_ini(:,:,:)
     integer, allocatable, save  :: mg_cls0(:,:,:)
     ! volfix de la celda en el paso (audit_volfix_cell; se anula en el modo 0)
     real(dp), allocatable, save :: mg_vf(:,:,:)
+    ! complemento y EOS por celda en el paso (WS-K7; se anulan en el modo 0):
+    ! neto con signo (identidad) y suma de |dm| por llamada (R-1, C-133)
+    real(dp), allocatable, save :: mg_comp(:,:,:), mg_eos(:,:,:)
+    real(dp), allocatable, save :: mg_comp_abs(:,:,:), mg_eos_abs(:,:,:)
+    ! alpha_g al inicio del paso: err_liq se evalua donde hay gas al inicio
+    ! o al final (alpha_g > 0: el complemento y la EOS actuan sin umbral,
+    ! C-124); en las demas multifase err_liq := 0 y |e| va a rem_abs igual
+    real(dp), allocatable, save :: mg_ag0(:,:,:)
     logical, save :: mg_ini_ok = .false.
 
     real(dp), save :: acc(N_AUD) = 0.0_dp
@@ -440,7 +532,7 @@ contains
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
                 'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq,m_gas_out,m_gas_rxn,E_gas_volfix,' // &
-                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip,E_slag_sol,m_steel_deficit,E_steel_deficit,E_abs_liq_hook,E_relax_liq,E_relax_gas,m_gas_err_free,m_gas_err_multi,m_gas_err_abs,m_gas_err_out,m_gas_cells_skip,m_gas_vf_cells'
+                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip,E_slag_sol,m_steel_deficit,E_steel_deficit,E_abs_liq_hook,E_relax_liq,E_relax_gas,m_gas_err_free,m_gas_err_multi,m_gas_err_abs,m_gas_err_out,m_gas_cells_skip,m_gas_vf_cells,m_gas_comp,m_gas_eos,m_gas_err_liq,m_gas_err_abs_multi,m_gas_err_rem_abs,m_gas_liq_skip,m_gas_vpois_abs,m_gas_veff_abs,m_gas_err_abs_nogas,m_gas_comp_abs,m_gas_eos_abs,m_gas_err_liq_all,m_gas_err_rem_abs_all,m_gas_comp_abs_nogas,m_gas_err_abs_nolink,m_gas_cells_nolink,m_gas_e2_nolink,m_gas_err_liq_lk,m_gas_err_liq_unl,m_gas_err_liq_unl_abs,m_gas_vpois_abs_nogas,m_gas_veff_abs_nogas,m_gas_rej_nogas,m_gas_e2_skip'
             close(iu)
         end if
         acc = 0.0_dp
@@ -572,7 +664,7 @@ contains
             ! solido no resolvia 1 kg de C oxidado). Sin E3 un valor < 1e-99
             ! imprime '6.678-178' (sin la
             ! E) y rompe el CSV (B1 v9, m_alpha_clip subnormal)
-            write(iu, '(I0,A,ES24.16E3,A,ES24.16E3,100(A,ES24.16E3))') &
+            write(iu, '(I0,A,ES24.16E3,A,ES24.16E3,200(A,ES24.16E3))') &
                 step, ',', time, ',', cfg%dt, &
                 ',', s_glob(1), ',', s_glob(2), ',', s_glob(3), ',', s_glob(4), &
                 ',', s_glob(5), ',', s_glob(6), ',', s_glob(7), ',', s_glob(8), &
@@ -607,7 +699,14 @@ contains
                 ',', a(AUD_GAS_CCDROP), ',', a(AUD_SLAG_CLIP_MASS), ',', a(AUD_SLAG_CLIP_E), ',', a(AUD_SLAG_SOL), ',', a(AUD_STEEL_DEF_MASS), ',', a(AUD_STEEL_DEF_E), &
                 ',', a(AUD_ABS_LIQ_HOOK), ',', a(AUD_RELAX_LIQ), ',', a(AUD_RELAX_GAS), &
                 ',', a(AUD_MG_ERR_FREE), ',', a(AUD_MG_ERR_MULTI), ',', a(AUD_MG_ERR_ABS), &
-                ',', a(AUD_MG_ERR_OUT), ',', a(AUD_MG_SKIP), ',', a(AUD_MG_VF_CELLS)
+                ',', a(AUD_MG_ERR_OUT), ',', a(AUD_MG_SKIP), ',', a(AUD_MG_VF_CELLS), &
+                ',', a(AUD_MG_COMP), ',', a(AUD_MG_EOS), ',', a(AUD_MG_ERR_LIQ), &
+                ',', a(AUD_MG_ERR_ABS_MULTI), ',', a(AUD_MG_ERR_REM_ABS), ',', a(AUD_MG_LIQ_SKIP), &
+                ',', a(AUD_MG_VPOIS_ABS), ',', a(AUD_MG_VEFF_ABS), ',', a(AUD_MG_ERR_ABS_NOGAS), &
+                ',', a(AUD_MG_COMP_ABS), ',', a(AUD_MG_EOS_ABS), ',', a(AUD_MG_ERR_LIQ_ALL), ',', a(AUD_MG_ERR_REM_ABS_ALL), &
+                ',', a(AUD_MG_COMP_ABS_NOGAS), ',', a(AUD_MG_ERR_ABS_NOLINK), ',', a(AUD_MG_CELLS_NOLINK), ',', a(AUD_MG_E2_NOLINK), &
+                ',', a(AUD_MG_ERR_LIQ_LK), ',', a(AUD_MG_ERR_LIQ_UNL), ',', a(AUD_MG_ERR_LIQ_UNL_ABS), &
+                ',', a(AUD_MG_VPOIS_ABS_NOGAS), ',', a(AUD_MG_VEFF_ABS_NOGAS), ',', a(AUD_MG_REJ_NOGAS), ',', a(AUD_MG_E2_SKIP)
             close(iu)
         end if
     end subroutine audit_write_step
@@ -792,6 +891,30 @@ contains
     end subroutine audit_volfix_cell
 
     !---------------------------------------------------------------------------
+    ! (WS-K7) Complemento alpha_g = 1 - sum de UNA celda (indices locales):
+    ! dm = rho_g V (alpha_g nueva - vieja) en los sitios de mod_continuity.
+    ! Sin asignar (antes del primer paso, sin audit) no hace nada. Las celdas
+    ! de halo pueden escribirse: la suma del modo 1 solo recorre las propias.
+    !---------------------------------------------------------------------------
+    subroutine audit_comp_cell(i, j, k, dm)
+        integer, intent(in)  :: i, j, k
+        real(dp), intent(in) :: dm
+        if (.not. allocated(mg_comp)) return
+        mg_comp(i,j,k) = mg_comp(i,j,k) + dm
+        mg_comp_abs(i,j,k) = mg_comp_abs(i,j,k) + abs(dm)
+    end subroutine audit_comp_cell
+
+    ! (WS-K7) EOS de UNA celda: dm = alpha_g V (rho_g nueva - vieja) en
+    ! update_properties.
+    subroutine audit_eos_cell(i, j, k, dm)
+        integer, intent(in)  :: i, j, k
+        real(dp), intent(in) :: dm
+        if (.not. allocated(mg_eos)) return
+        mg_eos(i,j,k) = mg_eos(i,j,k) + dm
+        mg_eos_abs(i,j,k) = mg_eos_abs(i,j,k) + abs(dm)
+    end subroutine audit_eos_cell
+
+    !---------------------------------------------------------------------------
     ! Clase de una celda para el balance de masa del gas: 0 outlet (sumidero,
     ! su e es el venteo), 1 gas libre (sin liquido, escoria NI solido),
     ! 2 multifase. asl es la escoria en volumen (Plan H): fuera de la vista
@@ -827,8 +950,9 @@ contains
         type(mesh_t), intent(in)   :: m
         type(config_t), intent(in) :: cfg
         integer  :: i, j, k, e, c, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: fl, rx, ee, asl
-        logical  :: is_out, at_rmin_aud, at_rmax_aud, at_zmin_aud, at_zmax_aud
+        real(dp) :: fl, rx, ee, vp, ve, el, el_unl, el_lk, vin
+        logical  :: is_out, liq_ok, has_gas, lk_any, e2_ok, unl_ok, lim_ok
+        logical  :: at_rmin_aud, at_rmax_aud, at_zmin_aud, at_zmax_aud
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         call physical_boundary_flags(m, at_rmin_aud, at_rmax_aud, at_zmin_aud, at_zmax_aud)
@@ -836,12 +960,19 @@ contains
             if (.not. allocated(mg_ini)) allocate(mg_ini, mold=gas%alpha)
             if (.not. allocated(mg_vf)) allocate(mg_vf, mold=gas%alpha)
             mg_vf = 0.0_dp
+            if (.not. allocated(mg_comp)) allocate(mg_comp, mold=gas%alpha)
+            if (.not. allocated(mg_eos)) allocate(mg_eos, mold=gas%alpha)
+            if (.not. allocated(mg_ag0)) allocate(mg_ag0, mold=gas%alpha)
+            if (.not. allocated(mg_comp_abs)) allocate(mg_comp_abs, mold=gas%alpha)
+            if (.not. allocated(mg_eos_abs)) allocate(mg_eos_abs, mold=gas%alpha)
+            mg_comp = 0.0_dp; mg_eos = 0.0_dp; mg_comp_abs = 0.0_dp; mg_eos_abs = 0.0_dp
             if (.not. allocated(mg_cls0)) allocate(mg_cls0(lbound(gas%alpha,1):ubound(gas%alpha,1), &
                 lbound(gas%alpha,2):ubound(gas%alpha,2), lbound(gas%alpha,3):ubound(gas%alpha,3)))
             do k = kstart, kend
                 do j = jstart, jend
                     do i = istart, iend
                         mg_ini(i,j,k) = gas%alpha(i,j,k) * gas%rho(i,j,k) * m%vol(i,j,k)
+                        mg_ag0(i,j,k) = gas%alpha(i,j,k)
                         mg_cls0(i,j,k) = gas_cell_class(liq%alpha(i,j,k), slag_vol(i,j,k), &
                                                         sol%alpha_s(i,j,k), outlet(i,j,k))
                     end do
@@ -850,6 +981,23 @@ contains
             mg_ini_ok = .true.
             return
         end if
+        ! (WS-K7) complemento y EOS del paso: entran SIEMPRE que el modo 0
+        ! haya corrido (tambien en mezcla y una fase, donde el balance por
+        ! celda se omite): la identidad d m_gas = comp + eos + volfix no
+        ! depende de ws_Fg
+        if (mg_ini_ok) then
+            do k = kstart, kend
+                do j = jstart, jend
+                    do i = istart, iend
+                        if (m%cell_type(i,j,k) == 0) cycle
+                        acc(AUD_MG_COMP) = acc(AUD_MG_COMP) + mg_comp(i,j,k)
+                        acc(AUD_MG_EOS)  = acc(AUD_MG_EOS)  + mg_eos(i,j,k)
+                        acc(AUD_MG_COMP_ABS) = acc(AUD_MG_COMP_ABS) + mg_comp_abs(i,j,k)
+                        acc(AUD_MG_EOS_ABS)  = acc(AUD_MG_EOS_ABS)  + mg_eos_abs(i,j,k)
+                    end do
+                end do
+            end do
+        end if
         if (.not. (mg_ini_ok .and. ws_Fg_valid .and. cfg%solve_flow .and. cfg%solve_multiphase)) then
             ! un contador por paso (lo suma solo el rank 0 tras la reduccion)
             if ((.not. m%is_parallel) .or. m%topo%rank == 0) acc(AUD_MG_SKIP) = acc(AUD_MG_SKIP) + 1.0_dp
@@ -857,6 +1005,23 @@ contains
             return
         end if
         mg_ini_ok = .false.
+        ! (WS-K7) desajuste liquido Poisson/transporte: exige los flujos del
+        ! ultimo Poisson (ws_Fc) y del ultimo transporte explicito (ws_Fr);
+        ! el fallback implicito los invalida y el paso se cuenta aparte
+        ! (B-1) con escoria condensada ws_Fr es el flujo del acero y el
+        ! complemento sigue al condensado: err_liq no vale, se cuenta el paso
+        liq_ok = ws_Fc_valid .and. ws_flux_valid .and. .not. slag_condensed_on(cfg)
+        if (.not. liq_ok) then
+            if ((.not. m%is_parallel) .or. m%topo%rank == 0) acc(AUD_MG_LIQ_SKIP) = acc(AUD_MG_LIQ_SKIP) + 1.0_dp
+        end if
+        ! (C-144) E2 aceptada por el ultimo Poisson de ESTE paso, y la E2 del
+        ! ultimo transporte (para el desfase); fraccion admitida del limitador
+        e2_ok  = cfg%pc_drift_source .and. ws_pc_unl_used_valid .and. ws_pc_unl_used_id == probe_current_step()
+        unl_ok = ws_pc_unl_valid .and. ws_pc_unl_id == probe_current_step()
+        lim_ok = ws_lim_step_valid .and. ws_lim_step_id == probe_current_step()
+        if (cfg%pc_drift_source .and. .not. e2_ok) then
+            if ((.not. m%is_parallel) .or. m%topo%rank == 0) acc(AUD_MG_E2_SKIP) = acc(AUD_MG_E2_SKIP) + 1.0_dp
+        end if
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
@@ -879,6 +1044,72 @@ contains
                         acc(AUD_MG_ERR_FREE) = acc(AUD_MG_ERR_FREE) + ee
                     case default
                         acc(AUD_MG_ERR_MULTI) = acc(AUD_MG_ERR_MULTI) + ee
+                        acc(AUD_MG_ERR_ABS_MULTI) = acc(AUD_MG_ERR_ABS_MULTI) + abs(ee)
+                        ! conjunto con gas (C-126): alpha_g > 0 al inicio o al final
+                        has_gas = gas%alpha(i,j,k) > 0.0_dp .or. mg_ag0(i,j,k) > 0.0_dp
+                        ! alguna cara enlazada en el ultimo Poisson (liquido o gas):
+                        ! define la clase nolink (C-132). V_pois ya no la usa: lleva
+                        ! la E2 que el Poisson acepto de verdad (ws_pc_unl_used, C-144)
+                        lk_any = ws_Fc_lk_r(i-1,j,k) == 1 .or. ws_Fc_lk_r(i,j,k) == 1 &
+                            .or. ws_Fc_lk_th(i,j-1,k) == 1 .or. ws_Fc_lk_th(i,j,k) == 1 &
+                            .or. ws_Fc_lk_z(i,j,k-1) == 1 .or. ws_Fc_lk_z(i,j,k) == 1 &
+                            .or. ws_Fg_lk_r(i-1,j,k) == 1 .or. ws_Fg_lk_r(i,j,k) == 1 &
+                            .or. ws_Fg_lk_th(i,j-1,k) == 1 .or. ws_Fg_lk_th(i,j,k) == 1 &
+                            .or. ws_Fg_lk_z(i,j,k-1) == 1 .or. ws_Fg_lk_z(i,j,k) == 1
+                        ! (B2) los conjuntos se cuentan aunque falten los flujos del liquido
+                        if (.not. has_gas) then
+                            acc(AUD_MG_ERR_ABS_NOGAS) = acc(AUD_MG_ERR_ABS_NOGAS) + abs(ee)
+                            acc(AUD_MG_COMP_ABS_NOGAS) = acc(AUD_MG_COMP_ABS_NOGAS) + mg_comp_abs(i,j,k)
+                        end if
+                        if (.not. lk_any) then
+                            acc(AUD_MG_ERR_ABS_NOLINK) = acc(AUD_MG_ERR_ABS_NOLINK) + abs(ee)
+                            acc(AUD_MG_CELLS_NOLINK) = acc(AUD_MG_CELLS_NOLINK) + 1.0_dp
+                            ! lo que SE HABRIA sumado (ws_pc_unl del transporte N)
+                            if (cfg%pc_drift_source .and. unl_ok) acc(AUD_MG_E2_NOLINK) = &
+                                acc(AUD_MG_E2_NOLINK) + abs(gas%rho(i,j,k) * cfg%dt * ws_pc_unl(i,j,k))
+                        end if
+                        if (liq_ok) then
+                            ! volumen de liquido que el Poisson balanceo (ws_Fc es
+                            ! VOLUMETRICO, alpha_f u_f A, en caras enlazadas; mas la
+                            ! fuente E2 que ESE Poisson acepto, ws_pc_unl_used) y el
+                            ! que el transporte movio (ws_Fr es MASA, todas las caras)
+                            vp = cfg%dt * ( ws_Fc_r(i-1,j,k) - ws_Fc_r(i,j,k) + ws_Fc_th(i,j-1,k) - ws_Fc_th(i,j,k) &
+                                          + ws_Fc_z(i,j,k-1) - ws_Fc_z(i,j,k) )
+                            if (e2_ok) vp = vp + cfg%dt * ws_pc_unl_used(i,j,k)
+                            ve = cfg%dt * ( ws_Fr(i-1,j,k) - ws_Fr(i,j,k) + ws_Fth(i,j-1,k) - ws_Fth(i,j,k) &
+                                          + ws_Fz(i,j,k-1) - ws_Fz(i,j,k) ) / liq%rho(i,j,k)
+                            el = gas%rho(i,j,k) * (vp - ve)
+                            ! reparto: desfase E2 (no enlazadas) y resto (enlazadas)
+                            el_unl = 0.0_dp
+                            if (e2_ok .and. unl_ok) el_unl = gas%rho(i,j,k) * cfg%dt * &
+                                (ws_pc_unl_used(i,j,k) - ws_pc_unl(i,j,k))
+                            el_lk = el - el_unl
+                            ! definicion original de C-121: todas las multifase
+                            acc(AUD_MG_ERR_LIQ_ALL) = acc(AUD_MG_ERR_LIQ_ALL) + el
+                            acc(AUD_MG_ERR_REM_ABS_ALL) = acc(AUD_MG_ERR_REM_ABS_ALL) + abs(ee - el)
+                            acc(AUD_MG_ERR_LIQ_LK)  = acc(AUD_MG_ERR_LIQ_LK)  + el_lk
+                            acc(AUD_MG_ERR_LIQ_UNL) = acc(AUD_MG_ERR_LIQ_UNL) + el_unl
+                            acc(AUD_MG_ERR_LIQ_UNL_ABS) = acc(AUD_MG_ERR_LIQ_UNL_ABS) + abs(el_unl)
+                            if (has_gas) then
+                                acc(AUD_MG_ERR_LIQ) = acc(AUD_MG_ERR_LIQ) + el
+                                acc(AUD_MG_ERR_REM_ABS) = acc(AUD_MG_ERR_REM_ABS) + abs(ee - el)
+                                acc(AUD_MG_VPOIS_ABS) = acc(AUD_MG_VPOIS_ABS) + abs(gas%rho(i,j,k) * vp)
+                                acc(AUD_MG_VEFF_ABS)  = acc(AUD_MG_VEFF_ABS)  + abs(gas%rho(i,j,k) * ve)
+                            else
+                                ! fuera del conjunto con gas: err_liq := 0 en C-126
+                                acc(AUD_MG_ERR_REM_ABS) = acc(AUD_MG_ERR_REM_ABS) + abs(ee)
+                                ! (R1) tamano del plan del Poisson y del transporte real
+                                acc(AUD_MG_VPOIS_ABS_NOGAS) = acc(AUD_MG_VPOIS_ABS_NOGAS) + abs(gas%rho(i,j,k) * vp)
+                                acc(AUD_MG_VEFF_ABS_NOGAS)  = acc(AUD_MG_VEFF_ABS_NOGAS)  + abs(gas%rho(i,j,k) * ve)
+                                if (lim_ok) then
+                                    vin = cfg%dt * ( max(ws_Fc_r(i-1,j,k), 0.0_dp) + max(-ws_Fc_r(i,j,k), 0.0_dp) &
+                                                   + max(ws_Fc_th(i,j-1,k), 0.0_dp) + max(-ws_Fc_th(i,j,k), 0.0_dp) &
+                                                   + max(ws_Fc_z(i,j,k-1), 0.0_dp) + max(-ws_Fc_z(i,j,k), 0.0_dp) )
+                                    acc(AUD_MG_REJ_NOGAS) = acc(AUD_MG_REJ_NOGAS) + &
+                                        gas%rho(i,j,k) * (1.0_dp - ws_lim_step(i,j,k)) * vin
+                                end if
+                            end if
+                        end if
                     end select
                     acc(AUD_MG_ERR_ABS) = acc(AUD_MG_ERR_ABS) + abs(ee)
                 end do

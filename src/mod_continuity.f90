@@ -28,7 +28,7 @@ module mod_continuity
     use mod_probe, only: probe_active_now, probe_current_step
     use mod_face_flux
     use mod_mpi_topology, only: mpi_allreduce_max, mpi_exchange_halos_3d
-    use mod_audit, only: audit_add, AUD_ALPHA_CLIP_MASS, AUD_ALPHA_CLIP_E, AUD_SPILL_MASS, &
+    use mod_audit, only: audit_add, audit_comp_cell, AUD_ALPHA_CLIP_MASS, AUD_ALPHA_CLIP_E, AUD_SPILL_MASS, &
                          AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED, AUD_SLAG_TCLIP, &
                          AUD_SLAG_CLIP_MASS, AUD_SLAG_CLIP_E, AUD_STEEL_DEF_MASS, AUD_STEEL_DEF_E
     use mod_workspace, only: ensure_workspace, ws_Fr, ws_Fth, ws_Fz, &
@@ -114,7 +114,7 @@ contains
         integer :: icfl, jcfl, kcfl
         integer :: istart, iend, jstart, jend, kstart, kend
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft
-        real(dp) :: cfl_loc, cfl_max, cfl_glob, dt_sub, a_pre, flux_net
+        real(dp) :: cfl_loc, cfl_max, cfl_glob, dt_sub, a_pre, ag_pre, flux_net
         integer, parameter :: N_SUB_MAX = 128
         ! Barridos del limitador: el "no cabe" se propaga UNA celda por
         ! barrido; una columna que se llena desde el fondo necesita ~nz.
@@ -804,9 +804,12 @@ contains
                         * (liq%cp(i,j,k) * liq%T(i,j,k) + (cfg%cp_s - cfg%cp_l) &
                            * cfg%T_liquidus + cfg%h_fusion)
                     end if
+                    ag_pre = gas%alpha(i,j,k)
                     gas%alpha(i,j,k) = 1.0_dp - sol%alpha_s(i,j,k) &
                                        - alpha_slag(i,j,k) - liq%alpha(i,j,k)
                     gas%alpha(i,j,k) = max(0.0_dp, gas%alpha(i,j,k))
+                    ! (WS-K7) masa de gas que crea/destruye el complemento
+                    call audit_comp_cell(i, j, k, (gas%alpha(i,j,k) - ag_pre) * gas%rho(i,j,k) * m%vol(i,j,k))
                 end do
             end do
         end do
@@ -1128,7 +1131,7 @@ contains
 
         real(dp), allocatable :: ac_old(:,:,:), zero(:,:,:), asl(:,:,:), slq(:,:,:,:), tmp(:,:,:)
         integer  :: i, j, k, c, nx, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: clip_loc, rl, clip_e, E_tr, a_raw, fcl, clip_el, dsteel, dclip_m, dclip_e, fcl_x, a_x
+        real(dp) :: clip_loc, rl, clip_e, E_tr, a_raw, fcl, clip_el, dsteel, dclip_m, dclip_e, fcl_x, a_x, ag_pre
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         nx = size(mx_pre,4)
@@ -1230,8 +1233,11 @@ contains
                         slag%T_sl(i,j,k) = slag%E_sl(i,j,k) / (slag%m_sl(i,j,k) * cfg%cp_slag)
                     end if
                     liq%alpha(i,j,k) = max(0.0_dp, liq%alpha(i,j,k) - slag%alpha_sl(i,j,k))
+                    ag_pre = gas%alpha(i,j,k)
                     gas%alpha(i,j,k) = max(0.0_dp, 1.0_dp - sol%alpha_s(i,j,k) - liq%alpha(i,j,k) &
                                                         - slag%alpha_sl(i,j,k))
+                    ! (WS-K7) masa de gas que crea/destruye el complemento
+                    call audit_comp_cell(i, j, k, (gas%alpha(i,j,k) - ag_pre) * gas%rho(i,j,k) * m%vol(i,j,k))
                 end do
             end do
         end do
@@ -1624,7 +1630,7 @@ contains
 
         integer :: i, j, k
         integer :: istart, iend, jstart, jend, kstart, kend
-        real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, vol_dt, a_pre, clip_call, clipE_call
+        real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, vol_dt, a_pre, ag_pre, clip_call, clipE_call
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
         call ensure_workspace(m)
@@ -1677,9 +1683,12 @@ contains
                         (a_pre - liq%alpha(i,j,k)) * liq%rho(i,j,k) * m%vol(i,j,k) &
                         * (liq%cp(i,j,k) * liq%T(i,j,k) + (cfg%cp_s - cfg%cp_l) &
                            * cfg%T_liquidus + cfg%h_fusion)
+                    ag_pre = gas%alpha(i,j,k)
                     gas%alpha(i,j,k) = 1.0_dp - sol%alpha_s(i,j,k) &
                                        - alpha_slag(i,j,k) - liq%alpha(i,j,k)
                     gas%alpha(i,j,k) = max(0.0_dp, gas%alpha(i,j,k))
+                    ! (WS-K7) masa de gas que crea/destruye el complemento
+                    call audit_comp_cell(i, j, k, (gas%alpha(i,j,k) - ag_pre) * gas%rho(i,j,k) * m%vol(i,j,k))
                 end do
             end do
         end do

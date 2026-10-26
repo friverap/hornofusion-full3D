@@ -191,6 +191,88 @@ DEFS = {
                       "EOS - (free + multi + out) = vent to round-off [kg] (WS-K5/WS-K6)"),
     "m_gas_vf_cells": ("D", "Gas volfix registered per cell by the AUD_GAS_VOLFIX routes "
                        "(audit_volfix_cell); check mass_gas_vf_cells requires it to equal m_gas_volfix [kg] (WS-K6)"),
+    "m_gas_comp": ("D", "Gas mass created/destroyed by the complement alpha_g = 1 - sum after the liquid "
+                   "transport (3 sites in mod_continuity, audit_comp_cell): sum rho_g V d(alpha_g) [kg] (WS-K7)"),
+    "m_gas_eos": ("D", "Gas mass rewritten by the EOS in update_properties (audit_eos_cell): sum alpha_g V "
+                  "d(rho_g) [kg]; check mass_gas_rewrites: dm_gas = comp + eos + volfix (WS-K7)"),
+    "m_gas_err_liq": ("D", "Over multiphase cells with gas at the start or end of the step (alpha_g > 0; 0 "
+                      "elsewhere): rho_g (V_pois_in - V_eff_in), the liquid volume the Poisson "
+                      "balanced (ws_Fc on linked faces + the E2 source that the LAST Poisson actually added "
+                      "to Su, ws_pc_unl_used; C-144) minus the volume the transport moved (ws_Fr/Fth/Fz, all "
+                      "faces): the per-cell error predicted by hypothesis C-110 [kg]. It is the RESTRICTION of "
+                      "m_gas_err_liq_all to the cells with gas at the start or end; the split lk + unl is of "
+                      "m_gas_err_liq_all, NOT of this column. Not valid with slag: with condensed slag (Plan H) "
+                      "it is not evaluated (counted in m_gas_liq_skip); with slag on the legacy path "
+                      "(slag_in_volume = false) it IS evaluated but V_eff is the steel flux while the "
+                      "complement subtracts the slag, and check_audit prints n/a (WS-K7)"),
+    "m_gas_err_abs_multi": ("D", "Sum of |per-cell gas mass error| over multiphase cells only [kg] (WS-K7)"),
+    "m_gas_err_rem_abs": ("D", "Sum of |e - err_liq| over ALL multiphase cells, on steps with valid liquid-side "
+                          "terms (err_liq = 0 outside the gas set, so the set matches m_gas_err_abs_multi): a "
+                          "residual by subtraction e - err_liq; "
+                          "1 - rem/abs is NOT a mechanism attribution (it mixes scale and correlation) [kg] (WS-K7)"),
+    "m_gas_err_abs_nogas": ("D", "Sum of |e| over the multiphase cells with no gas at the start nor the end of the "
+                            "step, i.e. outside the m_gas_err_liq set (m_gas_err_liq_all does cover them); "
+                            "accumulated whether or not the liquid-side terms are valid [kg] (WS-K7, C-124)"),
+    "m_gas_liq_skip": ("D", "Steps without the liquid-side terms of the per-cell audit (ws_Fc or ws_Fr not valid: "
+                       "implicit alpha fallback; or condensed slag on, where ws_Fr is the steel flux and the "
+                       "complement follows the condensed transport). Slag on the legacy path is NOT skipped here "
+                       "(check_audit flags it as n/a from m_slag). check_audit evaluates the m_gas_err_liq "
+                       "family only on rows with 0 here, and prints n/a when there are none [-] (WS-K7)"),
+    "m_gas_vpois_abs": ("D", "Sum |rho_g V_pois_in| over multiphase cells with gas: size of the liquid volume the "
+                        "Poisson balanced, in gas mass units [kg] (WS-K7, sanity of m_gas_err_liq)"),
+    "m_gas_veff_abs": ("D", "Sum |rho_g V_eff_in| over multiphase cells with gas: size of the liquid volume the "
+                       "transport moved, in gas mass units [kg] (WS-K7)"),
+    "m_gas_comp_abs": ("D", "Sum of |dm| over every call of audit_comp_cell (each complement site, each outer "
+                       "iteration): gas mass created plus destroyed by alpha_g = 1 - sum within the step, "
+                       "without the intra-step cancellation hidden by m_gas_comp [kg] (WS-K7, C-133)"),
+    "m_gas_eos_abs": ("D", "Sum of |dm| over every call of audit_eos_cell (each update_properties): gas mass "
+                      "rewritten plus un-rewritten by the EOS within the step [kg] (WS-K7, C-133)"),
+    "m_gas_err_liq_all": ("D", "err_liq = rho_g (V_pois_in - V_eff_in) summed over ALL multiphase cells, no gas "
+                          "filter (original definition of C-121), on steps with valid liquid-side terms; "
+                          "m_gas_err_liq_all = m_gas_err_liq_lk + m_gas_err_liq_unl by construction [kg] (WS-K7)"),
+    "m_gas_err_rem_abs_all": ("D", "Sum of |e - err_liq| over ALL multiphase cells with err_liq evaluated "
+                              "everywhere (original C-121 definition): residual by subtraction, not a mechanism "
+                              "attribution [kg] (WS-K7)"),
+    "m_gas_comp_abs_nogas": ("D", "m_gas_comp_abs restricted to the multiphase cells with no gas at the start nor "
+                             "the end of the step: > 0 means gas appeared and was destroyed within the step "
+                             "[kg] (WS-K7, C-133)"),
+    "m_gas_err_abs_nolink": ("D", "Sum of |e| over the multiphase cells with no linked face (liquid nor gas) in "
+                             "the last Poisson: there the E2 source is discarded (Su = 0) and err_liq = "
+                             "-rho_g V_eff_in by construction [kg] (WS-K7, C-132)"),
+    "m_gas_cells_nolink": ("D", "Number of multiphase cells with no linked face in the last Poisson, summed over "
+                           "the steps of the row [-] (WS-K7, C-132: 0 means that class is empty)"),
+    "m_gas_e2_nolink": ("D", "Sum |rho_g dt ws_pc_unl| over the multiphase cells with no linked face: "
+                        "approximately the E2 the Poisson discards there (it reads the E2 of transport N; the "
+                        "last Poisson saw that of transport N-1) [kg] (WS-K7, C-132)"),
+    "m_gas_err_liq_lk": ("D", "Part of m_gas_err_liq_all on LINKED faces, computed per cell as the err_liq of "
+                         "m_gas_err_liq_all minus the err_liq_unl of the same cell (the split is an identity by "
+                         "construction): rho_g dt sum_linked (ws_Fc - F/rho_l) up to second order, i.e. "
+                         "limiter, donor alpha vs a_f and face/cell density mismatch between the Poisson plan "
+                         "and the real transport [kg]. Spill is included only with pc_spill_source = false (with "
+                         "it on, spill enters unl_vol too and cancels). Only with pc_drift_source = true: with it "
+                         "off the split is not made and the unlinked inflow of ws_Fr also falls here (WS-K7, C-144)"),
+    "m_gas_err_liq_unl": ("D", "Part of m_gas_err_liq_all on UNLINKED faces: rho_g dt (E2 accepted by the last "
+                          "Poisson - E2 of the last transport): the lag of the E2 source between Poisson and "
+                          "transport. It tends to 0 with outer convergence ONLY where the Poisson accepted E2; "
+                          "where it discarded it (inactive, sealed or outlet cell) or accepted none (e.g. single "
+                          "outer iteration) it is -rho_g dt unl(N) at any convergence [kg] (WS-K7, C-144)"),
+    "m_gas_err_liq_unl_abs": ("D", "Sum of |per-cell m_gas_err_liq_unl| over all multiphase cells: size of "
+                              "the E2 lag [kg] (WS-K7, C-144)"),
+    "m_gas_vpois_abs_nogas": ("D", "Sum |rho_g V_pois_in| over the multiphase cells with no gas at the start nor "
+                              "the end of the step [kg] (WS-K7, C-144, R1)"),
+    "m_gas_veff_abs_nogas": ("D", "Sum |rho_g V_eff_in| over the same no-gas cells. These cells are full at both "
+                             "ends of the step and V_eff is NET, so it is ~0 by construction and not informative; "
+                             "whether a cell is blind (nothing in or out) or pass-through (out = in) is not "
+                             "measured [kg] (WS-K7, C-144, C-147/C-148)"),
+    "m_gas_rej_nogas": ("D", "Over the no-gas multiphase cells: rho_g (1 - ws_lim_step) dt sum_faces max(linked "
+                        "inflow ws_Fc, 0): ESTIMATE of the linked liquid inflow the Poisson planned that the "
+                        "limiter did not admit, in gas-mass units [kg]; ws_lim_step is the admitted fraction "
+                        "of the TOTAL transport inflow, applied here to the linked Poisson inflow (exact where "
+                        "ws_lim_step = 0 or 1) (WS-K7, C-144, R1)"),
+    "m_gas_e2_skip": ("D", "Steps with pc_drift_source on but no valid accepted-E2 array (ws_pc_unl_used) from "
+                      "this step's last Poisson [-]. It is 0 BY CONSTRUCTION while the per-cell branch runs: "
+                      "that branch requires ws_Fg_valid, which the same Poisson call sets after validating "
+                      "ws_pc_unl_used for this step; not an independent check (WS-K7, C-144, C-162)"),
     "m_gas_cells_skip": ("D", "Steps without per-cell gas balance (ws_Fg not valid: mixture model or no "
                          "multiphase) [-] (WS-K5)"),
     "E_slag_sol": ("C", "Heat from the slag to the scrap by contact in the bed (condensed slag "

@@ -132,13 +132,17 @@ guarda sin leer su causa.
   numérico. Gate `mgtol` 0.5 (regresiones); el juez es B1 (N-M4 abierto).
   **WS-K5 (C-106..C-110, 24-oct-2026)**: en B1 el residuo es una deriva
   continua (~−5e-5 kg/paso): ~60 % lazo externo truncado (max_outer 5 nunca
-  converge; vive en gas libre y lecho) y un piso ~1/3 que no baja con más
-  externas ni con alpha_T y vive en celdas multifase (errores +5e-3/−6e-3 kg
+  converge; vive en gas libre y lecho) y un piso ~1/3 de la EOS TOTAL en
+  300 pasos que no baja con más externas ni con alpha_T y vive en celdas
+  multifase (en las ventanas de K7 e_multi SÍ depende de las externas: ver
+  WS-K7; errores +5e-3/−6e-3 kg
   en 59 pasos que se compensan; el neto ≈ −la entrada por el outlet).
-  HIPÓTESIS (C-110, propuesta, no probada contra alternativas): el
-  complemento α_g = 1 − Σ crea gas donde el líquido se retira y lo destruye
-  donde entra, sin flujo de gas; alternativa abierta: transporte por caras
-  no enlazadas (ws_Fg_lk = 0). Hecho medido: el inventario nunca recibe el
+  HIPÓTESIS (C-110): el complemento α_g = 1 − Σ crea gas donde el líquido
+  se retira y lo destruye donde entra, sin flujo de gas. Resultado de WS-K7
+  (C-168): SIN DECIDIR por celda; en las celdas sin gas la masa es flujo de
+  gas exportado por el Poisson, no creación por el complemento; la
+  alternativa «caras no enlazadas (ws_Fg_lk = 0)» es NULA (C-120); ver el
+  párrafo de WS-K7. Hecho medido: el inventario nunca recibe el
   flujo del outlet, solo cambia por la EOS y el complemento. Columnas
   diagnósticas `m_gas_err_free`, `m_gas_err_multi`, `m_gas_err_abs`,
   `m_gas_err_out`, `m_gas_cells_skip` (balance POR CELDA con escoria en la
@@ -147,6 +151,116 @@ guarda sin leer su causa.
   `m_gas_vf_cells`; check `mass_gas_vf_cells` exige que iguale a
   `m_gas_volfix`: una ruta NUEVA de volfix sin `audit_volfix_cell` lo hace
   fallar); el cierre queda EOS − celdas = venteo; fuera de mass_gas;
+  **WS-K7 (C-120..C-168)**: la «alternativa» de transporte por caras
+  `ws_Fg_lk = 0` es NULA (ws_Fg vale 0 ahí: se anula en cada Poisson y solo
+  se escribe con lk = 1). El inventario del gas solo cambia por TRES rutas,
+  identidad exacta `mass_gas_rewrites`: Δm_gas = `m_gas_comp` (complemento
+  α_g = 1 − Σ en los 3 sitios de mod_continuity, `audit_comp_cell`) +
+  `m_gas_eos` (`update_properties`, `audit_eos_cell`) + volfix; resto
+  ≤ 4e-12 kg en 78 bancos y −3e-14 en 5499 pasos de B1, con tolerancia
+  1e-11·(Σ|comp| + Σ|eos| por llamada + Σ|volfix| por paso) + 1e-14·max
+  m_gas + 1e-12 (`m_gas_comp_abs`/`m_gas_eos_abs` son Σ|dm| POR LLAMADA);
+  toda reescritura nueva de α_g o ρ_g lleva su gancho o el check falla. La
+  hipótesis C-110 (complemento sin flujo de gas que lo lleve) se mide por
+  celda multifase como err_liq = ρ_g (V_pois,in − V_eff,in), con V_pois =
+  ws_Fc enlazado + la E2 que el ÚLTIMO Poisson sumó a `Su`
+  (`ws_pc_unl_used`; `ws_pc_unl` lo reescribe el transporte posterior) y
+  V_eff = ws_Fr/Fth/Fz/ρ_l. `m_gas_err_liq_all` lo suma en TODAS las
+  multifase (C-121) y `m_gas_err_liq` solo en las que tienen gas al inicio
+  o al final (C-126; en k7v5_mo20 −2.97e-3 kg frente a +4.88e-4 de _all).
+  Reparto por celda, identidad por construcción: `m_gas_err_liq_lk` :=
+  err_liq − `m_gas_err_liq_unl`, con unl = ρ_g dt (E2 aceptada − E2 del
+  transporte N) (desfase; −ρ_g dt unl(N) donde el Poisson no aceptó E2; 0
+  sin E2 aceptada válida, y entonces todo cae en lk). Como `unl_vol` es la
+  parte no enlazada de los mismos `Fw..Ft` de ws_Fr, lk se lee como el
+  desajuste en caras enlazadas (limitador, α dador/a_f, ρ̄ de cara/ρ de
+  celda; derrame solo con pc_spill_source = false). En 280 s el desfase
+  pesa ≤ 0.2 % de Σ|err_liq_all| y 2 % del neto. 1 − Σ|e − err_liq|/Σ|e|
+  (`m_gas_err_rem_abs`) es un residuo por resta que mezcla escala y
+  correlación: NO es atribución de mecanismo. Veredicto (k7v5_mo20: 280 s,
+  20 externas, 59 pasos tras reinicio; el único banco de K7 que pasa
+  check_audit): SIN DECIDIR por celda con todas las definiciones del
+  conjunto (rem/abs 0.319 sin filtro, 0.57 con filtro) y el inciso del NETO
+  falla (1.57). El 0.319 es media de 0.384 (celdas con gas) y 0.163 (sin
+  gas, identidad de fila): no es evidencia a favor de H. El inciso por
+  celda es FRÁGIL frente al CG en ambas direcciones: en los bancos de test
+  con el CG convergido rem_all/abs va de 0.134 a 1.007 (5 de 8 en la banda
+  de refutación) y esos bancos no predicen B1; el «sin decidir» global
+  (falla el neto) solo protege contra «soportada» (C-163). En ventanas largas
+  rem/abs deriva hacia la refutación, en bancos que NO pasan check_audit:
+  0.314 → 0.349 en 1 s con 20 externas (k7v5_mo20_1k, FAIL regime_gas 209);
+  0.43 → 0.53 en 5.5 s con 5 (k7v4_long, máximo 0.57, no monótono,
+  centinela de u_gas desde el paso 4340). e_multi DEPENDE de las externas
+  en K7 (×1.84 en 59 pasos; 43 % en 999); la independencia de C-109 es de
+  la EOS total en 300 pasos. Sobre el piso NETO el WS NO concluye:
+  corr(e − err_liq_all, e) = 0.97 la fuerza el cociente de amplitudes
+  (C-140), y la exportación de gas de las celdas sin gas (e_nogas entre
+  +2.7e-3 y +4.2e-3 kg en 59 pasos) se CANCELA POR CONSTRUCCIÓN en e_multi:
+  ws_Fg es conservativo y sus vecinas con gas son multifase (1213 de 1214
+  caras en 280059; la dirección no está medida), así que el neto vive en
+  Δm_multi y en el flujo de gas por la FRONTERA del conjunto multifase, que
+  ninguna columna mide (C-150). Celdas con α_g = 0 al inicio y al final
+  (29 % de Σ|e|): baño lleno (α_l ≥ 0.995) en las capas 2–4 desde el fondo
+  (índice h5 k = 1–3), el 94–97 % sobre poro seco de la solera (en act_g,
+  C-153); 406–488 celdas con α_g = 0 al final del paso en 5 snapshots
+  (research/ws/WS-K7/scripts/nogas_vecinas.py). Ahí e ≈ −dt ΣF_g
+  (complemento y EOS ≈ 0) y la fila del Poisson da Σ|ρ_g V_pois| =
+  0.83–0.85 de Σ|e|: el Poisson planea una entrada NETA de líquido que el
+  transporte no realiza (V_eff neto ≈ 0 por construcción en celda llena) y
+  exporta el gas correspondiente por la α de cara MEDIA del gas (F2.24) con
+  la celda en act_g por alcance. La identidad de fila vale en TODA fila del
+  Poisson y no distingue mecanismo: quién conduce (la demanda del líquido,
+  como en la válvula ficticia de Plan E, o el flujo fantasma del gas por
+  F2.21 + F2.24, con u_z del líquido p10 −0.28 / p90 +0.76 m/s ahí, que
+  refuta la premisa de F2.21) NO está medido; Plan E queda solo como
+  antecedente y su población es otra, en parte POR DEFINICIÓN: las celdas
+  de la válvula son poro saturado con α_g = ALPHA_PORE_GAS = 0.015 > 0 y
+  nunca entran en esta clase; si la válvula actúa, cae en el subconjunto
+  con gas (71 % de Σ|e|), donde K7 no la buscó (C-165; poro saturado: 7–19 %
+  de las caras de estas celdas). Tampoco están medidos: si la
+  celda es ciega o de paso; por qué caras y en qué dirección sale el gas
+  (una reconstrucción aproximada sugiere entrada por arriba y salida
+  lateral, C-153); ni su tamaño frente a vol_lim (`m_gas_rej_nogas` es un
+  estimador bruto que no se interpreta). La insensibilidad a las externas
+  (Σ|e|_nogas 4.82e-3 kg con 20 y 4.83e-3 con 5) es solo compatible con que
+  no sea lazo truncado y no separa el residuo del CG; la identidad de fila
+  acota CG + ρ de cara/celda + E2 en ≤ 16–18 % en B1. Con el CG convergido
+  se cumple al ≤ 3 % en los bancos de test con claves por defecto, donde el
+  término pesa 0–4 % de Σ|e| (29 % en B1) y no contienen la población de
+  B1 (0 % de sus celdas sin gas sobre poro seco, C-164), y al 10 % en bed_flood_n4
+  (claves de Plan D/E no por defecto) (C-158/C-162): existe con el CG
+  convergido pero ahí es marginal; su peso en B1 no está separado del CG
+  truncado ni del régimen. Esos ws_Fg ≠ 0 de celdas con α_g = 0 los
+  reutilizan la energía y el momento del gas (mod_energy_3d,
+  mod_momentum_3d: flujos de masa del Poisson), en tensión con «una celda
+  sin fase no intercambia energía de esa fase»; no medido (C-162). NO es vía
+  a E1b sin revalidación (C-089); la α del dador para el gas en el Poisson
+  o sacar del alcance al baño del piso chocan con F2.17–F2.21 y F2.24
+  (acople-pv.md). Complemento neto: |comp_multi del signo del piso| ≤
+  (Σ|comp| por llamada − comp neto)/2; con 5 externas al menos el 32–61 %
+  de e_multi por bloque de 1000 pasos no es complemento neto, compatible
+  con el lazo truncado de 5 externas y con el régimen de centinela; con 20
+  externas la cota no restringe (C-152). En bancos SIN líquido
+  (cold_10step*, cold_bucket2_n4, outer_conv_n8) hay error multifase con
+  complemento 0, un transitorio de arranque en frío (outer_conv_n8: ~1e-3
+  kg/paso que decae y cambia de signo en el paso 10; 3e-4–3.5e-3 de |EOS|)
+  cuyo origen no está separado (residuo del lazo externo con tol_cont 1e-2
+  u otro, C-155); no es H. `check_audit` (INFO `mass_gas_cells_liq`):
+  «1 − rem/abs = 0.000» con Σ|e| multifase en los bancos sin líquido; «n/a»
+  sin filas con err_liq evaluado (escoria condensada, fallback implícito),
+  con escoria por el camino legado (slag_in_volume = false: el audit evalúa
+  err_liq pero V_eff es solo acero y el complemento resta la escoria) o con
+  Σ|e| multifase = 0; «no medido» para err_liq_all, sin cara enlazada,
+  Σ|e| sin gas y Σ|dm| por llamada cuando faltan en CSV antiguos. Las
+  celdas con 0 < α_g < ALPHA_FLOW_CUTOFF SÍ tienen complemento y EOS (sin
+  umbral); fuera de act_g su F_g es 0; en act_g por alcance (F2.21: celdas
+  fuera del lecho junto a gas percolante; no depende de su α_g PROPIA)
+  PUEDEN exportar F_g ≠ 0 por la α de cara media, como las celdas sin gas;
+  su F_g no está medido (C-157/C-161). Siguiente pieza: `su_cc` frente a
+  `m_gas_eos` por celda y por conjunto (un desajuste su_cc–EOS explicaría
+  como máximo el 71 % de Σ|e|: en las celdas sin gas eos = su_cc = 0),
+  comp/eos por conjunto y flujo de gas por la frontera del conjunto
+  multifase;
   INFO `mass_gas_cells` con la tasa por s y por kg de gas, que no depende
   del largo de la ventana: el cociente de mass_gas sí, y en ventanas largas
   de B1 tiende a ~1).

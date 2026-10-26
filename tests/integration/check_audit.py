@@ -350,6 +350,127 @@ def main():
                     chk.report("mass_gas_vf_cells", abs(vfc - m_fix) <= 1e-9 * vfa + 1e-12,
                                f"volfix registrado por celda {vfc:.6e} kg vs m_gas_volfix {m_fix:.6e} kg "
                                f"(dif {vfc - m_fix:.2e}; max 1e-9 x sum|volfix| {vfa:.3e} + 1e-12)")
+                # (WS-K7) prediccion de la hipotesis C-110 en celdas multifase:
+                # e ~= err_liq = rho_g (V_pois_in - V_eff_in) (complemento sin
+                # flujo de gas que lo lleve). 1 - sum|e - err_liq|/sum|e| es un
+                # residuo por resta: NO es una atribucion de mecanismo.
+                if "m_gas_err_liq" in last:
+                    # Casos (sexto ciclo, rondas 9-15):
+                    # - sin filas con err_liq evaluado (m_gas_liq_skip > 0 en todas:
+                    #   escoria condensada, fallback implicito) -> n/a;
+                    # - escoria presente por el camino legado (slag_in_volume = false):
+                    #   el audit evalua err_liq pero V_eff es solo acero y el
+                    #   complemento resta la escoria -> n/a (no vale);
+                    # - sum|e| multifase = 0 -> n/a;
+                    # - sin liquido planeado ni movido en celdas multifase: err_liq = 0
+                    #   DE VERDAD y el error multifase no es cero (bancos frios) ->
+                    #   '1 - rem/abs = 0.000', con sum|e| multifase, no n/a;
+                    # - columnas ausentes en CSV antiguos -> 'no medido', nunca ceros.
+                    nls = sum(r.get("m_gas_liq_skip", 0.0) for r in steps)
+                    ls = [r for r in steps if r.get("m_gas_liq_skip", 0.0) == 0.0]
+                    S = lambda c: sum(r.get(c, 0.0) for r in ls)
+                    has = lambda c: c in last
+                    vpa, vea = S("m_gas_vpois_abs"), S("m_gas_veff_abs")
+                    vpn, ven = S("m_gas_vpois_abs_nogas"), S("m_gas_veff_abs_nogas")
+                    eam = S("m_gas_err_abs_multi")
+                    slag_legacy = any(r.get("m_slag", 0.0) > 0.0 for r in ls)
+                    skipmsg = (f"{nls:.0f} pasos sin err_liq (escoria condensada activa, fallback implicito "
+                               f"o sin flujos del liquido validos)") if nls > 0 else ""
+                    if has("m_gas_comp_abs"):
+                        dm_txt = (f"sum|comp| por llamada {S('m_gas_comp_abs'):.3e}"
+                                  + (f" (en celdas sin gas {S('m_gas_comp_abs_nogas'):.3e})" if has("m_gas_comp_abs_nogas") else "")
+                                  + f", sum|eos| por llamada {S('m_gas_eos_abs'):.3e} kg")
+                    else:
+                        dm_txt = "sum|dm| por llamada: no medido"
+                    if (not ls) or eam <= 0.0 or slag_legacy:
+                        why = ("ninguna fila con err_liq evaluado" if not ls else
+                               "escoria presente por el camino legado (slag_in_volume = false): V_eff es solo acero "
+                               "y el complemento resta la escoria, err_liq no vale" if slag_legacy else
+                               "sin error en celdas multifase")
+                        print(f"  INFO  mass_gas_cells_liq  n/a: {why}" + (f"; {skipmsg}" if skipmsg else ""))
+                    elif (vpa + vea + vpn + ven) <= 0.0:
+                        print(f"  INFO  mass_gas_cells_liq  err_liq = 0 (sin liquido planeado ni movido en celdas multifase): "
+                              f"1 - sum|e - err_liq|/sum|e| = 0.000 por celda; sum|e| multifase {eam:.3e} kg, "
+                              f"e_multi {S('m_gas_err_multi'):.3e} kg, {dm_txt} "
+                              f"(en {len(ls)} de {len(steps)} filas; reparto lk/unl y correlaciones: n/a)"
+                              + (f"; AVISO {skipmsg}" if skipmsg else ""))
+                    else:
+                        eml = S("m_gas_err_multi")
+                        el, erm = S("m_gas_err_liq"), S("m_gas_err_rem_abs")
+                        frac = 1.0 - erm / eam
+                        eng = S("m_gas_err_abs_nogas")
+                        has_all = has("m_gas_err_liq_all")
+                        ela, era = S("m_gas_err_liq_all"), S("m_gas_err_rem_abs_all")
+                        nog_txt = (f"sum|e| fuera del conjunto con gas {eng:.3e}" if has("m_gas_err_abs_nogas")
+                                   else "sum|e| fuera del conjunto con gas: no medido")
+                        nolink_txt = (f"sin cara enlazada {S('m_gas_err_abs_nolink'):.3e} en {S('m_gas_cells_nolink'):.0f} "
+                                      f"celdas-paso con E2 descartada {S('m_gas_e2_nolink'):.3e}"
+                                      if has("m_gas_err_abs_nolink") else "sin cara enlazada: no medido")
+                        all_txt = (f"C-121 sin filtro: err_liq_all {ela:.3e}, sum|e - err_liq_all| {era:.3e}, "
+                                   f"1 - rem/abs {1.0 - era / eam:.3f}" if has_all else "C-121 sin filtro: no medido")
+                        print(f"  INFO  mass_gas_cells_liq  en {len(ls)} de {len(steps)} filas con err_liq evaluado: "
+                              f"multifase e {eml:.3e} kg, err_liq (con gas) {el:.3e} kg, resto {eml - el:.3e}; "
+                              f"sum|e| {eam:.3e}, sum|e - err_liq| {erm:.3e}: 1 - rem/abs {frac:.3f} por celda "
+                              f"(residuo por resta, no atribucion; sum|rho V_pois| {vpa:.3e}, sum|rho V_eff| {vea:.3e}; "
+                              f"{nog_txt}, {nolink_txt}); {all_txt}; {dm_txt}"
+                              + (f"; AVISO {skipmsg}" if skipmsg else ""))
+                        # (quinto ciclo, C-144) reparto de err_liq_all (lk := err_liq_all - unl
+                        # por celda en el Fortran): identidad POR CONSTRUCCION, no se
+                        # comprueba aqui (ronda 9, M1). rej es un estimador bruto (C-148)
+                        if has("m_gas_err_liq_lk") and has_all:
+                            elk, eun, eua = S("m_gas_err_liq_lk"), S("m_gas_err_liq_unl"), S("m_gas_err_liq_unl_abs")
+                            ne2 = sum(r.get("m_gas_e2_skip", 0.0) for r in steps)
+                            if vpn > 0.0:
+                                nogas_e2 = (f"sin gas: sum|rho V_pois| {vpn:.3e}, sum|rho V_eff| {ven:.3e} "
+                                            f"(0 por construccion en celdas llenas), m_gas_rej_nogas {S('m_gas_rej_nogas'):.3e} kg "
+                                            f"(estimador bruto, no se interpreta)")
+                            else:
+                                nogas_e2 = "sin gas: sin plan del Poisson"
+                            print(f"  INFO  mass_gas_cells_e2  err_liq_all {ela:.3e} = enlazadas {elk:.3e} + desfase E2 {eun:.3e} "
+                                  f"(lk := err_liq_all - unl por celda, identidad por construccion); sum|desfase| {eua:.3e} = "
+                                  f"{eua / eam:.4f} de sum|e|; {nogas_e2}"
+                                  + (f"; AVISO {ne2:.0f} pasos sin E2 aceptada valida" if ne2 > 0 else ""))
+                        # (panel WS-K7 ronda 3, R-2) el NETO por paso (descriptivo, ronda 5)
+                        if len(ls) >= 3 and has_all:
+                            def _corr(x, y):
+                                n = len(x); mx = sum(x) / n; my = sum(y) / n
+                                sxy = sum((a - mx) * (b - my) for a, b in zip(x, y))
+                                sxx = sum((a - mx) ** 2 for a in x); syy = sum((b - my) ** 2 for b in y)
+                                return sxy / max((sxx * syy) ** 0.5, 1e-300)
+                            xe = [r.get("m_gas_err_multi", 0.0) for r in ls]
+                            xa = [r.get("m_gas_err_liq_all", 0.0) for r in ls]
+                            xl = [r.get("m_gas_err_liq", 0.0) for r in ls]
+                            same = sum(1 for a, b in zip(xe, xa) if a * b > 0)
+                            print(f"  INFO  mass_gas_cells_net  por paso ({len(ls)}, descriptivo): corr(err_liq_all, e) {_corr(xa, xe):+.3f}, "
+                                  f"corr(e - err_liq_all, e) {_corr([a - b for a, b in zip(xe, xa)], xe):+.3f}, "
+                                  f"mismo signo {same}/{len(ls)}; con filtro corr(err_liq, e) {_corr(xl, xe):+.3f}, "
+                                  f"corr(e - err_liq, e) {_corr([a - b for a, b in zip(xe, xl)], xe):+.3f}")
+        # (WS-K7) el inventario del gas solo cambia por complemento, EOS y
+        # volfix (el flujo nunca entra): identidad exacta por construccion.
+        # Una reescritura nueva de alpha_g o rho_g sin gancho la rompe
+        if "m_gas_comp" in last:
+            mc = sum(r.get("m_gas_comp", 0.0) for r in steps)
+            me = sum(r.get("m_gas_eos", 0.0) for r in steps)
+            # (panel ronda 3, B1) la tolerancia escala con lo que se SUMO, no
+            # con el neto: sum |dm| por llamada (m_gas_comp_abs/m_gas_eos_abs);
+            # sin esas columnas (CSV viejo) cae al |neto| por paso
+            if "m_gas_comp_abs" in last:
+                mca = sum(r.get("m_gas_comp_abs", 0.0) for r in steps)
+                mea = sum(r.get("m_gas_eos_abs", 0.0) for r in steps)
+            else:
+                mca = sum(abs(r.get("m_gas_comp", 0.0)) for r in steps)
+                mea = sum(abs(r.get("m_gas_eos", 0.0)) for r in steps)
+            mfa = sum(abs(r.get("m_gas_volfix", 0.0)) for r in steps)
+            rw = dm_g - (mc + me + m_fix)
+            # piso con el inventario (panel WS-K7, B1): dm_gas es una resta de
+            # dos inventarios grandes y su redondeo escala con m_gas
+            mg_max = max(abs(r["m_gas"]) for r in rows)
+            # (quinto ciclo, B-2) 1e-11: los restos medidos son <= 4e-12 kg con
+            # sum|dm| ~ 1 kg por banco y 78 kg en 5500 pasos de B1
+            tol_rw = 1e-11 * (mca + mea + mfa) + 1e-14 * mg_max + 1e-12
+            chk.report("mass_gas_rewrites", abs(rw) <= tol_rw,
+                       f"dm_gas {dm_g:.6e} = comp {mc:.6e} + eos {me:.6e} + volfix {m_fix:.6e} kg "
+                       f"(resto {rw:.2e}; max 1e-11 x sum|dm| {mca + mea + mfa:.3e} + 1e-14 x m_gas {mg_max:.2e} + 1e-12)")
         if per_phase and energy_on:
             cg = sum(r.get("E_conv_gas", 0.0) for r in steps)
             oc = sum(r.get("E_out_conv", 0.0) for r in steps)
