@@ -20,13 +20,13 @@ SRCS = \
 	$(SRCDIR)/mod_workspace.f90 \
 	$(SRCDIR)/mod_face_flux.f90 \
 	$(SRCDIR)/mod_boundary_3d.f90 \
+	$(SRCDIR)/mod_probe.f90 \
 	$(SRCDIR)/mod_audit.f90 \
 	$(SRCDIR)/mod_config_3d.f90 \
 	$(SRCDIR)/mod_mesh_3d.f90 \
 	$(SRCDIR)/mod_solver_3d.f90 \
 	$(SRCDIR)/mod_energy_3d.f90 \
 	$(SRCDIR)/mod_properties_3d.f90 \
-	$(SRCDIR)/mod_probe.f90 \
 	$(SRCDIR)/mod_momentum_3d.f90 \
 	$(SRCDIR)/mod_pressure_3d.f90 \
 	$(SRCDIR)/mod_drag_ergun.f90 \
