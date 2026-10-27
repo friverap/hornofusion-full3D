@@ -108,6 +108,8 @@ contains
             ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
             ws_pc_unl, ws_pc_unl_valid, ws_pc_unl_id, &
             ws_pc_unl_used, ws_pc_unl_used_valid, ws_pc_unl_used_id, &
+            ws_su_cc_used, ws_su_cc_used_valid, ws_su_cc_used_id, ws_gadv_used, &
+            ws_store_gas, ws_store_art, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, &
             ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bed_valid
@@ -211,6 +213,9 @@ contains
         ws_Fg_lk_r = 0; ws_Fg_lk_th = 0; ws_Fg_lk_z = 0
         ! (WS-K7, C-144) E2 aceptada por ESTE Poisson: se rellena abajo
         ws_pc_unl_used = 0.0_dp; ws_pc_unl_used_valid = .false.
+        ! (WS-K8) demanda de compresibilidad aceptada por ESTE Poisson
+        ws_su_cc_used = 0.0_dp; ws_su_cc_used_valid = .false.; ws_gadv_used = 0.0_dp
+        ws_store_gas = 0.0_dp; ws_store_art = 0.0_dp
         if (ws_liq_cont_valid) then
             act_l = ws_liq_cont
         else
@@ -622,6 +627,8 @@ contains
                         dcl = max(-cap, min(cap, dvol))
                         Su(i,j,k) = Su(i,j,k) + dcl
                         su_cc(i,j,k) = dcl
+                        ws_su_cc_used(i,j,k) = dcl
+                        ws_gadv_used(i,j,k) = gadv(i,j,k)
                         ! acarreo acotado por el mismo volumen de referencia
                         ! que la cota; lo que lo excede se descarta CON registro
                         ws_cc_new(i,j,k) = sign(min(abs(dvol - dcl) * cfg%dt, &
@@ -670,6 +677,8 @@ contains
                         aB(i,j,k) = 0.0_dp; aT(i,j,k) = 0.0_dp
                         aP(i,j,k) = 1.0_dp; Su(i,j,k) = 0.0_dp
                         ws_pc_unl_used(i,j,k) = 0.0_dp
+                        ws_su_cc_used(i,j,k) = 0.0_dp
+                        ws_gadv_used(i,j,k) = 0.0_dp
                         ! (M6-2) la fila sellada no evacua nada: lo que la
                         ! celda planteo este paso (Su ya incluia la parte
                         ! acotada) se descarta CON registro
@@ -682,6 +691,10 @@ contains
                         aP(i,j,k) = (aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + &
                                      aN(i,j,k) + aB(i,j,k) + aT(i,j,k)) * &
                                     (1.0_dp + PP_COMPLIANCE)
+                        ! (WS-K8) coeficientes de almacenamiento de la fila; se
+                        ! pasan a caudal con pp tras el CG (solo diagnostico)
+                        ws_store_art(i,j,k) = (aW(i,j,k) + aE(i,j,k) + aS(i,j,k) + &
+                                     aN(i,j,k) + aB(i,j,k) + aT(i,j,k)) * PP_COMPLIANCE
                         ! Término acústico low-Mach (ver P0_THERMO arriba)
                         if (cfg%gas_compressibility .and. cfg%solve_multiphase) then
                         block
@@ -706,6 +719,12 @@ contains
                             ! (volumen: d alpha_g/dp' = alpha_g/(P0 + p), M25)
                             if (ag_c > 0.0_dp) aP(i,j,k) = aP(i,j,k) + ag_c &
                                 / max(P0_THERMO + sh%p(i,j,k), P_ABS_MIN) * m%vol(i,j,k) / cfg%dt
+                            ! (WS-K8) parte real (alpha_g en act_g) y piso D2.4
+                            if (act_g(i,j,k)) ws_store_gas(i,j,k) = gas%alpha(i,j,k) &
+                                / max(P0_THERMO + sh%p(i,j,k), P_ABS_MIN) * m%vol(i,j,k) / cfg%dt
+                            if (ag_c > 0.0_dp) ws_store_art(i,j,k) = ws_store_art(i,j,k) &
+                                + ag_c / max(P0_THERMO + sh%p(i,j,k), P_ABS_MIN) * m%vol(i,j,k) / cfg%dt &
+                                - ws_store_gas(i,j,k)
                         end block
                         end if
                         ! Compresibilidad acústica del LÍQUIDO (física,
@@ -715,6 +734,8 @@ contains
                         if (act_l(i,j,k)) then
                             ! (volumen: alpha_l/(rho_l c^2))
                             aP(i,j,k) = aP(i,j,k) + liq%alpha(i,j,k) * m%vol(i,j,k) / &
+                                (liq%rho(i,j,k) * C_SOUND_LIQ**2 * cfg%dt)
+                            ws_store_art(i,j,k) = ws_store_art(i,j,k) + liq%alpha(i,j,k) * m%vol(i,j,k) / &
                                 (liq%rho(i,j,k) * C_SOUND_LIQ**2 * cfg%dt)
                         end if
                     end if
@@ -746,12 +767,18 @@ contains
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
-                    if (Su(i,j,k) == 0.0_dp) ws_pc_unl_used(i,j,k) = 0.0_dp
+                    if (Su(i,j,k) == 0.0_dp) then
+                        ws_pc_unl_used(i,j,k) = 0.0_dp
+                        ws_su_cc_used(i,j,k) = 0.0_dp
+                        ws_gadv_used(i,j,k) = 0.0_dp
+                    end if
                 end do
             end do
         end do
         ws_pc_unl_used_valid = .true.
         ws_pc_unl_used_id = probe_current_step()
+        ws_su_cc_used_valid = .true.
+        ws_su_cc_used_id = probe_current_step()
 
         ! Residual de continuidad del iterado entrante (ver flux_ref). Tras
         ! las BC: las celdas de SALIDA (Dirichlet pp = 0 en los agujeros de
@@ -784,6 +811,9 @@ contains
         call cg_3d_mpi(aW, aE, aS, aN, aB, aT, aP, Su, sh%pp, m, &
                        cfg%max_inner_pres, SOR_TOL_PRESSURE, &
                        cg_res, n_iter_cg)
+        ! (WS-K8) almacenamiento de la fila como caudal [m3/s] (diagnostico)
+        ws_store_gas = ws_store_gas * sh%pp
+        ws_store_art = ws_store_art * sh%pp
         if (probe_here) write(*,'(A,I8,A,ES11.3,A,6ES11.3)') '[PROBE-P] paso', probe_current_step(), &
             ' pp=', sh%pp(pi_,pj_,pk_), ' pp_vec(W,E,S,N,B,T)=', sh%pp(pi_-1,pj_,pk_), sh%pp(pi_+1,pj_,pk_), &
             sh%pp(pi_,pj_-1,pk_), sh%pp(pi_,pj_+1,pk_), sh%pp(pi_,pj_,pk_-1), sh%pp(pi_,pj_,pk_+1)

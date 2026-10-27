@@ -60,6 +60,26 @@ module mod_workspace
     real(dp), allocatable :: ws_pc_unl_used(:,:,:)
     logical, save :: ws_pc_unl_used_valid = .false.
     integer, save :: ws_pc_unl_used_id = -huge(1)
+    ! (WS-K8) demanda de COMPRESIBILIDAD del gas que el ULTIMO Poisson del
+    ! paso SUMO a Su por celda [m3/s] (su_cc: termica + advectiva con fsat,
+    ! acarreo y reacciones, ya acotada por COMP_SRC_CAP); 0 donde la fila se
+    ! anulo (inactiva, sellada, salida). Solo la lee el audit. Vale dentro del
+    ! paso (id): sin estado en el reinicio.
+    real(dp), allocatable :: ws_su_cc_used(:,:,:)
+    ! y su termino ADVECTIVO sin pesar (gadv = sum Q_in (rho_N - rho_P)/rho_P,
+    ! A8): pasa el balance de VOLUMEN del Poisson a MASA, porque ws_Fg ya
+    ! lleva la densidad del dador (plan en masa = rho_P dt (su_cc - gadv -
+    ! store_gas), con store_gas abajo)
+    real(dp), allocatable :: ws_gadv_used(:,:,:)
+    ! Volumen que la fila del ultimo Poisson ALMACENA en su diagonal en vez de
+    ! evacuarlo por las caras [m3/s] = (aP - sum a_nb) pp, partido en la
+    ! compresion ACUSTICA REAL del gas (alpha_g/(P0+p) V/dt, que la EOS si
+    ! realiza) y la ARTIFICIAL (compliance PP_COMPLIANCE, piso
+    ! alpha_g_comp_min de D2.4 y acustico del liquido), que ninguna fase
+    ! realiza. Solo los lee el audit (WS-K8).
+    real(dp), allocatable :: ws_store_gas(:,:,:), ws_store_art(:,:,:)
+    logical, save :: ws_su_cc_used_valid = .false.
+    integer, save :: ws_su_cc_used_id = -huge(1)
     ! Plan D D2.2b: celdas con presion de fluido PARA EL LIQUIDO. Falsa en la
     ! celda cuyo liquido quedo sin ninguna cara abierta en el ultimo Poisson
     ! del paso (hidraulicamente sellada para el liquido, tenga o no gas): es
@@ -508,6 +528,9 @@ contains
         ws_Fg_lk_r = 0; ws_Fg_lk_th = 0; ws_Fg_lk_z = 0
         allocate(ws_pc_unl, mold=ws_aW); ws_pc_unl = 0.0_dp
         allocate(ws_pc_unl_used, mold=ws_aW); ws_pc_unl_used = 0.0_dp
+        allocate(ws_su_cc_used, mold=ws_aW); ws_su_cc_used = 0.0_dp
+        allocate(ws_gadv_used, mold=ws_aW); ws_gadv_used = 0.0_dp
+        allocate(ws_store_gas, ws_store_art, mold=ws_aW); ws_store_gas = 0.0_dp; ws_store_art = 0.0_dp
         allocate(ws_liq_cont(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         ws_liq_cont = .true.
         allocate(ws_liq_cont_prev, ws_pv_active, mold=ws_liq_cont)

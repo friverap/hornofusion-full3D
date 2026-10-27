@@ -445,6 +445,58 @@ def main():
                                   f"corr(e - err_liq_all, e) {_corr([a - b for a, b in zip(xe, xa)], xe):+.3f}, "
                                   f"mismo signo {same}/{len(ls)}; con filtro corr(err_liq, e) {_corr(xl, xe):+.3f}, "
                                   f"corr(e - err_liq, e) {_corr([a - b for a, b in zip(xe, xl)], xe):+.3f}")
+        # (WS-K8) reparto del error por conjunto: por celda e = comp + eos -
+        # fl - rx (el volfix se cancela), asi que sobre el conjunto multifase y
+        # el de gas libre e = comp + eos - flux - rx, con flux = flujo neto de
+        # gas que ENTRA al conjunto por su frontera. mass_gas_class_split es
+        # tautologico en flux y rx (e y flux acumulan la misma fl): equivale a
+        # mass_gas_rewrites restringido a cada clase (inventario frente a los
+        # ganchos de complemento, EOS y volfix). El cierre NO tautologico del
+        # flujo es mass_gas_flux_closure: flux_multi + flux_free + m_gas_out = 0
+        # por paso (m_gas_out sale de otro camino de codigo).
+        if "m_gas_comp_multi" in last:
+            cs = [r for r in steps if r.get("m_gas_cells_skip", 0.0) == 0.0]
+            if cs:
+                T = lambda c: sum(r.get(c, 0.0) for r in cs)
+                em8, ef8 = T("m_gas_err_multi"), T("m_gas_err_free")
+                sm = T("m_gas_comp_multi") + T("m_gas_eos_multi") - T("m_gas_flux_multi") - T("m_gas_rx_multi")
+                sf = T("m_gas_comp_free") + T("m_gas_eos_free") - T("m_gas_flux_free") - T("m_gas_rx_free")
+                scale = T("m_gas_comp_abs") + T("m_gas_eos_abs") + sum(abs(r.get("m_gas_volfix", 0.0)) for r in cs)
+                mgx = max(abs(r["m_gas"]) for r in rows)
+                tol8 = 1e-11 * scale + 1e-14 * mgx + 1e-12
+                fcl = max(abs(r.get("m_gas_flux_multi", 0.0) + r.get("m_gas_flux_free", 0.0) + r.get("m_gas_out", 0.0))
+                          for r in cs)
+                fsc = max(abs(r.get("m_gas_out", 0.0)) for r in cs) + max(abs(r.get("m_gas_flux_multi", 0.0)) for r in cs)
+                chk.report("mass_gas_flux_closure", fcl <= 1e-9 * fsc + 1e-15,
+                           f"por paso flux_multi + flux_free + m_gas_out = 0: max|resto| {fcl:.2e} "
+                           f"(max 1e-9 x {fsc:.2e} + 1e-15); sum m_gas_out {T('m_gas_out'):.4e} kg, "
+                           f"flujo entrante al multifase {T('m_gas_flux_multi'):.4e}, al gas libre {T('m_gas_flux_free'):.4e}")
+                chk.report("mass_gas_class_split", abs(em8 - sm) <= tol8 and abs(ef8 - sf) <= tol8,
+                           f"multifase e {em8:.6e} = comp {T('m_gas_comp_multi'):.6e} + eos {T('m_gas_eos_multi'):.6e} "
+                           f"- flujo entrante {T('m_gas_flux_multi'):.6e} - rx {T('m_gas_rx_multi'):.6e} (resto {em8 - sm:.2e}); "
+                           f"gas libre e {ef8:.6e} (resto {ef8 - sf:.2e}); max 1e-11 x sum|dm| + 1e-14 x m_gas + 1e-12 = {tol8:.2e}")
+                # mitad de compresibilidad del plan del Poisson (err_cc) y plan completo
+                if T("m_gas_err_abs_multi") > 0.0 or T("m_gas_err_abs_free") > 0.0:
+                    ncc = sum(r.get("m_gas_cc_skip", 0.0) for r in steps)
+                    lq = [r for r in cs if r.get("m_gas_liq_skip", 0.0) == 0.0 and r.get("m_gas_cc_skip", 0.0) == 0.0
+                          and not r.get("m_slag", 0.0) > 0.0]
+                    U = lambda c: sum(r.get(c, 0.0) for r in lq)
+                    eaf, rcf = U("m_gas_err_abs_free"), U("m_gas_rem2_abs_free")
+                    eam8, r2 = U("m_gas_err_abs_multi"), U("m_gas_rem2_abs_multi")
+                    free_txt = (f"gas libre: e {U('m_gas_err_free'):.3e}, err_cc {U('m_gas_err_cc_free'):.3e}, "
+                                f"err_art {U('m_gas_err_art_free'):.3e}, sum|e| {eaf:.3e}, "
+                                f"sum|e - err_liq - err_cc - err_art| {rcf:.3e}, 1 - rem/abs {1.0 - rcf / eaf:.3f}"
+                                if lq and eaf > 0.0 else "gas libre: n/a")
+                    multi_txt = (f"multifase: e {U('m_gas_err_multi'):.3e}, err_liq_all {U('m_gas_err_liq_all'):.3e}, "
+                                 f"err_cc {U('m_gas_err_cc_multi'):.3e}, err_art {U('m_gas_err_art_multi'):.3e}, "
+                                 f"sum|e| {eam8:.3e}, sum|e - err_liq_all - err_cc - err_art| {r2:.3e}, "
+                                 f"1 - rem/abs {1.0 - r2 / eam8:.3f}"
+                                 if lq and eam8 > 0.0 else "multifase: n/a")
+                    print(f"  INFO  mass_gas_cells_cc  plan del Poisson en {len(lq)} de {len(steps)} filas "
+                          f"(liquido y su_cc validos, sin escoria; residuo por resta, no atribucion): {free_txt}; "
+                          f"{multi_txt}; sum|err_art| libre {U('m_gas_art_abs_free'):.3e}, multifase "
+                          f"{U('m_gas_art_abs_multi'):.3e} kg"
+                          + (f"; AVISO {ncc:.0f} pasos sin su_cc aceptada valida" if ncc > 0 else ""))
         # (WS-K7) el inventario del gas solo cambia por complemento, EOS y
         # volfix (el flujo nunca entra): identidad exacta por construccion.
         # Una reescritura nueva de alpha_g o rho_g sin gancho la rompe

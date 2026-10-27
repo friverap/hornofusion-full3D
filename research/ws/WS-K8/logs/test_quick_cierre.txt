@@ -1,0 +1,856 @@
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_constants.o src/mod_constants.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_mpi_topology.o src/mod_mpi_topology.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_types_3d.o src/mod_types_3d.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_parallel_utils.o src/mod_parallel_utils.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_timers.o src/mod_timers.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_workspace.o src/mod_workspace.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_face_flux.o src/mod_face_flux.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_boundary_3d.o src/mod_boundary_3d.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_probe.o src/mod_probe.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_audit.o src/mod_audit.f90 -Jobj
+src/mod_audit.f90:793:50:
+
+  793 |         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, dfl, dfg
+      |                                                  1~~
+Warning: Unused variable 'dfg' declared at (1) [-Wunused-variable]
+src/mod_audit.f90:793:45:
+
+  793 |         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, dfl, dfg
+      |                                             1~~
+Warning: Unused variable 'dfl' declared at (1) [-Wunused-variable]
+src/mod_audit.f90:774:33:
+
+  774 |     subroutine audit_accumulate(liq, gas, gas_T_old, sh, m, cfg, ag_heat)
+      |                                 1~~
+Warning: Unused dummy argument 'liq' at (1) [-Wunused-dummy-argument]
+src/mod_audit.f90:792:39:
+
+  792 |         real(dp) :: vol, src_dt, w_l, w_g, dT_eq
+      |                                       1~~
+Warning: Unused variable 'w_g' declared at (1) [-Wunused-variable]
+src/mod_audit.f90:792:34:
+
+  792 |         real(dp) :: vol, src_dt, w_l, w_g, dT_eq
+      |                                  1~~
+Warning: Unused variable 'w_l' declared at (1) [-Wunused-variable]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_config_3d.o src/mod_config_3d.f90 -Jobj
+src/mod_config_3d.f90:600:34:
+
+  600 |         if (cfg%n_pc_max > 1 .and. cfg_root()) print '(A)', &
+      |                                  1
+Warning: Impure function 'cfg_root' at (1) might not be evaluated [-Wfunction-elimination]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_mesh_3d.o src/mod_mesh_3d.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_solver_3d.o src/mod_solver_3d.f90 -Jobj
+src/mod_solver_3d.f90:386:49:
+
+  386 |                         aB(i,j,k) == 0.0_dp .and. aT(i,j,k) == 0.0_dp) cycle
+      |                                                 1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_solver_3d.f90:385:75:
+
+  385 |                         aS(i,j,k) == 0.0_dp .and. aN(i,j,k) == 0.0_dp .and. &
+      |                                                                           1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_solver_3d.f90:385:49:
+
+  385 |                         aS(i,j,k) == 0.0_dp .and. aN(i,j,k) == 0.0_dp .and. &
+      |                                                 1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_solver_3d.f90:384:75:
+
+  384 |                         aW(i,j,k) == 0.0_dp .and. aE(i,j,k) == 0.0_dp .and. &
+      |                                                                           1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_solver_3d.f90:384:49:
+
+  384 |                         aW(i,j,k) == 0.0_dp .and. aE(i,j,k) == 0.0_dp .and. &
+      |                                                 1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_solver_3d.f90:383:49:
+
+  383 |                     if (aP(i,j,k) == 1.0_dp .and. &
+      |                                                 1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_solver_3d.f90:383:24:
+
+  383 |                     if (aP(i,j,k) == 1.0_dp .and. &
+      |                        1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_energy_3d.o src/mod_energy_3d.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_properties_3d.o src/mod_properties_3d.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_momentum_3d.o src/mod_momentum_3d.f90 -Jobj
+src/mod_momentum_3d.f90:86:12:
+
+   86 |         use mod_workspace, only: ensure_workspace, own_weight_face, ws_liq_cont, ws_liq_cont_valid, &
+      |            1
+Warning: Unused module variable 'ws_bed' which has been explicitly imported at (1) [-Wunused-variable]
+src/mod_momentum_3d.f90:86:12:
+
+   86 |         use mod_workspace, only: ensure_workspace, own_weight_face, ws_liq_cont, ws_liq_cont_valid, &
+      |            1
+Warning: Unused module variable 'ws_bed_gas' which has been explicitly imported at (1) [-Wunused-variable]
+src/mod_momentum_3d.f90:86:12:
+
+   86 |         use mod_workspace, only: ensure_workspace, own_weight_face, ws_liq_cont, ws_liq_cont_valid, &
+      |            1
+Warning: Unused module variable 'ws_bed_liq' which has been explicitly imported at (1) [-Wunused-variable]
+src/mod_momentum_3d.f90:86:12:
+
+   86 |         use mod_workspace, only: ensure_workspace, own_weight_face, ws_liq_cont, ws_liq_cont_valid, &
+      |            1
+Warning: Unused module variable 'ws_bed_valid' which has been explicitly imported at (1) [-Wunused-variable]
+src/mod_momentum_3d.f90:86:12:
+
+   86 |         use mod_workspace, only: ensure_workspace, own_weight_face, ws_liq_cont, ws_liq_cont_valid, &
+      |            1
+Warning: Unused module variable 'ws_bedl_f' which has been explicitly imported at (1) [-Wunused-variable]
+src/mod_momentum_3d.f90:86:12:
+
+   86 |         use mod_workspace, only: ensure_workspace, own_weight_face, ws_liq_cont, ws_liq_cont_valid, &
+      |            1
+Warning: Unused module variable 'ws_bub' which has been explicitly imported at (1) [-Wunused-variable]
+src/mod_momentum_3d.f90:86:12:
+
+   86 |         use mod_workspace, only: ensure_workspace, own_weight_face, ws_liq_cont, ws_liq_cont_valid, &
+      |            1
+Warning: Unused module variable 'ws_bub_f' which has been explicitly imported at (1) [-Wunused-variable]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_pressure_3d.o src/mod_pressure_3d.f90 -Jobj
+src/mod_pressure_3d.f90:1969:12:
+
+ 1969 |         if (t == t) t = max(-P_HYDRO_CAP, t)
+      |            1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_pressure_3d.f90:1970:12:
+
+ 1970 |         if (u_in /= u_in) t = u_in
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_pressure_3d.f90:291:16:
+
+  291 |             if (fdt /= 0.0_dp) then
+      |                1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_pressure_3d.f90:770:24:
+
+  770 |                     if (Su(i,j,k) == 0.0_dp) then
+      |                        1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_pressure_3d.f90:823:12:
+
+  823 |         if (cg_res /= cg_res) residual = cg_res   ! NaN del CG: propagarlo
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_pressure_3d.f90:901:22:
+
+  901 |         if (.not. any(sh%p /= sh%p)) sh%p = max(-P_HYDRO_CAP, min(P_HYDRO_CAP, sh%p))
+      |                      1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_pressure_3d.f90:981:24:
+
+  981 |                     if (p_new /= p_new) cycle
+      |                        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_pressure_3d.f90:98:12:
+
+   98 |         use mod_workspace, only: ensure_workspace, own_weight_face, liq_own_weight, liq_w, mix_cell_weight, &
+      |            1
+Warning: Unused module variable 'ws_bed_gas' which has been explicitly imported at (1) [-Wunused-variable]
+src/mod_pressure_3d.f90:98:12:
+
+   98 |         use mod_workspace, only: ensure_workspace, own_weight_face, liq_own_weight, liq_w, mix_cell_weight, &
+      |            1
+Warning: Unused module variable 'ws_bed_liq' which has been explicitly imported at (1) [-Wunused-variable]
+src/mod_pressure_3d.f90:98:12:
+
+   98 |         use mod_workspace, only: ensure_workspace, own_weight_face, liq_own_weight, liq_w, mix_cell_weight, &
+      |            1
+Warning: Unused module variable 'ws_bedl_f' which has been explicitly imported at (1) [-Wunused-variable]
+src/mod_pressure_3d.f90:98:12:
+
+   98 |         use mod_workspace, only: ensure_workspace, own_weight_face, liq_own_weight, liq_w, mix_cell_weight, &
+      |            1
+Warning: Unused module variable 'ws_bub' which has been explicitly imported at (1) [-Wunused-variable]
+src/mod_pressure_3d.f90:98:12:
+
+   98 |         use mod_workspace, only: ensure_workspace, own_weight_face, liq_own_weight, liq_w, mix_cell_weight, &
+      |            1
+Warning: Unused module variable 'ws_bub_f' which has been explicitly imported at (1) [-Wunused-variable]
+src/mod_pressure_3d.f90:98:12:
+
+   98 |         use mod_workspace, only: ensure_workspace, own_weight_face, liq_own_weight, liq_w, mix_cell_weight, &
+      |            1
+Warning: Unused module variable 'ws_gas_perc' which has been explicitly imported at (1) [-Wunused-variable]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_drag_ergun.o src/mod_drag_ergun.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_continuity.o src/mod_continuity.f90 -Jobj
+src/mod_continuity.f90:996:16:
+
+  996 |             if (fg == huge(1.0_dp)) fg = 0.0_dp
+      |                1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_continuity.f90:527:113:
+
+  527 |                                   - Ft * phd(Ft, phs(i,j,k), phs(i,j,k+1)) * phd(Ft, qd(i,j,k,c), qd(i,j,k+1,c)))
+      |                                                                                                                 ^
+Warning: 'q_new.offset' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:60:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                                            ^~~~~~~~~~~~~~
+note: 'q_new.offset' was declared here
+src/mod_continuity.f90:521:33:
+
+  521 |                                 q_new(i,j,k,c) = slq_adv(i,j,k,c) + dt_sub / liq%rho(i,j,k) * ( &
+      |                                 ^~~~~~~~~~~~~~~
+Warning: 'q_new.dim[0].lbound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:60:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                                            ^~~~~~~~~~~~~~
+note: 'q_new.dim[0].lbound' was declared here
+src/mod_continuity.f90:521:33:
+
+  521 |                                 q_new(i,j,k,c) = slq_adv(i,j,k,c) + dt_sub / liq%rho(i,j,k) * ( &
+      |                                 ^~~~~~~~~~~~~~~
+Warning: 'q_new.dim[0].ubound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:60:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                                            ^~~~~~~~~~~~~~
+note: 'q_new.dim[0].ubound' was declared here
+src/mod_continuity.f90:527:113:
+
+  527 |                                   - Ft * phd(Ft, phs(i,j,k), phs(i,j,k+1)) * phd(Ft, qd(i,j,k,c), qd(i,j,k+1,c)))
+      |                                                                                                                 ^
+Warning: 'q_new.dim[1].stride' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:60:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                                            ^~~~~~~~~~~~~~
+note: 'q_new.dim[1].stride' was declared here
+src/mod_continuity.f90:521:33:
+
+  521 |                                 q_new(i,j,k,c) = slq_adv(i,j,k,c) + dt_sub / liq%rho(i,j,k) * ( &
+      |                                 ^~~~~~~~~~~~~~~
+Warning: 'q_new.dim[1].lbound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:60:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                                            ^~~~~~~~~~~~~~
+note: 'q_new.dim[1].lbound' was declared here
+src/mod_continuity.f90:521:33:
+
+  521 |                                 q_new(i,j,k,c) = slq_adv(i,j,k,c) + dt_sub / liq%rho(i,j,k) * ( &
+      |                                 ^~~~~~~~~~~~~~~
+Warning: 'q_new.dim[1].ubound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:60:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                                            ^~~~~~~~~~~~~~
+note: 'q_new.dim[1].ubound' was declared here
+src/mod_continuity.f90:527:113:
+
+  527 |                                   - Ft * phd(Ft, phs(i,j,k), phs(i,j,k+1)) * phd(Ft, qd(i,j,k,c), qd(i,j,k+1,c)))
+      |                                                                                                                 ^
+Warning: 'q_new.dim[2].stride' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:60:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                                            ^~~~~~~~~~~~~~
+note: 'q_new.dim[2].stride' was declared here
+src/mod_continuity.f90:521:33:
+
+  521 |                                 q_new(i,j,k,c) = slq_adv(i,j,k,c) + dt_sub / liq%rho(i,j,k) * ( &
+      |                                 ^~~~~~~~~~~~~~~
+Warning: 'q_new.dim[2].lbound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:60:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                                            ^~~~~~~~~~~~~~
+note: 'q_new.dim[2].lbound' was declared here
+src/mod_continuity.f90:521:33:
+
+  521 |                                 q_new(i,j,k,c) = slq_adv(i,j,k,c) + dt_sub / liq%rho(i,j,k) * ( &
+      |                                 ^~~~~~~~~~~~~~~
+Warning: 'q_new.dim[2].ubound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:60:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                                            ^~~~~~~~~~~~~~
+note: 'q_new.dim[2].ubound' was declared here
+src/mod_continuity.f90:527:113:
+
+  527 |                                   - Ft * phd(Ft, phs(i,j,k), phs(i,j,k+1)) * phd(Ft, qd(i,j,k,c), qd(i,j,k+1,c)))
+      |                                                                                                                 ^
+Warning: 'q_new.dim[3].stride' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:60:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                                            ^~~~~~~~~~~~~~
+note: 'q_new.dim[3].stride' was declared here
+src/mod_continuity.f90:521:33:
+
+  521 |                                 q_new(i,j,k,c) = slq_adv(i,j,k,c) + dt_sub / liq%rho(i,j,k) * ( &
+      |                                 ^~~~~~~~~~~~~~~
+Warning: 'q_new.dim[3].ubound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:60:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                                            ^~~~~~~~~~~~~~
+note: 'q_new.dim[3].ubound' was declared here
+src/mod_continuity.f90:510:29:
+
+  510 |                             s_new(i,j,k) = asl_adv(i,j,k) + dt_sub * ( &
+      |                             ^~~~~~~~~~~~~
+Warning: 's_new.dim[0].ubound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:34:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                  ^~~~~~~~~~~~
+note: 's_new.dim[0].ubound' was declared here
+src/mod_continuity.f90:510:29:
+
+  510 |                             s_new(i,j,k) = asl_adv(i,j,k) + dt_sub * ( &
+      |                             ^~~~~~~~~~~~~
+Warning: 's_new.dim[0].lbound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:34:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                  ^~~~~~~~~~~~
+note: 's_new.dim[0].lbound' was declared here
+src/mod_continuity.f90:510:29:
+
+  510 |                             s_new(i,j,k) = asl_adv(i,j,k) + dt_sub * ( &
+      |                             ^~~~~~~~~~~~~
+Warning: 's_new.dim[2].ubound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:34:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                  ^~~~~~~~~~~~
+note: 's_new.dim[2].ubound' was declared here
+src/mod_continuity.f90:510:29:
+
+  510 |                             s_new(i,j,k) = asl_adv(i,j,k) + dt_sub * ( &
+      |                             ^~~~~~~~~~~~~
+Warning: 's_new.dim[2].lbound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:34:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                  ^~~~~~~~~~~~
+note: 's_new.dim[2].lbound' was declared here
+src/mod_continuity.f90:109:34: Warning: 's_new.dim[2].stride' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:510:29:
+
+  510 |                             s_new(i,j,k) = asl_adv(i,j,k) + dt_sub * ( &
+      |                             ^~~~~~~~~~~~~
+Warning: 's_new.dim[1].ubound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:34:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                  ^~~~~~~~~~~~
+note: 's_new.dim[1].ubound' was declared here
+src/mod_continuity.f90:510:29:
+
+  510 |                             s_new(i,j,k) = asl_adv(i,j,k) + dt_sub * ( &
+      |                             ^~~~~~~~~~~~~
+Warning: 's_new.dim[1].lbound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:34:
+
+  109 |         real(dp), allocatable :: s_new(:,:,:), phs(:,:,:), q_new(:,:,:,:), qd(:,:,:,:)
+      |                                  ^~~~~~~~~~~~
+note: 's_new.dim[1].lbound' was declared here
+src/mod_continuity.f90:109:34: Warning: 's_new.dim[1].stride' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_continuity.f90:109:34: Warning: 's_new.offset' may be used uninitialized [-Wmaybe-uninitialized]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_melting_3d.o src/mod_melting_3d.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_fields_3d.o src/mod_fields_3d.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_scrap_collapse.o src/mod_scrap_collapse.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_ecs_feed.o src/mod_ecs_feed.f90 -Jobj
+src/mod_ecs_feed.f90:83:34:
+
+   83 |         real(dp), allocatable :: bud(:,:), dvb(:,:)
+      |                                  ^~~~~~~~
+Warning: 'bud.offset' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_ecs_feed.f90:203:34:
+
+  203 |             if (thru) dvb = 0.0_dp
+      |                                  ^
+Warning: 'bud.dim[0].ubound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_ecs_feed.f90:83:34:
+
+   83 |         real(dp), allocatable :: bud(:,:), dvb(:,:)
+      |                                  ^~~~~~~~
+note: 'bud.dim[0].ubound' was declared here
+src/mod_ecs_feed.f90:83:34: Warning: 'bud.dim[1].stride' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_ecs_feed.f90:203:34:
+
+  203 |             if (thru) dvb = 0.0_dp
+      |                                  ^
+Warning: 'bud.dim[1].ubound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_ecs_feed.f90:83:34:
+
+   83 |         real(dp), allocatable :: bud(:,:), dvb(:,:)
+      |                                  ^~~~~~~~
+note: 'bud.dim[1].ubound' was declared here
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_interphase_ht.o src/mod_interphase_ht.f90 -Jobj
+src/mod_interphase_ht.f90:246:44:
+
+  246 |         real(dp) :: al, ag, as, cg, cl, G, f, q, d, dp_, k_mol, urel, xb, f_disp, wet
+      |                                            1
+Warning: Unused variable 'f' declared at (1) [-Wunused-variable]
+src/mod_interphase_ht.f90:51:67:
+
+   51 |         real(dp) :: A_sv, eps_s, cap_g, cap_l, cap_s, G_gs, G_ls, b_g, b_l, T_sn
+      |                                                                   1~~
+Warning: Unused variable 'b_g' declared at (1) [-Wunused-variable]
+src/mod_interphase_ht.f90:51:34:
+
+   51 |         real(dp) :: A_sv, eps_s, cap_g, cap_l, cap_s, G_gs, G_ls, b_g, b_l, T_sn
+      |                                  1~~~~
+Warning: Unused variable 'cap_g' declared at (1) [-Wunused-variable]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_solid_phase.o src/mod_solid_phase.f90 -Jobj
+src/mod_solid_phase.f90:170:24:
+
+  170 |                     if (sol%mdot(i,j,k) == 0.0_dp) cycle
+      |                        1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_arc_cassie_mayr.o src/mod_arc_cassie_mayr.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_slag_3d.o src/mod_slag_3d.f90 -Jobj
+src/mod_slag_3d.f90:1095:24:
+
+ 1095 |                     if (qdown(i,j,k+1) == 0.0_dp) cycle
+      |                        1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_slag_3d.f90:1109:24:
+
+ 1109 |                     if (qup(i,j,k-1) == 0.0_dp) cycle
+      |                        1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_slag_3d.f90:656:24:
+
+  656 |                     if (ag_new /= gas%alpha(il,jl,kl)) then
+      |                        1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_slag_3d.f90:715:69:
+
+  715 |         real(dp) :: Mcol, Ecol, Xcol(N_SLAG_COMP), vneed, room, dv, f, mrem, mneed, dm
+      |                                                                     1
+Warning: Unused variable 'f' declared at (1) [-Wunused-variable]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_electrode_3d.o src/mod_electrode_3d.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_arc_radiation_mc.o src/mod_arc_radiation_mc.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_lorentz_3d.o src/mod_lorentz_3d.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_multiphase.o src/mod_multiphase.f90 -Jobj
+src/mod_multiphase.f90:55:34:
+
+   55 |         real(dp), allocatable :: a_prev(:,:,:)
+      |                                  ^~~~~~~~~~~~~
+Warning: 'a_prev.offset' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_multiphase.f90:537:57:
+
+  537 |                 if (cond) a_prev = a_prev - slag%alpha_sl
+      |                                                         ^
+Warning: 'a_prev.dim[0].lbound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_multiphase.f90:55:34:
+
+   55 |         real(dp), allocatable :: a_prev(:,:,:)
+      |                                  ^~~~~~~~~~~~~
+note: 'a_prev.dim[0].lbound' was declared here
+src/mod_multiphase.f90:537:57:
+
+  537 |                 if (cond) a_prev = a_prev - slag%alpha_sl
+      |                                                         ^
+Warning: 'a_prev.dim[0].ubound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_multiphase.f90:55:34:
+
+   55 |         real(dp), allocatable :: a_prev(:,:,:)
+      |                                  ^~~~~~~~~~~~~
+note: 'a_prev.dim[0].ubound' was declared here
+src/mod_multiphase.f90:537:57:
+
+  537 |                 if (cond) a_prev = a_prev - slag%alpha_sl
+      |                                                         ^
+Warning: 'a_prev.dim[1].lbound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_multiphase.f90:55:34:
+
+   55 |         real(dp), allocatable :: a_prev(:,:,:)
+      |                                  ^~~~~~~~~~~~~
+note: 'a_prev.dim[1].lbound' was declared here
+src/mod_multiphase.f90:537:57:
+
+  537 |                 if (cond) a_prev = a_prev - slag%alpha_sl
+      |                                                         ^
+Warning: 'a_prev.dim[1].ubound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_multiphase.f90:55:34:
+
+   55 |         real(dp), allocatable :: a_prev(:,:,:)
+      |                                  ^~~~~~~~~~~~~
+note: 'a_prev.dim[1].ubound' was declared here
+src/mod_multiphase.f90:537:57:
+
+  537 |                 if (cond) a_prev = a_prev - slag%alpha_sl
+      |                                                         ^
+Warning: 'a_prev.dim[2].lbound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_multiphase.f90:55:34:
+
+   55 |         real(dp), allocatable :: a_prev(:,:,:)
+      |                                  ^~~~~~~~~~~~~
+note: 'a_prev.dim[2].lbound' was declared here
+src/mod_multiphase.f90:537:57:
+
+  537 |                 if (cond) a_prev = a_prev - slag%alpha_sl
+      |                                                         ^
+Warning: 'a_prev.dim[2].ubound' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_multiphase.f90:55:34:
+
+   55 |         real(dp), allocatable :: a_prev(:,:,:)
+      |                                  ^~~~~~~~~~~~~
+note: 'a_prev.dim[2].ubound' was declared here
+src/mod_multiphase.f90:539:85:
+
+  539 |                                       - a_prev(istart:iend,jstart:jend,kstart:kend)))
+      |                                                                                     ^
+Warning: 'a_prev.dim[1].stride' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_multiphase.f90:55:34:
+
+   55 |         real(dp), allocatable :: a_prev(:,:,:)
+      |                                  ^~~~~~~~~~~~~
+note: 'a_prev.dim[1].stride' was declared here
+src/mod_multiphase.f90:539:85:
+
+  539 |                                       - a_prev(istart:iend,jstart:jend,kstart:kend)))
+      |                                                                                     ^
+Warning: 'a_prev.dim[2].stride' may be used uninitialized [-Wmaybe-uninitialized]
+src/mod_multiphase.f90:55:34:
+
+   55 |         real(dp), allocatable :: a_prev(:,:,:)
+      |                                  ^~~~~~~~~~~~~
+note: 'a_prev.dim[2].stride' was declared here
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_mixture_3d.o src/mod_mixture_3d.f90 -Jobj
+src/mod_mixture_3d.f90:989:12:
+
+  989 |         if (cg_res /= cg_res) residual = cg_res
+      |            1
+Warning: Inequality comparison for REAL(8) at (1) [-Wcompare-reals]
+src/mod_mixture_3d.f90:848:43:
+
+  848 |     subroutine mixture_pressure(liq, gas, gas_old, sh, m, cfg, residual)
+      |                                           1~~~~~~
+Warning: Unused dummy argument 'gas_old' at (1) [-Wunused-dummy-argument]
+src/mod_mixture_3d.f90:616:44:
+
+  616 |     subroutine mixture_momentum(comp, liq, gas, sh, m, cfg, residual)
+      |                                            1~~
+Warning: Unused dummy argument 'gas' at (1) [-Wunused-dummy-argument]
+src/mod_mixture_3d.f90:616:39:
+
+  616 |     subroutine mixture_momentum(comp, liq, gas, sh, m, cfg, residual)
+      |                                       1~~
+Warning: Unused dummy argument 'liq' at (1) [-Wunused-dummy-argument]
+src/mod_mixture_3d.f90:329:21:
+
+  329 |         logical  :: onbed
+      |                     1~~~~
+Warning: Unused variable 'onbed' declared at (1) [-Wunused-variable]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_turbulence_3d.o src/mod_turbulence_3d.f90 -Jobj
+src/mod_turbulence_3d.f90:342:16:
+
+  342 |             if (y == huge(1.0_dp)) y = 0.0_dp
+      |                1
+Warning: Equality comparison for REAL(8) at (1) [-Wcompare-reals]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_radiation_do.o src/mod_radiation_do.f90 -Jobj
+src/mod_radiation_do.f90:380:28:
+
+  380 |         function bwall(ii, jj, kk, ip, jp, kp) result(b)
+      |                            1~
+Warning: Unused dummy argument 'jj' at (1) [-Wunused-dummy-argument]
+src/mod_radiation_do.f90:78:38:
+
+   78 |         real(dp) :: ks_a, kf_a, T_s, dE_rate, denom, dE
+      |                                      1~~~~~~
+Warning: Unused variable 'de_rate' declared at (1) [-Wunused-variable]
+src/mod_radiation_do.f90:78:47:
+
+   78 |         real(dp) :: ks_a, kf_a, T_s, dE_rate, denom, dE
+      |                                               1~~~~
+Warning: Unused variable 'denom' declared at (1) [-Wunused-variable]
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_foam.o src/mod_foam.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_slag_chemistry.o src/mod_slag_chemistry.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_chemistry_carbon.o src/mod_chemistry_carbon.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_species_transport.o src/mod_species_transport.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_convergence_3d.o src/mod_convergence_3d.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_input_profiles.o src/mod_input_profiles.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_output_hdf5.o src/mod_output_hdf5.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/mod_restart.o src/mod_restart.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -c -o obj/main_3d.o src/main_3d.f90 -Jobj
+mpif90 -O2 -std=f2008 -Wall -Wextra -fcheck=bounds -ffree-line-length-none -I/opt/homebrew/include -o bin/eaf3d_mpi obj/mod_constants.o obj/mod_mpi_topology.o obj/mod_types_3d.o obj/mod_parallel_utils.o obj/mod_timers.o obj/mod_workspace.o obj/mod_face_flux.o obj/mod_boundary_3d.o obj/mod_probe.o obj/mod_audit.o obj/mod_config_3d.o obj/mod_mesh_3d.o obj/mod_solver_3d.o obj/mod_energy_3d.o obj/mod_properties_3d.o obj/mod_momentum_3d.o obj/mod_pressure_3d.o obj/mod_drag_ergun.o obj/mod_continuity.o obj/mod_melting_3d.o obj/mod_fields_3d.o obj/mod_scrap_collapse.o obj/mod_ecs_feed.o obj/mod_interphase_ht.o obj/mod_solid_phase.o obj/mod_arc_cassie_mayr.o obj/mod_slag_3d.o obj/mod_electrode_3d.o obj/mod_arc_radiation_mc.o obj/mod_lorentz_3d.o obj/mod_multiphase.o obj/mod_mixture_3d.o obj/mod_turbulence_3d.o obj/mod_radiation_do.o obj/mod_foam.o obj/mod_slag_chemistry.o obj/mod_chemistry_carbon.o obj/mod_species_transport.o obj/mod_convergence_3d.o obj/mod_input_profiles.o obj/mod_output_hdf5.o obj/mod_restart.o obj/main_3d.o -L/opt/homebrew/lib -lhdf5_hl_fortran -lhdf5_fortran -lhdf5 -Wl,-rpath,/opt/homebrew/lib
+== corrida cold_10step -n 8
+[invariants] tests/out/cold_10step_n8
+  (3 snapshots)
+  PASS  nan  F_lorentz_r step 0: 0 no-finitos
+  PASS  alpha_bounds  step 0: min=0.000e+00 max=1.000000
+  PASS  sum_alpha  step 0: max|sum_alpha - (1 activa / 0 inactiva)| = 0.000e+00
+  PASS  T_liquid_bound  step 0: [300.0, 300.0] K
+  PASS  T_solid_bound  step 0: [300.0, 300.0] K
+  PASS  T_gas_bound  step 0: min=300.0 fuera_arco_max=300.0 arco_max=300.0 K
+  PASS  Y_bounds  step 0
+  PASS  turb_positive  step 10
+  PASS  slag_comp  step 0: max sum X = 0.000000
+[audit] tests/out/cold_10step_n8 (10 pasos)
+  PASS  energy_balance_step  peor paso 9: gap/permitido = 1.350e-02 (etol_step 0.1 x S_gas + xtol 1e-09 x S_ext + htol_step 5e-05 x S_int, piso 1e-8 E_tot; por paso desde el 2)
+  PASS  energy_balance  dE=1.5078e+07 J, E_iny=1.5082e+07 J, gap=-4.740e+03 J, permitido=2.030e+05 J (etol 0.02 x S_gas 1.015e+07 + xtol 1e-09 x S_ext 1.542e+07 + htol 0.0001 x S_int 1.257e+04), gap/permitido=2.334e-02
+  INFO  energy_relax  residuo del enunciado (sub-relajacion): liquido 0.000e+00 J, gas -4.470e+03 J; gap - residuos = -2.700e+02 J (gap -4.740e+03 J)
+  PASS  slag_adjust_cum  |E_slag_tclip| + |E_slag_clip| acumulado 0.000e+00 J sobre S_ext 1.542e+07 J (max 1e-2 S_ext + 1 J)
+  PASS  mass_gas  dm_gas=-1.8747e+01 vs -venteo+volfix+reacciones=-1.8004e+01 kg (venteo 1.799e+01, volfix -1.176e-02, rxn 0.000e+00); EOS reescribe -7.430e-01 kg = 3.963e-02 rel (max 0.5)
+  INFO  mass_gas_cells  por celda (sin volfix): gas libre -5.970e-01 kg, multifase 7.262e-03 kg (|e| 1.215e+00), outlet -1.815e+01; cierre EOS - celdas - venteo = -3.553e-15 kg (sobre |EOS| 7.430e-01); tasa EOS -1.762e-02 /s por kg de gas
+  PASS  mass_gas_vf_cells  volfix registrado por celda -1.175595e-02 kg vs m_gas_volfix -1.175595e-02 kg (dif 0.00e+00; max 1e-9 x sum|volfix| 1.176e-02 + 1e-12)
+  INFO  mass_gas_cells_liq  err_liq = 0 (sin liquido planeado ni movido en celdas multifase): 1 - sum|e - err_liq|/sum|e| = 0.000 por celda; sum|e| multifase 1.331e-02 kg, e_multi 7.262e-03 kg, sum|comp| por llamada 0.000e+00 (en celdas sin gas 0.000e+00), sum|eos| por llamada 4.275e+01 kg (en 10 de 10 filas; reparto lk/unl y correlaciones: n/a)
+  PASS  mass_gas_flux_closure  por paso flux_multi + flux_free + m_gas_out = 0: max|resto| 8.88e-16 (max 1e-9 x 2.17e+00 + 1e-15); sum m_gas_out 1.7992e+01 kg, flujo entrante al multifase -1.8703e-01, al gas libre -1.7805e+01
+  PASS  mass_gas_class_split  multifase e 7.261629e-03 = comp 0.000000e+00 + eos -1.797698e-01 - flujo entrante -1.870314e-01 - rx 0.000000e+00 (resto 5.57e-16); gas libre e -5.970290e-01 (resto 1.55e-15); max 1e-11 x sum|dm| + 1e-14 x m_gas + 1e-12 = 4.31e-10
+  INFO  mass_gas_cells_cc  plan del Poisson en 10 de 10 filas (liquido y su_cc validos, sin escoria; residuo por resta, no atribucion): gas libre: e -5.970e-01, err_cc -6.049e-01, err_art -7.163e-05, sum|e| 1.202e+00, sum|e - err_liq - err_cc - err_art| 6.517e-02, 1 - rem/abs 0.946; multifase: e 7.262e-03, err_liq_all 0.000e+00, err_cc 6.643e-03, err_art -7.886e-06, sum|e| 1.331e-02, sum|e - err_liq_all - err_cc - err_art| 3.199e-03, 1 - rem/abs 0.760; sum|err_art| libre 7.210e-05, multifase 8.114e-06 kg
+  PASS  mass_gas_rewrites  dm_gas -1.874656e+01 = comp 0.000000e+00 + eos -1.873480e+01 + volfix -1.175595e-02 kg (resto 0.00e+00; max 1e-11 x sum|dm| 4.276e+01 + 1e-14 x m_gas 2.11e+02 + 1e-12)
+  INFO  conv_gas  E_conv_gas - venteo = -8.300e+06 J; / (cp 1000 x masa EOS -7.430e-01 kg) = -11171.2 K equivalentes
+  PASS  rad_closure  sum rad fases + pared = -1.111e+03 J sobre 3.308e+05 (max 0.05)
+  PASS  arc_budget  recibida/P_arc·dt = 1.0000000 (descartada 0.000e+00 J, tol 1e-05)
+  PASS  mc_lost_bound  E_mc_lost 2.074e+06 J = 0.126 del arco (max 0.4)
+  PASS  mass_liq  dm_liq=0.0000e+00 vs fundido-resolid-clip=0.0000e+00 kg (fundido=0.000e+00, resolid=0.000e+00, clip=0.000e+00), err rel=0.000e+00 (max 1.000e-09)
+  PASS  alpha_clip  sum|clip| auditado 0.000e+00 kg (neto 0.000e+00) sobre fundido 0.000e+00 kg (max 1e-06 relativo)
+  PASS  steel_deficit_bounded  acero creado por deficit de congelacion 0.000e+00 kg (max 1e-06 relativo)
+  PASS  ccdrop_bounded  |m_gas_ccdrop| acumulado 8.736e-18 kg sobre m_gas 2.108e+02 kg (max 2e-2)
+  PASS  mass_sol  dm_sol=0.0000e+00 vs cargas+ECS-fundido+resolid-Cox=0.0000e+00 kg, err rel=0.000e+00 (max 1.990e-09)
+  PASS  sentinel_p  p_max 2.214e+03 Pa (P_HYDRO_CAP 2.0e+06)
+  PASS  sentinel_gas  u_gas_max 82.4 m/s (U_GAS_MAX 300)
+  PASS  regime_p  p_max 2.214e+03 Pa (max 5.0e+05)
+  PASS  regime_gas  u_gas_max 82.4 m/s (max 200)
+[metrics] comparando contra metrics_v131.json (rtol 1e-12)
+  PASS  cold_10step_n8: peor métrica - (err rel 0.000e+00)
+== reinicio cold_10step desde paso 5 (n8 -> n8)
+[decomposition] cold_10step_n8_to_n8_s5 vs cold_10step_n8 (step 10)
+      F_lorentz_r            err_rel_Linf = 0.000e+00
+      F_lorentz_th           err_rel_Linf = 0.000e+00
+      F_lorentz_z            err_rel_Linf = 0.000e+00
+      G_rad                  err_rel_Linf = 0.000e+00
+      S_CO_src               err_rel_Linf = 0.000e+00
+      S_arc                  err_rel_Linf = 0.000e+00
+      S_chem                 err_rel_Linf = 0.000e+00
+      S_rad                  err_rel_Linf = 0.000e+00
+      T_gas                  err_rel_Linf = 0.000e+00
+      T_liquid               err_rel_Linf = 0.000e+00
+      T_slag                 err_rel_Linf = 0.000e+00
+      T_solid                err_rel_Linf = 0.000e+00
+      X_C                    err_rel_Linf = 0.000e+00
+      X_CaO                  err_rel_Linf = 0.000e+00
+      X_FeO                  err_rel_Linf = 0.000e+00
+      X_MgO                  err_rel_Linf = 0.000e+00
+      X_SiO2                 err_rel_Linf = 0.000e+00
+      Y_CO                   err_rel_Linf = 0.000e+00
+      Y_CO2                  err_rel_Linf = 0.000e+00
+      Y_O2                   err_rel_Linf = 0.000e+00
+      alpha_foam             err_rel_Linf = 0.000e+00
+      alpha_gas              err_rel_Linf = 0.000e+00
+      alpha_liquid           err_rel_Linf = 0.000e+00
+      alpha_slag             err_rel_Linf = 0.000e+00
+      alpha_solid            err_rel_Linf = 0.000e+00
+      epsilon                err_rel_Linf = 0.000e+00
+      mass_solid             err_rel_Linf = 0.000e+00
+      pressure               err_rel_Linf = 0.000e+00
+      rst:E_slag             err_rel_Linf = 0.000e+00
+      rst:E_solid            err_rel_Linf = 0.000e+00
+      rst:Tg_end             err_rel_Linf = 0.000e+00
+      rst:alpha_foam_rst     err_rel_Linf = 0.000e+00
+      rst:comp_carry         err_rel_Linf = 0.000e+00
+      rst:layer_id           err_rel_Linf = 0.000e+00
+      rst:liq_cont_prev      err_rel_Linf = 0.000e+00
+      rst:m_C                err_rel_Linf = 0.000e+00
+      rst:m_C_slag           err_rel_Linf = 0.000e+00
+      rst:m_CaO              err_rel_Linf = 0.000e+00
+      rst:m_FeO              err_rel_Linf = 0.000e+00
+      rst:m_MgO              err_rel_Linf = 0.000e+00
+      rst:m_SiO2             err_rel_Linf = 0.000e+00
+      rst:m_slag             err_rel_Linf = 0.000e+00
+      rst:mu_eff_liquid      err_rel_Linf = 0.000e+00
+      rst:mu_t               err_rel_Linf = 0.000e+00
+      rst:rho_gas            err_rel_Linf = 0.000e+00
+      tke                    err_rel_Linf = 0.000e+00
+      velocity_r_gas         err_rel_Linf = 0.000e+00
+      velocity_r_liquid      err_rel_Linf = 0.000e+00
+      velocity_th_gas        err_rel_Linf = 0.000e+00
+      velocity_th_liquid     err_rel_Linf = 0.000e+00
+      velocity_z_gas         err_rel_Linf = 0.000e+00
+      velocity_z_liquid      err_rel_Linf = 0.000e+00
+  PASS  peor campo:  (0.000e+00, tol 0.0)
+[invariants] tests/out/restart/cold_10step_n8_to_n8_s5
+  (2 snapshots)
+  PASS  nan  F_lorentz_r step 5: 0 no-finitos
+  PASS  alpha_bounds  step 5: min=0.000e+00 max=1.000000
+  PASS  sum_alpha  step 5: max|sum_alpha - (1 activa / 0 inactiva)| = 0.000e+00
+  PASS  T_liquid_bound  step 5: [300.0, 300.0] K
+  PASS  T_solid_bound  step 5: [300.0, 306.8] K
+  PASS  T_gas_bound  step 5: min=300.0 fuera_arco_max=357.6 arco_max=1531.7 K
+  PASS  Y_bounds  step 5
+  PASS  turb_positive  step 10
+  PASS  slag_comp  step 5: max sum X = 0.000000
+[audit] tests/out/restart/cold_10step_n8_to_n8_s5 (5 pasos)
+  PASS  energy_balance_step  peor paso 9: gap/permitido = 1.350e-02 (etol_step 0.1 x S_gas + xtol 1e-09 x S_ext + htol_step 5e-05 x S_int, piso 1e-8 E_tot; por paso desde el 2)
+  PASS  energy_balance  dE=7.5560e+06 J, E_iny=7.5602e+06 J, gap=-4.130e+03 J, permitido=1.015e+05 J (etol 0.02 x S_gas 5.074e+06 + xtol 1e-09 x S_ext 7.888e+06 + htol 0.0001 x S_int 9.992e+03), gap/permitido=4.070e-02
+  INFO  energy_relax  residuo del enunciado (sub-relajacion): liquido 0.000e+00 J, gas -3.880e+03 J; gap - residuos = -2.494e+02 J (gap -4.130e+03 J)
+  PASS  slag_adjust_cum  |E_slag_tclip| + |E_slag_clip| acumulado 0.000e+00 J sobre S_ext 7.888e+06 J (max 1e-2 S_ext + 1 J)
+  PASS  mass_gas  dm_gas=-9.6163e+00 vs -venteo+volfix+reacciones=-9.6613e+00 kg (venteo 9.661e+00, volfix 0.000e+00, rxn 0.000e+00); EOS reescribe 4.498e-02 kg = 4.655e-03 rel (max 0.5)
+  INFO  mass_gas_cells  por celda (sin volfix): gas libre 6.824e-02 kg, multifase 4.519e-03 kg (|e| 1.804e-01), outlet -9.689e+00; cierre EOS - celdas - venteo = -3.553e-15 kg (sobre |EOS| 4.498e-02); tasa EOS 2.230e-03 /s por kg de gas
+  PASS  mass_gas_vf_cells  volfix registrado por celda 0.000000e+00 kg vs m_gas_volfix 0.000000e+00 kg (dif 0.00e+00; max 1e-9 x sum|volfix| 0.000e+00 + 1e-12)
+  INFO  mass_gas_cells_liq  err_liq = 0 (sin liquido planeado ni movido en celdas multifase): 1 - sum|e - err_liq|/sum|e| = 0.000 por celda; sum|e| multifase 5.364e-03 kg, e_multi 4.519e-03 kg, sum|comp| por llamada 0.000e+00 (en celdas sin gas 0.000e+00), sum|eos| por llamada 2.137e+01 kg (en 5 de 5 filas; reparto lk/unl y correlaciones: n/a)
+  PASS  mass_gas_flux_closure  por paso flux_multi + flux_free + m_gas_out = 0: max|resto| 8.88e-16 (max 1e-9 x 2.10e+00 + 1e-15); sum m_gas_out 9.6613e+00 kg, flujo entrante al multifase -3.6883e-01, al gas libre -9.2924e+00
+  PASS  mass_gas_class_split  multifase e 4.519067e-03 = comp 0.000000e+00 + eos -3.643141e-01 - flujo entrante -3.688331e-01 - rx 0.000000e+00 (resto -2.17e-17); gas libre e 6.823804e-02 (resto 1.37e-15); max 1e-11 x sum|dm| + 1e-14 x m_gas + 1e-12 = 2.17e-10
+  INFO  mass_gas_cells_cc  plan del Poisson en 5 de 5 filas (liquido y su_cc validos, sin escoria; residuo por resta, no atribucion): gas libre: e 6.824e-02, err_cc 5.260e-02, err_art -4.338e-05, sum|e| 1.750e-01, sum|e - err_liq - err_cc - err_art| 3.369e-02, 1 - rem/abs 0.807; multifase: e 4.519e-03, err_liq_all 0.000e+00, err_cc 3.359e-03, err_art -4.730e-06, sum|e| 5.364e-03, sum|e - err_liq_all - err_cc - err_art| 1.357e-03, 1 - rem/abs 0.747; sum|err_art| libre 4.338e-05, multifase 4.730e-06 kg
+  PASS  mass_gas_rewrites  dm_gas -9.616299e+00 = comp 0.000000e+00 + eos -9.616299e+00 + volfix 0.000000e+00 kg (resto -1.78e-15; max 1e-11 x sum|dm| 2.137e+01 + 1e-14 x m_gas 2.02e+02 + 1e-12)
+  INFO  conv_gas  E_conv_gas - venteo = -4.870e+06 J; / (cp 1000 x masa EOS 4.498e-02 kg) = -108286.1 K equivalentes
+  PASS  rad_closure  sum rad fases + pared = -1.107e+03 J sobre 3.249e+05 (max 0.05)
+  PASS  arc_budget  recibida/P_arc·dt = 1.0000000 (descartada 0.000e+00 J, tol 1e-05)
+  PASS  mc_lost_bound  E_mc_lost 1.039e+06 J = 0.126 del arco (max 0.4)
+  PASS  mass_liq  dm_liq=0.0000e+00 vs fundido-resolid-clip=0.0000e+00 kg (fundido=0.000e+00, resolid=0.000e+00, clip=0.000e+00), err rel=0.000e+00 (max 1.000e-09)
+  PASS  alpha_clip  sum|clip| auditado 0.000e+00 kg (neto 0.000e+00) sobre fundido 0.000e+00 kg (max 1e-06 relativo)
+  PASS  steel_deficit_bounded  acero creado por deficit de congelacion 0.000e+00 kg (max 1e-06 relativo)
+  PASS  ccdrop_bounded  |m_gas_ccdrop| acumulado 3.425e-18 kg sobre m_gas 2.017e+02 kg (max 2e-2)
+  PASS  mass_sol  dm_sol=0.0000e+00 vs cargas+ECS-fundido+resolid-Cox=0.0000e+00 kg, err rel=0.000e+00 (max 1.990e-09)
+  PASS  sentinel_p  p_max 2.214e+03 Pa (P_HYDRO_CAP 2.0e+06)
+  PASS  sentinel_gas  u_gas_max 82.4 m/s (U_GAS_MAX 300)
+  PASS  regime_p  p_max 2.214e+03 Pa (max 5.0e+05)
+  PASS  regime_gas  u_gas_max 82.4 m/s (max 200)
+[audit-restart] cold_10step_n8_to_n8_s5 vs cold_10step_n8 (5 filas, 137 columnas)
+  PASS  peor columna: - (0.000e+00, tol 1e-12)
+== corrida bath_test -n 4
+[invariants] tests/out/bath_test_n4
+  (11 snapshots)
+  PASS  nan  F_lorentz_r step 0: 0 no-finitos
+  PASS  alpha_bounds  step 0: min=0.000e+00 max=1.000000
+  PASS  sum_alpha  step 0: max|sum_alpha - (1 activa / 0 inactiva)| = 0.000e+00
+  PASS  T_liquid_bound  step 100: [1850.0, 1850.0] K
+  PASS  T_solid_bound  step 0: [1850.0, 1850.0] K
+  PASS  T_gas_bound  step 100: min=1850.0 fuera_arco_max=1850.0 arco_max=1850.0 K
+  PASS  Y_bounds  step 0
+  PASS  turb_positive  step 0
+  PASS  slag_comp  step 0: max sum X = 0.000000
+[audit] tests/out/bath_test_n4 (100 pasos)
+  PASS  energy_balance_step  peor paso 5: gap/permitido = 4.234e-07 (etol_step 0.1 x S_gas + xtol 1e-09 x S_ext + htol_step 5e-05 x S_int, piso 1e-8 E_tot; por paso desde el 2)
+  PASS  energy_balance  dE=-1.2206e-04 J, E_iny=-1.9254e-18 J, gap=-1.221e-04 J, permitido=3.841e-10 J (etol 0.02 x S_gas 1.920e-08 + xtol 1e-09 x S_ext 1.050e-16 + htol 0.0001 x S_int 0.000e+00), gap/permitido=1.221e-04
+  INFO  energy_relax  residuo del enunciado (sub-relajacion): liquido 7.534e-05 J, gas 1.415e-08 J; gap - residuos = -1.974e-04 J (gap -1.221e-04 J)
+  PASS  slag_adjust_cum  |E_slag_tclip| + |E_slag_clip| acumulado 0.000e+00 J sobre S_ext 1.050e-16 J (max 1e-2 S_ext + 1 J)
+  PASS  mass_gas  dm_gas=1.1337e-07 vs -venteo+volfix+reacciones=1.6794e-07 kg (venteo -1.679e-07, volfix 0.000e+00, rxn 0.000e+00); EOS reescribe -5.458e-08 kg = 1.893e-07 rel (max 0.5)
+  INFO  mass_gas_cells  por celda (sin volfix): gas libre -2.513e-09 kg, multifase -5.206e-08 kg (|e| 5.532e-08), outlet 1.679e-07; cierre EOS - celdas - venteo = 6.627e-15 kg (sobre |EOS| 5.458e-08); tasa EOS -1.893e-09 /s por kg de gas
+  PASS  mass_gas_vf_cells  volfix registrado por celda 0.000000e+00 kg vs m_gas_volfix 0.000000e+00 kg (dif 0.00e+00; max 1e-9 x sum|volfix| 0.000e+00 + 1e-12)
+  INFO  mass_gas_cells_liq  en 100 de 100 filas con err_liq evaluado: multifase e -5.206e-08 kg, err_liq (con gas) -2.513e-10 kg, resto -5.181e-08; sum|e| 5.213e-08, sum|e - err_liq| 5.183e-08: 1 - rem/abs 0.006 por celda (residuo por resta, no atribucion; sum|rho V_pois| 2.681e-10, sum|rho V_eff| 1.689e-10; sum|e| fuera del conjunto con gas 0.000e+00, sin cara enlazada 0.000e+00 en 0 celdas-paso con E2 descartada 0.000e+00); C-121 sin filtro: err_liq_all -2.512e-10, sum|e - err_liq_all| 5.183e-08, 1 - rem/abs 0.006; sum|comp| por llamada 8.784e-09 (en celdas sin gas 6.266e-15), sum|eos| por llamada 6.084e-07 kg
+  INFO  mass_gas_cells_e2  err_liq_all -2.512e-10 = enlazadas 3.313e-12 + desfase E2 -2.546e-10 (lk := err_liq_all - unl por celda, identidad por construccion); sum|desfase| 2.546e-10 = 0.0049 de sum|e|; sin gas: sum|rho V_pois| 2.774e-14, sum|rho V_eff| 1.333e-16 (0 por construccion en celdas llenas), m_gas_rej_nogas 1.183e-13 kg (estimador bruto, no se interpreta)
+  INFO  mass_gas_cells_net  por paso (100, descriptivo): corr(err_liq_all, e) +0.832, corr(e - err_liq_all, e) +1.000, mismo signo 100/100; con filtro corr(err_liq, e) +0.832, corr(e - err_liq, e) +1.000
+  PASS  mass_gas_flux_closure  por paso flux_multi + flux_free + m_gas_out = 0: max|resto| 2.65e-23 (max 1e-9 x 2.20e-07 + 1e-15); sum m_gas_out -1.6794e-07 kg, flujo entrante al multifase 1.4990e-07, al gas libre 1.8041e-08
+  PASS  mass_gas_class_split  multifase e -5.206284e-08 = comp 1.035218e-11 + eos 9.782815e-08 - flujo entrante 1.499013e-07 - rx 0.000000e+00 (resto 1.99e-17); gas libre e -2.513210e-09 (resto 1.59e-16); max 1e-11 x sum|dm| + 1e-14 x m_gas + 1e-12 = 1.29e-12
+  INFO  mass_gas_cells_cc  plan del Poisson en 100 de 100 filas (liquido y su_cc validos, sin escoria; residuo por resta, no atribucion): gas libre: e -2.513e-09, err_cc -2.670e-09, err_art -2.639e-11, sum|e| 3.192e-09, sum|e - err_liq - err_cc - err_art| 7.393e-11, 1 - rem/abs 0.977; multifase: e -5.206e-08, err_liq_all -2.512e-10, err_cc -1.260e-09, err_art -1.991e-12, sum|e| 5.213e-08, sum|e - err_liq_all - err_cc - err_art| 5.057e-08, 1 - rem/abs 0.030; sum|err_art| libre 3.103e-11, multifase 2.032e-12 kg
+  PASS  mass_gas_rewrites  dm_gas 1.133671e-07 = comp 1.035217e-11 + eos 1.133567e-07 + volfix 0.000000e+00 kg (resto 6.83e-15; max 1e-11 x sum|dm| 6.172e-07 + 1e-14 x m_gas 2.88e+01 + 1e-12)
+  INFO  conv_gas  E_conv_gas - venteo = 3.107e-01 J; / (cp 1000 x masa EOS -5.458e-08 kg) = 5692.9 K equivalentes
+  PASS  arc_budget  (sin potencia de arco: no aplica)
+  PASS  mass_liq  dm_liq=-1.1642e-09 vs fundido-resolid-clip=0.0000e+00 kg (fundido=0.000e+00, resolid=0.000e+00, clip=0.000e+00), err rel=1.164e-09 (max 5.129e-09)
+  PASS  alpha_clip  sum|clip| auditado 0.000e+00 kg (neto 0.000e+00) sobre fundido 0.000e+00 kg (max 1e-06 relativo)
+  PASS  steel_deficit_bounded  acero creado por deficit de congelacion 0.000e+00 kg (max 1e-06 relativo)
+  PASS  ccdrop_bounded  |m_gas_ccdrop| acumulado 0.000e+00 kg sobre m_gas 2.883e+01 kg (max 2e-2)
+  PASS  mass_sol  dm_sol=0.0000e+00 vs cargas+ECS-fundido+resolid-Cox=0.0000e+00 kg, err rel=0.000e+00 (max 1.000e-09)
+  PASS  sentinel_p  p_max 8.056e+04 Pa (P_HYDRO_CAP 2.0e+06)
+  PASS  sentinel_gas  u_gas_max 0.0 m/s (U_GAS_MAX 300)
+  PASS  regime_p  p_max 8.056e+04 Pa (max 5.0e+05)
+  PASS  regime_gas  u_gas_max 0.0 m/s (max 200)
+[bath] tests/out/bath_test_n4
+  PASS  bath_hydrostatic  err 4.600e-12 de rho g H = 7.207e+04 Pa (p fondo-tope medida 6.177e+04, esperada 6.177e+04, g_eff/g 0.995)
+  PASS  bath_rest  max |u_l| en celdas puras = 1.919e-11 m/s
+  PASS  bath_alpha_frozen  max |d alpha_l| en celdas puras = 3.264e-11
+  PASS  bath_mass  m_liq 274000.000 -> 274000.000 kg (err 4.249e-15)
+  PASS  bath_p_bounded  p_max 8.056e+04 Pa (3x ferro = 2.162e+05)
+  PASS  bath_gas_bounded  u_gas_max 0.0 m/s (max 100)
+[metrics] comparando contra metrics_v131.json (rtol 1e-12)
+  PASS  bath_test_n4: peor métrica - (err rel 0.000e+00)
+== corrida arc_melt -n 4
+[invariants] tests/out/arc_melt_n4
+  (9 snapshots)
+  PASS  nan  F_lorentz_r step 0: 0 no-finitos
+  PASS  alpha_bounds  step 0: min=0.000e+00 max=1.000000
+  PASS  sum_alpha  step 0: max|sum_alpha - (1 activa / 0 inactiva)| = 0.000e+00
+  PASS  T_liquid_bound  step 25: [300.0, 1550.0] K
+  PASS  T_solid_bound  step 200: [1546.4, 1600.0] K
+  PASS  T_gas_bound  step 0: min=300.0 fuera_arco_max=300.0 arco_max=300.0 K
+  PASS  Y_bounds  step 0
+  PASS  turb_positive  step 0
+  PASS  slag_comp  step 0: max sum X = 0.000000
+[audit] tests/out/arc_melt_n4 (200 pasos)
+  PASS  energy_balance_step  peor paso 150: gap/permitido = 2.331e-01 (etol_step 0.1 x S_gas + xtol 1e-09 x S_ext + htol_step 5e-05 x S_int, piso 1e-8 E_tot; por paso desde el 2)
+  PASS  energy_balance  dE=7.8270e+07 J, E_iny=7.8283e+07 J, gap=-1.242e+04 J, permitido=1.332e+06 J (etol 0.02 x S_gas 6.639e+07 + xtol 1e-09 x S_ext 2.247e+08 + htol 0.0001 x S_int 4.397e+07), gap/permitido=9.322e-03
+  INFO  energy_relax  residuo del enunciado (sub-relajacion): liquido -4.095e+02 J, gas -8.345e+03 J; gap - residuos = -3.665e+03 J (gap -1.242e+04 J)
+  PASS  slag_adjust_cum  |E_slag_tclip| + |E_slag_clip| acumulado 0.000e+00 J sobre S_ext 2.247e+08 J (max 1e-2 S_ext + 1 J)
+  PASS  mass_gas  dm_gas=-1.1473e+02 vs -venteo+volfix+reacciones=-9.9536e+01 kg (venteo 9.949e+01, volfix -4.785e-02, rxn 0.000e+00); EOS reescribe -1.519e+01 kg = 1.324e-01 rel (max 0.5)
+  INFO  mass_gas_cells  por celda (sin volfix): gas libre -1.380e+01 kg, multifase -1.119e+00 kg (|e| 1.875e+01), outlet -9.976e+01; cierre EOS - celdas - venteo = -6.111e-13 kg (sobre |EOS| 1.519e+01); tasa EOS -3.604e-02 /s por kg de gas
+  PASS  mass_gas_vf_cells  volfix registrado por celda -4.784863e-02 kg vs m_gas_volfix -4.784863e-02 kg (dif 0.00e+00; max 1e-9 x sum|volfix| 4.785e-02 + 1e-12)
+  INFO  mass_gas_cells_liq  en 200 de 200 filas con err_liq evaluado: multifase e -1.119e+00 kg, err_liq (con gas) 1.279e-09 kg, resto -1.119e+00; sum|e| 4.660e+00, sum|e - err_liq| 4.660e+00: 1 - rem/abs -0.000 por celda (residuo por resta, no atribucion; sum|rho V_pois| 3.206e-04, sum|rho V_eff| 3.206e-04; sum|e| fuera del conjunto con gas 0.000e+00, sin cara enlazada 0.000e+00 en 0 celdas-paso con E2 descartada 0.000e+00); C-121 sin filtro: err_liq_all 1.279e-09, sum|e - err_liq_all| 4.660e+00, 1 - rem/abs -0.000; sum|comp| por llamada 3.190e-04 (en celdas sin gas 0.000e+00), sum|eos| por llamada 1.589e+02 kg
+  INFO  mass_gas_cells_e2  err_liq_all 1.279e-09 = enlazadas 4.269e-14 + desfase E2 1.279e-09 (lk := err_liq_all - unl por celda, identidad por construccion); sum|desfase| 1.863e-07 = 0.0000 de sum|e|; sin gas: sin plan del Poisson
+  INFO  mass_gas_cells_net  por paso (200, descriptivo): corr(err_liq_all, e) +0.001, corr(e - err_liq_all, e) +1.000, mismo signo 101/200; con filtro corr(err_liq, e) +0.001, corr(e - err_liq, e) +1.000
+  PASS  mass_gas_flux_closure  por paso flux_multi + flux_free + m_gas_out = 0: max|resto| 1.55e-15 (max 1e-9 x 3.87e+00 + 1e-15); sum m_gas_out 9.9488e+01 kg, flujo entrante al multifase -1.5010e+01, al gas libre -8.4477e+01
+  PASS  mass_gas_class_split  multifase e -1.118544e+00 = comp -1.611963e-05 + eos -1.612901e+01 - flujo entrante -1.501049e+01 - rx 0.000000e+00 (resto -6.66e-16); gas libre e -1.380367e+01 (resto -1.07e-14); max 1e-11 x sum|dm| + 1e-14 x m_gas + 1e-12 = 1.59e-09
+  INFO  mass_gas_cells_cc  plan del Poisson en 200 de 200 filas (liquido y su_cc validos, sin escoria; residuo por resta, no atribucion): gas libre: e -1.380e+01, err_cc -1.486e+01, err_art -1.172e-02, sum|e| 1.409e+01, sum|e - err_liq - err_cc - err_art| 3.300e+00, 1 - rem/abs 0.766; multifase: e -1.119e+00, err_liq_all 1.279e-09, err_cc -1.965e+00, err_art -1.168e-03, sum|e| 4.660e+00, sum|e - err_liq_all - err_cc - err_art| 1.248e+00, 1 - rem/abs 0.732; sum|err_art| libre 1.172e-02, multifase 1.168e-03 kg
+  PASS  mass_gas_rewrites  dm_gas -1.147292e+02 = comp -1.611963e-05 + eos -1.146813e+02 + volfix -4.784863e-02 kg (resto -6.11e-13; max 1e-11 x sum|dm| 1.590e+02 + 1e-14 x m_gas 2.11e+02 + 1e-12)
+  INFO  conv_gas  E_conv_gas - venteo = -1.188e+08 J; / (cp 1000 x masa EOS -1.519e+01 kg) = -7822.1 K equivalentes
+  PASS  rad_closure  sum rad fases + pared = 4.650e+04 J sobre 7.039e+07 (max 0.05)
+  PASS  arc_budget  recibida/P_arc·dt = 1.0000000 (descartada 0.000e+00 J, tol 1e-05)
+  PASS  mc_lost_bound  E_mc_lost 2.070e+07 J = 0.125 del arco (max 0.4)
+  PASS  mass_liq  dm_liq=3.7071e+01 vs fundido-resolid-clip=3.7071e+01 kg (fundido=3.713e+01, resolid=6.215e-02, clip=0.000e+00), err rel=1.910e-16 (max 1.000e-09)
+  PASS  alpha_clip  sum|clip| auditado 0.000e+00 kg (neto 0.000e+00) sobre fundido 3.713e+01 kg (max 1e-06 relativo)
+  PASS  steel_deficit_bounded  acero creado por deficit de congelacion 0.000e+00 kg (max 1e-06 relativo)
+  PASS  ccdrop_bounded  |m_gas_ccdrop| acumulado 3.583e-18 kg sobre m_gas 2.108e+02 kg (max 2e-2)
+  PASS  mass_sol  dm_sol=-3.7071e+01 vs cargas+ECS-fundido+resolid-Cox=-3.7071e+01 kg, err rel=1.167e-12 (max 1.027e-09)
+  PASS  sentinel_p  p_max 5.629e+03 Pa (P_HYDRO_CAP 2.0e+06)
+  PASS  sentinel_gas  u_gas_max 94.7 m/s (U_GAS_MAX 300)
+  PASS  regime_p  p_max 5.629e+03 Pa (max 5.0e+05)
+  PASS  regime_gas  u_gas_max 94.7 m/s (max 200)
+[arcmelt] tests/out/arc_melt_n4
+  PASS  arcmelt_progressive  0.62 de los pasos funden (min 0.4); el mayor paso funde 0.012 del total (max 0.1)
+  PASS  arcmelt_mass  m_liq final 37.1 kg (min 25.0)
+[metrics] comparando contra metrics_v131.json (rtol 1e-12)
+  PASS  arc_melt_n4: peor métrica - (err rel 0.000e+00)
+== corrida bed_bath_rest -n 4
+[invariants] tests/out/bed_bath_rest_n4
+  (11 snapshots)
+  PASS  nan  F_lorentz_r step 0: 0 no-finitos
+  PASS  alpha_bounds  step 0: min=0.000e+00 max=1.000000
+  PASS  sum_alpha  step 0: max|sum_alpha - (1 activa / 0 inactiva)| = 0.000e+00
+  PASS  T_liquid_bound  step 100: [1850.0, 1850.0] K
+  PASS  T_solid_bound  step 0: [1850.0, 1850.0] K
+  PASS  T_gas_bound  step 100: min=1850.0 fuera_arco_max=1850.0 arco_max=1850.0 K
+  PASS  Y_bounds  step 0
+  PASS  turb_positive  step 0
+  PASS  slag_comp  step 0: max sum X = 0.000000
+[audit] tests/out/bed_bath_rest_n4 (100 pasos)
+  PASS  energy_balance_step  peor paso 35: gap/permitido = 7.479e-08 (etol_step 0.1 x S_gas + xtol 1e-09 x S_ext + htol_step 5e-05 x S_int, piso 1e-8 E_tot; por paso desde el 2)
+  PASS  energy_balance  dE=3.0506e-04 J, E_iny=-8.7720e-06 J, gap=3.138e-04 J, permitido=2.297e-09 J (etol 0.02 x S_gas 1.149e-07 + xtol 1e-09 x S_ext 8.772e-06 + htol 0.0001 x S_int 0.000e+00), gap/permitido=3.138e-04
+  INFO  energy_relax  residuo del enunciado (sub-relajacion): liquido 1.495e-04 J, gas -1.149e-07 J; gap - residuos = 1.644e-04 J (gap 3.138e-04 J)
+  PASS  slag_adjust_cum  |E_slag_tclip| + |E_slag_clip| acumulado 0.000e+00 J sobre S_ext 8.772e-06 J (max 1e-2 S_ext + 1 J)
+  PASS  mass_gas  dm_gas=-5.4612e-04 vs -venteo+volfix+reacciones=-1.0855e-02 kg (venteo 1.086e-02, volfix 0.000e+00, rxn 0.000e+00); EOS reescribe 1.031e-02 kg = 4.444e-02 rel (max 0.5)
+  INFO  mass_gas_cells  por celda (sin volfix): gas libre 1.121e-03 kg, multifase 9.188e-03 kg (|e| 1.147e-02), outlet -1.086e-02; cierre EOS - celdas - venteo = -2.652e-14 kg (sobre |EOS| 1.031e-02); tasa EOS 8.888e-04 /s por kg de gas
+  PASS  mass_gas_vf_cells  volfix registrado por celda 0.000000e+00 kg vs m_gas_volfix 0.000000e+00 kg (dif 0.00e+00; max 1e-9 x sum|volfix| 0.000e+00 + 1e-12)
+  INFO  mass_gas_cells_liq  en 100 de 100 filas con err_liq evaluado: multifase e 9.188e-03 kg, err_liq (con gas) -6.069e-07 kg, resto 9.189e-03; sum|e| 9.861e-03, sum|e - err_liq| 9.860e-03: 1 - rem/abs 0.000 por celda (residuo por resta, no atribucion; sum|rho V_pois| 6.243e-06, sum|rho V_eff| 3.446e-06; sum|e| fuera del conjunto con gas 6.843e-07, sin cara enlazada 0.000e+00 en 0 celdas-paso con E2 descartada 0.000e+00); C-121 sin filtro: err_liq_all -1.346e-07, sum|e - err_liq_all| 9.860e-03, 1 - rem/abs 0.000; sum|comp| por llamada 1.217e-05 (en celdas sin gas 2.912e-13), sum|eos| por llamada 1.122e-02 kg
+  INFO  mass_gas_cells_e2  err_liq_all -1.346e-07 = enlazadas -1.346e-07 + desfase E2 0.000e+00 (lk := err_liq_all - unl por celda, identidad por construccion); sum|desfase| 0.000e+00 = 0.0000 de sum|e|; sin gas: sum|rho V_pois| 6.957e-07, sum|rho V_eff| 5.005e-16 (0 por construccion en celdas llenas), m_gas_rej_nogas 8.581e-07 kg (estimador bruto, no se interpreta)
+  INFO  mass_gas_cells_net  por paso (100, descriptivo): corr(err_liq_all, e) -0.810, corr(e - err_liq_all, e) +1.000, mismo signo 6/100; con filtro corr(err_liq, e) -0.992, corr(e - err_liq, e) +1.000
+  PASS  mass_gas_flux_closure  por paso flux_multi + flux_free + m_gas_out = 0: max|resto| 1.08e-18 (max 1e-9 x 5.47e-03 + 1e-15); sum m_gas_out 1.0855e-02 kg, flujo entrante al multifase -9.7341e-03, al gas libre -1.1212e-03
+  PASS  mass_gas_class_split  multifase e 9.188384e-03 = comp 2.682613e-07 + eos -5.460343e-04 - flujo entrante -9.734150e-03 - rx 0.000000e+00 (resto 5.55e-17); gas libre e 1.120809e-03 (resto -6.09e-17); max 1e-11 x sum|dm| + 1e-14 x m_gas + 1e-12 = 1.34e-12
+  INFO  mass_gas_cells_cc  plan del Poisson en 100 de 100 filas (liquido y su_cc validos, sin escoria; residuo por resta, no atribucion): gas libre: e 1.121e-03, err_cc 1.120e-03, err_art 1.188e-06, sum|e| 1.606e-03, sum|e - err_liq - err_cc - err_art| 1.396e-07, 1 - rem/abs 1.000; multifase: e 9.188e-03, err_liq_all -1.346e-07, err_cc 3.990e-04, err_art 7.686e-07, sum|e| 9.861e-03, sum|e - err_liq_all - err_cc - err_art| 8.799e-03, 1 - rem/abs 0.108; sum|err_art| libre 1.700e-06, multifase 9.658e-07 kg
+  PASS  mass_gas_rewrites  dm_gas -5.461217e-04 = comp 2.682613e-07 + eos -5.463900e-04 + volfix 0.000000e+00 kg (resto -2.65e-14; max 1e-11 x sum|dm| 1.123e-02 + 1e-14 x m_gas 2.32e+01 + 1e-12)
+  INFO  conv_gas  E_conv_gas - venteo = -2.008e+04 J; / (cp 1000 x masa EOS 1.031e-02 kg) = -1948.0 K equivalentes
+  PASS  arc_budget  (sin potencia de arco: no aplica)
+  PASS  mass_liq  dm_liq=-2.0373e-10 vs fundido-resolid-clip=-8.7794e-12 kg (fundido=0.000e+00, resolid=0.000e+00, clip=8.779e-12), err rel=1.949e-10 (max 2.507e-09)
+  PASS  alpha_clip  sum|clip| auditado 8.779e-12 kg (neto 8.779e-12) sobre fundido 0.000e+00 kg (max 1e-06 relativo)
+  PASS  steel_deficit_bounded  acero creado por deficit de congelacion 0.000e+00 kg (max 1e-06 relativo)
+  PASS  ccdrop_bounded  |m_gas_ccdrop| acumulado 0.000e+00 kg sobre m_gas 2.320e+01 kg (max 2e-2)
+  PASS  mass_sol  dm_sol=0.0000e+00 vs cargas+ECS-fundido+resolid-Cox=0.0000e+00 kg, err rel=0.000e+00 (max 6.877e-09)
+  PASS  sentinel_p  p_max 8.748e+04 Pa (P_HYDRO_CAP 2.0e+06)
+  PASS  sentinel_gas  u_gas_max 3.3 m/s (U_GAS_MAX 300)
+  PASS  regime_p  p_max 8.748e+04 Pa (max 5.0e+05)
+  PASS  regime_gas  u_gas_max 3.3 m/s (max 200)
+[bedbath] tests/out/bed_bath_rest_n4
+  PASS  bedbath_alpha_frozen  max |d alpha_l| = 5.914e-07 (max 1e-05)
+  PASS  bedbath_p_bounded  p_max 8.759e+04 Pa (inicial 8.759e+04, factor 1.2)
+  PASS  bedbath_liq_rest  u_liq_max (t >= 0.1) = 0.069 m/s (max 0.1)
+  PASS  bedbath_gas_rest  u_gas_max (t >= 0.1) = 0.262 m/s (max 1.0)
+[metrics] comparando contra metrics_v131.json (rtol 1e-12)
+  PASS  bed_bath_rest_n4: peor métrica - (err rel 0.000e+00)
+------------------------------------------------------------
+TESTS (quick): OK

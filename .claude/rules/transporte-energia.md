@@ -260,7 +260,74 @@ guarda sin leer su causa.
   `m_gas_eos` por celda y por conjunto (un desajuste su_cc–EOS explicaría
   como máximo el 71 % de Σ|e|: en las celdas sin gas eos = su_cc = 0),
   comp/eos por conjunto y flujo de gas por la frontera del conjunto
-  multifase;
+  multifase (hecho en WS-K8);
+  **WS-K8 (C-169..C-192)**: el Poisson exporta la demanda de compresibilidad
+  que sumó a `Su` (`ws_su_cc_used`), su término advectivo (`ws_gadv_used`) y
+  el almacenamiento de la fila (`ws_store_gas` real, `ws_store_art`
+  artificial: compliance, piso D2.4 y acústico del líquido). Plan del Poisson
+  por celda = err_liq_all + err_cc + err_art, con err_cc = eos + ρ_g dt
+  (su_cc − gadv − store_gas) − rx (gadv se resta porque `ws_Fg` ya lleva la
+  densidad del dador) y err_art = −ρ_g dt store_art. `su_cc` NO es «demanda
+  térmica + gadv»: es clamp(fsat·(−src + gadv) + acarreo/dt + S_rx/ρ_g), y
+  el plan usa ESA `su_cc` (`ws_su_cc_used` = lo sumado a `Su`). Como la fila
+  la realiza en flujos, `su_cc` aparece igual en fl + ρ_g V_pois que en cc y
+  se cancela en rem2: fsat, el acarreo y el tope solo sobreviven en rem2
+  dentro de (ρ_final − ρ_iterado)/ρ·su_cc, de orden (Δρ/ρ)·Σ|cc|, que NO es
+  despreciable en el gas libre (Σ|cc| = 4070 Σ|e|: basta Δρ/ρ ≈ 2e-4 para
+  dar todo rem2_libre, C-190); como tales pertenecen a err_cc frente a la
+  EOS; en el gas libre fsat ≡ 1 (`fsat_cell` < 1 exige α_s ≥ ALPHA_BED =
+  1e-2, y la clase libre α_s < 1e-2) (C-188, corrige C-181). En el residuo rem2
+  = e − plan la EOS y rx se CANCELAN (err_cc contiene la EOS): rem2 mide el
+  cierre de la fila del Poisson en masa y que el complemento siga al líquido
+  realizado, NO contrasta la EOS (C-178/C-180); la parte de store_gas que la
+  EOS no realiza (sh%p avanza alpha_p·pp; ws_Fg usa el pp completo) cae en
+  err_cc, no en rem2. Por la misma cancelación, corr(e_multi, plan) por paso
+  (0.93) NO es evidencia: reexpresa que la sd del neto de rem2 es pequeña
+  frente a la de e (C-181). Reparto por conjunto: e = comp + eos − flujo
+  entrante − rx (`m_gas_{comp,eos,flux,rx}_{multi,free}`;
+  `mass_gas_class_split` es `mass_gas_rewrites` por clase, tautológico en el
+  flujo; el cierre no tautológico es `mass_gas_flux_closure`: flux_multi +
+  flux_free + m_gas_out = 0 por paso). En la ventana de 280 s el CG NO
+  converge con 20 ni con 200 iteraciones (residuo reducido ~2e-5 con 200);
+  con 1000 sí. Con 20 externas y el CG convergido (k8_cg1000): el inciso por
+  celda de C-110 no cambia (0.3156 frente a 0.3186; C-174); rem2/abs = 0.197
+  en el multifase es un cierre de la fila al ~5.5 % de su plan (Σ|cc| =
+  3.6×Σ|e|); en el gas libre rem2/Σ|cc| = 2e-4 con CG 200 y 1000, así que
+  el 0.863 no es residuo del CG (C-173, refutada por la letra); que sea un
+  piso de conversión volumen→masa y no un término que le falte al plan es
+  HIPÓTESIS. Candidatos que sobreviven a la cancelación: (ρ_final −
+  ρ_iterado)·dt·(su_cc + E2 + líquido neto − store) y `gadv` de ensamblaje
+  frente al corregido, con las caras que `gas_adv` excluye por la guardia
+  ALPHA_CUTOFF (C-188). El almacenamiento
+  artificial es despreciable (~5e-8 kg frente a Σ|e| 1.6e-2). El NETO
+  multifase es un desfase casi constante del residuo del plan (D, negativo
+  en todos los pasos). Barrido de `max_outer` con CG 1000 desde
+  judge_otp_280 (k8s_mo{5,10,20,40,80}, C-182 SOPORTADA en C-184): D en el
+  paso 1 vale −4.18e-5, −2.31e-5, −2.105e-5, −2.078e-5 y −2.085e-5 kg con
+  5/10/20/40/80 externas. Desde 20 externas D es una MESETA estructural que
+  no depende del CG ni de iterar más el lazo externo. Con 5 externas D es
+  mayor: 1.99 veces la meseta en el paso 1 y 1.76 de media con CG 1000, y
+  1.71 y 1.51 con CG 20, la config de B1 (k8_base). No es aditivo (con 5
+  externas converger el CG sube |D1| un 16 %) y sale de bancos que C-182 no
+  usaba para decidir, y los dos bancos de 5 externas fallan
+  `energy_balance` y `regime_gas` (u_gas 215 m/s) (C-187, corrige C-183). Salvedad: el lazo externo no declara convergencia en ningún paso
+  de ningún banco (residuos estancados entre 20 y 80 externas), así que la
+  meseta es la del iterado estancado (con 41 externas converge en 2 de 59
+  pasos; nunca en los demás). No es enganche de fase: con 21 y 41 externas
+  D1 queda a 3 % y 0.03 % de 20 y 40 (C-189 SOPORTADA en C-191); D no sigue
+  al residuo paso a paso y su extrapolación a res_cont → 0 cae en la meseta
+  (C-192, lectura). Coherente con el piso de la EOS de C-107/C-109. El origen de la meseta NO está medido
+  (candidatos: el corchete del complemento frente a V_eff o el de la
+  conversión volumen→masa de la fila, con los candidatos de arriba). Con 5
+  externas el CG convergido baja
+  el error del gas libre de 9.2e-3 a 3.6e-3 kg (C-186). Que el flujo neto que entra al multifase iguale en 59 pasos
+  la entrada por las celdas de salida es coincidencia de sumas (corr por
+  paso 0.09; en 999 pasos el cociente va de +1.39 a −143 por tramos):
+  RETIRADO como origen. Con 20 externas el error del gas libre es residuo
+  del CG (11× mayor con CG 20). Siguiente: partir rem2 en sus dos
+  corchetes ([comp + ρ_g V_eff] y [fl + ρ_g V_pois + cc + err_art]) por
+  clase y paso en los bancos de 5 y de 20 externas del barrido,
+  a pre-registrar (columnas nuevas en `src/`).
   INFO `mass_gas_cells` con la tasa por s y por kg de gas, que no depende
   del largo de la ventana: el cociente de mass_gas sí, y en ventanas largas
   de B1 tiende a ~1).

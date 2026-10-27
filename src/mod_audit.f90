@@ -27,7 +27,9 @@ module mod_audit
                              ws_Fc_r, ws_Fc_th, ws_Fc_z, ws_Fc_valid, ws_Fr, ws_Fth, ws_Fz, ws_flux_valid, &
                              ws_Fc_lk_r, ws_Fc_lk_th, ws_Fc_lk_z, ws_pc_unl, ws_pc_unl_valid, ws_pc_unl_id, &
                              ws_pc_unl_used, ws_pc_unl_used_valid, ws_pc_unl_used_id, &
-                             ws_lim_step, ws_lim_step_valid, ws_lim_step_id
+                             ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
+                             ws_su_cc_used, ws_su_cc_used_valid, ws_su_cc_used_id, ws_gadv_used, &
+                             ws_store_gas, ws_store_art
     use mod_probe, only: probe_current_step
     use mod_face_flux, only: face_mass_fluxes
     use mod_boundary_3d, only: physical_boundary_flags
@@ -52,7 +54,12 @@ module mod_audit
               AUD_MG_ERR_ABS_NOGAS, AUD_MG_COMP_ABS, AUD_MG_EOS_ABS, AUD_MG_ERR_LIQ_ALL, AUD_MG_ERR_REM_ABS_ALL, &
               AUD_MG_COMP_ABS_NOGAS, AUD_MG_ERR_ABS_NOLINK, AUD_MG_CELLS_NOLINK, AUD_MG_E2_NOLINK, &
               AUD_MG_ERR_LIQ_LK, AUD_MG_ERR_LIQ_UNL, AUD_MG_ERR_LIQ_UNL_ABS, AUD_MG_VPOIS_ABS_NOGAS, &
-              AUD_MG_VEFF_ABS_NOGAS, AUD_MG_REJ_NOGAS, AUD_MG_E2_SKIP
+              AUD_MG_VEFF_ABS_NOGAS, AUD_MG_REJ_NOGAS, AUD_MG_E2_SKIP, &
+              AUD_MG_COMP_MULTI, AUD_MG_EOS_MULTI, AUD_MG_FLUX_MULTI, AUD_MG_RX_MULTI, &
+              AUD_MG_COMP_FREE, AUD_MG_EOS_FREE, AUD_MG_FLUX_FREE, AUD_MG_RX_FREE, &
+              AUD_MG_ERR_CC_MULTI, AUD_MG_ERR_CC_FREE, AUD_MG_REM2_ABS_MULTI, AUD_MG_REM2_ABS_FREE, &
+              AUD_MG_ERR_ABS_FREE, AUD_MG_CC_ABS_MULTI, AUD_MG_CC_ABS_FREE, AUD_MG_CC_SKIP, &
+              AUD_MG_ERR_ART_MULTI, AUD_MG_ERR_ART_FREE, AUD_MG_ART_ABS_MULTI, AUD_MG_ART_ABS_FREE
     public :: AUD_RESID_MASS, AUD_RESID_E, AUD_SPILL_MASS
     public :: AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
     public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2, AUD_GAS_VOLFIX, AUD_SLAG_TCLIP, AUD_MIX_INIT
@@ -282,7 +289,46 @@ module mod_audit
     integer, parameter :: AUD_MG_VEFF_ABS_NOGAS  = 89
     integer, parameter :: AUD_MG_REJ_NOGAS    = 90
     integer, parameter :: AUD_MG_E2_SKIP      = 91
-    integer, parameter :: N_AUD = 91
+    ! (WS-K8) reparto EXACTO del error por conjunto (multifase / gas libre):
+    ! por celda e = comp + eos - fl - rx (el volfix se cancela), asi que
+    !   e_conjunto = comp + eos - flux - rx  sobre sus celdas,
+    ! con flux = sum fl = flujo neto de gas que ENTRA al conjunto por su
+    ! frontera (las caras internas se cancelan). Y la mitad de compresibilidad
+    ! del plan del Poisson: err_cc = eos + rho_g dt (su_cc - gadv - store_gas) - rx
+    ! (su_cc = ws_su_cc_used, la demanda que el ultimo Poisson sumo a Su;
+    ! gadv = ws_gadv_used, su termino advectivo sin pesar: el flujo de MASA
+    ! ws_Fg ya lleva la densidad del dador, asi que en masa el plan es
+    ! rho_P dt (su_cc - gadv); store_gas = compresion acustica real del gas
+    ! almacenada en la diagonal, con el pp completo). Plan completo por celda
+    ! e ~= err_liq + err_cc + err_art (err_art: AUD_MG_ERR_ART_*); el resto es
+    ! residuo del CG, rho del iterado frente a la final y la parte de pp que
+    ! la EOS no realiza (sh%p avanza alpha_p pp).
+    integer, parameter :: AUD_MG_COMP_MULTI   = 92
+    integer, parameter :: AUD_MG_EOS_MULTI    = 93
+    integer, parameter :: AUD_MG_FLUX_MULTI   = 94
+    integer, parameter :: AUD_MG_RX_MULTI     = 95
+    integer, parameter :: AUD_MG_COMP_FREE    = 96
+    integer, parameter :: AUD_MG_EOS_FREE     = 97
+    integer, parameter :: AUD_MG_FLUX_FREE    = 98
+    integer, parameter :: AUD_MG_RX_FREE      = 99
+    integer, parameter :: AUD_MG_ERR_CC_MULTI = 100
+    integer, parameter :: AUD_MG_ERR_CC_FREE  = 101
+    integer, parameter :: AUD_MG_REM2_ABS_MULTI = 102
+    integer, parameter :: AUD_MG_REM2_ABS_FREE = 103
+    integer, parameter :: AUD_MG_ERR_ABS_FREE = 104
+    integer, parameter :: AUD_MG_CC_ABS_MULTI = 105
+    integer, parameter :: AUD_MG_CC_ABS_FREE  = 106
+    integer, parameter :: AUD_MG_CC_SKIP      = 107
+    ! almacenamiento ARTIFICIAL de la fila (compliance, piso D2.4, acustico
+    ! del liquido): err_art = -rho_g dt store_art, gas que el Poisson dejo de
+    ! evacuar sin que ninguna fase lo almacene. Plan completo por celda:
+    !   e ~= err_liq_all + err_cc + err_art,
+    ! con err_cc = eos + rho_g dt (su_cc - gadv - store_gas) - rx
+    integer, parameter :: AUD_MG_ERR_ART_MULTI = 108
+    integer, parameter :: AUD_MG_ERR_ART_FREE  = 109
+    integer, parameter :: AUD_MG_ART_ABS_MULTI = 110
+    integer, parameter :: AUD_MG_ART_ABS_FREE  = 111
+    integer, parameter :: N_AUD = 111
     ! masa del gas por celda y su clase al inicio del paso (audit_gas_cells
     ! modo 0); no es estado entre pasos: se recaptura al inicio de cada paso
     real(dp), allocatable, save :: mg_ini(:,:,:)
@@ -532,7 +578,7 @@ contains
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
                 'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq,m_gas_out,m_gas_rxn,E_gas_volfix,' // &
-                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip,E_slag_sol,m_steel_deficit,E_steel_deficit,E_abs_liq_hook,E_relax_liq,E_relax_gas,m_gas_err_free,m_gas_err_multi,m_gas_err_abs,m_gas_err_out,m_gas_cells_skip,m_gas_vf_cells,m_gas_comp,m_gas_eos,m_gas_err_liq,m_gas_err_abs_multi,m_gas_err_rem_abs,m_gas_liq_skip,m_gas_vpois_abs,m_gas_veff_abs,m_gas_err_abs_nogas,m_gas_comp_abs,m_gas_eos_abs,m_gas_err_liq_all,m_gas_err_rem_abs_all,m_gas_comp_abs_nogas,m_gas_err_abs_nolink,m_gas_cells_nolink,m_gas_e2_nolink,m_gas_err_liq_lk,m_gas_err_liq_unl,m_gas_err_liq_unl_abs,m_gas_vpois_abs_nogas,m_gas_veff_abs_nogas,m_gas_rej_nogas,m_gas_e2_skip'
+                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip,E_slag_sol,m_steel_deficit,E_steel_deficit,E_abs_liq_hook,E_relax_liq,E_relax_gas,m_gas_err_free,m_gas_err_multi,m_gas_err_abs,m_gas_err_out,m_gas_cells_skip,m_gas_vf_cells,m_gas_comp,m_gas_eos,m_gas_err_liq,m_gas_err_abs_multi,m_gas_err_rem_abs,m_gas_liq_skip,m_gas_vpois_abs,m_gas_veff_abs,m_gas_err_abs_nogas,m_gas_comp_abs,m_gas_eos_abs,m_gas_err_liq_all,m_gas_err_rem_abs_all,m_gas_comp_abs_nogas,m_gas_err_abs_nolink,m_gas_cells_nolink,m_gas_e2_nolink,m_gas_err_liq_lk,m_gas_err_liq_unl,m_gas_err_liq_unl_abs,m_gas_vpois_abs_nogas,m_gas_veff_abs_nogas,m_gas_rej_nogas,m_gas_e2_skip,m_gas_comp_multi,m_gas_eos_multi,m_gas_flux_multi,m_gas_rx_multi,m_gas_comp_free,m_gas_eos_free,m_gas_flux_free,m_gas_rx_free,m_gas_err_cc_multi,m_gas_err_cc_free,m_gas_rem2_abs_multi,m_gas_rem2_abs_free,m_gas_err_abs_free,m_gas_cc_abs_multi,m_gas_cc_abs_free,m_gas_cc_skip,m_gas_err_art_multi,m_gas_err_art_free,m_gas_art_abs_multi,m_gas_art_abs_free'
             close(iu)
         end if
         acc = 0.0_dp
@@ -706,7 +752,14 @@ contains
                 ',', a(AUD_MG_COMP_ABS), ',', a(AUD_MG_EOS_ABS), ',', a(AUD_MG_ERR_LIQ_ALL), ',', a(AUD_MG_ERR_REM_ABS_ALL), &
                 ',', a(AUD_MG_COMP_ABS_NOGAS), ',', a(AUD_MG_ERR_ABS_NOLINK), ',', a(AUD_MG_CELLS_NOLINK), ',', a(AUD_MG_E2_NOLINK), &
                 ',', a(AUD_MG_ERR_LIQ_LK), ',', a(AUD_MG_ERR_LIQ_UNL), ',', a(AUD_MG_ERR_LIQ_UNL_ABS), &
-                ',', a(AUD_MG_VPOIS_ABS_NOGAS), ',', a(AUD_MG_VEFF_ABS_NOGAS), ',', a(AUD_MG_REJ_NOGAS), ',', a(AUD_MG_E2_SKIP)
+                ',', a(AUD_MG_VPOIS_ABS_NOGAS), ',', a(AUD_MG_VEFF_ABS_NOGAS), ',', a(AUD_MG_REJ_NOGAS), ',', a(AUD_MG_E2_SKIP), &
+                ',', a(AUD_MG_COMP_MULTI), ',', a(AUD_MG_EOS_MULTI), ',', a(AUD_MG_FLUX_MULTI), ',', a(AUD_MG_RX_MULTI), &
+                ',', a(AUD_MG_COMP_FREE), ',', a(AUD_MG_EOS_FREE), ',', a(AUD_MG_FLUX_FREE), ',', a(AUD_MG_RX_FREE), &
+                ',', a(AUD_MG_ERR_CC_MULTI), ',', a(AUD_MG_ERR_CC_FREE), ',', a(AUD_MG_REM2_ABS_MULTI), &
+                ',', a(AUD_MG_REM2_ABS_FREE), ',', a(AUD_MG_ERR_ABS_FREE), ',', a(AUD_MG_CC_ABS_MULTI), &
+                ',', a(AUD_MG_CC_ABS_FREE), ',', a(AUD_MG_CC_SKIP), &
+                ',', a(AUD_MG_ERR_ART_MULTI), ',', a(AUD_MG_ERR_ART_FREE), ',', a(AUD_MG_ART_ABS_MULTI), &
+                ',', a(AUD_MG_ART_ABS_FREE)
             close(iu)
         end if
     end subroutine audit_write_step
@@ -950,8 +1003,8 @@ contains
         type(mesh_t), intent(in)   :: m
         type(config_t), intent(in) :: cfg
         integer  :: i, j, k, e, c, istart, iend, jstart, jend, kstart, kend
-        real(dp) :: fl, rx, ee, vp, ve, el, el_unl, el_lk, vin
-        logical  :: is_out, liq_ok, has_gas, lk_any, e2_ok, unl_ok, lim_ok
+        real(dp) :: fl, rx, ee, vp, ve, el, el_unl, el_lk, vin, cc, ecc, eart, elf
+        logical  :: is_out, liq_ok, has_gas, lk_any, e2_ok, unl_ok, lim_ok, cc_ok
         logical  :: at_rmin_aud, at_rmax_aud, at_zmin_aud, at_zmax_aud
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -1022,6 +1075,11 @@ contains
         if (cfg%pc_drift_source .and. .not. e2_ok) then
             if ((.not. m%is_parallel) .or. m%topo%rank == 0) acc(AUD_MG_E2_SKIP) = acc(AUD_MG_E2_SKIP) + 1.0_dp
         end if
+        ! (WS-K8) demanda de compresibilidad aceptada por el ultimo Poisson
+        cc_ok = ws_su_cc_used_valid .and. ws_su_cc_used_id == probe_current_step()
+        if (.not. cc_ok) then
+            if ((.not. m%is_parallel) .or. m%topo%rank == 0) acc(AUD_MG_CC_SKIP) = acc(AUD_MG_CC_SKIP) + 1.0_dp
+        end if
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
@@ -1036,15 +1094,54 @@ contains
                     ee = gas%alpha(i,j,k) * gas%rho(i,j,k) * m%vol(i,j,k) - mg_ini(i,j,k) - fl - rx &
                        - mg_vf(i,j,k)
                     acc(AUD_MG_VF_CELLS) = acc(AUD_MG_VF_CELLS) + mg_vf(i,j,k)
+                    ! (WS-K8) gas que el Poisson planeo ventear por compresibilidad
+                    ! (rho_g dt (su_cc - gadv - store_gas)) frente a lo que la EOS
+                    ! reescribio, y almacenamiento artificial de la fila (eart)
+                    cc = 0.0_dp; eart = 0.0_dp
+                    if (cc_ok) then
+                        cc = gas%rho(i,j,k) * cfg%dt * (ws_su_cc_used(i,j,k) - ws_gadv_used(i,j,k) &
+                                                        - ws_store_gas(i,j,k))
+                        eart = -gas%rho(i,j,k) * cfg%dt * ws_store_art(i,j,k)
+                    end if
+                    ecc = mg_eos(i,j,k) + cc - rx
+                    ! desajuste del liquido tambien en gas libre (goteo, E2)
+                    elf = 0.0_dp
+                    if (liq_ok) then
+                        vp = cfg%dt * ( ws_Fc_r(i-1,j,k) - ws_Fc_r(i,j,k) + ws_Fc_th(i,j-1,k) - ws_Fc_th(i,j,k) &
+                                      + ws_Fc_z(i,j,k-1) - ws_Fc_z(i,j,k) )
+                        if (e2_ok) vp = vp + cfg%dt * ws_pc_unl_used(i,j,k)
+                        ve = cfg%dt * ( ws_Fr(i-1,j,k) - ws_Fr(i,j,k) + ws_Fth(i,j-1,k) - ws_Fth(i,j,k) &
+                                      + ws_Fz(i,j,k-1) - ws_Fz(i,j,k) ) / liq%rho(i,j,k)
+                        elf = gas%rho(i,j,k) * (vp - ve)
+                    end if
                     select case (c)
                     case (0)
                         acc(AUD_MG_ERR_OUT) = acc(AUD_MG_ERR_OUT) + ee
                         cycle
                     case (1)
                         acc(AUD_MG_ERR_FREE) = acc(AUD_MG_ERR_FREE) + ee
+                        acc(AUD_MG_ERR_ABS_FREE) = acc(AUD_MG_ERR_ABS_FREE) + abs(ee)
+                        acc(AUD_MG_COMP_FREE) = acc(AUD_MG_COMP_FREE) + mg_comp(i,j,k)
+                        acc(AUD_MG_EOS_FREE)  = acc(AUD_MG_EOS_FREE)  + mg_eos(i,j,k)
+                        acc(AUD_MG_FLUX_FREE) = acc(AUD_MG_FLUX_FREE) + fl
+                        acc(AUD_MG_RX_FREE)   = acc(AUD_MG_RX_FREE)   + rx
+                        acc(AUD_MG_ERR_CC_FREE) = acc(AUD_MG_ERR_CC_FREE) + ecc
+                        acc(AUD_MG_CC_ABS_FREE) = acc(AUD_MG_CC_ABS_FREE) + abs(cc)
+                        acc(AUD_MG_ERR_ART_FREE) = acc(AUD_MG_ERR_ART_FREE) + eart
+                        acc(AUD_MG_ART_ABS_FREE) = acc(AUD_MG_ART_ABS_FREE) + abs(eart)
+                        if (cc_ok .and. liq_ok) acc(AUD_MG_REM2_ABS_FREE) = acc(AUD_MG_REM2_ABS_FREE) &
+                            + abs(ee - elf - ecc - eart)
                     case default
                         acc(AUD_MG_ERR_MULTI) = acc(AUD_MG_ERR_MULTI) + ee
                         acc(AUD_MG_ERR_ABS_MULTI) = acc(AUD_MG_ERR_ABS_MULTI) + abs(ee)
+                        acc(AUD_MG_COMP_MULTI) = acc(AUD_MG_COMP_MULTI) + mg_comp(i,j,k)
+                        acc(AUD_MG_EOS_MULTI)  = acc(AUD_MG_EOS_MULTI)  + mg_eos(i,j,k)
+                        acc(AUD_MG_FLUX_MULTI) = acc(AUD_MG_FLUX_MULTI) + fl
+                        acc(AUD_MG_RX_MULTI)   = acc(AUD_MG_RX_MULTI)   + rx
+                        acc(AUD_MG_ERR_CC_MULTI) = acc(AUD_MG_ERR_CC_MULTI) + ecc
+                        acc(AUD_MG_CC_ABS_MULTI) = acc(AUD_MG_CC_ABS_MULTI) + abs(cc)
+                        acc(AUD_MG_ERR_ART_MULTI) = acc(AUD_MG_ERR_ART_MULTI) + eart
+                        acc(AUD_MG_ART_ABS_MULTI) = acc(AUD_MG_ART_ABS_MULTI) + abs(eart)
                         ! conjunto con gas (C-126): alpha_g > 0 al inicio o al final
                         has_gas = gas%alpha(i,j,k) > 0.0_dp .or. mg_ag0(i,j,k) > 0.0_dp
                         ! alguna cara enlazada en el ultimo Poisson (liquido o gas):
@@ -1090,6 +1187,8 @@ contains
                             acc(AUD_MG_ERR_LIQ_LK)  = acc(AUD_MG_ERR_LIQ_LK)  + el_lk
                             acc(AUD_MG_ERR_LIQ_UNL) = acc(AUD_MG_ERR_LIQ_UNL) + el_unl
                             acc(AUD_MG_ERR_LIQ_UNL_ABS) = acc(AUD_MG_ERR_LIQ_UNL_ABS) + abs(el_unl)
+                            ! (WS-K8) plan completo del Poisson: liquido + compresibilidad
+                            if (cc_ok) acc(AUD_MG_REM2_ABS_MULTI) = acc(AUD_MG_REM2_ABS_MULTI) + abs(ee - el - ecc - eart)
                             if (has_gas) then
                                 acc(AUD_MG_ERR_LIQ) = acc(AUD_MG_ERR_LIQ) + el
                                 acc(AUD_MG_ERR_REM_ABS) = acc(AUD_MG_ERR_REM_ABS) + abs(ee - el)

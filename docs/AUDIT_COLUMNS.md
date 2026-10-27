@@ -121,3 +121,23 @@ Generado por `scripts/make_audit_glossary.py` desde el encabezado de `src/mod_au
 | `m_gas_veff_abs_nogas` | D | Sum \|rho_g V_eff_in\| over the same no-gas cells. These cells are full at both ends of the step and V_eff is NET, so it is ~0 by construction and not informative; whether a cell is blind (nothing in or out) or pass-through (out = in) is not measured [kg] (WS-K7, C-144, C-147/C-148) |
 | `m_gas_rej_nogas` | D | Over the no-gas multiphase cells: rho_g (1 - ws_lim_step) dt sum_faces max(linked inflow ws_Fc, 0): ESTIMATE of the linked liquid inflow the Poisson planned that the limiter did not admit, in gas-mass units [kg]; ws_lim_step is the admitted fraction of the TOTAL transport inflow, applied here to the linked Poisson inflow (exact where ws_lim_step = 0 or 1) (WS-K7, C-144, R1) |
 | `m_gas_e2_skip` | D | Steps with pc_drift_source on but no valid accepted-E2 array (ws_pc_unl_used) from this step's last Poisson [-]. It is 0 BY CONSTRUCTION while the per-cell branch runs: that branch requires ws_Fg_valid, which the same Poisson call sets after validating ws_pc_unl_used for this step; not an independent check (WS-K7, C-144, C-162) |
+| `m_gas_comp_multi` | D | Complement rewrite (net per cell) summed over the multiphase cells; with eos, flux and rx it splits m_gas_err_multi exactly: e = comp + eos - flux - rx (volfix cancels; check mass_gas_class_split, which is mass_gas_rewrites per class and tautological in flux and rx) [kg] (WS-K8) |
+| `m_gas_eos_multi` | D | EOS rewrite (net per cell) summed over the multiphase cells [kg] (WS-K8) |
+| `m_gas_flux_multi` | D | Net gas mass that ENTERS the multiphase set through its boundary, sum over its cells of dt sum_faces ws_Fg on linked faces (internal faces cancel); check mass_gas_flux_closure: flux_multi + flux_free + m_gas_out = 0 per step [kg] (WS-K8) |
+| `m_gas_rx_multi` | D | Reaction gas-mass source (CO, CO2, O2) in the multiphase cells [kg] (WS-K8) |
+| `m_gas_comp_free` | D | As m_gas_comp_multi over the free-gas cells [kg] (WS-K8) |
+| `m_gas_eos_free` | D | As m_gas_eos_multi over the free-gas cells [kg] (WS-K8) |
+| `m_gas_flux_free` | D | Net gas mass that enters the free-gas set through its boundary [kg] (WS-K8) |
+| `m_gas_rx_free` | D | Reaction gas-mass source in the free-gas cells [kg] (WS-K8) |
+| `m_gas_err_cc_multi` | D | Compressibility half of the Poisson plan over the multiphase cells: sum of err_cc = eos + rho_g dt (su_cc - gadv - store_gas) - rx per cell, with su_cc the compressibility demand the LAST Poisson added to Su (ws_su_cc_used: thermal + advective with fsat, carry and reactions, capped by COMP_SRC_CAP) and gadv its unweighted advective term (ws_gadv_used), which converts the volume plan to mass because ws_Fg already carries the donor density, and store_gas the REAL acoustic compression of the gas the row stores instead of evacuating, alpha_g/(P0+p) V/dt pp (ws_store_gas). It uses the full pp while the EOS only sees p advanced by alpha_p pp, so part of it is not realized (not measured) [kg] (WS-K8) |
+| `m_gas_err_cc_free` | D | As m_gas_err_cc_multi over the free-gas cells; there the full plan is e ~= err_liq (dripping liquid / E2) + err_cc + err_art, as in m_gas_rem2_abs_free [kg] (WS-K8) |
+| `m_gas_rem2_abs_multi` | D | Sum over multiphase cells of \|e - err_liq_all - err_cc - err_art\| (full Poisson plan: liquid + compressibility + artificial storage), on steps with valid liquid-side terms: residual by subtraction (CG residual, iterate vs final rho, gadv computed with assembly-time fluxes, ...) [kg] (WS-K8) |
+| `m_gas_rem2_abs_free` | D | As m_gas_rem2_abs_multi over the free-gas cells (err_liq there is the dripping liquid / E2 term) [kg] (WS-K8) |
+| `m_gas_err_abs_free` | D | Sum of \|e\| over the free-gas cells [kg] (WS-K8) |
+| `m_gas_cc_abs_multi` | D | Sum of \|rho_g dt (su_cc - gadv - store_gas)\| over the multiphase cells: size of the compressibility plan [kg] (WS-K8) |
+| `m_gas_cc_abs_free` | D | Sum of \|rho_g dt (su_cc - gadv - store_gas)\| over the free-gas cells [kg] (WS-K8) |
+| `m_gas_cc_skip` | D | Steps without a valid accepted-compressibility array (ws_su_cc_used) from this step's last Poisson [-] (WS-K8) |
+| `m_gas_err_art_multi` | D | Artificial storage of the Poisson row over the multiphase cells: err_art = -rho_g dt store_art, with store_art = (PP_COMPLIANCE sum a_nb + alpha_g_comp_min floor of D2.4 + liquid acoustic) pp (ws_store_art): gas the row did not evacuate although no phase stores it [kg] (WS-K8) |
+| `m_gas_err_art_free` | D | As m_gas_err_art_multi over the free-gas cells [kg] (WS-K8) |
+| `m_gas_art_abs_multi` | D | Sum of \|err_art\| over the multiphase cells [kg] (WS-K8) |
+| `m_gas_art_abs_free` | D | Sum of \|err_art\| over the free-gas cells [kg] (WS-K8) |

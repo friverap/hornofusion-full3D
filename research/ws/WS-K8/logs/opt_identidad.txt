@@ -1,0 +1,21 @@
+# Identidad del binario de banco frente al codigo de src/ (WS-K8)
+Tue Oct 27 14:27:42 CST 2026
+Oct 27 14:27:02 2026 src/mod_audit.f90
+Oct 27 13:52:20 2026 src/mod_pressure_3d.f90
+Oct 27 14:27:02 2026 src/mod_workspace.f90
+Oct 27 13:56:02 2026 campaigns/bin/eaf3d_k8_opt
+## sha256 del diff de src/ respecto a HEAD
+78797d1c626af7f65f86aa98cdb37ba321a004a166eef99cf0fb143fac3e32ef  -
+make opt rc=0
+bbe3e11c9dfdb20bf7f40e6bc986707bcdfa4977a2e01a3fe8abc2c0fd681ad3  bin/eaf3d_mpi
+2a0bca74b898fcc8633c2822869899fb79793442a9f7bc33d1e28e41e9397f28  campaigns/bin/eaf3d_k8_opt
+bin/eaf3d_mpi campaigns/bin/eaf3d_k8_opt differ: char 1449, line 4
+
+## Diagnostico (27-oct, tras la diferencia anterior)
+# El binario de banco (eaf3d_k8_opt) y el del codigo actual (eaf3d_k8b_opt) difieren en 270 bytes:
+# solo las cadenas de error con numero de linea que gfortran incrusta ("At line 504 of file
+# src/mod_workspace.f90" -> 505), porque la ronda de verificacion cambio solo COMENTARIOS.
+# Prueba con datos: k8_cg1000 y k8_mo20 repetidos con eaf3d_k8b_opt en rutas propias
+# (campaigns/b1/k8_cg1000_r2, k8_mo20_r2): audit.csv identicos en todas las columnas (ver abajo).
+# k8_cg1000 frente a k8_cg1000_r2: 60 filas, 137 columnas, distintas: []
+# k8_mo20 frente a k8_mo20_r2: 60 filas, 137 columnas, distintas: []
