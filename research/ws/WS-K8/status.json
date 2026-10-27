@@ -1,0 +1,17 @@
+{
+ "ws": "WS-K8",
+ "meta": "G3",
+ "estado": "abierto",
+ "ronda": 0,
+ "numerico": true,
+ "prediccion": "C-169",
+ "diff_sha": null,
+ "test_quick": null,
+ "revisores": {
+  "auditor-eaf3d": null,
+  "revisor-evidencia": null,
+  "revisor-refutador": null
+ },
+ "creado": "2026-10-27T13:45:00-06:00",
+ "actualizado": "2026-10-27T13:55:24-06:00"
+}
