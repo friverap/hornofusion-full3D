@@ -1,0 +1,63 @@
+ [CONFIG] Reading: /private/tmp/claude-502/-Users-frariv-Horno/68c200c2-efa4-46c5-a9ff-3c767a24d56a/scratchpad/coldnoE_old/config.dat
+ 
+ ============================================================
+   MPI Parallel Configuration
+ ============================================================
+  Total processes:       4 (  1 x   2 x   2
+)
+  Global mesh:          12 x     24 x     16
+  Total cells:        4608
+ ============================================================
+ ============================================================
+   3D EAF Multiphysics Simulator (MPI Parallel)
+   Ugarte et al. (2024) - HBI/Scrap Melting in Industrial EAF
+   Cylindrical FVM / SIMPLE / Eulerian-Eulerian
+   Cassie-Mayr AC arc / k-eps / DO radiation
+ ============================================================
+  Running on 4 MPI processes
+ ============================================================
+ ============================================================
+   3D EAF CFD Solver - Configuration
+ ============================================================
+  R_shell=   3.800  H_total=   4.500
+  Mesh:    12 x    24 x    16 =       4608
+  dt= 2.000E-02  t_final= 2.000E-01
+  max_outer= 10  alpha_u= 0.30
+  rho_steel=  7500.0  T_sol=  1600.0  T_liq=  1809.0
+  flow=T energy=F melt=F turb=T
+ ============================================================
+ [MESH] Global cells:     12 x     24 x     16 =       4608
+ [MESH] Rank    0 local:     12 x     12 x      8 =       1152
+  [FIELDS] All fields initialized
+ [INPUT] Charge recipe:  27 layers  B1= 14  B2= 13
+ [INPUT] Loaded electrode profile:    18 points
+  [MAIN] Writing initial state...
+ [CHARGE] Bucket 1 loaded, layers   1- 14
+ [FIELDS] Presion hidrostatica inicial: p_max =  5.132E+01 Pa
+ [HDF5] Written step        0 (t=      0.00s) -> /private/tmp/claude-502/-Users-frariv-Horno/68c200c2-efa4-46c5-a9ff-3c767a24d56a/scratchpad/coldnoE_old/eaf3d_00000000.h5
+ 
+  [MAIN] Starting time integration...
+ 
+ [STEP]        5  t=      0.10  outer= 10  res:   1.0419E-01  7.2134E-03  0.0000E+00
+ [HDF5] Written step        5 (t=      0.10s) -> /private/tmp/claude-502/-Users-frariv-Horno/68c200c2-efa4-46c5-a9ff-3c767a24d56a/scratchpad/coldnoE_old/eaf3d_00000005.h5
+ [STEP]       10  t=      0.20  outer= 10  res:   5.6742E-02  4.9881E-03  0.0000E+00
+ [HDF5] Written step       10 (t=      0.20s) -> /private/tmp/claude-502/-Users-frariv-Horno/68c200c2-efa4-46c5-a9ff-3c767a24d56a/scratchpad/coldnoE_old/eaf3d_00000010.h5
+ 
+ ============================================================
+  Simulation complete. Steps:       10  Time:       0.20 s
+ ============================================================
+ [HDF5] Written step       10 (t=      0.20s) -> /private/tmp/claude-502/-Users-frariv-Horno/68c200c2-efa4-46c5-a9ff-3c767a24d56a/scratchpad/coldnoE_old/eaf3d_00000010.h5
+   Resources freed. Done.
+ 
+ [TIMERS] pared acumulada por bloque (max entre ranks):
+   arco                    0.00 s  (   0.0 %)
+   radiacion DO            0.00 s  (   0.0 %)
+   quimica+especies        0.00 s  (   0.0 %)
+   lazo SIMPLE             0.41 s  (  93.6 %)
+   fase solida             0.00 s  (   0.0 %)
+   escoria                 0.00 s  (   0.0 %)
+   salida/auditoria        0.03 s  (   6.4 %)
+   TOTAL instrumentado        0.44 s
+ 
+  Total halo exchanges:      48239
+  Avg time per exchange:      0.003 ms

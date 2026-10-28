@@ -151,7 +151,9 @@ DEFS = {
     "E_slag_liq": ("C", "Heat the slag receives from the bath (own cell or the "
                         "one below) [J] (diagnostic)"),
     "m_gas_out": ("C", "Net gas mass entering the outlet cells (electrode holes) "
-                       "with the conservative gas fluxes [kg]: the export"),
+                       "with the conservative gas fluxes [kg]: the export; accumulated "
+                       "whenever the two-fluid flow is solved, with or without "
+                       "solve_energy (WS-K9)"),
     "m_gas_rxn": ("C", "Gas mass created by the reactions ($S_{CO}+S_{CO_2}+S_{O_2}$) "
                        "[kg]"),
     "E_gas_volfix": ("C", "Enthalpy carried by the gas mass the volume constraint creates "

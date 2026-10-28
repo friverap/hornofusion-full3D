@@ -31,7 +31,7 @@ STAGE=v1 make test-rebaseline   # regenera el golden de métricas (una vez por e
 | Ruta | Qué es |
 |---|---|
 | `unit/*.f90` | Unit tests de kernels y de cada arreglo (descubiertos por `make test-unit`: todo `unit/*.f90`). Entre los recientes: `test_dispersed_liquid` (caso 5: histéresis de la película), `test_transport_f28` (Plan J-B, caras r/θ/z), `test_pore_floor` (rampa del piso de poro), `test_drift_source` (E2), `test_slag_ox_column` (Plan I1), `test_slag_reduction`, `test_slag_contact` |
-| `integration/configs/*.dat` | Corridas cortas: `cold_10step` (regresión fría), `melt_forced` (fusión desde el paso 1, T_init=1815 K), `symmetry_3elec` (simetría 120°), `noflow_energy` (balance térmico sin flujo), `bath_test` (charco de líquido puro en reposo, Bug 19) y `bath_fill` (charco + fusión forzada, Bug 19) |
+| `integration/configs/*.dat` | Corridas cortas: `cold_10step` (regresión fría), `melt_forced` (fusión desde el paso 1, T_init=1815 K), `symmetry_3elec` (simetría 120°), `noflow_energy` (balance térmico sin flujo), `bath_test` (charco de líquido puro en reposo, Bug 19) y `bath_fill` (charco + fusión forzada, Bug 19) y `cold_flow_noenergy` (dos fluidos sin energía: `m_gas_out` y `mass_gas_flux_closure`, WS-K9) |
 | `integration/check_invariants.py` | NaN, 0≤α≤1, Σα∈{0,1}, cotas de T e Y, k/ε≥0 |
 | `integration/check_melt.py` | Conservación de masa en fusión: Δm_liq = −Δm_sol |
 | `integration/compare_decomposition.py` | Invarianza al nº de ranks MPI |

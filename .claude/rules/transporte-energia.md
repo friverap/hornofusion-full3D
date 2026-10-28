@@ -288,7 +288,9 @@ guarda sin leer su causa.
   entrante − rx (`m_gas_{comp,eos,flux,rx}_{multi,free}`;
   `mass_gas_class_split` es `mass_gas_rewrites` por clase, tautológico en el
   flujo; el cierre no tautológico es `mass_gas_flux_closure`: flux_multi +
-  flux_free + m_gas_out = 0 por paso). En la ventana de 280 s el CG NO
+  flux_free + m_gas_out = 0 por paso; desde WS-K9 `m_gas_out` se acumula
+  con flujo de dos fluidos aunque `solve_energy` = false, banco
+  `cold_flow_noenergy`). En la ventana de 280 s el CG NO
   converge con 20 ni con 200 iteraciones (residuo reducido ~2e-5 con 200);
   con 1000 sí. Con 20 externas y el CG convergido (k8_cg1000): el inciso por
   celda de C-110 no cambia (0.3156 frente a 0.3186; C-174); rem2/abs = 0.197

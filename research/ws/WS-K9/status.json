@@ -1,0 +1,27 @@
+{
+ "ws": "WS-K9",
+ "meta": "G3",
+ "estado": "aprobado",
+ "ronda": 2,
+ "numerico": false,
+ "prediccion": null,
+ "diff_sha": "10f3690d5333114554d64cb73a7e8106a15ad6c38ab7aae6e5d3976291abe00a",
+ "test_quick": "ok",
+ "revisores": {
+  "auditor-eaf3d": {
+   "veredicto": "aprueba",
+   "ronda": 2
+  },
+  "revisor-evidencia": {
+   "veredicto": "aprueba",
+   "ronda": 2
+  },
+  "revisor-refutador": {
+   "veredicto": "aprueba",
+   "ronda": 2
+  }
+ },
+ "creado": "2026-10-27T18:45:37-06:00",
+ "actualizado": "2026-10-27T19:26:23-06:00",
+ "test_quick_sha": "10f3690d5333114554d64cb73a7e8106a15ad6c38ab7aae6e5d3976291abe00a"
+}

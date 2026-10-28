@@ -12,6 +12,7 @@
 ! MPI: 3D domain decomposition with halo exchange
 !===============================================================================
 program eaf_3d_simulator
+    use, intrinsic :: iso_fortran_env, only: compiler_version
     use mod_constants
     use mod_types_3d
     use mod_mpi_topology
@@ -140,6 +141,14 @@ program eaf_3d_simulator
         print *, '  Cassie-Mayr AC arc / k-eps / DO radiation'
         print *, '============================================================'
         print '(A,I0,A)', '  Running on ', mesh%topo%nprocs, ' MPI processes'
+        ! (WS-K9) que binario corrio queda en run.log (panel WS-K8, evidencia
+        ! O4: los bancos de campana usan binarios copiados en campaigns/bin)
+        block
+            character(len=1024) :: exe
+            call get_command_argument(0, exe)
+            print '(A,A)', '  Ejecutable: ', trim(exe)
+            print '(A,A)', '  Compilador: ', compiler_version()
+        end block
         print *, '============================================================'
     end if
 

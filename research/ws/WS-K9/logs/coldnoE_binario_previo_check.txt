@@ -1,0 +1,21 @@
+[audit] /private/tmp/claude-502/-Users-frariv-Horno/68c200c2-efa4-46c5-a9ff-3c767a24d56a/scratchpad/coldnoE_old (10 pasos)
+  PASS  energy_balance  (solve_energy = false y sin fuentes: no aplica)
+  PASS  slag_adjust_cum  |E_slag_tclip| + |E_slag_clip| acumulado 0.000e+00 J sobre S_ext 0.000e+00 J (max 1e-2 S_ext + 1 J)
+  PASS  mass_gas  dm_gas=7.0818e-06 vs -venteo+volfix+reacciones=0.0000e+00 kg (venteo 0.000e+00, volfix 0.000e+00, rxn 0.000e+00); EOS reescribe 7.082e-06 kg = 3.360e-06 rel (max 0.5)
+  INFO  mass_gas_cells  por celda (sin volfix): gas libre -2.275e-08 kg, multifase -1.614e-08 kg (|e| 9.210e-08), outlet 7.121e-06; cierre EOS - celdas - venteo = -2.290e-13 kg (sobre |EOS| 7.082e-06); tasa EOS 1.680e-07 /s por kg de gas
+  PASS  mass_gas_vf_cells  volfix registrado por celda 0.000000e+00 kg vs m_gas_volfix 0.000000e+00 kg (dif 0.00e+00; max 1e-9 x sum|volfix| 0.000e+00 + 1e-12)
+  INFO  mass_gas_cells_liq  err_liq = 0 (sin liquido planeado ni movido en celdas multifase): 1 - sum|e - err_liq|/sum|e| = 0.000 por celda; sum|e| multifase 1.952e-08 kg, e_multi -1.614e-08 kg, sum|comp| por llamada 0.000e+00 (en celdas sin gas 0.000e+00), sum|eos| por llamada 1.359e-05 kg (en 10 de 10 filas; reparto lk/unl y correlaciones: n/a)
+  FAIL  mass_gas_flux_closure  por paso flux_multi + flux_free + m_gas_out = 0: max|resto| 3.41e-06 (max 1e-9 x 1.24e-06 + 1e-15); sum m_gas_out 0.0000e+00 kg, flujo entrante al multifase 1.7794e-06, al gas libre 5.3413e-06
+  PASS  mass_gas_class_split  multifase e -1.613822e-08 = comp 0.000000e+00 + eos 1.763222e-06 - flujo entrante 1.779360e-06 - rx 0.000000e+00 (resto 4.21e-16); gas libre e -2.275058e-08 (resto 1.99e-16); max 1e-11 x sum|dm| + 1e-14 x m_gas + 1e-12 = 3.11e-12
+  INFO  mass_gas_cells_cc  plan del Poisson en 10 de 10 filas (liquido y su_cc validos, sin escoria; residuo por resta, no atribucion): gas libre: e -2.275e-08, err_cc -2.199e-08, err_art -1.899e-10, sum|e| 7.258e-08, sum|e - err_liq - err_cc - err_art| 6.242e-10, 1 - rem/abs 0.991; multifase: e -1.614e-08, err_liq_all 0.000e+00, err_cc -1.586e-08, err_art -1.063e-10, sum|e| 1.952e-08, sum|e - err_liq_all - err_cc - err_art| 1.725e-10, 1 - rem/abs 0.991; sum|err_art| libre 5.065e-10, multifase 1.290e-10 kg
+  PASS  mass_gas_rewrites  dm_gas 7.081839e-06 = comp 0.000000e+00 + eos 7.081839e-06 + volfix 0.000000e+00 kg (resto -2.28e-13; max 1e-11 x sum|dm| 1.359e-05 + 1e-14 x m_gas 2.11e+02 + 1e-12)
+  PASS  arc_budget  (solve_energy = false: no aplica)
+  PASS  mass_liq  dm_liq=0.0000e+00 vs fundido-resolid-clip=0.0000e+00 kg (fundido=0.000e+00, resolid=0.000e+00, clip=0.000e+00), err rel=0.000e+00 (max 1.000e-09)
+  PASS  alpha_clip  sum|clip| auditado 0.000e+00 kg (neto 0.000e+00) sobre fundido 0.000e+00 kg (max 1e-06 relativo)
+  PASS  steel_deficit_bounded  acero creado por deficit de congelacion 0.000e+00 kg (max 1e-06 relativo)
+  PASS  ccdrop_bounded  |m_gas_ccdrop| acumulado 0.000e+00 kg sobre m_gas 2.108e+02 kg (max 2e-2)
+  PASS  mass_sol  dm_sol=0.0000e+00 vs cargas+ECS-fundido+resolid-Cox=0.0000e+00 kg, err rel=0.000e+00 (max 1.990e-09)
+  PASS  sentinel_p  p_max 5.133e+01 Pa (P_HYDRO_CAP 2.0e+06)
+  PASS  sentinel_gas  u_gas_max 0.0 m/s (U_GAS_MAX 300)
+  PASS  regime_p  p_max 5.133e+01 Pa (max 5.0e+05)
+  PASS  regime_gas  u_gas_max 0.0 m/s (max 200)

@@ -76,7 +76,7 @@ Generado por `scripts/make_audit_glossary.py` desde el encabezado de `src/mod_au
 | `E_abs_gas_hook` | D | Heat absorbed by the gas equation according to its own hook [J] (diagnostic against E_gas_abs) |
 | `E_slag_gas` | C | Heat the slag receives from the gas of its cell [J] (transfer between state inventories; diagnostic) |
 | `E_slag_liq` | C | Heat the slag receives from the bath (own cell or the one below) [J] (diagnostic) |
-| `m_gas_out` | C | Net gas mass entering the outlet cells (electrode holes) with the conservative gas fluxes [kg]: the export |
+| `m_gas_out` | C | Net gas mass entering the outlet cells (electrode holes) with the conservative gas fluxes [kg]: the export; accumulated whenever the two-fluid flow is solved, with or without solve_energy (WS-K9) |
 | `m_gas_rxn` | C | Gas mass created by the reactions (`S_{CO}+S_{CO_2}+S_{O_2}`) [kg] |
 | `E_gas_volfix` | C | Enthalpy carried by the gas mass the volume constraint creates or destroys (`m_{gas,volfix} c_p T`) [J]; exact external term |
 | `m_vf_O2` | C | O`_2` mass leaving with the gas destroyed by the volume constraint, slag buoyancy, bucket charge or ECS [kg] (created gas carries no species) |

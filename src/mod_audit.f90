@@ -793,7 +793,7 @@ contains
         real(dp) :: Fw, Fe, Fs, Fn, Fb, Ft, dfl, dfg
         integer  :: i, j, k
         integer  :: istart, iend, jstart, jend, kstart, kend
-        logical  :: liq_energy_on, gas_energy_on
+        logical  :: liq_energy_on, gas_energy_on, gas_mass_on
         logical  :: at_rmin_aud, at_rmax_aud, at_zmin_aud, at_zmax_aud
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -805,6 +805,11 @@ contains
         liq_energy_on = cfg%solve_energy
         gas_energy_on = cfg%solve_energy .and. cfg%solve_flow .and. &
                         cfg%solve_multiphase
+        ! (WS-K9) la MASA venteada (AUD_GAS_OUT) no depende de la energia:
+        ! audit_gas_cells y el cierre mass_gas_flux_closure solo exigen flujo
+        ! multifase; con solve_energy = false m_gas_out quedaba en 0 y el
+        ! cierre daba una falsa alarma (panel WS-K8, auditor B1)
+        gas_mass_on = cfg%solve_flow .and. cfg%solve_multiphase
 
         do k = kstart, kend
             do j = jstart, jend
@@ -854,7 +859,7 @@ contains
                     ! entra por las caras 'desaparece' ahí (no por la cara
                     ! superior, cuyo flujo es 0 contra el halo inactivo).
                     ! Se contabiliza la entalpía convectiva NETA que entra.
-                    if (gas_energy_on .and. k == m%nz .and. at_zmax_aud) then
+                    if (gas_mass_on .and. k == m%nz .and. at_zmax_aud) then
                         block
                             integer :: e
                             logical :: is_out
@@ -881,6 +886,7 @@ contains
                                     gas%ur, gas%uth, gas%uz, m, i, j, k, &
                                     Fw, Fe, Fs, Fn, Fb, Ft)
                                 end if
+                                if (gas_energy_on) then
                                 ein = ( max(Fw,0.0_dp)*gas%T(i-1,j,k) &
                                       - max(-Fw,0.0_dp)*gas%T(i,j,k)  &
                                       - max(Fe,0.0_dp)*gas%T(i,j,k)   &
@@ -895,6 +901,7 @@ contains
                                       + max(-Ft,0.0_dp)*gas%T(i,j,k+1) ) * &
                                       gas%cp(i,j,k)
                                 srcacc(17) = srcacc(17) + ein * cfg%dt
+                                end if
                                 ! masa neta que entra a la celda outlet (A4-6)
                                 acc(AUD_GAS_OUT) = acc(AUD_GAS_OUT) + cfg%dt * &
                                     (Fw - Fe + Fs - Fn + Fb - Ft)

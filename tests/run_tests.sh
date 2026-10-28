@@ -386,6 +386,9 @@ full | rebaseline)
     run_case bath_test 12
     run_case bath_test_stretch 4
     run_case bath_test_cold 4
+    # (WS-K9) dos fluidos sin energia: m_gas_out y mass_gas_flux_closure no
+    # dependen de solve_energy (antes m_gas_out = 0 y el cierre fallaba)
+    run_case cold_flow_noenergy 4
     # (auditoria 5, B5-4) rama de UNA fase (flujo sin dos fluidos): banco legado
     run_case oneflow_test 4
     run_case bath_fill 4
