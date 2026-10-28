@@ -1,0 +1,12 @@
+Tue Oct 27 21:58:21 CST 2026
+## sha256 del diff de src/ frente a HEAD (5999f40)
+45be9cf95dc2e16eee064a9a254ace0d3ac708b27d1a87ec26d548307f9a9946  -
+d5827e700e4635f165ccf2dcfc70bfd72f83117dd31e6dc86366192268e19a3f  bin/eaf3d_mpi
+d5827e700e4635f165ccf2dcfc70bfd72f83117dd31e6dc86366192268e19a3f  campaigns/bin/eaf3d_k10_opt
+Tue Oct 27 22:37:45 CST 2026
+## binario del codigo WS-K10 tras la revision previa (escalas brutas, eos_end, guarda audit_freq)
+## sha256 del diff de src/ frente a HEAD
+74a5e2a4aec4f7b5bba694cb4cdaf92479ea6ad43e5dc3cad561ce24c1fe02a5  -
+5409bbe987ce9a9a3e5016d5f573e0c964495b8f5ddd395c65f5fb6c1627098d  bin/eaf3d_mpi
+5409bbe987ce9a9a3e5016d5f573e0c964495b8f5ddd395c65f5fb6c1627098d  campaigns/bin/eaf3d_k10b_opt
+d5827e700e4635f165ccf2dcfc70bfd72f83117dd31e6dc86366192268e19a3f  campaigns/bin/eaf3d_k10_opt

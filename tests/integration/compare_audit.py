@@ -85,13 +85,23 @@ def main():
     # columna m_*/E_* y aflojaba m_spill, m_vf_*, m_gas_volfix a 1e-3)
     # (Plan H, P8) el clip de escoria condensada es del mismo tipo (~1e-33 kg
     # con signo segun la descomposicion): piso con el inventario de escoria
-    ROUNDOFF_COLS = {"m_gas_ccdrop": "m_gas", "m_slag_clip": "m_slag", "E_slag_clip": "E_slag"}
+    # (WS-K10) los cierres de la descomposicion del gas son sumas de |resto|
+    # de redondeo, y Bx es la masa del residuo del CG (ruido del solver: en
+    # cold_10step hasta ~6e-11 kg por fila): con otro numero de ranks
+    # cambian en sus ultimos bits (medido en 8->4: ~3e-17 kg en Bx, ~1e-16
+    # en los cierres). m_gas_rv_abs es una suma de |redondeo| que puede
+    # cambiar del orden de su propio valor: piso 1e-13 de su escala
+    ROUNDOFF_COLS = {"m_gas_ccdrop": "m_gas", "m_slag_clip": "m_slag", "E_slag_clip": "E_slag",
+                     "m_gas_dec_abs_multi": "m_gas", "m_gas_dec_abs_free": "m_gas",
+                     "m_gas_rv_abs": "m_gas_rv_scale", "m_gas_bx_multi": "m_gas", "m_gas_bx_free": "m_gas",
+                     "m_gas_eosend_abs": "m_gas_eosend_scale"}
+    ROUNDOFF_FACTOR = {"m_gas_rv_abs": 1e-13, "m_gas_eosend_abs": 1e-13}
     def inv_floor(c):
         if not (args.decomp and c in ROUNDOFF_COLS):
             return 0.0
         inv = ROUNDOFF_COLS[c]
         v = [abs(float(B[s][inv])) for s in steps if inv in B[s]]
-        return 1e-15 * max(v) if v else 0.0
+        return ROUNDOFF_FACTOR.get(c, 1e-15) * max(v) if v else 0.0
     worst, worst_id = 0.0, "-"
     # fila N: inventarios del estado de arranque frente a la continua
     cmp_rows = [(args.from_step, INVENTORY)] if args.from_step in A and args.from_step in B else []

@@ -497,6 +497,62 @@ def main():
                           f"{multi_txt}; sum|err_art| libre {U('m_gas_art_abs_free'):.3e}, multifase "
                           f"{U('m_gas_art_abs_multi'):.3e} kg"
                           + (f"; AVISO {ncc:.0f} pasos sin su_cc aceptada valida" if ncc > 0 else ""))
+        # (WS-K10) descomposicion EXACTA del residuo D = e - err_liq - err_cc -
+        # err_art por clase: D = A + Br1 + Br2 + Bgr + Bgq + Bx (ver
+        # AUD_MG_PA_* en mod_audit). Dos cierres: la fila del ultimo Poisson
+        # en VOLUMEN, sin densidades (m_gas_rv_abs frente a m_gas_rv_scale),
+        # y la descomposicion en MASA (m_gas_dec_abs_*). Un fallo de la
+        # primera localiza un termino de Su o un halo fuera de la identidad;
+        # uno solo de la segunda, una densidad o un gancho de complemento
+        if "m_gas_dec_abs_multi" in last:
+            ds = [r for r in steps if r.get("m_gas_cells_skip", 0.0) == 0.0
+                  and r.get("m_gas_dec_skip", 0.0) == 0.0]
+            if not ds:
+                print("  INFO  mass_gas_decomp  n/a: ninguna fila con la descomposicion evaluada "
+                      "(escoria condensada, fallback implicito, claves pc_fs_* o sin flujo de dos fluidos)")
+            else:
+                V = lambda c: sum(r.get(c, 0.0) for r in ds)
+                rva, rvsc = V("m_gas_rv_abs"), V("m_gas_rv_scale")
+                # escalas BRUTAS (caudales por cara, |cada termino|, masa de gas
+                # de la celda): la tolerancia es ~1e3 eps de lo que se sumo
+                chk.report("mass_gas_row_volume", rva <= 1e-13 * rvsc + 1e-20,
+                           f"fila del Poisson en volumen en {len(ds)} filas: dt sum|Q_g,out + Q_l,out - su_cc - E2 "
+                           f"+ store + r| = {rva:.2e} m3 (max 1e-13 x escala bruta {rvsc:.2e} + 1e-20)")
+                dam, daf = V("m_gas_dec_abs_multi"), V("m_gas_dec_abs_free")
+                if "m_gas_dec_scale_multi" in last:
+                    scm, scf = V("m_gas_dec_scale_multi"), V("m_gas_dec_scale_free")
+                    chk.report("mass_gas_decomp", dam <= 1e-13 * scm + 1e-20 and daf <= 1e-13 * scf + 1e-20,
+                               f"sum|D - (A + Br1 + Br2 + Bgr + Bgq + Bx)| multifase {dam:.2e} (max 1e-13 x {scm:.2e}), "
+                               f"gas libre {daf:.2e} kg (max 1e-13 x {scf:.2e})")
+                else:
+                    # CSV de la primera version del instrumento (sin escala bruta,
+                    # panel WS-K10 C-218): tolerancia de entonces
+                    sc0 = (V("m_gas_comp_abs") + V("m_gas_eos_abs") + V("m_gas_cc_abs_multi")
+                           + V("m_gas_cc_abs_free") + sum(abs(r.get("m_gas_volfix", 0.0)) for r in ds))
+                    tol0 = 1e-11 * sc0 + 1e-14 * max(abs(r["m_gas"]) for r in rows) + 1e-12
+                    chk.report("mass_gas_decomp", dam <= tol0 and daf <= tol0,
+                               f"sum|D - (A + Br1 + Br2 + Bgr + Bgq + Bx)| multifase {dam:.2e}, gas libre {daf:.2e} kg "
+                               f"(CSV sin m_gas_dec_scale_*: max 1e-11 x {sc0:.2e} + 1e-14 x m_gas + 1e-12 = {tol0:.2e})")
+                # reparto Br1/Br2: la EOS final reescribe alpha_g V (rho_f - rho_pre)
+                if "m_gas_eosend_abs" in last:
+                    eoa, eos_s = V("m_gas_eosend_abs"), V("m_gas_eosend_scale")
+                    chk.report("mass_gas_eos_end", eoa <= 1e-13 * eos_s + 1e-20,
+                               f"EOS final: sum|alpha_g V (rho_f - rho_pre) - incremento del gancho| = {eoa:.2e} kg "
+                               f"(max 1e-13 x {eos_s:.2e} + 1e-20; valida el reparto Br1/Br2)")
+                else:
+                    print("  INFO  mass_gas_eos_end  no medido (CSV sin m_gas_eosend_*)")
+                n = len(ds)
+                for cls, el in (("multi", "m_gas_err_liq_all"), ("free", "m_gas_err_liq_free")):
+                    e = V(f"m_gas_err_{cls}")
+                    dd = e - V(el) - V(f"m_gas_err_cc_{cls}") - V(f"m_gas_err_art_{cls}")
+                    parts = [(nm, V(f"m_gas_{c}_{cls}")) for nm, c in
+                             (("A", "pa"), ("Br1", "brho_it"), ("Br2", "brho_end"), ("Bgr", "bg_rho"),
+                              ("Bgq", "bg_q"), ("Bx", "bx"))]
+                    txt = ", ".join(f"{nm} {v / n:+.3e}" for nm, v in parts)
+                    print(f"  INFO  mass_gas_cells_pieces  {'multifase' if cls == 'multi' else 'gas libre'}, "
+                          f"por paso ({n} filas): e {e / n:+.3e} = err_liq {V(el) / n:+.3e} + err_cc "
+                          f"{V(f'm_gas_err_cc_{cls}') / n:+.3e} + err_art {V(f'm_gas_err_art_{cls}') / n:+.3e} + D "
+                          f"{dd / n:+.3e}; D = {txt}; rho_f dt store_gas {V(f'm_gas_store_{cls}') / n:+.3e} kg")
         # (WS-K7) el inventario del gas solo cambia por complemento, EOS y
         # volfix (el flujo nunca entra): identidad exacta por construccion.
         # Una reescritura nueva de alpha_g o rho_g sin gancho la rompe

@@ -29,7 +29,9 @@ module mod_audit
                              ws_pc_unl_used, ws_pc_unl_used_valid, ws_pc_unl_used_id, &
                              ws_lim_step, ws_lim_step_valid, ws_lim_step_id, &
                              ws_su_cc_used, ws_su_cc_used_valid, ws_su_cc_used_id, ws_gadv_used, &
-                             ws_store_gas, ws_store_art
+                             ws_store_gas, ws_store_art, &
+                             ws_Fgv_r, ws_Fgv_th, ws_Fgv_z, ws_rho_g_used, ws_pc_res, ws_Fgv_valid, ws_Fgv_id, &
+                             ws_rho_g_pre, ws_rho_g_pre_valid, ws_rho_g_pre_id
     use mod_probe, only: probe_current_step
     use mod_face_flux, only: face_mass_fluxes
     use mod_boundary_3d, only: physical_boundary_flags
@@ -37,6 +39,7 @@ module mod_audit
     private
 
     public :: audit_init, audit_write_step, audit_add, audit_accumulate, audit_peek
+    public :: audit_mark_eos_pre
     public :: audit_set_energy, eq_residual, gas_inventory_cell, gas_heat_capacity_ref, gas_log_exchange
     public :: AUD_ARC_DIRECT, AUD_ARC_DISCARD, AUD_MC_DEPOSIT
     public :: AUD_ALPHA_CLIP_MASS, AUD_MELT_MASS, AUD_RESOLID_MASS
@@ -59,7 +62,13 @@ module mod_audit
               AUD_MG_COMP_FREE, AUD_MG_EOS_FREE, AUD_MG_FLUX_FREE, AUD_MG_RX_FREE, &
               AUD_MG_ERR_CC_MULTI, AUD_MG_ERR_CC_FREE, AUD_MG_REM2_ABS_MULTI, AUD_MG_REM2_ABS_FREE, &
               AUD_MG_ERR_ABS_FREE, AUD_MG_CC_ABS_MULTI, AUD_MG_CC_ABS_FREE, AUD_MG_CC_SKIP, &
-              AUD_MG_ERR_ART_MULTI, AUD_MG_ERR_ART_FREE, AUD_MG_ART_ABS_MULTI, AUD_MG_ART_ABS_FREE
+              AUD_MG_ERR_ART_MULTI, AUD_MG_ERR_ART_FREE, AUD_MG_ART_ABS_MULTI, AUD_MG_ART_ABS_FREE, &
+              AUD_MG_ELF_FREE, AUD_MG_PA_MULTI, AUD_MG_PA_FREE, AUD_MG_BR1_MULTI, AUD_MG_BR1_FREE, &
+              AUD_MG_BR2_MULTI, AUD_MG_BR2_FREE, AUD_MG_BGR_MULTI, AUD_MG_BGR_FREE, &
+              AUD_MG_BGQ_MULTI, AUD_MG_BGQ_FREE, AUD_MG_BX_MULTI, AUD_MG_BX_FREE, &
+              AUD_MG_STORE_MULTI, AUD_MG_STORE_FREE, AUD_MG_DEC_ABS_MULTI, AUD_MG_DEC_ABS_FREE, &
+              AUD_MG_RV_ABS, AUD_MG_RV_SCALE, AUD_MG_DEC_SKIP, AUD_MG_DEC_SCALE_MULTI, AUD_MG_DEC_SCALE_FREE, &
+              AUD_MG_EOSEND_ABS, AUD_MG_EOSEND_SCALE
     public :: AUD_RESID_MASS, AUD_RESID_E, AUD_SPILL_MASS
     public :: AUD_VOL_DALPHA, AUD_VOL_LIM, AUD_VOL_UNLINKED
     public :: AUD_CHARGE_MASS, AUD_CHARGE_E, AUD_C_OXID, AUD_DIL_O2, AUD_DIL_CO, AUD_DIL_CO2, AUD_GAS_VOLFIX, AUD_SLAG_TCLIP, AUD_MIX_INIT
@@ -328,7 +337,54 @@ module mod_audit
     integer, parameter :: AUD_MG_ERR_ART_FREE  = 109
     integer, parameter :: AUD_MG_ART_ABS_MULTI = 110
     integer, parameter :: AUD_MG_ART_ABS_FREE  = 111
-    integer, parameter :: N_AUD = 111
+    ! (WS-K10) descomposicion EXACTA del error por celda. Con la fila del
+    ! ultimo Poisson tras el CG, sum_enl (q_g,out + q_l,out) = su_cc + E2 -
+    ! store_gas - store_art - r, y D = e - err_liq - err_cc - err_art:
+    !   D = A + Br1 + Br2 + Bgr + Bgq + Bx
+    !   A   = comp + rho_f V_eff               (complemento frente al liquido realizado)
+    !   Br1 = (rho_it - rho_pre) X, Br2 = (rho_pre - rho_f) X,
+    !         X = V_pois + dt (su_cc - store_gas - store_art)
+    !         (densidad que cambia DESPUES del ultimo Poisson: EOS del mismo
+    !          outer, y la EOS final del paso)
+    !   Bgr = dt (rho_f - rho_it) gadv_used,  Bgq = dt (rho_it gadv_used +
+    !         sum_caras (rho_dador - rho_it) q_out)  (advectivo de ensamblaje
+    !         frente al de los caudales corregidos, sin la guardia ALPHA_CUTOFF)
+    !   Bx  = -rho_it dt r                      (residuo de la fila tras el CG)
+    ! rho_it = ws_rho_g_used, rho_pre = ws_rho_g_pre, rho_f = gas%rho final.
+    ! DEC_ABS = sum |D - piezas| (cierre en masa); RV_ABS = dt sum |fila en
+    ! volumen| y RV_SCALE su escala (cierre sin densidades). STORE = rho_f dt
+    ! store_gas (dato: la parte (1 - alpha_p) que la EOS no realiza cae en
+    ! err_cc). ELF_FREE = err_liq en el gas libre (para D del gas libre).
+    integer, parameter :: AUD_MG_ELF_FREE      = 112
+    integer, parameter :: AUD_MG_PA_MULTI      = 113
+    integer, parameter :: AUD_MG_PA_FREE       = 114
+    integer, parameter :: AUD_MG_BR1_MULTI     = 115
+    integer, parameter :: AUD_MG_BR1_FREE      = 116
+    integer, parameter :: AUD_MG_BR2_MULTI     = 117
+    integer, parameter :: AUD_MG_BR2_FREE      = 118
+    integer, parameter :: AUD_MG_BGR_MULTI     = 119
+    integer, parameter :: AUD_MG_BGR_FREE      = 120
+    integer, parameter :: AUD_MG_BGQ_MULTI     = 121
+    integer, parameter :: AUD_MG_BGQ_FREE      = 122
+    integer, parameter :: AUD_MG_BX_MULTI      = 123
+    integer, parameter :: AUD_MG_BX_FREE       = 124
+    integer, parameter :: AUD_MG_STORE_MULTI   = 125
+    integer, parameter :: AUD_MG_STORE_FREE    = 126
+    integer, parameter :: AUD_MG_DEC_ABS_MULTI = 127
+    integer, parameter :: AUD_MG_DEC_ABS_FREE  = 128
+    integer, parameter :: AUD_MG_RV_ABS        = 129
+    integer, parameter :: AUD_MG_RV_SCALE      = 130
+    integer, parameter :: AUD_MG_DEC_SKIP      = 131
+    ! escala BRUTA del redondeo de DEC_ABS por clase (|cada termino| + masa
+    ! de gas de la celda + dt sum |rho_dador q| por cara), y la identidad que
+    ! valida el REPARTO Br1/Br2: alpha_g V (rho_f - rho_pre) frente al
+    ! incremento del gancho de la EOS en la EOS final (EOSEND_ABS, con su
+    ! escala); sin ella el cierre en masa no ve donde se copio rho_pre
+    integer, parameter :: AUD_MG_DEC_SCALE_MULTI = 132
+    integer, parameter :: AUD_MG_DEC_SCALE_FREE  = 133
+    integer, parameter :: AUD_MG_EOSEND_ABS      = 134
+    integer, parameter :: AUD_MG_EOSEND_SCALE    = 135
+    integer, parameter :: N_AUD = 135
     ! masa del gas por celda y su clase al inicio del paso (audit_gas_cells
     ! modo 0); no es estado entre pasos: se recaptura al inicio de cada paso
     real(dp), allocatable, save :: mg_ini(:,:,:)
@@ -339,6 +395,9 @@ module mod_audit
     ! neto con signo (identidad) y suma de |dm| por llamada (R-1, C-133)
     real(dp), allocatable, save :: mg_comp(:,:,:), mg_eos(:,:,:)
     real(dp), allocatable, save :: mg_comp_abs(:,:,:), mg_eos_abs(:,:,:)
+    ! (WS-K10) gancho de la EOS acumulado justo antes de la EOS final del paso
+    real(dp), allocatable, save :: mg_eos_pre(:,:,:)
+    integer, save :: mg_eos_pre_id = -huge(1)
     ! alpha_g al inicio del paso: err_liq se evalua donde hay gas al inicio
     ! o al final (alpha_g > 0: el complemento y la EOS actuan sin umbral,
     ! C-124); en las demas multifase err_liq := 0 y |e| va a rem_abs igual
@@ -578,7 +637,12 @@ contains
                 'vol_dalpha_outer,vol_lim,vol_unlinked,' // &
                 'p_max,u_gas_max,u_liq_max,m_charge_in,E_charge_in,m_C_oxid,' // &
                 'm_dil_O2,m_dil_CO,m_dil_CO2,m_gas_volfix,E_slag_tclip,E_mix_init,E_resolid,E_alpha_clip,E_conv_liq,E_conv_gas,E_abs_gas_hook,E_slag_gas,E_slag_liq,m_gas_out,m_gas_rxn,E_gas_volfix,' // &
-                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip,E_slag_sol,m_steel_deficit,E_steel_deficit,E_abs_liq_hook,E_relax_liq,E_relax_gas,m_gas_err_free,m_gas_err_multi,m_gas_err_abs,m_gas_err_out,m_gas_cells_skip,m_gas_vf_cells,m_gas_comp,m_gas_eos,m_gas_err_liq,m_gas_err_abs_multi,m_gas_err_rem_abs,m_gas_liq_skip,m_gas_vpois_abs,m_gas_veff_abs,m_gas_err_abs_nogas,m_gas_comp_abs,m_gas_eos_abs,m_gas_err_liq_all,m_gas_err_rem_abs_all,m_gas_comp_abs_nogas,m_gas_err_abs_nolink,m_gas_cells_nolink,m_gas_e2_nolink,m_gas_err_liq_lk,m_gas_err_liq_unl,m_gas_err_liq_unl_abs,m_gas_vpois_abs_nogas,m_gas_veff_abs_nogas,m_gas_rej_nogas,m_gas_e2_skip,m_gas_comp_multi,m_gas_eos_multi,m_gas_flux_multi,m_gas_rx_multi,m_gas_comp_free,m_gas_eos_free,m_gas_flux_free,m_gas_rx_free,m_gas_err_cc_multi,m_gas_err_cc_free,m_gas_rem2_abs_multi,m_gas_rem2_abs_free,m_gas_err_abs_free,m_gas_cc_abs_multi,m_gas_cc_abs_free,m_gas_cc_skip,m_gas_err_art_multi,m_gas_err_art_free,m_gas_art_abs_multi,m_gas_art_abs_free'
+                'm_vf_O2,m_vf_CO,m_vf_CO2,m_gas_ccdrop,m_slag_clip,E_slag_clip,E_slag_sol,m_steel_deficit,E_steel_deficit,E_abs_liq_hook,E_relax_liq,E_relax_gas,m_gas_err_free,m_gas_err_multi,m_gas_err_abs,m_gas_err_out,m_gas_cells_skip,m_gas_vf_cells,m_gas_comp,m_gas_eos,m_gas_err_liq,m_gas_err_abs_multi,m_gas_err_rem_abs,m_gas_liq_skip,m_gas_vpois_abs,m_gas_veff_abs,m_gas_err_abs_nogas,m_gas_comp_abs,m_gas_eos_abs,m_gas_err_liq_all,m_gas_err_rem_abs_all,m_gas_comp_abs_nogas,m_gas_err_abs_nolink,m_gas_cells_nolink,m_gas_e2_nolink,m_gas_err_liq_lk,m_gas_err_liq_unl,m_gas_err_liq_unl_abs,m_gas_vpois_abs_nogas,m_gas_veff_abs_nogas,m_gas_rej_nogas,m_gas_e2_skip,m_gas_comp_multi,m_gas_eos_multi,m_gas_flux_multi,m_gas_rx_multi,m_gas_comp_free,m_gas_eos_free,m_gas_flux_free,m_gas_rx_free,m_gas_err_cc_multi,m_gas_err_cc_free,m_gas_rem2_abs_multi,m_gas_rem2_abs_free,m_gas_err_abs_free,m_gas_cc_abs_multi,m_gas_cc_abs_free,m_gas_cc_skip,m_gas_err_art_multi,m_gas_err_art_free,m_gas_art_abs_multi,m_gas_art_abs_free,' // &
+                'm_gas_err_liq_free,m_gas_pa_multi,m_gas_pa_free,m_gas_brho_it_multi,m_gas_brho_it_free,' // &
+                'm_gas_brho_end_multi,m_gas_brho_end_free,m_gas_bg_rho_multi,m_gas_bg_rho_free,' // &
+                'm_gas_bg_q_multi,m_gas_bg_q_free,m_gas_bx_multi,m_gas_bx_free,m_gas_store_multi,m_gas_store_free,' // &
+                'm_gas_dec_abs_multi,m_gas_dec_abs_free,m_gas_rv_abs,m_gas_rv_scale,m_gas_dec_skip,' // &
+                'm_gas_dec_scale_multi,m_gas_dec_scale_free,m_gas_eosend_abs,m_gas_eosend_scale'
             close(iu)
         end if
         acc = 0.0_dp
@@ -759,7 +823,15 @@ contains
                 ',', a(AUD_MG_REM2_ABS_FREE), ',', a(AUD_MG_ERR_ABS_FREE), ',', a(AUD_MG_CC_ABS_MULTI), &
                 ',', a(AUD_MG_CC_ABS_FREE), ',', a(AUD_MG_CC_SKIP), &
                 ',', a(AUD_MG_ERR_ART_MULTI), ',', a(AUD_MG_ERR_ART_FREE), ',', a(AUD_MG_ART_ABS_MULTI), &
-                ',', a(AUD_MG_ART_ABS_FREE)
+                ',', a(AUD_MG_ART_ABS_FREE), &
+                ',', a(AUD_MG_ELF_FREE), ',', a(AUD_MG_PA_MULTI), ',', a(AUD_MG_PA_FREE), &
+                ',', a(AUD_MG_BR1_MULTI), ',', a(AUD_MG_BR1_FREE), ',', a(AUD_MG_BR2_MULTI), ',', a(AUD_MG_BR2_FREE), &
+                ',', a(AUD_MG_BGR_MULTI), ',', a(AUD_MG_BGR_FREE), ',', a(AUD_MG_BGQ_MULTI), ',', a(AUD_MG_BGQ_FREE), &
+                ',', a(AUD_MG_BX_MULTI), ',', a(AUD_MG_BX_FREE), ',', a(AUD_MG_STORE_MULTI), ',', a(AUD_MG_STORE_FREE), &
+                ',', a(AUD_MG_DEC_ABS_MULTI), ',', a(AUD_MG_DEC_ABS_FREE), ',', a(AUD_MG_RV_ABS), &
+                ',', a(AUD_MG_RV_SCALE), ',', a(AUD_MG_DEC_SKIP), &
+                ',', a(AUD_MG_DEC_SCALE_MULTI), ',', a(AUD_MG_DEC_SCALE_FREE), &
+                ',', a(AUD_MG_EOSEND_ABS), ',', a(AUD_MG_EOSEND_SCALE)
             close(iu)
         end if
     end subroutine audit_write_step
@@ -966,6 +1038,18 @@ contains
 
     ! (WS-K7) EOS de UNA celda: dm = alpha_g V (rho_g nueva - vieja) en
     ! update_properties.
+    !---------------------------------------------------------------------------
+    ! (WS-K10) marca el gancho de la EOS justo antes de la EOS final del paso
+    ! (main_3d, junto a ws_rho_g_pre): el modo 1 compara su incremento con
+    ! alpha_g V (rho_f - rho_pre) y valida el reparto Br1/Br2
+    !---------------------------------------------------------------------------
+    subroutine audit_mark_eos_pre()
+        if (.not. allocated(mg_eos)) return
+        if (.not. allocated(mg_eos_pre)) allocate(mg_eos_pre, mold=mg_eos)
+        mg_eos_pre = mg_eos
+        mg_eos_pre_id = probe_current_step()
+    end subroutine audit_mark_eos_pre
+
     subroutine audit_eos_cell(i, j, k, dm)
         integer, intent(in)  :: i, j, k
         real(dp), intent(in) :: dm
@@ -1012,6 +1096,10 @@ contains
         integer  :: i, j, k, e, c, istart, iend, jstart, jend, kstart, kend
         real(dp) :: fl, rx, ee, vp, ve, el, el_unl, el_lk, vin, cc, ecc, eart, elf
         logical  :: is_out, liq_ok, has_gas, lk_any, e2_ok, unl_ok, lim_ok, cc_ok
+        ! (WS-K10) piezas de la descomposicion exacta
+        real(dp) :: rit, rpre, rfin, qgo, qlo, gq, e2v, rvv, rvs, xv, pa, br1, br2, bgr, bgq, bx, stg, dd
+        real(dp) :: sgv, sgm, dsc, deos, peos
+        logical  :: dec_ok, eosend_ok
         logical  :: at_rmin_aud, at_rmax_aud, at_zmin_aud, at_zmax_aud
 
         call get_loop_bounds(m, istart, iend, jstart, jend, kstart, kend)
@@ -1087,6 +1175,17 @@ contains
         if (.not. cc_ok) then
             if ((.not. m%is_parallel) .or. m%topo%rank == 0) acc(AUD_MG_CC_SKIP) = acc(AUD_MG_CC_SKIP) + 1.0_dp
         end if
+        ! (WS-K10) la descomposicion exige el plan completo (liquido y
+        ! compresibilidad), el caudal volumetrico del gas y la rho previa a la
+        ! EOS final de ESTE paso. Con las claves pc_fs_* de Plan D la fila
+        ! tiene caras de superficie libre fuera de la identidad: no se evalua
+        dec_ok = cc_ok .and. liq_ok .and. ws_Fgv_valid .and. ws_Fgv_id == probe_current_step() &
+            .and. ws_rho_g_pre_valid .and. ws_rho_g_pre_id == probe_current_step() &
+            .and. .not. (cfg%pc_fs_liquid_face .and. cfg%pc_fs_liquid_gradient)
+        eosend_ok = dec_ok .and. allocated(mg_eos_pre) .and. mg_eos_pre_id == probe_current_step()
+        if (.not. dec_ok) then
+            if ((.not. m%is_parallel) .or. m%topo%rank == 0) acc(AUD_MG_DEC_SKIP) = acc(AUD_MG_DEC_SKIP) + 1.0_dp
+        end if
         do k = kstart, kend
             do j = jstart, jend
                 do i = istart, iend
@@ -1121,6 +1220,69 @@ contains
                                       + ws_Fz(i,j,k-1) - ws_Fz(i,j,k) ) / liq%rho(i,j,k)
                         elf = gas%rho(i,j,k) * (vp - ve)
                     end if
+                    ! (WS-K10) piezas de D = ee - elf - ecc - eart (ver AUD_MG_PA_*)
+                    if (dec_ok .and. c /= 0) then
+                        rit = ws_rho_g_used(i,j,k); rpre = ws_rho_g_pre(i,j,k); rfin = gas%rho(i,j,k)
+                        qgo = 0.0_dp; gq = 0.0_dp; sgv = 0.0_dp; sgm = 0.0_dp
+                        call gface(ws_Fgv_r(i,j,k),   ws_rho_g_used(i,j,k),   ws_rho_g_used(i+1,j,k),  1.0_dp)
+                        call gface(ws_Fgv_r(i-1,j,k), ws_rho_g_used(i-1,j,k), ws_rho_g_used(i,j,k),   -1.0_dp)
+                        call gface(ws_Fgv_th(i,j,k),   ws_rho_g_used(i,j,k),   ws_rho_g_used(i,j+1,k),  1.0_dp)
+                        call gface(ws_Fgv_th(i,j-1,k), ws_rho_g_used(i,j-1,k), ws_rho_g_used(i,j,k),   -1.0_dp)
+                        call gface(ws_Fgv_z(i,j,k),   ws_rho_g_used(i,j,k),   ws_rho_g_used(i,j,k+1),  1.0_dp)
+                        call gface(ws_Fgv_z(i,j,k-1), ws_rho_g_used(i,j,k-1), ws_rho_g_used(i,j,k),   -1.0_dp)
+                        qlo = ws_Fc_r(i,j,k) - ws_Fc_r(i-1,j,k) + ws_Fc_th(i,j,k) - ws_Fc_th(i,j-1,k) &
+                            + ws_Fc_z(i,j,k) - ws_Fc_z(i,j,k-1)
+                        e2v = 0.0_dp
+                        if (e2_ok) e2v = ws_pc_unl_used(i,j,k)
+                        rvv = qgo + qlo - ws_su_cc_used(i,j,k) - e2v + ws_store_gas(i,j,k) &
+                            + ws_store_art(i,j,k) + ws_pc_res(i,j,k)
+                        ! escala BRUTA: caudales por cara (el redondeo viene de ahi, no del neto)
+                        rvs = sgv + abs(ws_Fc_r(i,j,k)) + abs(ws_Fc_r(i-1,j,k)) + abs(ws_Fc_th(i,j,k)) &
+                            + abs(ws_Fc_th(i,j-1,k)) + abs(ws_Fc_z(i,j,k)) + abs(ws_Fc_z(i,j,k-1)) &
+                            + abs(ws_su_cc_used(i,j,k)) + abs(e2v) &
+                            + abs(ws_store_gas(i,j,k)) + abs(ws_store_art(i,j,k)) + abs(ws_pc_res(i,j,k))
+                        acc(AUD_MG_RV_ABS) = acc(AUD_MG_RV_ABS) + cfg%dt * abs(rvv)
+                        acc(AUD_MG_RV_SCALE) = acc(AUD_MG_RV_SCALE) + cfg%dt * rvs
+                        xv = vp + cfg%dt * (ws_su_cc_used(i,j,k) - ws_store_gas(i,j,k) - ws_store_art(i,j,k))
+                        pa = mg_comp(i,j,k) + rfin * ve
+                        br1 = (rit - rpre) * xv
+                        br2 = (rpre - rfin) * xv
+                        bgr = cfg%dt * (rfin - rit) * ws_gadv_used(i,j,k)
+                        bgq = cfg%dt * (rit * ws_gadv_used(i,j,k) + gq)
+                        bx = -rit * cfg%dt * ws_pc_res(i,j,k)
+                        stg = rfin * cfg%dt * ws_store_gas(i,j,k)
+                        dd = abs(ee - elf - ecc - eart - (pa + br1 + br2 + bgr + bgq + bx))
+                        dsc = abs(ee) + abs(elf) + abs(ecc) + abs(eart) + abs(pa) + abs(br1) + abs(br2) &
+                            + abs(bgr) + abs(bgq) + abs(bx) + cfg%dt * sgm + abs(mg_vf(i,j,k)) &
+                            + gas%alpha(i,j,k) * rfin * m%vol(i,j,k) + abs(mg_ini(i,j,k))
+                        if (eosend_ok) then
+                            deos = mg_eos(i,j,k) - mg_eos_pre(i,j,k)
+                            peos = gas%alpha(i,j,k) * (rfin - rpre) * m%vol(i,j,k)
+                            acc(AUD_MG_EOSEND_ABS) = acc(AUD_MG_EOSEND_ABS) + abs(peos - deos)
+                            acc(AUD_MG_EOSEND_SCALE) = acc(AUD_MG_EOSEND_SCALE) + abs(deos) + abs(peos)
+                        end if
+                        if (c == 1) then
+                            acc(AUD_MG_PA_FREE) = acc(AUD_MG_PA_FREE) + pa
+                            acc(AUD_MG_BR1_FREE) = acc(AUD_MG_BR1_FREE) + br1
+                            acc(AUD_MG_BR2_FREE) = acc(AUD_MG_BR2_FREE) + br2
+                            acc(AUD_MG_BGR_FREE) = acc(AUD_MG_BGR_FREE) + bgr
+                            acc(AUD_MG_BGQ_FREE) = acc(AUD_MG_BGQ_FREE) + bgq
+                            acc(AUD_MG_BX_FREE) = acc(AUD_MG_BX_FREE) + bx
+                            acc(AUD_MG_STORE_FREE) = acc(AUD_MG_STORE_FREE) + stg
+                            acc(AUD_MG_DEC_ABS_FREE) = acc(AUD_MG_DEC_ABS_FREE) + dd
+                            acc(AUD_MG_DEC_SCALE_FREE) = acc(AUD_MG_DEC_SCALE_FREE) + dsc
+                        else
+                            acc(AUD_MG_PA_MULTI) = acc(AUD_MG_PA_MULTI) + pa
+                            acc(AUD_MG_BR1_MULTI) = acc(AUD_MG_BR1_MULTI) + br1
+                            acc(AUD_MG_BR2_MULTI) = acc(AUD_MG_BR2_MULTI) + br2
+                            acc(AUD_MG_BGR_MULTI) = acc(AUD_MG_BGR_MULTI) + bgr
+                            acc(AUD_MG_BGQ_MULTI) = acc(AUD_MG_BGQ_MULTI) + bgq
+                            acc(AUD_MG_BX_MULTI) = acc(AUD_MG_BX_MULTI) + bx
+                            acc(AUD_MG_STORE_MULTI) = acc(AUD_MG_STORE_MULTI) + stg
+                            acc(AUD_MG_DEC_ABS_MULTI) = acc(AUD_MG_DEC_ABS_MULTI) + dd
+                            acc(AUD_MG_DEC_SCALE_MULTI) = acc(AUD_MG_DEC_SCALE_MULTI) + dsc
+                        end if
+                    end if
                     select case (c)
                     case (0)
                         acc(AUD_MG_ERR_OUT) = acc(AUD_MG_ERR_OUT) + ee
@@ -1136,6 +1298,7 @@ contains
                         acc(AUD_MG_CC_ABS_FREE) = acc(AUD_MG_CC_ABS_FREE) + abs(cc)
                         acc(AUD_MG_ERR_ART_FREE) = acc(AUD_MG_ERR_ART_FREE) + eart
                         acc(AUD_MG_ART_ABS_FREE) = acc(AUD_MG_ART_ABS_FREE) + abs(eart)
+                        if (liq_ok) acc(AUD_MG_ELF_FREE) = acc(AUD_MG_ELF_FREE) + elf
                         if (cc_ok .and. liq_ok) acc(AUD_MG_REM2_ABS_FREE) = acc(AUD_MG_REM2_ABS_FREE) &
                             + abs(ee - elf - ecc - eart)
                     case default
@@ -1222,6 +1385,27 @@ contains
             end do
         end do
     contains
+        ! (WS-K10) una cara de gas enlazada de la celda: q es el caudal de la
+        ! cara (orientado de la celda - a la +), rm/rp las rho de esas dos
+        ! celdas en el Poisson y sgn = +1 si la celda es la -, -1 si es la +.
+        ! El dador es el de gmass (mod_pressure_3d): la celda - si q >= 0
+        subroutine gface(q, rm, rp, sgn)
+            real(dp), intent(in) :: q, rm, rp, sgn
+            real(dp) :: qo, rd
+            ! cara sin caudal (no enlazada o q = 0 exacto): no aporta, y asi no
+            ! se lee la rho de un halo de frontera fisica
+            if (q == 0.0_dp) return
+            qo = sgn * q
+            if (q >= 0.0_dp) then
+                rd = rm
+            else
+                rd = rp
+            end if
+            qgo = qgo + qo
+            gq = gq + (rd - rit) * qo
+            sgv = sgv + abs(q)
+            sgm = sgm + abs(rd * q)
+        end subroutine gface
         ! outlet: misma definicion que m_gas_out (celdas de electrodo del techo)
         logical function outlet(ii, jj, kk)
             integer, intent(in) :: ii, jj, kk

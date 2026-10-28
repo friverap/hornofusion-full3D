@@ -77,6 +77,15 @@ paso cae a 0.38 (veredicto {C-196}, «tasa» por la letra), pero e_multi por
 paso se queda en 0.93 y el plan cambia de signo {C-197}. Sin cambios en
 `src/` ni `tests/`.
 
+**Corrección posterior (WS-K10, {C-206}):** ese 0.93 y el cambio de signo
+del plan eran un ARTEFACTO. El primer paso de `k8s_dt05` es el transitorio
+del reinicio al acotar el dt del snapshot (1e-3 → 5e-4), y pone el 66 % del
+error del banco. Sin él, e_multi por paso con 0.5 ms es 0.32 veces el de
+1 ms con todos los pasos, y 0.35 (IC90 0.33-0.40) en los pasos con p_max <
+100 kPa: no se decide si baja más que linealmente ({C-211}, {C-223}). El
+plan por paso vale +3.7e-6, sin
+cambio de signo. El veredicto {C-196} sobre D no cambia (0.380).
+
 ## Proceso
 
 1. **Punto de partida.** K7 dejó la hipótesis del complemento sin decidir por
@@ -472,7 +481,9 @@ salida (`diff` de sus `config.dat`; `alpha_T` = 0.7 en ambas). Se retiró la fil
   - **Veredicto de {C-194}: SOPORTADA por la letra** {C-196}: q = 0.380,
     dentro de [0.35, 0.65] y cerca del borde. Cero `[CG] AVISO`; las tres
     identidades de masa del gas pasan.
-  - **Pero la descomposición no sostiene la lectura «tasa»** {C-197}: el
+  - **[RETIRADO por {C-206}: el 0.93 y el cambio de signo del plan eran el
+    transitorio del reinicio; ver «Corrección posterior» al inicio]**
+    **Pero la descomposición no sostiene la lectura «tasa»** {C-197}: el
     error multifase por paso apenas cambia (0.93), así que se comporta como
     una cantidad POR PASO; lo que cambia con dt es el plan, que pasa de
     +7.2e-6 a −5.2e-6 kg/paso. D baja porque cambia el plan, no porque el

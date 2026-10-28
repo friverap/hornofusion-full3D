@@ -110,6 +110,7 @@ contains
             ws_pc_unl_used, ws_pc_unl_used_valid, ws_pc_unl_used_id, &
             ws_su_cc_used, ws_su_cc_used_valid, ws_su_cc_used_id, ws_gadv_used, &
             ws_store_gas, ws_store_art, &
+            ws_Fgv_r, ws_Fgv_th, ws_Fgv_z, ws_rho_g_used, ws_pc_res, ws_Fgv_valid, ws_Fgv_id, &
             ws_pv_liq, ws_pv_liq_valid, ws_pv_liq_id, &
             ws_gas_perc, ws_gas_reach, ws_gas_perc_valid, &
             ws_bed, ws_bed_gas, ws_bed_liq, ws_bedl_f, ws_bub, ws_bub_f, ws_bed_valid
@@ -216,6 +217,9 @@ contains
         ! (WS-K8) demanda de compresibilidad aceptada por ESTE Poisson
         ws_su_cc_used = 0.0_dp; ws_su_cc_used_valid = .false.; ws_gadv_used = 0.0_dp
         ws_store_gas = 0.0_dp; ws_store_art = 0.0_dp
+        ! (WS-K10) caudal volumetrico del gas, rho usada y residuo de ESTE Poisson
+        ws_Fgv_r = 0.0_dp; ws_Fgv_th = 0.0_dp; ws_Fgv_z = 0.0_dp
+        ws_rho_g_used = 0.0_dp; ws_pc_res = 0.0_dp; ws_Fgv_valid = .false.
         if (ws_liq_cont_valid) then
             act_l = ws_liq_cont
         else
@@ -814,6 +818,28 @@ contains
         ! (WS-K8) almacenamiento de la fila como caudal [m3/s] (diagnostico)
         ws_store_gas = ws_store_gas * sh%pp
         ws_store_art = ws_store_art * sh%pp
+        ! (WS-K10) residuo de la fila por celda tras el CG, r = Su - A pp
+        ! (mismo orden de operaciones que matvec de mod_solver_3d; pp ya
+        ! trae los halos del CG). 0 en cell_type 0, salidas, filas no
+        ! activas y selladas (pp no se mueve ahi). Solo celdas propias y
+        ! solo con el audit activo (diagnostico).
+        if (cfg%audit_freq > 0) then
+        do k = kstart, kend
+            do j = jstart, jend
+                do i = istart, iend
+                    if (m%cell_type(i,j,k) == 0) cycle
+                    if (at_zmax .and. k == kend) then
+                        if (any(m%is_electrode(i,j,k,:))) cycle
+                    end if
+                    if ((.not. act_l(i,j,k) .and. .not. act_g(i,j,k)) .or. sealed(i,j,k)) cycle
+                    ws_pc_res(i,j,k) = Su(i,j,k) - (aP(i,j,k) * sh%pp(i,j,k) &
+                        - aW(i,j,k) * sh%pp(i-1,j,k) - aE(i,j,k) * sh%pp(i+1,j,k) &
+                        - aS(i,j,k) * sh%pp(i,j-1,k) - aN(i,j,k) * sh%pp(i,j+1,k) &
+                        - aB(i,j,k) * sh%pp(i,j,k-1) - aT(i,j,k) * sh%pp(i,j,k+1))
+                end do
+            end do
+        end do
+        end if
         if (probe_here) write(*,'(A,I8,A,ES11.3,A,6ES11.3)') '[PROBE-P] paso', probe_current_step(), &
             ' pp=', sh%pp(pi_,pj_,pk_), ' pp_vec(W,E,S,N,B,T)=', sh%pp(pi_-1,pj_,pk_), sh%pp(pi_+1,pj_,pk_), &
             sh%pp(pi_,pj_-1,pk_), sh%pp(pi_,pj_+1,pk_), sh%pp(pi_,pj_,pk_-1), sh%pp(pi_,pj_,pk_+1)
@@ -863,12 +889,20 @@ contains
                 do j = jstart, jend
                     do i = istart, iend
                         if (m%cell_type(i,j,k) == 0) cycle
-                        if (ws_Fg_lk_r(i,j,k) == 1) ws_Fg_r(i,j,k) = gmass(Fg_r(i,j,k) + &
-                            ag_r(i,j,k) * (sh%pp(i,j,k) - sh%pp(i+1,j,k)), i, j, k, i+1, j, k)
-                        if (ws_Fg_lk_th(i,j,k) == 1) ws_Fg_th(i,j,k) = gmass(Fg_th(i,j,k) + &
-                            ag_th(i,j,k) * (sh%pp(i,j,k) - sh%pp(i,j+1,k)), i, j, k, i, j+1, k)
-                        if (ws_Fg_lk_z(i,j,k) == 1) ws_Fg_z(i,j,k) = gmass(Fg_z(i,j,k) + &
-                            ag_z(i,j,k) * (sh%pp(i,j,k) - sh%pp(i,j,k+1)), i, j, k, i, j, k+1)
+                        ! (WS-K10) el caudal volumetrico se guarda (ws_Fgv) y la
+                        ! masa sale del MISMO valor: ws_Fg = gmass(ws_Fgv)
+                        if (ws_Fg_lk_r(i,j,k) == 1) then
+                            ws_Fgv_r(i,j,k) = Fg_r(i,j,k) + ag_r(i,j,k) * (sh%pp(i,j,k) - sh%pp(i+1,j,k))
+                            ws_Fg_r(i,j,k) = gmass(ws_Fgv_r(i,j,k), i, j, k, i+1, j, k)
+                        end if
+                        if (ws_Fg_lk_th(i,j,k) == 1) then
+                            ws_Fgv_th(i,j,k) = Fg_th(i,j,k) + ag_th(i,j,k) * (sh%pp(i,j,k) - sh%pp(i,j+1,k))
+                            ws_Fg_th(i,j,k) = gmass(ws_Fgv_th(i,j,k), i, j, k, i, j+1, k)
+                        end if
+                        if (ws_Fg_lk_z(i,j,k) == 1) then
+                            ws_Fgv_z(i,j,k) = Fg_z(i,j,k) + ag_z(i,j,k) * (sh%pp(i,j,k) - sh%pp(i,j,k+1))
+                            ws_Fg_z(i,j,k) = gmass(ws_Fgv_z(i,j,k), i, j, k, i, j, k+1)
+                        end if
                     end do
                 end do
             end do
@@ -879,6 +913,16 @@ contains
             call mpi_exchange_halos_3d_int(ws_Fg_lk_th, m%topo)
             call mpi_exchange_halos_3d_int(ws_Fg_lk_z,  m%topo)
             ws_Fg_valid = .true.
+            ! (WS-K10) gas%rho tiene halos coherentes aqui (la evaluo gmass);
+            ! solo con el audit activo (diagnostico)
+            if (cfg%audit_freq > 0) then
+                call mpi_exchange_halos_3d(ws_Fgv_r,  m%topo)
+                call mpi_exchange_halos_3d(ws_Fgv_th, m%topo)
+                call mpi_exchange_halos_3d(ws_Fgv_z,  m%topo)
+                ws_rho_g_used = gas%rho
+                ws_Fgv_valid = .true.
+                ws_Fgv_id = probe_current_step()
+            end if
         end if
 
         ! D2.6: el corrector usa el MISMO operador de gradiente que el

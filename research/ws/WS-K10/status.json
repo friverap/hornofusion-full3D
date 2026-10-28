@@ -1,0 +1,27 @@
+{
+ "ws": "WS-K10",
+ "meta": "G3",
+ "estado": "aprobado",
+ "ronda": 1,
+ "numerico": false,
+ "prediccion": "C-202",
+ "diff_sha": "660ee6ac158415539d27950bc74606e79e3076634ea745ee8b86f614b1a43134",
+ "test_quick": "ok",
+ "revisores": {
+  "auditor-eaf3d": {
+   "veredicto": "aprueba",
+   "ronda": 1
+  },
+  "revisor-evidencia": {
+   "veredicto": "aprueba",
+   "ronda": 1
+  },
+  "revisor-refutador": {
+   "veredicto": "aprueba",
+   "ronda": 1
+  }
+ },
+ "creado": "2026-10-27T21:22:06-06:00",
+ "actualizado": "2026-10-28T01:05:41-06:00",
+ "test_quick_sha": "660ee6ac158415539d27950bc74606e79e3076634ea745ee8b86f614b1a43134"
+}

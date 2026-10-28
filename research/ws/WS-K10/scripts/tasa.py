@@ -18,7 +18,17 @@ def r(d, col, salto):
     return st.mean(float(x[col]) for x in f) / dt, dt, len(f)
 
 
-dirs = sys.argv[1:4]
+GRUPOS = {"Bgq + err_cc": ("m_gas_bg_q_multi", "m_gas_err_cc_multi"),
+          "err_liq + A": ("m_gas_err_liq_all", "m_gas_pa_multi"),
+          "Br + Bgr": ("m_gas_brho_it_multi", "m_gas_brho_end_multi", "m_gas_bg_rho_multi")}
+args = sys.argv[1:]
+if args and args[0] == "--grupos":
+    for nombre, cols in GRUPOS.items():
+        v = [sum(r(d, c, 1)[0] for c in cols) for d in args[1:4]]
+        print(f"{nombre} por unidad de tiempo sin el paso 1 [lectura]: " + ", ".join(f"{x:+.4e}" for x in v)
+              + f" kg/s; cocientes {v[1]/v[0]:.3f}, {v[2]/v[1]:.3f}")
+    sys.exit(0)
+dirs = args[0:3]
 for col in ("m_gas_err_multi", "m_gas_bg_q_multi"):
     for salto in (1, 2, 4):
         v = [r(d, col, salto) for d in dirs]

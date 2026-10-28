@@ -141,3 +141,27 @@ Generado por `scripts/make_audit_glossary.py` desde el encabezado de `src/mod_au
 | `m_gas_err_art_free` | D | As m_gas_err_art_multi over the free-gas cells [kg] (WS-K8) |
 | `m_gas_art_abs_multi` | D | Sum of \|err_art\| over the multiphase cells [kg] (WS-K8) |
 | `m_gas_art_abs_free` | D | Sum of \|err_art\| over the free-gas cells [kg] (WS-K8) |
+| `m_gas_err_liq_free` | D | Liquid mismatch of the Poisson plan over the free-gas cells, rho_g (V_pois - V_eff) [kg] (WS-K10; needed for D of the free gas) |
+| `m_gas_pa_multi` | D | Piece A of the exact decomposition of D = e - err_liq - err_cc - err_art over the multiphase cells: A = comp + rho_f V_eff, the complement against the liquid volume the transport realized [kg] (WS-K10) |
+| `m_gas_pa_free` | D | As m_gas_pa_multi over the free-gas cells [kg] (WS-K10) |
+| `m_gas_brho_it_multi` | D | Piece Br1 over the multiphase cells: (rho_it - rho_pre) X, X = V_pois + dt (su_cc - store_gas - store_art); rho_it = gas density the last Poisson used for ws_Fg, rho_pre = density before the end-of-step EOS: the density change after the last Poisson inside the same outer iteration [kg] (WS-K10) |
+| `m_gas_brho_it_free` | D | As m_gas_brho_it_multi over the free-gas cells [kg] (WS-K10) |
+| `m_gas_brho_end_multi` | D | Piece Br2 over the multiphase cells: (rho_pre - rho_f) X, the density change of the end-of-step EOS [kg] (WS-K10) |
+| `m_gas_brho_end_free` | D | As m_gas_brho_end_multi over the free-gas cells [kg] (WS-K10) |
+| `m_gas_bg_rho_multi` | D | Piece Bgr over the multiphase cells: dt (rho_f - rho_it) gadv_used [kg] (WS-K10) |
+| `m_gas_bg_rho_free` | D | As m_gas_bg_rho_multi over the free-gas cells [kg] (WS-K10) |
+| `m_gas_bg_q_multi` | D | Piece Bgq over the multiphase cells: dt (rho_it gadv_used + sum_faces (rho_donor - rho_it) q_out): the assembly advective term against the one of the corrected gas flows, including the faces gas_adv skips (ALPHA_CUTOFF guard) [kg] (WS-K10) |
+| `m_gas_bg_q_free` | D | As m_gas_bg_q_multi over the free-gas cells [kg] (WS-K10) |
+| `m_gas_bx_multi` | D | Piece Bx over the multiphase cells: -rho_it dt r, r = Su - A pp the residual of the last Poisson row after the CG (ws_pc_res) [kg] (WS-K10) |
+| `m_gas_bx_free` | D | As m_gas_bx_multi over the free-gas cells [kg] (WS-K10) |
+| `m_gas_store_multi` | D | rho_f dt store_gas over the multiphase cells (data, not a piece of D: the part (1 - alpha_p) of it the EOS does not realize falls in err_cc) [kg] (WS-K10) |
+| `m_gas_store_free` | D | As m_gas_store_multi over the free-gas cells [kg] (WS-K10) |
+| `m_gas_dec_abs_multi` | D | Sum over multiphase cells of \|D - (A + Br1 + Br2 + Bgr + Bgq + Bx)\|: closure of the exact decomposition, roundoff (check mass_gas_decomp) [kg] (WS-K10) |
+| `m_gas_dec_abs_free` | D | As m_gas_dec_abs_multi over the free-gas cells [kg] (WS-K10) |
+| `m_gas_rv_abs` | D | dt sum over multiphase and free-gas cells of \|Q_g,out + Q_l,out - su_cc - E2 + store_gas + store_art + r\|: the last Poisson row in VOLUME, roundoff (check mass_gas_row_volume) [m^3] (WS-K10) |
+| `m_gas_rv_scale` | D | Gross scale of m_gas_rv_abs: dt sum of \|gas and liquid flow on each face\| + \|su_cc\| + \|E2\| + \|stores\| + \|r\| [m^3] (WS-K10) |
+| `m_gas_dec_skip` | D | Steps that reach the per-cell balance (m_gas_cells_skip = 0) without the decomposition (no valid liquid or compressibility plan, gas volumetric flow or pre-EOS density from this step, or both Plan D keys pc_fs_*) [-] (WS-K10) |
+| `m_gas_dec_scale_multi` | D | Gross roundoff scale of m_gas_dec_abs_multi: sum over multiphase cells of \|every term\| + cell gas mass + dt sum_faces \|rho_donor q\| [kg] (WS-K10) |
+| `m_gas_dec_scale_free` | D | As m_gas_dec_scale_multi over the free-gas cells [kg] (WS-K10) |
+| `m_gas_eosend_abs` | D | Sum over cells of \|alpha_g V (rho_f - rho_pre) - increment of the EOS hook in the end-of-step EOS\|: validates the split Br1/Br2, roundoff (check mass_gas_eos_end) [kg] (WS-K10) |
+| `m_gas_eosend_scale` | D | Scale of m_gas_eosend_abs: sum of the absolute values of both terms [kg] (WS-K10) |

@@ -22,7 +22,7 @@ program eaf_3d_simulator
     use mod_fields_3d
     use mod_output_hdf5
     use mod_restart
-    use mod_probe, only: probe_report, probe_set_step, probe_active
+    use mod_probe, only: probe_report, probe_set_step, probe_active, probe_current_step
     use mod_solver_3d
     use mod_boundary_3d
     use mod_energy_3d
@@ -34,7 +34,7 @@ program eaf_3d_simulator
     use mod_multiphase
     use mod_mixture_3d
     use mod_workspace, only: ensure_workspace, ws_liq_cont_prev, ws_sp_asl, ws_sp_es, ws_sp_mx, ws_Tsrc, ws_flux_valid, ws_Fc_valid, ws_cc, ws_cc_new, ws_cc_drop, ws_p_n, ws_Fg_valid, &
-                             ws_liq_cont, ws_liq_cont_valid
+                             ws_liq_cont, ws_liq_cont_valid, ws_rho_g_pre, ws_rho_g_pre_valid, ws_rho_g_pre_id
     use mod_solid_phase
     use mod_melting_3d
     use mod_scrap_collapse
@@ -795,6 +795,14 @@ program eaf_3d_simulator
         if (cfg%audit_freq > 0) &
             call audit_accumulate(liq, gas, gas_old%T, sh, mesh, cfg, ag_heat)
         call timer_stop(T_IO)
+        ! (WS-K10) gas%rho antes de la EOS final: parte el cambio de densidad
+        ! posterior al ultimo Poisson en el del mismo outer y el de aqui
+        if (cfg%audit_freq > 0 .and. allocated(ws_rho_g_pre)) then
+            ws_rho_g_pre = gas%rho
+            ws_rho_g_pre_valid = .true.
+            ws_rho_g_pre_id = probe_current_step()
+            call audit_mark_eos_pre()
+        end if
         if (cfg%solve_flow .and. cfg%solve_multiphase .and. cfg%solve_energy) then
             call update_properties(liq, gas, sh, mesh, cfg)
             call phase_exchange_halos(liq, mesh)

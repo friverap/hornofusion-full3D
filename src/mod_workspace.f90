@@ -80,6 +80,19 @@ module mod_workspace
     real(dp), allocatable :: ws_store_gas(:,:,:), ws_store_art(:,:,:)
     logical, save :: ws_su_cc_used_valid = .false.
     integer, save :: ws_su_cc_used_id = -huge(1)
+    ! (WS-K10) descomposicion EXACTA del error de masa del gas por celda: el
+    ! caudal VOLUMETRICO corregido del gas por las caras + del ultimo Poisson
+    ! [m3/s] (el de ws_Fg antes de multiplicar por la densidad del dador),
+    ! la gas%rho con que ese Poisson evaluo ws_Fg, el residuo de su fila tras
+    ! el CG, r = Su - A pp [m3/s] (0 en filas triviales, selladas y salidas)
+    ! y la gas%rho justo antes de la EOS final del paso. Solo los lee el
+    ! audit; validos dentro del paso (id): sin estado en el reinicio.
+    real(dp), allocatable :: ws_Fgv_r(:,:,:), ws_Fgv_th(:,:,:), ws_Fgv_z(:,:,:)
+    real(dp), allocatable :: ws_rho_g_used(:,:,:), ws_pc_res(:,:,:), ws_rho_g_pre(:,:,:)
+    logical, save :: ws_Fgv_valid = .false.
+    integer, save :: ws_Fgv_id = -huge(1)
+    logical, save :: ws_rho_g_pre_valid = .false.
+    integer, save :: ws_rho_g_pre_id = -huge(1)
     ! Plan D D2.2b: celdas con presion de fluido PARA EL LIQUIDO. Falsa en la
     ! celda cuyo liquido quedo sin ninguna cara abierta en el ultimo Poisson
     ! del paso (hidraulicamente sellada para el liquido, tenga o no gas): es
@@ -531,6 +544,10 @@ contains
         allocate(ws_su_cc_used, mold=ws_aW); ws_su_cc_used = 0.0_dp
         allocate(ws_gadv_used, mold=ws_aW); ws_gadv_used = 0.0_dp
         allocate(ws_store_gas, ws_store_art, mold=ws_aW); ws_store_gas = 0.0_dp; ws_store_art = 0.0_dp
+        allocate(ws_Fgv_r, ws_Fgv_th, ws_Fgv_z, mold=ws_aW)
+        ws_Fgv_r = 0.0_dp; ws_Fgv_th = 0.0_dp; ws_Fgv_z = 0.0_dp
+        allocate(ws_rho_g_used, ws_pc_res, ws_rho_g_pre, mold=ws_aW)
+        ws_rho_g_used = 0.0_dp; ws_pc_res = 0.0_dp; ws_rho_g_pre = 0.0_dp
         allocate(ws_liq_cont(-1:m%nr+2, -1:m%ntheta+2, -1:m%nz+2))
         ws_liq_cont = .true.
         allocate(ws_liq_cont_prev, ws_pv_active, mold=ws_liq_cont)

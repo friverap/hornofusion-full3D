@@ -322,10 +322,12 @@ guarda sin leer su causa.
   + e_free en la meseta (~−1.44e-5 kg/paso) es del orden del piso de
   C-109: el barrido NO distingue un sesgo de la fila de un error real de
   masa del gas que el plan no ve (C-193). Con dt 0.5 ms (k8s_dt05) D por paso cae a
-  0.38 (C-196, «tasa» por la letra), pero e_multi por paso se queda en 0.93:
-  el ERROR se comporta como cantidad POR PASO y lo que cambia con dt es el
-  plan (+7.2e-6 → −5.2e-6 kg/paso). Candidatos: operación de una vez por
-  paso (ρ_final − ρ_iterado, volfix, recorte) (C-197). No es enganche de fase: con 21 y 41 externas
+  0.38 (C-196, «tasa» por la letra). Que e_multi por paso se quedara en 0.93
+  (C-197) era un ARTEFACTO: el primer paso de k8s_dt05 es el
+  transitorio del acotado de dt del reinicio (66 % del error); sin el, e
+  0.5 ms / 1 ms = 0.32 con todos los pasos y 0.35 (IC90 0.33-0.40) en los
+  pasos con p_max < 100 kPa: no se decide si baja mas que linealmente
+  (C-223) y el plan no cambia de signo (C-206). No es enganche de fase: con 21 y 41 externas
   D1 queda a 3 % y 0.03 % de 20 y 40 (C-189 SOPORTADA en C-191); D no sigue
   al residuo paso a paso y su extrapolación a res_cont → 0 cae en la meseta
   (C-192, lectura). Coherente con el piso de la EOS de C-107/C-109. El origen de la meseta NO está medido
@@ -340,6 +342,63 @@ guarda sin leer su causa.
   corchetes ([comp + ρ_g V_eff] y [fl + ρ_g V_pois + cc + err_art]) por
   clase y paso en los bancos de 5 y de 20 externas del barrido,
   a pre-registrar (columnas nuevas en `src/`).
+  **WS-K10 (C-202..C-235)**: descomposicion EXACTA por celda y clase del
+  residuo D = e − err_liq − err_cc − err_art, con la fila del ultimo Poisson
+  tras el CG: D = A + Br1 + Br2 + Bgr + Bgq + Bx (`m_gas_pa_*`,
+  `m_gas_brho_it_*`, `m_gas_brho_end_*`, `m_gas_bg_rho_*`, `m_gas_bg_q_*`,
+  `m_gas_bx_*`; el Poisson exporta `ws_Fgv_*`, `ws_rho_g_used` y
+  `ws_pc_res` solo con `audit_freq > 0`; `main_3d` copia la rho previa a la
+  EOS final, `ws_rho_g_pre`, y marca el gancho de la EOS). Checks exactos a
+  redondeo con tolerancia 1e-13 de una escala BRUTA: `mass_gas_row_volume`
+  (fila en volumen), `mass_gas_decomp` (masa) y `mass_gas_eos_end` (valida el
+  reparto Br1/Br2, que el cierre en masa no ve porque telescopa); con CSV de
+  la primera version (sin `m_gas_dec_scale_*`) el checker usa la tolerancia
+  de entonces (C-221); «n/a» con escoria condensada o las dos claves
+  `pc_fs_*` (Plan D: caras de superficie libre fuera de la identidad). Los
+  cierres y Bx van en `ROUNDOFF_COLS` de `compare_audit.py`.
+  OJO: el snapshot judge_otp_280/eaf3d_00280000.h5 lo escribio judge_fh_275
+  con `pc_transport_f28` y `pc_outlet_total_pressure` APAGADAS; todo banco
+  que reinicia de el con el codigo actual las enciende y arranca con un
+  TRANSITORIO de 2-3 pasos (100 kPa / 163 m/s con 1 ms; 461 kPa / 300 m/s,
+  centinela, con 0.25 ms); desde eaf3d_00290000.h5 (ya con las claves) no
+  hay transitorio DE CLAVES (WS-K11, C-227), pero el primer paso tras acotar
+  dt se excluye siempre (C-230). Para comparar config o dt, reiniciar de un
+  snapshot escrito con las MISMAS claves.
+  DESDE 290 s, con 20 externas, CG 1000, ventana 290.00-290.06 s y UNA
+  trayectoria por dt (1 / 0.5 / 0.25 ms): r(e) = -4.93e-2 / -4.33e-2 /
+  -4.11e-2 kg/s. C-231 SOPORTADA por la letra (C-232: 0.877, predicho
+  0.888), pero con poca potencia: la rama de refutacion era inalcanzable
+  con los extremos ya vistos, y el criterio (b) no distinguia una pieza por
+  paso de su ausencia; la forma de los tres puntos refuta una pieza por paso
+  constante en err_liq_lk (C-234, C-235). Lectura: el error se comporta
+  mayormente como una tasa (c/r(1 ms) ~0.8, no pre-registrado). EN ESTA
+  CONTABILIDAD Bgq es la tasa dominante (-5.8e-2 a -5.1e-2 kg/s, 1.2 e);
+  puede ser la diferencia de dos terminos grandes no exportados. Con la
+  config de B1 (solo 1 ms): store_gas multifase x77 y gas libre -2.2e-5
+  kg/paso (C-233); su dependencia con dt NO esta medida.
+  COMPARAR dt DESDE UN REINICIO ESTA CONFUNDIDO: el primer paso acota el dt
+  del snapshot (transitorio; con 0.5 ms pone el 66 % del error, C-206) y la
+  presion tarda mas en asentarse (pasos con p_max >= 100 kPa: 0 %, 9 % y
+  51 % con 1 / 0.5 / 0.25 ms; max 592 kPa con 0.25 ms; C-216/C-219), y
+  con 0.25 ms la CENTINELA U_GAS_MAX salta a los 3 pasos del reinicio (300
+  m/s, 461 kPa; C-222): es el transitorio del cambio de claves (C-227). Con
+  estos bancos NO se separa tasa de truncamiento (C-212 sin decidir, C-213;
+  se retiraron las lecturas de C-214 «46 % fijo + dt^1.6» y de C-215 «dos
+  tasas»; err_liq + A CRECE por unidad de tiempo al bajar dt, C-217). Lo
+  medido, EN ESTA CONTABILIDAD de gadv y rho_f (no unica): en 280 s, con
+  cada dt, la pieza de mayor media es Bgq
+  (advectivo de ensamblaje frente al de los caudales corregidos, con las
+  caras de la guardia ALPHA_CUTOFF de `gas_adv`), y la densidad posterior al
+  ultimo Poisson pesa < 2 % de e en neto (Br2 y Bgr se cancelan). C-202
+  (H10: «esta en Br») SIN DECIDIR por la letra (C-204, C-208). Antes de
+  pre-registrar el reparto de Bgq: exportar las magnitudes brutas de sus dos
+  terminos (dt Σ ρ_it gadv_used y dt Σ_caras (ρ_dador − ρ_it) q_out); un
+  banco con la config de B1 en 340-345 s, donde el gas libre pesa 0.66 del
+  multifase (k10_base); snapshots ASENTADOS y con las mismas claves si se
+  compara dt; y
+  ojo con repetir M6-1 (advectivo con T_g rancia en celdas sin gas) y M7-5
+  (caudal fantasma de `ws_qin_cap`): Bgq apenas cambia con el regimen de
+  presion y err_cc si (C-216).
   INFO `mass_gas_cells` con la tasa por s y por kg de gas, que no depende
   del largo de la ventana: el cociente de mass_gas sí, y en ventanas largas
   de B1 tiende a ~1).
