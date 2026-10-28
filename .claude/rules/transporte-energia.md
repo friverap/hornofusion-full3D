@@ -261,7 +261,7 @@ guarda sin leer su causa.
   como máximo el 71 % de Σ|e|: en las celdas sin gas eos = su_cc = 0),
   comp/eos por conjunto y flujo de gas por la frontera del conjunto
   multifase (hecho en WS-K8);
-  **WS-K8 (C-169..C-193)**: el Poisson exporta la demanda de compresibilidad
+  **WS-K8 (C-169..C-197)**: el Poisson exporta la demanda de compresibilidad
   que sumó a `Su` (`ws_su_cc_used`), su término advectivo (`ws_gadv_used`) y
   el almacenamiento de la fila (`ws_store_gas` real, `ws_store_art`
   artificial: compliance, piso D2.4 y acústico del líquido). Plan del Poisson
@@ -319,7 +319,11 @@ guarda sin leer su causa.
   e_multi (el plan neto por paso es ~+7.2e-6 en todos los bancos), y e_multi
   + e_free en la meseta (~−1.44e-5 kg/paso) es del orden del piso de
   C-109: el barrido NO distingue un sesgo de la fila de un error real de
-  masa del gas que el plan no ve (C-193). No es enganche de fase: con 21 y 41 externas
+  masa del gas que el plan no ve (C-193). Con dt 0.5 ms (k8s_dt05) D por paso cae a
+  0.38 (C-196, «tasa» por la letra), pero e_multi por paso se queda en 0.93:
+  el ERROR se comporta como cantidad POR PASO y lo que cambia con dt es el
+  plan (+7.2e-6 → −5.2e-6 kg/paso). Candidatos: operación de una vez por
+  paso (ρ_final − ρ_iterado, volfix, recorte) (C-197). No es enganche de fase: con 21 y 41 externas
   D1 queda a 3 % y 0.03 % de 20 y 40 (C-189 SOPORTADA en C-191); D no sigue
   al residuo paso a paso y su extrapolación a res_cont → 0 cae en la meseta
   (C-192, lectura). Coherente con el piso de la EOS de C-107/C-109. El origen de la meseta NO está medido

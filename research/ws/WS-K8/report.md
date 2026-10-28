@@ -72,7 +72,10 @@ ciclo 2 resueltas con datos existentes {C-193} (la meseta de D es sobre todo
 la de e_multi y no distingue fila de error; D en los 2 pasos convergidos de
 `k8s_mo41`; brazo corto de la extrapolación; correlaciones con N = 5; fuentes
 que faltaban; pruebas de humo; citas de línea; fsat = 1 salvo excursiones
-intra-paso). Sin cambios en `src/` ni `tests/`.
+intra-paso). Prueba de dt 0.5 ms pre-registrada ({C-194}/{C-195}): D por
+paso cae a 0.38 (veredicto {C-196}, «tasa» por la letra), pero e_multi por
+paso se queda en 0.93 y el plan cambia de signo {C-197}. Sin cambios en
+`src/` ni `tests/`.
 
 ## Proceso
 
@@ -450,6 +453,33 @@ salida (`diff` de sus `config.dat`; `alpha_T` = 0.7 en ambas). Se retiró la fil
     convergido. Las tres identidades de masa del gas pasan en los cinco
     bancos.
     > [fuente: for d in campaigns/b1/k8s_mo{5,10,20,40,80} campaigns/b1/k8_base; do python3 tests/integration/check_audit.py $d | grep -E 'FAIL|mass_gas_rewrites|mass_gas_class_split|mass_gas_flux_closure'; done]
+- **¿Tasa o cantidad por paso? (tras el cierre)** {C-194}{C-195}{C-196}{C-197}.
+  Pre-registrado en {C-194} (commit `a0026cb`) y enmendado antes de correr
+  en {C-195} (`03f59a7`: el primer arranque abortó en la validación de la
+  config sin escribir datos). `campaigns/b1/k8s_dt05` repite `k8s_mo20` con
+  dt fijo de 0.5 ms (118 pasos en la misma ventana física):
+
+  | por paso [kg] | dt 1 ms (`k8s_mo20`) | dt 0.5 ms (`k8s_dt05`) | cociente |
+  |---|---|---|---|
+  | D (media) | −2.1694e-5 | −8.2371e-6 | **0.380** |
+  | D1 | −2.1053e-5 | −6.1662e-6 | 0.293 |
+  | e_multi (media) | −1.449e-5 | −1.348e-5 | 0.930 |
+  | e_multi + e_free (media) | −1.440e-5 | −1.339e-5 | 0.930 |
+  | plan (media) | +7.202e-6 | −5.243e-6 | −0.728 |
+
+  > [fuente: python3 research/ws/WS-K8/scripts/barrido_outer.py campaigns/b1/k8s_mo20 campaigns/b1/k8s_dt05; e_multi y plan con el comando de {C-197}; python3 tests/integration/check_audit.py campaigns/b1/k8s_dt05]
+
+  - **Veredicto de {C-194}: SOPORTADA por la letra** {C-196}: q = 0.380,
+    dentro de [0.35, 0.65] y cerca del borde. Cero `[CG] AVISO`; las tres
+    identidades de masa del gas pasan.
+  - **Pero la descomposición no sostiene la lectura «tasa»** {C-197}: el
+    error multifase por paso apenas cambia (0.93), así que se comporta como
+    una cantidad POR PASO; lo que cambia con dt es el plan, que pasa de
+    +7.2e-6 a −5.2e-6 kg/paso. D baja porque cambia el plan, no porque el
+    error sea una tasa. El criterio se escribió sobre D y no sobre e_multi.
+    El error de la meseta apunta a una operación que se hace una vez por
+    paso (ρ_final − ρ_iterado, volfix, recorte), y la dependencia del plan
+    con dt no está explicada.
 - **Almacenamiento artificial de la fila: despreciable** {C-173}: Σ|err_art|
   = 4.9e-8 kg (`m_gas_art_abs_multi` + `m_gas_art_abs_free`, `k8_cg1000`)
   frente a Σ|e| = 1.64e-2. Con el `pp` del último Poisson, el error no está
