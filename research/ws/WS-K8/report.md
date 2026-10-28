@@ -67,6 +67,13 @@ precisa en {C-190}; enganche de fase descartado con N = 21 y 41
 pre-registrado ({C-189}, veredicto {C-191}); correlación de D con el residuo
 y extrapolación en {C-192}. Sin cambios en `src/` ni `tests/`.
 
+Tras el cierre (commit `79dc27b`): objeciones no bloqueantes del panel del
+ciclo 2 resueltas con datos existentes {C-193} (la meseta de D es sobre todo
+la de e_multi y no distingue fila de error; D en los 2 pasos convergidos de
+`k8s_mo41`; brazo corto de la extrapolación; correlaciones con N = 5; fuentes
+que faltaban; pruebas de humo; citas de línea; fsat = 1 salvo excursiones
+intra-paso). Sin cambios en `src/` ni `tests/`.
+
 ## Proceso
 
 1. **Punto de partida.** K7 dejó la hipótesis del complemento sin decidir por
@@ -89,7 +96,7 @@ y extrapolación en {C-192}. Sin cambios en `src/` ni `tests/`.
      realiza la EOS y cae en err_cc, no en el residuo: ver Incertidumbre,
      {C-177}). Ojo: `su_cc` no es «demanda térmica + gadv»: es
      clamp(fsat·(−src + gadv) + acarreo/dt + S_rx/ρ_g)
-     (`src/mod_pressure_3d.f90:625-632`), y el plan resta `gadv` completo
+     (`src/mod_pressure_3d.f90:624-631`), y el plan resta `gadv` completo
      (`src/mod_audit.f90:1102-1103`). El plan usa la MISMA `su_cc` que la
      fila sumó a `Su` (`ws_su_cc_used` = `dcl`, ya con fsat, acarreo y
      tope) y la fila la realiza en flujos: por la identidad de la fila,
@@ -100,11 +107,15 @@ y extrapolación en {C-192}. Sin cambios en `src/` ni `tests/`.
      Σ|cc|_libre = 0.374 kg = 4070 Σ|e|_libre: basta Δρ/ρ ≈ 2e-4 para dar
      todo rem2_libre (7.94e-5 kg) {C-190}. Ese producto es el candidato (i)
      de abajo, no un término aparte de fsat, el acarreo o el tope, que como
-     tales pertenecen a err_cc frente a la EOS. En el gas libre fsat ≡ 1:
+     tales pertenecen a err_cc frente a la EOS. En el gas libre fsat = 1:
      `fsat_cell` (`src/mod_pressure_3d.f90:1019-1028`) solo baja de 1 con
      `ws_bed` > 0, que exige α_s ≥ `ALPHA_BED` = 1e-2, y la clase libre
      exige α_s < 1e-2 al inicio y al final del paso
-     (`src/mod_audit.f90:981`). Esto corrige la lectura de {C-181} que daba
+     (`src/mod_audit.f90:981` y `:1089`, `mg_cls0`), salvo excursiones de
+     α_s por encima de 1e-2 dentro del paso (colapso antes del lazo y
+     fusión tras la energía; `ws_bed` se evalúa en `multiphase_iteration`),
+     que no se han contado. No cambia nada: por {C-188} fsat se cancela en
+     rem2. Esto corrige la lectura de {C-181} que daba
      (1 − fsat)·gadv como término que la fila no pidió {C-188};
    - err_art = −ρ_g dt store_art, el almacenamiento ARTIFICIAL de la fila
      (compliance `PP_COMPLIANCE`, piso `alpha_g_comp_min` de D2.4 y acústico
@@ -126,9 +137,11 @@ y extrapolación en {C-192}. Sin cambios en `src/` ni `tests/`.
    (que no deciden) dio un plan peor que nada en el gas libre: se había usado
    ρ·dt·su_cc, que cuenta dos veces el término advectivo porque `ws_Fg` ya
    lleva la densidad del dador. Con su_cc − gadv, y añadiendo después el
-   almacenamiento de la fila, el plan explicaba 0.77–1.00 del gas libre y
-   0.73–0.76 del multifase en `arc_melt_n4` y `cold_10step_n8`, y 0.11 del
-   multifase en `bed_bath_rest_n4`. Todo esto antes de pre-registrar.
+   almacenamiento de la fila, el plan explicaba en el gas libre 0.77
+   (`arc_melt_n4`), 0.95 (`cold_10step_n8`) y 1.00 (`bed_bath_rest_n4`), y
+   en el multifase 0.73, 0.76 y 0.11. Todo esto antes de pre-registrar. Las
+   cifras se reproducen con la salida actual de `tests/out` (regenerada por
+   `make test-quick` con el binario final).
    > [fuente: tests/out/{arc_melt_n4,cold_10step_n8,bed_bath_rest_n4}/audit.csv | for d in tests/out/arc_melt_n4 tests/out/cold_10step_n8 tests/out/bed_bath_rest_n4; do python3 tests/integration/check_audit.py $d | grep mass_gas_cells_cc; done]
 4. **Instrumento** (`src/mod_workspace.f90`, `src/mod_pressure_3d.f90`,
    `src/mod_audit.f90`): el Poisson guarda la demanda de compresibilidad que
@@ -161,7 +174,8 @@ y extrapolación en {C-192}. Sin cambios en `src/` ni `tests/`.
    enmienda relaja el prerrequisito bit a bit de {C-169} DESPUÉS de ver que
    `k8_mo20` lo incumplía literalmente en `m_gas_err_multi` y
    `m_gas_err_abs_multi`; se registró antes del banco que decide (`4aa8363`,
-   13:59:32; `k8_cg1000` arranca a las 13:59:38) y de cualquier veredicto, y
+   13:59:32; `k8_cg1000` arranca a las 13:59:38; `git show -s --format=%ci
+   4aa8363` y `stat -f %SB campaigns/b1/k8_cg1000/run.log`) y de cualquier veredicto, y
    `k8_cg200` da el mismo veredicto (0.847), así que no cambia el resultado.
 7. **Corridas** en rutas propias, una a la vez, binario
    `campaigns/bin/eaf3d_k8_opt`, 59 pasos 280001–280059 desde
@@ -260,6 +274,7 @@ salida (`diff` de sus `config.dat`; `alpha_T` = 0.7 en ambas). Se retiró la fil
   3.627e-3, así que el CG truncado aporta ~60 % del error del gas libre; en
   el paso 1, 1.71e-4 frente a 5.80e-5 kg. El multifase casi no cambia
   (1.814e-2 → 1.797e-2). Ver Incertidumbre.
+  > [fuente del paso 1: python3 -c "import sys; sys.path.insert(0,'research/ws/WS-K8/scripts'); from barrido_outer import filas; [print(n, filas('campaigns/b1/'+n)[0]['m_gas_err_abs_free']) for n in ('k8_base','k8s_mo5')]"]
 - **Neto multifase: un desfase casi constante del residuo, que depende del
   lazo externo y cuyo origen no está medido**
   {C-175}{C-176}{C-177}{C-178}{C-181} (`k8_cg1000`). El reparto exacto por conjunto
@@ -280,7 +295,7 @@ salida (`diff` de sus `config.dat`; `alpha_T` = 0.7 en ambas). Se retiró la fil
   - En `k7v5_mo20_1k` (mismo reinicio, 20 externas, 999 pasos; idéntico a
     `k8_mo20` en m_liq, m_gas, E_liq, E_gas, p_max y dt hasta el paso
     280058; la fila 280059 difiere porque en `k8_mo20` el último dt se
-    recortó a t_final, 9.9999971e-4 frente a 1e-3), por tramos de 200 pasos Σ e_multi =
+    recortó a t_final, 9.9999971e-4 frente a 1e-3; python3 -c "import csv; a={x['step']:x for x in csv.DictReader(open('campaigns/b1/k8_mo20/audit.csv'))}; b={x['step']:x for x in csv.DictReader(open('campaigns/b1/k7v5_mo20_1k/audit.csv'))}; print([s for s in a if s in b and any(a[s][c]!=b[s][c] for c in ('m_liq','m_gas','E_liq','E_gas','p_max','dt'))], a['280059']['dt'])"), por tramos de 200 pasos Σ e_multi =
     −3.04e-3, −3.52e-3, −3.38e-3, −3.35e-3, −3.55e-3 kg, mientras Σ m_gas_out
     = −2.19e-3, +2.5e-5, −1.76e-3, +4.3e-4, −5.33e-3: en el tramo 200–400 el
     outlet no aporta nada y el déficit es el mismo. Se RETIRA la lectura
@@ -349,14 +364,18 @@ salida (`diff` de sus `config.dat`; `alpha_T` = 0.7 en ambas). Se retiró la fil
     0.0033, ambos ≤ 0.10; para la media, 0.011 y 0.037 ≤ 0.15. La
     refutación (|D1(80)| ≤ 0.5 |D1(20)|) no se cumple: el cociente es 0.99.
   - **Salvedad del veredicto.** El lazo externo no declara convergencia en
-    ningún paso de ningún banco, y sus residuos se estancan entre 20 y 80
-    externas. «Estructural» significa aquí que iterar más el lazo, tal como
+    ningún paso de los bancos que deciden {C-182}, y sus residuos se
+    estancan entre 20 y 80 externas (en `k8s_mo41` converge en 2 de 59
+    pasos, abajo). «Estructural» significa aquí que iterar más el lazo, tal como
     está, no lo quita; no está probado contra un lazo que sí converja.
-    Lectura que la acota, no veredicto {C-192}: D no sigue al residuo paso
-    a paso (corr(D, res_u) entre −0.33 y +0.30 y corr(D, res_cont) entre
-    −0.13 y +0.21 con 10/20/40/80 externas), y el ajuste lineal de D1 frente
-    a res_cont del paso 1 extrapola a res_cont → 0 en −2.065e-5 kg
-    (−2.000e-5 incluyendo N = 5), dentro de la meseta.
+    Lectura que la acota, no veredicto {C-192}{C-193}: con 10 a 80
+    externas D no sigue al residuo paso a paso (corr(D, res_u) entre −0.33
+    y +0.30 y corr(D, res_cont) entre −0.13 y +0.21); con 5 externas sí
+    algo (+0.387 y +0.461). El ajuste lineal de D1 frente a res_cont del
+    paso 1 extrapola a res_cont → 0 en −2.065e-5 kg (−2.000e-5 incluyendo
+    N = 5), pero tiene poco brazo: con N ≥ 20 res_cont del paso 1 solo va
+    de 6.5e-6 a 1.27e-5, el ajuste lo fijan N = 10 y N = 5 y no es evidencia
+    independiente de la meseta.
     > [fuente: python3 research/ws/WS-K8/scripts/desfase_residuo.py campaigns/b1/k8s_mo{10,20,40,80}; ídem con k8s_mo{5,10,20,40,80}]
   - **Enganche de fase descartado** {C-189}{C-191}. Los N que decidieron
     {C-182} son múltiplos de 20 (refutador, ronda 3, O2). Pre-registrado
@@ -374,13 +393,35 @@ salida (`diff` de sus `config.dat`; `alpha_T` = 0.7 en ambas). Se retiró la fil
     frente a 40), ≤ 0.10; de la media, 0.022 y 0.022, ≤ 0.15: SOPORTADA.
     Cero `[CG] AVISO`; las tres identidades de masa del gas pasan. Con 41
     externas el lazo declara convergencia en 2 pasos (280022 y 280058, con
-    33 y 32 externas): los únicos pasos convergidos de todo el barrido.
-  - **Relación con WS-K4** {C-192}: {C-107}/{C-109} vieron que la masa que
-    reescribe la EOS en 280.0–280.3 s se satura en un piso al pasar de 5 a
-    10 y 20 externas. K8 lo repite con el CG convergido, otra métrica (rem2
-    neto multifase), hasta 80 externas y con los residuos registrados, y es
-    coherente. La salvedad de {C-125} (convergencia del lazo no medida) ya
-    está medida: el lazo no converge.
+    33 y 32 externas): los únicos pasos convergidos de todo el barrido
+    (`grep '\[STEP\]' campaigns/b1/k8s_mo41/run.log | grep -v 'outer= *41'`).
+    En esos dos pasos D vale −2.183e-5 y −2.163e-5 kg, dentro de la meseta
+    (`k8s_mo40` en los mismos pasos, sin converger: −2.199e-5 y −2.193e-5):
+    evidencia parcial, de 2 pasos y no pre-registrada, a favor de
+    «estructural» frente a «meseta del iterado estancado» {C-193}.
+  - **Relación con WS-K4: la meseta de D es sobre todo la de e_multi**
+    {C-192}{C-193}. El plan neto por paso casi no cambia entre bancos, y
+    toda la dependencia de D con N está en e_multi:
+
+    | banco | `k8_base` | mo5 | mo10 | mo20 | mo21 | mo40 | mo41 | mo80 |
+    |---|---|---|---|---|---|---|---|---|
+    | e_multi [kg/paso] | −2.66e-5 | −3.09e-5 | −1.72e-5 | −1.45e-5 | −1.40e-5 | −1.43e-5 | −1.38e-5 | −1.46e-5 |
+    | plan [kg/paso] | +6.19e-6 | +7.27e-6 | +5.75e-6 | +7.20e-6 | +7.20e-6 | +7.18e-6 | +7.18e-6 | +7.68e-6 |
+    | D [kg/paso] | −3.28e-5 | −3.82e-5 | −2.30e-5 | −2.17e-5 | −2.12e-5 | −2.15e-5 | −2.10e-5 | −2.23e-5 |
+    | e_multi + e_free [kg/paso] | −4.34e-5 | −4.56e-5 | −1.80e-5 | −1.44e-5 | −1.43e-5 | −1.42e-5 | −1.41e-5 | −1.47e-5 |
+
+    > [fuente: comando de {C-193}]
+
+    En la meseta, e_multi + e_free vale ~−1.44e-5 kg/paso, del orden del
+    piso de {C-109} (−4.46e-3 kg en 300 pasos = −1.49e-5 kg/paso), aunque
+    allí la magnitud era otra: la masa que reescribe la EOS. K8 repite ese
+    piso; lo nuevo es el CG convergido, N hasta 80 con los residuos
+    registrados y el enganche de fase descartado. Por eso el barrido de
+    {C-182} no separa un sesgo de la identidad de fila de un error real de
+    masa del gas que el plan no ve: la meseta no favorece a los candidatos
+    del lado de la fila sobre los del lado del error. La salvedad de
+    {C-125} (convergencia del lazo no medida) ya está medida: el lazo no
+    converge salvo en 2 pasos de `k8s_mo41`.
   - **Con 5 externas D es mayor que la meseta, y cuánto depende del CG**
     {C-183}, corregido por {C-187}. Frente a la meseta de 20 externas
     (`k8s_mo20`: D1 −2.1053e-5, media −2.1694e-5):
@@ -461,8 +502,12 @@ salida (`diff` de sus `config.dat`; `alpha_T` = 0.7 en ambas). Se retiró la fil
 - **Origen de la meseta del neto multifase: no medido** {C-181}{C-184}. El
   barrido descarta que la meseta (~−2.1e-5 kg/paso desde 20 externas) sea
   truncamiento del lazo externo tal como está, pero ese lazo no converge en
-  ningún banco (residuos estancados entre 20 y 80 externas): no se puede
-  descartar que un lazo que sí converja la cambie. Con 5 externas el
+  los bancos que deciden (residuos estancados entre 20 y 80 externas; solo
+  2 pasos convergidos en `k8s_mo41`, con D dentro de la meseta {C-193}):
+  hace falta una ventana con el lazo convergido en todos los pasos, a
+  pre-registrar. La meseta es sobre todo la de e_multi, así que no
+  distingue un sesgo de la fila de un error de masa que el plan no ve
+  {C-193}. Con 5 externas el
   desfase es mayor que la meseta (1.71 / 1.51 veces con CG 20, la config de
   B1; 1.99 / 1.76 con CG 1000), en bancos que no decidían y sin reparto
   aditivo {C-187}. Siguiente pieza, por pre-registrar: partir rem2 en
@@ -487,7 +532,7 @@ salida (`diff` de sus `config.dat`; `alpha_T` = 0.7 en ambas). Se retiró la fil
   una HIPÓTESIS {C-181}: no está medido frente a un término que le falte al
   plan; candidatos: (ρ_final − ρ_iterado)·dt·(su_cc + E2 + líquido neto −
   store) y `gadv` de ensamblaje frente al corregido, con las caras que
-  excluye la guardia `ALPHA_CUTOFF` {C-188}. En el gas libre fsat ≡ 1, y
+  excluye la guardia `ALPHA_CUTOFF` {C-188}. En el gas libre fsat = 1 (salvo excursiones intra-paso de α_s, no contadas), y
   el acarreo y el tope se cancelan en rem2 con `su_cc`: pertenecen a err_cc
   frente a la EOS. Decidirlo exige columnas
   nuevas por clase, a pre-registrar.

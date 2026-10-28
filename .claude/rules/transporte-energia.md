@@ -261,7 +261,7 @@ guarda sin leer su causa.
   como máximo el 71 % de Σ|e|: en las celdas sin gas eos = su_cc = 0),
   comp/eos por conjunto y flujo de gas por la frontera del conjunto
   multifase (hecho en WS-K8);
-  **WS-K8 (C-169..C-192)**: el Poisson exporta la demanda de compresibilidad
+  **WS-K8 (C-169..C-193)**: el Poisson exporta la demanda de compresibilidad
   que sumó a `Su` (`ws_su_cc_used`), su término advectivo (`ws_gadv_used`) y
   el almacenamiento de la fila (`ws_store_gas` real, `ws_store_art`
   artificial: compliance, piso D2.4 y acústico del líquido). Plan del Poisson
@@ -275,8 +275,9 @@ guarda sin leer su causa.
   dentro de (ρ_final − ρ_iterado)/ρ·su_cc, de orden (Δρ/ρ)·Σ|cc|, que NO es
   despreciable en el gas libre (Σ|cc| = 4070 Σ|e|: basta Δρ/ρ ≈ 2e-4 para
   dar todo rem2_libre, C-190); como tales pertenecen a err_cc frente a la
-  EOS; en el gas libre fsat ≡ 1 (`fsat_cell` < 1 exige α_s ≥ ALPHA_BED =
-  1e-2, y la clase libre α_s < 1e-2) (C-188, corrige C-181). En el residuo rem2
+  EOS; en el gas libre fsat = 1 (`fsat_cell` < 1 exige α_s ≥ ALPHA_BED =
+  1e-2, y la clase libre α_s < 1e-2 al inicio y al final; excursiones
+  intra-paso no contadas) (C-188, corrige C-181). En el residuo rem2
   = e − plan la EOS y rx se CANCELAN (err_cc contiene la EOS): rem2 mide el
   cierre de la fila del Poisson en masa y que el complemento siga al líquido
   realizado, NO contrasta la EOS (C-178/C-180); la parte de store_gas que la
@@ -313,7 +314,12 @@ guarda sin leer su causa.
   `energy_balance` y `regime_gas` (u_gas 215 m/s) (C-187, corrige C-183). Salvedad: el lazo externo no declara convergencia en ningún paso
   de ningún banco (residuos estancados entre 20 y 80 externas), así que la
   meseta es la del iterado estancado (con 41 externas converge en 2 de 59
-  pasos; nunca en los demás). No es enganche de fase: con 21 y 41 externas
+  pasos, y ahí D = −2.18e-5 y −2.16e-5, dentro de la meseta: evidencia
+  parcial, C-193; nunca en los demás). La meseta de D es sobre todo la de
+  e_multi (el plan neto por paso es ~+7.2e-6 en todos los bancos), y e_multi
+  + e_free en la meseta (~−1.44e-5 kg/paso) es del orden del piso de
+  C-109: el barrido NO distingue un sesgo de la fila de un error real de
+  masa del gas que el plan no ve (C-193). No es enganche de fase: con 21 y 41 externas
   D1 queda a 3 % y 0.03 % de 20 y 40 (C-189 SOPORTADA en C-191); D no sigue
   al residuo paso a paso y su extrapolación a res_cont → 0 cae en la meseta
   (C-192, lectura). Coherente con el piso de la EOS de C-107/C-109. El origen de la meseta NO está medido
