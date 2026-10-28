@@ -4,7 +4,9 @@ Pregunta, del panel de WS-K10 ({C-222}): ¿por qué el banco `k10b_dt025` dispar
 centinela U_GAS_MAX (300 m/s, 461 kPa) a los 3 pasos de reiniciar desde
 `judge_otp_280/eaf3d_00280000.h5` con dt acotado a 0.25 ms? Es diagnóstico:
 sin cambios en `src/` ni `tests/`. La regla del proyecto exige diagnosticar
-toda centinela que se dispare.
+toda centinela que se dispare. Este cierre diagnostica el pico de
+`k10b_dt025`; quedan SIN diagnosticar la de L (jb 295 s, {C-261}), los
+450 kPa de `k11_dt025_s290` ({C-237}) y P_HYDRO_CAP en I y J ({C-277}).
 
 **Resultado en una línea.** En los primeros 60 ms tras reiniciar con
 0.25 ms, ENCENDER `pc_transport_f28` sobre un estado escrito sin ella es
@@ -27,13 +29,15 @@ multifase sin cara enlazada, nolink, y ≥ 20 pasos con p_max ≥ 100 kPa en
   del estado, formada con la dinámica sin f28 y erosionada con f28
   encendida, hace falta para la firma. «Cuenta la edad del cambio» es una
   HIPÓTESIS no probada y sin escala de decaimiento ({C-268}, {C-269}).
-  Se RETIRA que el final de B y F con celdas nolink la haga plausible:
+  Se RETIRA, para F, que su final con celdas nolink la haga plausible:
   `k11_dt025_tgfix`, casi gemelo de F, termina la ventana sin nolink y en
-  42-104 kPa ({C-273}; paso 13 e Incertidumbre).
+  42-104 kPa ({C-273}). B, que no tiene gemelo, termina con nolink (4
+  celdas, 109-150 kPa); de los 6 brazos con cambio y firma, B y F acaban
+  con nolink y G, I, J y tgfix sin él ({C-277}; paso 13 e Incertidumbre).
 - **La firma fuera de los bancos de 60 ms** ({C-269}). `k7v4_long` (1 ms,
   config de `k7v4_base`, que es la de `judge_otp_280` con 5 externas,
   desde `judge_otp_280/eaf3d_00280000.h5`, es decir, con el cambio de f28
-  en 280 s; binario `eaf3d_k7v4_opt`; coincide con `judge_otp_280` en
+  en 280 s; binario `eaf3d_k7v4_opt`, {C-135}; coincide con `judge_otp_280` en
   280002 y es otra trayectoria antes de 281 s) tiene nolink > 0 en 146 pasos
   entre los pasos 284669 y 285379 (t = 284.670-285.380 s; hasta 360
   celdas) y ninguno antes. En los 60 pasos desde 284669: 59 con nolink, 45
@@ -48,8 +52,8 @@ multifase sin cara enlazada, nolink, y ≥ 20 pasos con p_max ≥ 100 kPa en
     apaga; los reinicios, 1-16 celdas que fluctúan (máximo 6 en F, 11 en
     G, 16 en I, 13 en J);
   - **orden:** en `k7v4_long` el episodio empieza por u_gas (300 m/s en
-    284340) sin nolink; en los 329 pasos siguientes p_max queda en
-    36-87 kPa y no hay nolink, y nolink entra de 0 a 360 en 284669, el
+    284340) sin nolink; en los 328 pasos siguientes p_max queda en
+    35.9-85.3 kPa y no hay nolink ({C-277}), y nolink entra de 0 a 360 en 284669, el
     paso de su primer p_max ≥ 100 kPa; en los reinicios, nolink está
     desde el paso 2;
   - **relación con p** (mixta): pasos con p_max ≥ 100 kPa que llevan
@@ -58,10 +62,12 @@ multifase sin cara enlazada, nolink, y ≥ 20 pasos con p_max ≥ 100 kPa en
   Hipótesis de trabajo: NO es el mismo conjunto de celdas. Quedan dos
   lecturas sin discriminar: (i) un artefacto propio del cambio; (ii) el
   cambio con 0.25 ms dispara antes el mecanismo de las paradas de B1;
-  estos datos no apoyan (ii). El tamaño puede depender de la config
-  (`k7v4_long` usa CG 20 y 5 externas; la clase nolink depende de los
-  enlaces del último Poisson), así que tampoco refutan (ii)
-  (Incertidumbre).
+  estos datos no apoyan (ii). Tampoco la refutan: la comparación cruza la
+  convergencia del Poisson y el binario. `k7v4_long` (CG 20, 5 externas)
+  acumula ≥ 27001 resoluciones de CG sin converger de unas 27500, frente
+  a 0 avisos en los bancos de 0.25 ms (CG 1000), y la clase nolink
+  depende de los enlaces del último Poisson; su binario es del 25-oct,
+  anterior a `4d8570a` ({C-277}; Incertidumbre).
   > [fuente: python3 research/ws/WS-K11/scripts/nolink.py]
 - **No suficiente:** encender f28 da la firma en fh 280, 285 y 295 s
   (pares de una clave A/F, M/I y O/J) y en el estado de 280.06 s escrito
@@ -323,7 +329,7 @@ descarta. Más hallazgos:
      | `k11_c_dt025_jb280` (H16) | 0.25 ms | f28 sin cambio (jb 280 s) | 0/235 | — |
      | `k11_d_dt025_s300` (H16) | 0.25 ms | on, establecidas (300 s) | 0/235 | — |
      | `k11_e_dt025_jb280_otp` (H17) | 0.25 ms | f28 sin cambio, presión total encendida (jb 280 s) | 0/235 | — |
-     | `k11_f_dt025_fh280_f28` (H18) | 0.25 ms | solo f28 encendida en 280 s | 105/235, en los mismos pasos que `k10b_dt025` | 71 de 120 |
+     | `k11_f_dt025_fh280_f28` (H18) | 0.25 ms | solo f28 encendida en 280 s | 105/235, en los mismos pasos que `k10b_dt025` (`pares.py`: «mismos pasos nolink: True») | 71 de 120 |
 
      El máximo de `regime_p` de `k10b_dt025` (591.6 kPa, paso 280161) abre su
      último tramo con celdas nolink. Con 1 ms el pico (163.5 m/s en
@@ -467,7 +473,9 @@ descarta. Más hallazgos:
       así que su presencia no separa; su número sí, con margen pequeño
       (≤ 3 frente a ≥ 8 con el primero; ≤ 2 frente a ≥ 6 con el segundo).
     - **G descarta los dos confusores de R5:** el binario escritor (G lo
-      escribió el binario actual) y el acotado de dt (G no acota). Su
+      escribió el binario actual) y el salto de dt en el reinicio (G corre
+      con dt_min = dt_max = 0.25 ms, como A, de cuyo final arranca: no
+      hay salto de 1 a 0.25 ms). Su
       régimen ≥ 100 kPa ocupa el primer cuarto y luego cae, a diferencia de
       F y `k10b_dt025` (una trayectoria). La alternativa más sencilla es la
       dispersión entre trayectorias, no una propiedad del estado:
@@ -545,8 +553,9 @@ descarta. Más hallazgos:
       Q arrancan en el paso 299999 con t_final 300.06 s: los cinco tienen
       61 ms (239 filas tras quitar el paso 1), igual que G, I, J, K y L,
       frente a 60 ms (235 filas) de A-F, H, `k10b_dt025` y `k11_dt025_s290`.
-      No altera los veredictos: M-Q dan 0 pasos con nolink y 0 con
-      p_max ≥ 100 kPa en toda su ventana.
+      Es una desviación del pre-registro, conservadora: M-Q dan 0 pasos
+      con nolink y 0 con p_max ≥ 100 kPa en toda su ventana, y también en
+      sus primeras 235 filas, así que no altera los veredictos.
       > [fuente: grep t_final campaigns/b1/k11_[mnopq]_*/config.dat; wc -l de cada audit.csv; h22.py imprime las filas]
 
     - **Veredictos, por la letra:** H22 SOPORTADA {C-265} y H23 REFUTADA
@@ -570,11 +579,13 @@ descarta. Más hallazgos:
 
       Consecuencias: (a) con 20 brazos nolink > 0 sigue implicando cambio
       de f28; (b) la lectura «transitorio que decae hacia el nivel de f28
-      establecida» (Resultado) ya tiene un dato existente a favor en el
-      estado fh de 280 s: tgfix acaba en ~84 kPa de media con |Δp| de 18
-      kPa, cerca de C (80 / 11 kPa); (c) se retira que el final de B y F con
-      nolink haga plausible la edad del cambio, porque el casi gemelo de F
-      no lo tiene; (d) F frente a tgfix, y G frente a F, se leen como
+      establecida» (Resultado) tiene un dato COMPATIBLE en el estado fh de
+      280 s: tgfix acaba en ~84 kPa de media con |Δp| de 18 kPa, cerca de C
+      (80 / 11 kPa), pero compara un estado fh con uno jb y su casi gemelo
+      `k10b_dt025` acaba en 106.8 kPa con nolink ({C-277}); (c) se retira,
+      para F, que su final con nolink haga plausible la edad del cambio,
+      porque su casi gemelo no lo tiene; B, sin gemelo, acaba con nolink
+      ({C-277}); (d) F frente a tgfix, y G frente a F, se leen como
       dispersión entre trayectorias, sensibles a perturbaciones mínimas,
       no como una propiedad del estado, salvo que se pre-registre otra
       cosa; (e) el máximo de `regime_p` de `k10b_dt025` (591.6 kPa,
@@ -653,11 +664,12 @@ ventana, sin el paso 1:
   régimen trabado tras el cambio; (b) un transitorio del cambio que decae,
   en decenas o cientos de ms, hacia el nivel de f28 establecida con
   0.25 ms (~80 kPa en C y E). Las dos predicen casi todo sobre 100 kPa en
-  la ventana con medias que bajan. Para el estado fh de 280 s, (b) ya
-  tiene un dato existente a favor: `k11_dt025_tgfix` baja a 83.9 kPa de
-  media y 17.8 kPa de |Δp| en el último cuarto, sin nolink desde 280024
-  ({C-273}); que `k10b_dt025` no baje igual se lee como dispersión entre
-  trayectorias. En B, prolongar a ≥ 300 ms desde su `eaf3d_00290236.h5`
+  la ventana con medias que bajan. Para el estado fh de 280 s, (b) tiene
+  un dato compatible: `k11_dt025_tgfix` baja a 83.9 kPa de media y
+  17.8 kPa de |Δp| en el último cuarto, sin nolink desde 280024
+  ({C-273}); que `k10b_dt025` acabe en 106.8 kPa con nolink se lee como
+  dispersión entre trayectorias, y la cercanía al nivel de C (un estado
+  jb) puede ser casual ({C-277}). En B, prolongar a ≥ 300 ms desde su `eaf3d_00290236.h5`
   seguiría decidiéndolo; no se ha corrido. La tabla muestra además que,
   con 0.25 ms, los brazos jb/otp con f28 establecida no dan un estado
   tranquilo (C y E suben de 28 a ~80 kPa y alternan ~75/87 kPa hasta el
@@ -679,7 +691,10 @@ ventana, sin el paso 1:
 - **Consecuencia para las comparaciones desde 280 s (K5-K8, K10)** {C-227}{C-236}. Toda comparación de config o
   de dt desde `judge_otp_280/eaf3d_00280000.h5` lleva el pico de reinicio,
   también el arranque del propio `judge_otp_280`. Para comparar, lo que queda
-  en pie es reiniciar desde un snapshot escrito con las mismas claves. Con
+  en pie es reiniciar desde un snapshot escrito con las mismas claves y
+  con f28 establecida ≥ 5 s (el mínimo probado sin firma, jb 280 s): por
+  la continuidad del reinicio, un snapshot escrito con las mismas claves
+  60 ms después del cambio, como el final de B, arrastraría la firma. Con
   las claves apagadas, H15 ({C-239}) lo muestra: el snapshot de 280 s
   (escrito el 20-oct) no da pico con el binario actual. Con f28 ya
   establecida lo respaldan `k11_dt025_s290` (fase tranquila, {C-241}), el
@@ -916,7 +931,9 @@ ventana, sin el paso 1:
     `judge_fh_275`, y G es el estado de A 60 ms después. «5 de 6 estados
     fh» es una trayectoria muestreada en el tiempo, no una tasa. Existen
     estados escritos sin f28 por otras trayectorias, sin probar con
-    0.25 ms: `judge_e2_275` (misma config que fh salvo `audit_freq`; a
+    0.25 ms: `judge_e2_275` (misma config.dat que fh: `audit_freq` aparece dos
+    veces con el mismo valor; la causa de la otra trayectoria no está en la
+    config y su binario no consta en run.log, {C-277}; a
     280 s ya difiere de fh en |Δα_g| hasta 0.34 y |Δp| hasta 2.2 kPa) y
     `judge_fhe1_275` (fh con `pc_sat_open`), con snapshots de 280, 285,
     290, 295 y 299.999 s. Dato existente de no suficiencia en otro estado,
@@ -945,8 +962,9 @@ ventana, sin el paso 1:
   estado, medible, que se forma con la dinámica sin f28 y se erosiona con
   f28 encendida (candidatas: clase y lugar de las celdas que quedan
   nolink, o un campo del snapshot como `comp_carry`, abajo). Se retira
-  también que el final de B y F con nolink haga plausible la edad: el
-  casi gemelo de F, `k11_dt025_tgfix`, termina sin nolink ({C-273}).
+  también, para F, que su final con nolink haga plausible la edad: su
+  casi gemelo `k11_dt025_tgfix` termina sin nolink ({C-273}). B, sin
+  gemelo, termina con nolink ({C-277}).
   Además no tiene escala: `k7v4_long` da la firma 4.67 s después del
   cambio, justo por debajo del mínimo probado sin firma (5 s, jb 280 s),
   así que «edad del cambio» sin una escala de decaimiento puede absorber
@@ -974,7 +992,17 @@ ventana, sin el paso 1:
   corrida (paso 299999, no 300000). En cambio, ni el salto de `Tg_end`
   (|T_gas/Tg_end − 1| p99 0.20-0.23 % en todos los fh y 0.05 % en A
   280.06 s; máximo 6.8-44.8 %, 44.8 % en fh 295 s, que responde, y
-  44.5 % en fh 300 s, que no) ni Σ`liq_cont_prev` (1708-1755) separan.
+  44.5 % en fh 300 s, que no) ni Σ`liq_cont_prev` (1620 en rampbelow
+  255 s, 1707 en A 280.06 s, 1708-1755 en fh; {C-277}) separan.
+  Lectura posterior (refutador del ciclo 4, R2; {C-278}): las celdas de
+  chatarra sumergida (α_s ≥ ALPHA_BED, α_s < 0.1, α_l > 0.5) son 155-212
+  en los estados que responden y 43 en P; en los escritos con f28 hay
+  cifras parecidas (jb 280 s 217, jb 299.999 s 130, otp 300 s 52), así
+  que no es la propiedad X; podría ser un cofactor, con un solo negativo y
+  confundido con el tiempo. Lo discriminarían reinicios de 0.25 ms con f28
+  encendida y su control desde `judge_e2_275` 295 y 299.999 s y
+  `judge_fhe1_275` 299.999 s, que cubren además el linaje único; requiere
+  pre-registro.
   Con dos estados que no responden, uno a otro dt, es una variable
   candidata, no un predictor, y débil: `comp_carry` ≠ 0 es habitual en
   los estados escritos con f28, también en estados en pleno régimen de
@@ -1010,7 +1038,11 @@ ventana, sin el paso 1:
   1 ms, y comparar con los pasos 280002-280004 de F; antes, comprobar que
   ese reinicio reproduce el audit de `k7v4_long`. Variante (refutador
   R4): el mismo reinicio con 20 externas y CG 1000, para ver si las 360
-  celdas dependen de la config. Hipótesis de partida: no es el mismo
+  celdas dependen de la config o de la no convergencia (≥ 27001 CG sin
+  converger en `k7v4_long`), y con el binario actual, porque
+  `eaf3d_k7v4_opt` es del 25-oct, anterior a `4d8570a` (según git, el
+  código que fija los enlaces `ws_F*_lk` no cambió desde entonces; no
+  verificado con una corrida; {C-277}). Hipótesis de partida: no es el mismo
   conjunto de celdas ({C-275}: 360 celdas fijas frente a 1-16, y nolink
   después de u_gas en `k7v4_long` y desde el paso 2 en los reinicios).
   Que la familia de 284 s exista sin cambio (`judge_e2_275`, f28 apagada,
@@ -1105,7 +1137,7 @@ ventana, sin el paso 1:
   cerrada cambia supone reabrir workstreams cerrados; fuera de WS-K11
   (panel, ciclo 2, ronda 2, refutador R6).
 - **La regla de transporte** (`.claude/rules/transporte-energia.md`, párrafo
-  WS-K10/WS-K11, cabecera C-222..C-276) la corrigió el coordinador tras la
+  WS-K10/WS-K11, cabecera C-222..C-278) la corrigió el coordinador tras la
   ronda 2 del ciclo 3 con los textos que este reporte proponía: el nivel
   alternante con 0.25 ms no se separa entre f28 y linaje (auditor M1);
   «15 de 20 brazos con f28» y la edad del cambio como hipótesis sin el
@@ -1118,4 +1150,8 @@ ventana, sin el paso 1:
   (refutador R1 y R2) la corrigió de nuevo: la firma de `k7v4_long` y la
   del reinicio solo comparten el indicador nolink, con patrón distinto
   ({C-275}), y el dato de M20-2 fuera del arranque ni apoya ni refuta la
-  prohibición ({C-276}).
+  prohibición ({C-276}). Con las objeciones no bloqueantes del ciclo 4,
+  una tercera vez ({C-277}): `k7v4_long` es un reinicio en 280 s (auditor
+  B3), la convergencia del CG y el binario como confusores del tamaño
+  (refutador R4, auditor B4), la retirada solo para F (refutador R1) y
+  las centinelas que siguen sin diagnosticar (refutador R6).

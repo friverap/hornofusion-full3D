@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""WS-K11: duracion de los eventos de nivel centinela tras el reinicio (sin
-el paso 1): pasos con u_gas_max >= 200 m/s, pasos con p_max >= 300 kPa,
+"""WS-K11: duracion de los eventos con el criterio de pico de H15 tras el
+reinicio (sin el paso 1; no es el «nivel centinela de B1», u >= 299 m/s o
+p >= 300 kPa): pasos con u_gas_max >= 200 m/s, pasos con p_max >= 300 kPa,
 ultimo paso (contado desde P0) con alguno de los dos, y max u_gas_max desde
 P0+5. P0 = primera fila de audit.csv. Solo lectura.
 

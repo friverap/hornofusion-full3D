@@ -342,7 +342,7 @@ guarda sin leer su causa.
   corchetes ([comp + ρ_g V_eff] y [fl + ρ_g V_pois + cc + err_art]) por
   clase y paso en los bancos de 5 y de 20 externas del barrido,
   a pre-registrar (columnas nuevas en `src/`).
-  **WS-K10 (C-202..C-235; WS-K11 C-222..C-276)**: descomposicion EXACTA por celda y clase del
+  **WS-K10 (C-202..C-235; WS-K11 C-222..C-278)**: descomposicion EXACTA por celda y clase del
   residuo D = e − err_liq − err_cc − err_art, con la fila del ultimo Poisson
   tras el CG: D = A + Br1 + Br2 + Bgr + Bgq + Bx (`m_gas_pa_*`,
   `m_gas_brho_it_*`, `m_gas_brho_end_*`, `m_gas_bg_rho_*`, `m_gas_bg_q_*`,
@@ -359,21 +359,23 @@ guarda sin leer su causa.
   OJO: el snapshot judge_otp_280/eaf3d_00280000.h5 lo escribio judge_fh_275
   (20-oct) con `pc_transport_f28` y `pc_outlet_total_pressure` APAGADAS.
   WS-K11 (0.25 ms, una trayectoria por brazo; C-239, C-245, C-248, C-249,
-  C-255..C-257, C-265, C-266, C-268..C-276): en los primeros 60 ms tras
+  C-255..C-257, C-265, C-266, C-268..C-278): en los primeros 60 ms tras
   reiniciar con 0.25 ms, ENCENDER f28 sobre un estado escrito sin ella es
   NECESARIO y NO suficiente para la firma (>= 1 paso con celdas multifase
   sin cara enlazada, `m_gas_cells_nolink`, y >= 20 pasos con p_max >= 100
-  kPa en 60 ms). La firma NO es exclusiva de ese reinicio: a 1 ms y sin
-  reiniciar, k7v4_long (desde judge_otp_280/eaf3d_00280000.h5) la da desde
-  el paso 284669 (284.670 s; C-272), 4.67 s despues del cambio y junto a la parada de B1 de 284.3 s
+  kPa en 60 ms). La firma NO es exclusiva de ese reinicio: a 1 ms, 4.67 s
+  despues de reiniciar con el cambio de f28 (judge_otp_280/eaf3d_00280000.h5),
+  k7v4_long la da desde el paso 284669 (284.670 s; C-272), junto a la
+  parada de B1 de 284.3 s
   (146 pasos con nolink; ninguno antes). Solo comparte el indicador
   nolink > 0, con otro patron (C-275): k7v4_long tiene un bloque fijo de
   360 celdas (144 de 146 pasos) que entra 0.33 s DESPUES de que empiece
   el episodio por u_gas; los reinicios, 1-16 celdas que fluctuan desde el
   paso 2. Hipotesis de trabajo: no es el mismo conjunto de celdas; los
   datos no apoyan que el cambio con 0.25 ms dispare antes el mecanismo de
-  las paradas de B1, pero tampoco lo refutan (k7v4_long usa CG 20 y 5
-  externas). Lo separaria comparar clase y lugar de las celdas nolink con
+  las paradas de B1, pero tampoco lo refutan: k7v4_long usa CG 20 y 5
+  externas (>= 27001 resoluciones de CG sin converger de ~27500, frente a
+  0 avisos con CG 1000) y un binario del 25-oct (C-277). Lo separaria comparar clase y lugar de las celdas nolink con
   PROBE-P; el mecanismo esta abierto.
   - Pares de UNA clave (solo f28) con firma: fh 280 s (A/F), 285 s (M/I) y
     295 s (O/J; 285 y 295 s hasta P_HYDRO_CAP). En fh 290 s la firma se
@@ -388,8 +390,9 @@ guarda sin leer su causa.
     Entre los brazos con f28 encendida (15 de 20, con k11_dt025_tgfix),
     «sin cambio» y «f28 establecida >= 5 s» van siempre juntos. HIPOTESIS
     no probada y sin escala: lo que cuenta es la edad del cambio (k7v4_long
-    da la firma 4.67 s despues del cambio). El final con nolink de B y F NO
-    la hace plausible: su gemelo tgfix termina sin nolink (C-273). Lo
+    da la firma 4.67 s despues del cambio). El final con nolink de F NO
+    la hace plausible: su casi gemelo tgfix termina sin nolink (C-273); B,
+    sin gemelo, acaba con nolink (C-277). Lo
     decidiria una propiedad del estado medida o los snapshots de
     judge_e1w280_n15 (report.md, Incertidumbre); no corrido.
   - `pc_outlet_total_pressure`: no necesaria en fh 280 s (F, C-249), no
@@ -436,7 +439,9 @@ guarda sin leer su causa.
     de m202 frente a m203 (C-270, C-276).
   - Con las claves ya establecidas (judge_otp_280/eaf3d_00290000.h5) hubo
     con 0.25 ms picos aislados de hasta 450 kPa (paso 290093) sin nolink,
-    sin diagnosticar y no repetidos desde 300 s (C-245). El primer paso tras acotar dt se excluye
+    sin diagnosticar y no repetidos desde 300 s (C-245). Tambien siguen sin
+    diagnosticar U_GAS_MAX en L (C-261) y P_HYDRO_CAP en I y J (C-277).
+    El primer paso tras acotar dt se excluye
     siempre (C-230).
   Para comparar config o dt, reiniciar de un snapshot escrito con las MISMAS
   claves y con f28 establecida >= 5 s (minimo probado). Los bancos de

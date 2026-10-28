@@ -6,10 +6,12 @@ y filas de nivel centinela de B1 (u_gas_max >= 299 m/s o p_max >= 300 kPa)
 que llevan nolink, y el orden (primer paso nolink frente a la primera fila
 centinela). Solo lectura.
 
-Uso: python3 research/ws/WS-K11/scripts/nolink.py [dir ...]
+Uso: python3 research/ws/WS-K11/scripts/nolink.py [DIR ...]
+(DIR: nombre bajo campaigns/b1/ o ruta completa)
 """
 import collections
 import csv
+import os
 import sys
 
 DEF = ['k7v4_long', 'k11_f_dt025_fh280_f28', 'k11_g_dt025_a236_f28',
@@ -18,7 +20,8 @@ DEF = ['k7v4_long', 'k11_f_dt025_fh280_f28', 'k11_g_dt025_a236_f28',
 
 def main(dirs):
     for d in dirs:
-        a = list(csv.DictReader(open(f'campaigns/b1/{d}/audit.csv')))
+        ruta = d if os.path.isdir(d) else f'campaigns/b1/{d}'
+        a = list(csv.DictReader(open(f'{ruta}/audit.csv')))
         p0 = int(a[0]['step'])
         r = [x for x in a if int(x['step']) > p0 + 1]
         nl = [int(float(x['m_gas_cells_nolink'])) for x in r]
