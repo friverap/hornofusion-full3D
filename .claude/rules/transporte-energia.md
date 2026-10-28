@@ -342,7 +342,7 @@ guarda sin leer su causa.
   corchetes ([comp + ρ_g V_eff] y [fl + ρ_g V_pois + cc + err_art]) por
   clase y paso en los bancos de 5 y de 20 externas del barrido,
   a pre-registrar (columnas nuevas en `src/`).
-  **WS-K10 (C-202..C-235)**: descomposicion EXACTA por celda y clase del
+  **WS-K10 (C-202..C-235; WS-K11 C-222..C-276)**: descomposicion EXACTA por celda y clase del
   residuo D = e − err_liq − err_cc − err_art, con la fila del ultimo Poisson
   tras el CG: D = A + Br1 + Br2 + Bgr + Bgq + Bx (`m_gas_pa_*`,
   `m_gas_brho_it_*`, `m_gas_brho_end_*`, `m_gas_bg_rho_*`, `m_gas_bg_q_*`,
@@ -357,13 +357,96 @@ guarda sin leer su causa.
   `pc_fs_*` (Plan D: caras de superficie libre fuera de la identidad). Los
   cierres y Bx van en `ROUNDOFF_COLS` de `compare_audit.py`.
   OJO: el snapshot judge_otp_280/eaf3d_00280000.h5 lo escribio judge_fh_275
-  con `pc_transport_f28` y `pc_outlet_total_pressure` APAGADAS; todo banco
-  que reinicia de el con el codigo actual las enciende y arranca con un
-  TRANSITORIO de 2-3 pasos (100 kPa / 163 m/s con 1 ms; 461 kPa / 300 m/s,
-  centinela, con 0.25 ms); desde eaf3d_00290000.h5 (ya con las claves) no
-  hay transitorio DE CLAVES (WS-K11, C-227), pero el primer paso tras acotar
-  dt se excluye siempre (C-230). Para comparar config o dt, reiniciar de un
-  snapshot escrito con las MISMAS claves.
+  (20-oct) con `pc_transport_f28` y `pc_outlet_total_pressure` APAGADAS.
+  WS-K11 (0.25 ms, una trayectoria por brazo; C-239, C-245, C-248, C-249,
+  C-255..C-257, C-265, C-266, C-268..C-276): en los primeros 60 ms tras
+  reiniciar con 0.25 ms, ENCENDER f28 sobre un estado escrito sin ella es
+  NECESARIO y NO suficiente para la firma (>= 1 paso con celdas multifase
+  sin cara enlazada, `m_gas_cells_nolink`, y >= 20 pasos con p_max >= 100
+  kPa en 60 ms). La firma NO es exclusiva de ese reinicio: a 1 ms y sin
+  reiniciar, k7v4_long (desde judge_otp_280/eaf3d_00280000.h5) la da desde
+  el paso 284669 (284.670 s; C-272), 4.67 s despues del cambio y junto a la parada de B1 de 284.3 s
+  (146 pasos con nolink; ninguno antes). Solo comparte el indicador
+  nolink > 0, con otro patron (C-275): k7v4_long tiene un bloque fijo de
+  360 celdas (144 de 146 pasos) que entra 0.33 s DESPUES de que empiece
+  el episodio por u_gas; los reinicios, 1-16 celdas que fluctuan desde el
+  paso 2. Hipotesis de trabajo: no es el mismo conjunto de celdas; los
+  datos no apoyan que el cambio con 0.25 ms dispare antes el mecanismo de
+  las paradas de B1, pero tampoco lo refutan (k7v4_long usa CG 20 y 5
+  externas). Lo separaria comparar clase y lugar de las celdas nolink con
+  PROBE-P; el mecanismo esta abierto.
+  - Pares de UNA clave (solo f28) con firma: fh 280 s (A/F), 285 s (M/I) y
+    295 s (O/J; 285 y 295 s hasta P_HYDRO_CAP). En fh 290 s la firma se
+    midio encendiendo LAS DOS claves (N/B): f28 sola en 290 s no se probo.
+    El estado de 280.06 s escrito por el binario actual (G) da la firma sin
+    acotar dt (el binario escritor no es la causa), pero no tiene control
+    sin cambio. En fh 300 s encender f28 NO da la firma (P). Todos los
+    estados con cambio salen de UNA trayectoria (judge_fh_275): no es una
+    tasa (C-271).
+  - Ningun reinicio sin cambio la da en 60 ms con 0.25 ms: controles fh
+    280-295 s con las claves apagadas (15-20 kPa) y jb/otp con sus claves.
+    Entre los brazos con f28 encendida (15 de 20, con k11_dt025_tgfix),
+    «sin cambio» y «f28 establecida >= 5 s» van siempre juntos. HIPOTESIS
+    no probada y sin escala: lo que cuenta es la edad del cambio (k7v4_long
+    da la firma 4.67 s despues del cambio). El final con nolink de B y F NO
+    la hace plausible: su gemelo tgfix termina sin nolink (C-273). Lo
+    decidiria una propiedad del estado medida o los snapshots de
+    judge_e1w280_n15 (report.md, Incertidumbre); no corrido.
+  - `pc_outlet_total_pressure`: no necesaria en fh 280 s (F, C-249), no
+    suficiente en fh 280 s (H, C-257) ni en jb 280 s (E, C-248). Actua en
+    las aberturas con electrodo con gas: objetivo p0 - 1/2 rho u_in^2, con
+    u_in > 0 solo si hay reflujo; sin reflujo relaja hacia la columna de
+    gas p0. En los pasos 0-10 cambia u_gas_max y p_max en <= 1e-8 relativo
+    y m_gas en ~3e-7 (atribuirlo al reflujo no esta medido).
+  - Duracion: con 0.25 ms la persistencia >= 100 kPa NO es general. Ocupa
+    los 60 ms en F (120/235 pasos), B (235/235) y J (219/239); G cae a 0
+    tras el primer cuarto (27, 0, 0, 0), I baja a 6 en el segundo (59, 6,
+    22, 55). k11_dt025_tgfix, casi gemelo de F (coincide hasta 280026),
+    tiene nolink solo en 280002-280023 y medias de p_max por cuartos que
+    bajan de 138 a 84 kPa (103/235 pasos >= 100 kPa; C-273): F, tgfix y G
+    se leen como dispersion entre trayectorias, y el regime_p de 591.6 kPa
+    de k10b_dt025 depende de la trayectoria. Si decae despues de 60 ms, sin
+    decidir (C-250).
+  - U_GAS_MAX sola no identifica el cambio: jb 295 s con sus mismas claves
+    da 300.0 m/s en 1 paso (295002; 3 pasos >= 200 m/s) al acotar dt de 1 a
+    0.25 ms y se apaga, sin nolink (C-256, C-259, sin diagnosticar). Con
+    0.25 ms, los brazos jb/otp con f28 establecida alternan (C 76-80 kPa,
+    K 66-71, L 31-42, Q 34-52); los fh con las claves apagadas (A, H, M, N,
+    O) quedan planos en 14-18 kPa; f28 y linaje van juntos (no hay brazo jb
+    con f28 apagada), asi que no se separa si ese nivel lo pone f28 o el
+    estado. Solo se probo un sentido del cambio (encender f28 sobre fh);
+    apagarla sobre un estado escrito con ella no se ha corrido.
+  - Con 1 ms el pico se asienta en 13-31 pasos, y no en un estado tranquilo
+    sino en un ciclo de 2 pasos (23/43 y 28/49 kPa); con f28 ese regimen
+    alto y alternante (por media de p_max y |dp|) dura los 15-20 s medidos
+    (C-241), pero por CONTEO no explica las paradas de B1: con filas de nivel centinela
+    (u >= 299 m/s o p >= 300 kPa, cada 5 pasos, 280-295 s) el linaje sin
+    claves da 15, el de solo f28 1 y judge_otp_280 26, y el evento de
+    284.3 s aparece tambien sin f28 (C-251). f28 se adopto con un reinicio
+    que la encendia en 280 s; la evidencia de mas largo plazo sin cambio de
+    clave (jb 1 frente a fh 15 filas) no la contradice ni la apoya (una
+    trayectoria por linaje, C-260). La adopcion de f28 (2f0529b, centinela
+    2.6 % -> 0 %) NO esta contaminada por el pico de reinicio (sus filas de
+    nivel centinela estan en 281461-281502), pero M20-2 (0398a99, acople-pv
+    «no repetir») se decidio sobre el transitorio del cambio de f28 en
+    280003-280029. Fuera de esos pasos m202_280 da 66.1 kPa y 1 fila,
+    en el borde de la dispersion de sus hermanos (48.3-62.6 kPa, 0 filas,
+    scrfh_b hasta 287.7 m/s), y el commit cita ademas B1 255-258 s neutro:
+    ese dato ni apoya ni refuta M20-2; decidirlo pide un juez estadistico
+    de m202 frente a m203 (C-270, C-276).
+  - Con las claves ya establecidas (judge_otp_280/eaf3d_00290000.h5) hubo
+    con 0.25 ms picos aislados de hasta 450 kPa (paso 290093) sin nolink,
+    sin diagnosticar y no repetidos desde 300 s (C-245). El primer paso tras acotar dt se excluye
+    siempre (C-230).
+  Para comparar config o dt, reiniciar de un snapshot escrito con las MISMAS
+  claves y con f28 establecida >= 5 s (minimo probado). Los bancos de
+  WS-K5 a WS-K8 y WS-K10 que reinician de judge_otp_280/eaf3d_00280000.h5
+  llevan el cambio de f28 y sus ventanas incluyen el asentamiento del pico.
+  Los de 1599 filas con f28 encendida (C-270) reinician de
+  judge_fh_275/eaf3d_00280000.h5, de campos primarios identicos, y tambien
+  llevan el cambio (lista en
+  research/ws/WS-K11/report.md, C-251); cuanto cambia eso sus conclusiones
+  no esta evaluado.
   DESDE 290 s, con 20 externas, CG 1000, ventana 290.00-290.06 s y UNA
   trayectoria por dt (1 / 0.5 / 0.25 ms): r(e) = -4.93e-2 / -4.33e-2 /
   -4.11e-2 kg/s. C-231 SOPORTADA por la letra (C-232: 0.877, predicho
