@@ -12,7 +12,7 @@ numérico que decidir.
 
 ## Proceso
 
-1. **El defecto** {C-198}. `audit_write_step` acumulaba la masa neta que
+1. **El defecto** {C-198}. `audit_accumulate` acumulaba la masa neta que
    entra a las celdas de salida (`AUD_GAS_OUT`, columna `m_gas_out`) solo
    dentro de `if (gas_energy_on ...)`, con gas_energy_on = solve_energy
    .and. solve_flow .and. solve_multiphase (`src/mod_audit.f90`, bloque
@@ -100,7 +100,9 @@ numérico que decidir.
 
 - La única configuración sin energía y con dos fluidos probada es la de
   `cold_flow_noenergy` (sin arco, sin fusión, sin radiación): 10 pasos de
-  0.02 s casi en reposo (u_gas_max 0.0 m/s). Ejerce el camino, no un
+  0.02 s casi en reposo (columna `u_gas_max` de
+  `tests/out/cold_flow_noenergy_n4/audit.csv` ≤ 7.5e-5 m/s; check_audit lo
+  redondea a 0.0). Ejerce el camino, no un
   régimen con venteo fuerte.
 - `Ejecutable:` es la ruta tal como se pasó a `mpirun`; no identifica el
   contenido del binario (un mismo nombre puede apuntar a otro archivo).
@@ -120,3 +122,17 @@ numérico que decidir.
   comando `mpirun` no se guardó en un archivo: el que figura arriba es el
   declarado por el operador. Del log solo se comprueba que el binario es
   anterior al arreglo, que corrió con 4 procesos y que usó esa config.
+- **Tras el cierre (`2b65e11`), objeciones no bloqueantes del panel:**
+  - El PASS de `mass_gas_flux_closure` prueba que `m_gas_out` cierra el
+    reparto de flujos, no que sea el venteo correcto en signo y magnitud con
+    una medida independiente.
+  - `mass_gas` pasa aunque el venteo sea 0 (tolerancia relativa 0.5 sobre
+    max(|dm|, 1e-2·m_gas)): lo mostró la reproducción con el binario
+    previo. La única guardia de este defecto es `mass_gas_flux_closure` en
+    `cold_flow_noenergy_n4`, que solo corre en `test-full`.
+  - Los comentarios heredados de `cold_10step` en
+    `tests/integration/configs/cold_flow_noenergy.dat` («física de flujo
+    completa», dt y `max_outer` justificados con la energía) no aplican a
+    un banco sin energía; `get_command_argument(0, exe)` se llama sin
+    `length`/`status` (una ruta de más de 1024 caracteres se truncaría sin
+    aviso). Ambos tocan `tests/` o `src/` y quedan como pendiente.
