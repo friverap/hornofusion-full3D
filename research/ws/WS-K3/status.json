@@ -1,16 +1,27 @@
 {
  "ws": "WS-K3",
  "meta": "G3",
- "estado": "abierto",
- "ronda": 0,
+ "estado": "fallido",
+ "ronda": 2,
  "numerico": false,
  "prediccion": null,
- "diff_sha": null,
+ "diff_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
  "test_quick": null,
  "revisores": {
-  "auditor-eaf3d": null,
-  "revisor-evidencia": null,
-  "revisor-refutador": null
+  "auditor-eaf3d": {
+   "veredicto": "aprueba",
+   "ronda": 2
+  },
+  "revisor-evidencia": {
+   "veredicto": "aprueba",
+   "ronda": 2
+  },
+  "revisor-refutador": {
+   "veredicto": "aprueba",
+   "ronda": 2
+  }
  },
- "creado": "2026-10-22T17:31:49-06:00"
+ "creado": "2026-10-22T17:31:49-06:00",
+ "actualizado": "2026-10-29T01:11:47-06:00",
+ "cierre": "G3 sin objeto: Plan K no adoptado; 15 afirmaciones de diagnostico cerradas"
 }
