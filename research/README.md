@@ -37,9 +37,57 @@ Reglas (las verifica `ledger.py check`):
   predicción nueva; nunca se reinterpreta el resultado en el texto.
 - Las refutadas y fallidas son permanentes: antes de proponer un cambio se
   consulta `ledger.py open` (sección de refutadas) y `.claude/rules/acople-pv.md`.
+  Son ABSORBENTES (`validate`, WS-K13): ningún evento posterior cita con
+  `--ref` una hipótesis, predicción o resultado cuyo estado vigente sea
+  refutada o fallida, ni a sus enmiendas (ni nota, ni hija, ni otro juicio, ni
+  `sin_decidir`). Quien la retome registra una afirmación NUEVA sin `--ref`, o
+  con `--ref` a su VEREDICTO (práctica del registro: C-226 → C-225, C-263 →
+  C-256); `open` lista esas hijas no raíz mientras sigan abiertas.
+- Una PREDICCIÓN se juzga solo con un VEREDICTO: un `resultado` sobre ella o
+  su enmienda es una nota (propuesta) o un cierre `sin_decidir`. Una predicción
+  CERRADA (veredicto de cierre en su cadena, o estado vigente cerrado, incluido
+  `sin_decidir`) es DEFINITIVA: nada la cita ni a sus enmiendas, tampoco otro
+  veredicto. Una predicción con veredicto (aunque sea `en_disputa`) ya no admite
+  notas directas: la nota va con `--ref` al veredicto (como C-308 → C-093).
+- Un CIERRE (`resultado` refutada, fallida o `sin_decidir` con `--ref`) es el
+  sitio de las precisiones y retomas: admite una nota (`resultado` propuesta)
+  o una predicción/hipótesis hija, nada más, y no reabre lo que cierra. Así se
+  precisa o retoma una predicción definitiva, o una afirmación refutada,
+  fallida o `sin_decidir` (C-110 vía C-304).
+- Una hipótesis o resultado cerrado `sin_decidir` admite además una
+  PREDICCIÓN hija directa (la retoma), que la reabre; no admite notas
+  directas (van al cierre).
+- Las enmiendas solo cambian el criterio de una PREDICCIÓN.
+- Una hipótesis nace `propuesta` (como una predicción nace `pre-registrada`), y
+  ni una hija (predicción o hipótesis) ni una nota (`resultado` propuesta)
+  cambian el estado vigente de una PREDICCIÓN: a la predicción solo la juzga
+  su veredicto (WS-K13). Una enmienda encadenada también trae el criterio
+  NUEVO. Una hipótesis o resultado
+  soportado sí admite eventos posteriores: una hija o una nota lo reabre, y un
+  resultado puede refutarlo (C-031 → C-013).
 - Las cerradas `sin_decidir` las lista `ledger.py open` («cerradas sin
   decidir») y su motivo se lee con `ledger.py show C-nnn`. La pregunta que
-  dejaron abierta solo se retoma con una predicción NUEVA.
+  dejaron abierta solo se retoma con una predicción NUEVA. Si la afirmación es
+  una hipótesis o un resultado, la retoma la cita y la reabre (sale de esa
+  lista); si es una PREDICCIÓN (definitiva), la retoma cita su cierre o su
+  veredicto, la predicción sigue en la lista y la hija sale en «NO raíz
+  abiertas» de `open`.
+- Enmiendas y veredictos (WS-K13): la cadena de enmiendas es LINEAL; una
+  enmienda o un veredicto van sobre la ÚLTIMA enmienda (el criterio vigente),
+  nunca sobre un eslabón ya enmendado. Una predicción tiene a lo sumo UN
+  veredicto en toda su cadena: un segundo juicio es una predicción nueva. Una
+  afirmación ya juzgada o cerrada no admite enmiendas. `sin_decidir` solo
+  cierra una afirmación no cerrada cuya cadena no tenga veredicto de cierre
+  (soportada, refutada o fallida); tras un veredicto `en_disputa` sí cabe.
+- Estado vigente (`current_state`): se recorre el registro en orden y vale el
+  último evento que la cita con `--ref` (una enmienda la deja «enmendada») o el
+  último veredicto sobre una enmienda de su cadena, cada uno en SU posición.
+  Una nota que cite una enmienda no la juzga. Un veredicto conserva su propio
+  estado: las notas que lo precisan no lo cambian. El veredicto de una
+  predicción HIJA no se propaga a la madre: la madre se cierra con un
+  `resultado` propio (regla de WS-K12); `open` avisa «hija juzgada» junto a
+  cada madre abierta cuya hija DIRECTA (predicción con `--ref` a la madre) está
+  cerrada; las hijas colgadas de un resultado intermedio no se avisan.
 
 ## Working paper (`report.md`)
 
@@ -58,8 +106,34 @@ Reglas (las verifica `ledger.py check`):
    usuario; el reporte queda.
 2. `make test-quick` verde sobre el diff staged → `ws-set WS test_quick=ok diff_sha=auto`.
 3. Si el cambio es numérico: predicción pre-registrada con veredicto.
-4. El hook `guard_cierre.sh` bloquea `git commit` de `src/` o `tests/` si
-   `ledger.py gate` no pasa para ese diff exacto.
+4. El hook `guard_cierre.sh` bloquea `git commit` de `src/`, `tests/`,
+   `scripts/research/`, `.claude/hooks/`, `.claude/workflows/`,
+   `.claude/agents/` o `.claude/settings.json` (la herramienta del registro,
+   el panel y su conexión, WS-K13) si `ledger.py gate` no pasa para ese diff
+   exacto; `diff_sha` cubre esas rutas (`GATED` en `ledger.py`). La compuerta
+   la decide el `ledger.py` de HEAD (la herramienta ya aprobada), no el staged
+   ni el del disco; el del índice solo si HEAD no lo tiene, y el del disco solo
+   si tampoco el índice (repo nuevo). Borrar o renombrar la herramienta no
+   apaga la compuerta (`git diff --cached --no-renames`). Consecuencia: el
+   commit que cambia la propia compuerta (`staged_sha`, `GATED`,
+   `gate_errors`) se juzga con la de HEAD, así que su `diff_sha` y su
+   `test_quick` se fijan con el `ledger.py` de HEAD (`git show
+   HEAD:scripts/research/ledger.py > $T; python3 $T ws-set ...`). Para atar
+   el resto del cambio, `status.json` lleva además `diff_sha_gated` (sha256 de
+   `git diff --cached -- <rutas de GATED>`), y justo antes del commit de
+   arranque se comprueba a mano que el staged lo reproduce.
+   Límite: Claude Code ejecuta el `guard_cierre.sh` del DISCO, así que un hook
+   debilitado decide su propio commit; su cambio exige panel solo mientras el
+   hook vigente sea el honesto.
+
+Estados de un workstream (`status.json`): `abierto`, `en_revision`,
+`aprobado` (el panel aprobó el reporte), `sin_terminar` (sin consenso en 3
+rondas) y `fallido`: el panel aprobó por unanimidad un reporte de CIERRE que
+concluye que la meta no se cumplió (refutada o sin objeto). Los veredictos de
+los revisores quedan en `status.json` y la clave `cierre` dice el motivo en
+una línea (`ledger.py open` la muestra). `ledger.py check` lo exige: un
+`fallido` sin `cierre` o sin los tres «aprueba» en la ronda vigente es error.
+Un workstream `fallido` no abre la compuerta de commit.
 
 ## Reportar al usuario
 

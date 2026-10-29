@@ -1,0 +1,9 @@
+# diff_sha que fijo `ledger.py ws-set WS-K13 estado=en_revision diff_sha=auto` al lanzar cada ciclo
+# del panel (copiado de status.json en cada lanzamiento; status.json se sobrescribe).
+ciclo1 106ba79ba0499daae7fabecad1177e84805a3b627fef77c950c6217a31da7d3c  (src, tests)
+ciclo2 351c1e5f93db158b914517d2f85b7c4955625ffb60586b70aabd3a1f280b8d2d  (src, tests, scripts/research)
+ciclo3 302baba47975b9677ea883a224eac31c196d8de5962d01dc70ac4f3c74d9e5c0  (src, tests, scripts/research, .claude/hooks, .claude/workflows)
+ciclo4 d86e308531ff47495f02c6ed513dc50a7c0bd00de3364c1857c883d464091a8d  (src, tests, scripts/research, .claude/hooks, .claude/workflows, .claude/agents, .claude/settings.json)
+ciclo5 85191384dfc0d08e2cc9b3c25ef6029c12f7be486bfb1e358e6edb4252fa0459  (src, tests: formula de HEAD, commit de arranque); todas las rutas de GATED: 571806d2d8fae89f7003a6b7d44e0e6c831c87624f8bbf2f60b3a28cedc404cc
+ciclo6 e648eeff5f5869af8f0e62fa5f0caf902e750dca30e7b4bb449d4ad24df4aa09  (src, tests: formula de HEAD); diff_sha_gated b0cd7c6585fcaa02c6194b1fc8996d90f1b8f6da7a4cbd881335988390c45675
+ciclo7 e9e5211c92e563e84ab12ebf5535c34a08d5cc89b8ce67d0515adb6ed7f844a7  (src, tests: formula de HEAD); diff_sha_gated f1b8e6ba1f42a7ea871fe0231fc7db9d1a6e6dc4862322f33c85e8ef5d447c96

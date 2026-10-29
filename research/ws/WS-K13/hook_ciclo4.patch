@@ -1,0 +1,47 @@
+diff --git a/.claude/hooks/guard_cierre.sh b/.claude/hooks/guard_cierre.sh
+index 8d5e470..1ae1d02 100755
+--- a/.claude/hooks/guard_cierre.sh
++++ b/.claude/hooks/guard_cierre.sh
+@@ -3,8 +3,11 @@
+ # co-investigador (research/README.md; AI co-mathematician, arXiv 2605.06651
+ # §3.3-3.4: el trabajo no se marca terminado hasta que pasan los tests y TODOS
+ # los revisores aprueban).
+-#   1. `git commit` cuyo staged toque src/ o tests/ (salvo tests/golden y
+-#      tests/research) exige `scripts/research/ledger.py gate` OK para ESE diff:
++#   1. `git commit` cuyo staged toque src/, tests/ (salvo tests/golden y
++#      tests/research), scripts/research/, .claude/hooks/, .claude/workflows/,
++#      .claude/agents/ o .claude/settings.json (la herramienta del registro y el
++#      panel, WS-K13) exige
++#      `scripts/research/ledger.py gate` OK para ESE diff (GATED en ledger.py):
+ #      workstream aprobado por los tres revisores en la misma ronda,
+ #      test_quick=ok, diff_sha del staged y, si es numerico, prediccion
+ #      pre-registrada juzgada.
+@@ -149,13 +152,25 @@ for rdir, args in commits:
+         continue   # otro repo
+     staged = subprocess.run(["git", "-C", top, "diff", "--cached", "--name-only"],
+                             capture_output=True, text=True).stdout.split()
+-    gated = [f for f in staged if (f.startswith("src/") or f.startswith("tests/"))
++    gated = [f for f in staged if f.startswith(("src/", "tests/", "scripts/research/", ".claude/hooks/",
++                                                 ".claude/workflows/", ".claude/agents/",
++                                                 ".claude/settings.json"))
+              and not f.startswith("tests/golden/") and not f.startswith("tests/research/")]
+     if not gated:
+         continue
+     env = dict(os.environ, RESEARCH_ROOT=top)
+-    r = subprocess.run([sys.executable, os.path.join(top, "scripts", "research", "ledger.py"), "gate"],
+-                       capture_output=True, text=True, cwd=top, env=env)
++    # la compuerta la decide el ledger.py STAGED (el que ata diff_sha), no el del disco (WS-K13)
++    import tempfile
++    staged_l = subprocess.run(["git", "-C", top, "show", ":scripts/research/ledger.py"],
++                              capture_output=True, text=True).stdout
++    if not staged_l:   # sin version en el indice (repo sin la herramienta versionada): la del disco
++        staged_l = open(os.path.join(top, "scripts", "research", "ledger.py")).read()
++    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as tf:
++        tf.write(staged_l)
++    try:
++        r = subprocess.run([sys.executable, tf.name, "gate"], capture_output=True, text=True, cwd=top, env=env)
++    finally:
++        os.unlink(tf.name)
+     if r.returncode == 0:
+         continue
+     if ESCAPE:

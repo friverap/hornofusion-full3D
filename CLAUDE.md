@@ -84,8 +84,8 @@ Replica de *AI co-mathematician* (arXiv 2605.06651); convenciones en
 experimento → `research/ws/<WS>/report.md` (afirmaciones `{C-nnn}`, fuente
 de cada numero) → `/workstream` (panel auditor-eaf3d + revisor-evidencia +
 revisor-refutador, unanimidad, max 3 rondas) → `make test-quick` →
-commit. El hook `guard_cierre.sh` bloquea commits de `src/`/`tests/` sin esa
-compuerta para el diff exacto; `research/ledger.jsonl` es append-only
+commit. El hook `guard_cierre.sh` bloquea commits de `src/`/`tests/`/
+`scripts/research/`/`.claude/{hooks,workflows,agents,settings.json}` sin esa compuerta para el diff exacto; `research/ledger.jsonl` es append-only
 (`scripts/research/ledger.py`). Estados al usuario SOLO desde el registro
 (`/estado`): aplicado ≠ verificado ≠ cerrado. Un resultado que no cumple su
 criterio pre-registrado es `refutada`; cambiar el criterio exige `enmienda`

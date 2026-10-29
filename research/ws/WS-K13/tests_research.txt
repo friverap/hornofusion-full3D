@@ -1,0 +1,302 @@
+test_borrar_la_herramienta_no_apaga_la_compuerta (test_guard_cierre.GuardCierreTest.test_borrar_la_herramienta_no_apaga_la_compuerta) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmph_6ef17v/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmph_6ef17v/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmph_6ef17v/src/a.f90' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_compuerta_completa_y_diff_cambiado (test_guard_cierre.GuardCierreTest.test_compuerta_completa_y_diff_cambiado) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp311p7bmx/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp311p7bmx/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp311p7bmx/src/a.f90' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp311p7bmx/src/a.f90' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_docs_allow (test_guard_cierre.GuardCierreTest.test_docs_allow) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp7rnhzmmg/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp7rnhzmmg/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp7rnhzmmg/docs/a.md' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_escape_queda_en_registro (test_guard_cierre.GuardCierreTest.test_escape_queda_en_registro) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpdebvnjm0/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpdebvnjm0/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpdebvnjm0/src/a.f90' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:143: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpdebvnjm0/research/ledger.jsonl' mode='r' encoding='UTF-8'>
+  self.assertIn("SIN compuerta", open(os.path.join(self.d, "research", "ledger.jsonl")).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_flags_que_saltan_staged (test_guard_cierre.GuardCierreTest.test_flags_que_saltan_staged) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp3njlp1i1/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp3njlp1i1/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp3njlp1i1/docs/b.md' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_herramienta_del_registro_deny (test_guard_cierre.GuardCierreTest.test_herramienta_del_registro_deny) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpnvbhy8ee/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpnvbhy8ee/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:57: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/frariv/Horno/hornofusion-full3D/scripts/research/ledger.py' mode='r' encoding='UTF-8'>
+  self.stage("scripts/research/ledger.py", open(LEDGER).read() + "# cambio\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpnvbhy8ee/scripts/research/ledger.py' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_hook_y_workflow_deny (test_guard_cierre.GuardCierreTest.test_hook_y_workflow_deny) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpbb1ou61q/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpbb1ou61q/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpbb1ou61q/.claude/hooks/x.sh' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpbb1ou61q/.claude/workflows/x.js' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpbb1ou61q/.claude/agents/x.md' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpbb1ou61q/.claude/settings.json' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_ledger_append_only (test_guard_cierre.GuardCierreTest.test_ledger_append_only) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpagerxwec/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpagerxwec/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_ledger_permisivo_en_disco_no_decide (test_guard_cierre.GuardCierreTest.test_ledger_permisivo_en_disco_no_decide) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpcxbox4br/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpcxbox4br/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:100: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpcxbox4br/scripts/research/ledger.py' mode='r' encoding='UTF-8'>
+  src = open(lp).read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:101: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpcxbox4br/scripts/research/ledger.py' mode='w' encoding='UTF-8'>
+  open(lp, "w").write(src.replace("def gate_errors(st, sha, ev):\n", "def gate_errors(st, sha, ev):\n    return []\n"))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpcxbox4br/src/a.f90' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_ledger_permisivo_staged_no_decide (test_guard_cierre.GuardCierreTest.test_ledger_permisivo_staged_no_decide) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpu_ozi_kp/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpu_ozi_kp/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:110: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpu_ozi_kp/scripts/research/ledger.py' mode='r' encoding='UTF-8'>
+  src = open(lp).read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:111: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpu_ozi_kp/scripts/research/ledger.py' mode='w' encoding='UTF-8'>
+  open(lp, "w").write(src.replace("def gate_errors(st, sha, ev):\n", "def gate_errors(st, sha, ev):\n    return []\n"))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpu_ozi_kp/src/a.f90' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_otros_comandos_no_tocados (test_guard_cierre.GuardCierreTest.test_otros_comandos_no_tocados) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpf34m_06t/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpf34m_06t/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpf34m_06t/src/a.f90' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_quitarla_del_indice_no_usa_la_del_disco (test_guard_cierre.GuardCierreTest.test_quitarla_del_indice_no_usa_la_del_disco) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpaqmo5efp/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpaqmo5efp/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:132: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpaqmo5efp/scripts/research/ledger.py' mode='r' encoding='UTF-8'>
+  src = open(lp).read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:134: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpaqmo5efp/scripts/research/ledger.py' mode='w' encoding='UTF-8'>
+  open(lp, "w").write(src.replace("def gate_errors(st, sha, ev):\n", "def gate_errors(st, sha, ev):\n    return []\n"))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpaqmo5efp/src/a.f90' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_renombrar_la_herramienta_no_apaga_la_compuerta (test_guard_cierre.GuardCierreTest.test_renombrar_la_herramienta_no_apaga_la_compuerta) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpl3blsle4/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpl3blsle4/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_ruta_no_ascii_deny (test_guard_cierre.GuardCierreTest.test_ruta_no_ascii_deny) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp8o2h5me6/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp8o2h5me6/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp8o2h5me6/src/año.f90' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_src_sin_workstream_deny (test_guard_cierre.GuardCierreTest.test_src_sin_workstream_deny) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp2qnmw9u3/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp2qnmw9u3/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp2qnmw9u3/src/a.f90' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_cadena_de_enmiendas_juzgada (test_ledger.LedgerTest.test_cadena_de_enmiendas_juzgada) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpa995m7ru/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_cadena_lineal_y_un_solo_veredicto (test_ledger.LedgerTest.test_cadena_lineal_y_un_solo_veredicto) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmph20u2tzz/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_check_detecta_edicion_a_mano (test_ledger.LedgerTest.test_check_detecta_edicion_a_mano) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp9zs7rvtv/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_cierre_admite_nota_y_retoma (test_ledger.LedgerTest.test_cierre_admite_nota_y_retoma) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpzqod_c2w/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_enmienda_antes_del_veredicto_solamente (test_ledger.LedgerTest.test_enmienda_antes_del_veredicto_solamente) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp3kzb0l9a/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_enmienda_solo_de_predicciones (test_ledger.LedgerTest.test_enmienda_solo_de_predicciones) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpchzx5bk6/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_gate (test_ledger.LedgerTest.test_gate) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp5owm15ie/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:88: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp5owm15ie/src/a.f90' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "src", "a.f90"), "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:105: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp5owm15ie/src/a.f90' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "src", "a.f90"), "w").write("x = 2\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:117: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp5owm15ie/scripts/research/x.py' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "scripts", "research", "x.py"), "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_hija_no_juzga_a_una_prediccion (test_ledger.LedgerTest.test_hija_no_juzga_a_una_prediccion) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp2nos3_rd/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_juicio_por_enmienda_cuenta_en_su_posicion (test_ledger.LedgerTest.test_juicio_por_enmienda_cuenta_en_su_posicion) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmphn_qf_gi/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_nota_no_cambia_a_una_prediccion_enmendada (test_ledger.LedgerTest.test_nota_no_cambia_a_una_prediccion_enmendada) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp17w_he1m/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_nota_sobre_enmienda_no_la_juzga (test_ledger.LedgerTest.test_nota_sobre_enmienda_no_la_juzga) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpbwgo96m9/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_nota_sobre_veredicto_no_lo_cambia (test_ledger.LedgerTest.test_nota_sobre_veredicto_no_lo_cambia) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpgqudqxu2/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_open_avisa_madre_con_hija_juzgada (test_ledger.LedgerTest.test_open_avisa_madre_con_hija_juzgada) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp29i4fupw/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_open_lista_abiertas_y_refutadas (test_ledger.LedgerTest.test_open_lista_abiertas_y_refutadas) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpc8kpfp0x/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_open_sin_decidir_por_estado_vigente (test_ledger.LedgerTest.test_open_sin_decidir_por_estado_vigente) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp9q9_yzac/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_prediccion_exige_criterio (test_ledger.LedgerTest.test_prediccion_exige_criterio) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpsz5kdrvi/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_prediccion_juzgada_por_su_enmienda (test_ledger.LedgerTest.test_prediccion_juzgada_por_su_enmienda) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpym2gfdw7/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_prediccion_solo_se_juzga_con_veredicto_y_una_vez (test_ledger.LedgerTest.test_prediccion_solo_se_juzga_con_veredicto_y_una_vez) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpqb2so0lb/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_refutada_es_absorbente (test_ledger.LedgerTest.test_refutada_es_absorbente) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpdn51yvzr/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_refutada_no_admite_hijas (test_ledger.LedgerTest.test_refutada_no_admite_hijas) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp0m4on2yz/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_resultado_que_cierra_impide_enmienda (test_ledger.LedgerTest.test_resultado_que_cierra_impide_enmienda) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpnqn797zs/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_sin_decidir_no_tras_veredicto_de_cierre (test_ledger.LedgerTest.test_sin_decidir_no_tras_veredicto_de_cierre) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmptd15g5qf/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_sin_decidir_sin_veredicto_no_admite_juicio (test_ledger.LedgerTest.test_sin_decidir_sin_veredicto_no_admite_juicio) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp0mgghic4/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_sin_decidir_solo_la_retoma_una_prediccion (test_ledger.LedgerTest.test_sin_decidir_solo_la_retoma_una_prediccion) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpidz7gr8e/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_soportada_exige_evidencia_existente (test_ledger.LedgerTest.test_soportada_exige_evidencia_existente) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp0qb8tisr/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_veredicto_exige_prediccion (test_ledger.LedgerTest.test_veredicto_exige_prediccion) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp9gfh5feq/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_ws_fallido_exige_cierre_y_panel (test_ledger.LedgerTest.test_ws_fallido_exige_cierre_y_panel) ... /Users/frariv/Horno/hornofusion-full3D/tests/research/test_ledger.py:19: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmpxevwt2tr/campaigns/audit.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "audit.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+
+----------------------------------------------------------------------
+Ran 42 tests in 12.862s
+
+OK

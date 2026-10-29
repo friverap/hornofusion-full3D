@@ -1,0 +1,39 @@
+## Revisor refutador — WS-K13, ciclo 6, ronda 1
+
+WS-K13 cambia solo la herramienta (G3): no toca `src/` ni hay predicción. Busco por qué sus conclusiones podrían ser falsas aunque los números estén bien copiados. Trabajé en solo lectura. Usé python para leer `ledger.jsonl` y `status.json`, y para hacer en memoria (sin escribir en el repo) una búsqueda exhaustiva de secuencias de eventos sintéticos. No lancé make, mpirun ni corridas, y no leí `reviews/`.
+
+### 1. Conclusiones, hipótesis alternativa y dato que las separa
+
+| # | Conclusión del reporte | Mejor alternativa | Dato que las separa | ¿En los datos? Qué dice |
+|---|---|---|---|---|
+| C1 | `current_state` sigue las enmiendas juzgadas. Frente a HEAD solo cambian {C-169} (enmendada → refutada) y {C-194} (enmendada → soportada). Los 24 veredictos que tenían otro estado ahora conservan el suyo. | El cambio en los veredictos oculta información: notas «soportada» sobre un veredicto refutado (C-119 → C-118, C-178/C-180 → C-173) podían estar reabriendo el juicio. | Ver si alguna afirmación (no veredicto) cambia de estado por esas notas. | Sí. Recalculé con el `ledger.py` de HEAD y con el staged: 24 veredictos distintos con HEAD y 0 ahora. Fuera de los veredictos, solo cambian C-169 y C-194. Las notas citan el VEREDICTO, nunca la predicción, así que C-117, C-171 y C-144 no cambian con ninguna de las dos herramientas. El cambio es solo de presentación. |
+| C2 | Las reglas nuevas (cadena lineal, un solo veredicto, refutadas absorbentes, cierres, `sin_decidir` solo tras `en_disputa`) son coherentes y no rompen el registro. | Las reglas están ajustadas a mano para aceptar los 309 eventos y a los casos de 39 tests escritos con el arreglo (5 ciclos, cada uno con huecos nuevos). Podrían dejar pasar secuencias que violen lo que dice el README. | Comprobar invariantes sobre TODAS las secuencias válidas, no solo los casos escritos a mano. | Sí, lo hice: enumeración exhaustiva de todas las secuencias válidas de hasta 4 eventos (70 695) y 4000 secuencias aleatorias de 10 eventos (36 549 pasos). Tipos: hipótesis, predicción, resultado (6 estados), veredicto (3 estados) y enmienda. Invariantes revisados: (I1) una afirmación refutada o fallida no cambia de estado; (I2) una predicción cerrada o con veredicto de cierre no cambia; (I3) como mucho un veredicto por cadena; (I4) `open` no lista un id a la vez como abierto y como «cerrada sin decidir» (L1); (I5) un veredicto conserva su estado; (I6) una hipótesis o resultado `sin_decidir` solo sale con una predicción; (I7) citar un cierre no reabre lo que cierra. Ninguna violación. La única «violación» aparente es deliberada: el estado propio de un CIERRE (p. ej. un resultado refutada con `--ref`) pasa a `propuesta` o `pre-registrada` cuando se cita, como manda el README. No afecta a `open` ni a las reglas, que miran el estado propio del cierre. |
+| C3 | `check` pasa sobre los 309 eventos; `open` da la misma salida que HEAD. | `open` no cambia porque el registro real no tiene ninguna retoma de un `sin_decidir`: L1 solo se demuestra en tests sintéticos. | Un caso real de retoma. | Comprobado: `ledger OK (309 eventos, 13 workstreams)` y `diff` vacío entre los `open`. De los 10 `sin_decidir`, 8 van tras un veredicto `en_disputa` y 2 no tienen veredicto (C-110, C-168), como dice el reporte. Que L1 no se vea en el registro real es lo esperable en una herramienta, y I4 lo cubre (ver C2). |
+| C4 | El hook protege `scripts/research`, `.claude/{hooks,workflows,agents,settings.json}`; la compuerta la decide el `ledger.py` de HEAD; ni borrarlo ni renombrarlo la apaga. | Durante el arranque, la herramienta de HEAD calcula el sha solo sobre src y tests, y cualquier WS aprobado vale. Si existe una aprobación sobre un diff vacío, la ampliación del hook no sirve para nada. | `gate_errors` de los WS aprobados con el sha del diff vacío. | **Sí, y refuta en parte:** WS-K11 y WS-K12 tienen diff_sha = test_quick_sha = e3b0… y `gate_errors` devuelve [] con HEAD y con el nuevo. Hoy, un commit sin src/ ni tests/ (p. ej. ledger.py y el hook solos) pasa la compuerta sin WS-K13 (**R1**). Con el commit completo staged (src+tests da `e648…` = diff_sha), solo coincide WS-K13. Después del commit, el disparo del hook implica un diff de GATED no vacío, salvo el desajuste de prefijo de `settings.json` (**R2**). |
+| C5 | diff_sha y diff_sha_gated atan el staged revisado. | — | Recalcular. | Comprobado: `git diff --cached -- src tests` da `e648eeff…` y el de todas las rutas de GATED da `b0cd7c65…`, igual que `status.json`. No hay cambios sin hacer stage en ledger.py ni en el hook. |
+
+### 2. ¿Repite un fracaso registrado?
+
+- **Física:** no aplica. El WS no toca el simulador ni ninguna de las 46 refutadas o fallidas, ni las secciones de `acople-pv.md`. Tampoco hay un `docs/PLAN_*` del tema.
+- **Herramienta:** el problema del commit de arranque es el mismo L5 que origina el WS: el cambio de `ledger.py` de WS-K12 no quedó atado porque su diff_sha era el de un diff vacío. Aquí se repite para el propio commit de WS-K13: el `ledger.py` y el hook nuevos quedan atados por una comprobación manual (diff_sha_gated), no por la compuerta. El reporte lo declara y explica por qué la diferencia importa (la herramienta de HEAD no puede verificar rutas que no conoce). Es aceptable. Lo que no declara es la llave del diff vacío de WS-K11 y WS-K12 (R1).
+- **Hook que se certifica a sí mismo** (O4/B4): sigue igual y está declarado.
+
+### 3. ¿Mueve el problema de sitio?
+
+- El coste de los cambios en la herramienta sube. Tocar `.claude/agents/` o un workflow exige ahora panel y `make test-quick`, que también corre los casos MPI del simulador. Es decisión de diseño, no error.
+- `en_disputa` deja de admitir un segundo veredicto: la única salida es un cierre `sin_decidir` y una predicción nueva. Coincide con la práctica del registro (8 de 10 se cerraron así). La compuerta numérica con `en_disputa` (B2) sigue igual que antes y está declarada.
+
+### 4. Objeciones
+
+- **R1 (no bloqueante).** Llave del diff vacío en el arranque: WS-K11 y WS-K12 están aprobados con e3b0…, y con la herramienta de HEAD cualquier commit sin src/ ni tests/ pasa la compuerta. *Resolución:* declararlo en «Commit de arranque» y exigir que el arranque se haga en un solo commit que incluya los tests (sha e648…). Opcional: que `gate_errors` rechace diff_sha == sha256(b'') y un test que lo cubra.
+- **R2 (no bloqueante).** Para el hook basta con que la ruta empiece por «.claude/settings.json»; el pathspec de GATED solo cubre el archivo exacto. Un staged de solo `.claude/settings.json.bak` dispara la compuerta, el sha sale vacío y abre por WS-K11/WS-K12 aun con la herramienta nueva (es inocuo). La lista del hook no se deriva de GATED. *Resolución:* test con `.claude/settings.json.bak` que espere deny, o igualdad exacta para settings.json, y un test que compare la lista del hook con `ledger.GATED`.
+- **R3 (no bloqueante).** No reejecuté la suite (solo lectura). 39/39, 25 con HEAD y 3 con el ciclo 5 solo los contrasté con `tests_research.log` («Ran 39», «OK») y con el número de tests en los archivos. *Resolución:* que lo reproduzca el revisor de evidencia. La lógica la verifiqué por mi cuenta con la enumeración de invariantes.
+
+### Archivos
+
+- `/Users/frariv/Horno/hornofusion-full3D/research/ws/WS-K13/report.md`
+- `/Users/frariv/Horno/hornofusion-full3D/scripts/research/ledger.py`
+- `/Users/frariv/Horno/hornofusion-full3D/.claude/hooks/guard_cierre.sh`
+- `/Users/frariv/Horno/hornofusion-full3D/research/ws/WS-K11/status.json` y `/Users/frariv/Horno/hornofusion-full3D/research/ws/WS-K12/status.json` (diff_sha = e3b0…)
+
+VEREDICTO: aprueba

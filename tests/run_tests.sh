@@ -286,6 +286,9 @@ check_audit_if_present() {  # <rundir> [prefijo_xfail_extra] [args extra] [base]
 case "$MODE" in
 quick)
     mkdir -p "$OUT"
+    # Herramienta del registro y compuerta del harness (WS-K13, ~12 s): sin
+    # esto el test_quick=ok que exige la compuerta no cubre tests/research
+    run_script "research" $PY -m unittest discover -s tests/research -q
     run_case cold_10step 8 && {
         check_invariants "$OUT/cold_10step_n8" cold_10step
         check_audit_if_present "$OUT/cold_10step_n8" audit_cold

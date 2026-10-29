@@ -1,0 +1,58 @@
+diff --git a/.claude/hooks/guard_cierre.sh b/.claude/hooks/guard_cierre.sh
+index 8d5e470..4cb4b30 100755
+--- a/.claude/hooks/guard_cierre.sh
++++ b/.claude/hooks/guard_cierre.sh
+@@ -3,8 +3,11 @@
+ # co-investigador (research/README.md; AI co-mathematician, arXiv 2605.06651
+ # §3.3-3.4: el trabajo no se marca terminado hasta que pasan los tests y TODOS
+ # los revisores aprueban).
+-#   1. `git commit` cuyo staged toque src/ o tests/ (salvo tests/golden y
+-#      tests/research) exige `scripts/research/ledger.py gate` OK para ESE diff:
++#   1. `git commit` cuyo staged toque src/, tests/ (salvo tests/golden y
++#      tests/research), scripts/research/, .claude/hooks/, .claude/workflows/,
++#      .claude/agents/ o .claude/settings.json (la herramienta del registro y el
++#      panel, WS-K13) exige
++#      `scripts/research/ledger.py gate` OK para ESE diff (GATED en ledger.py):
+ #      workstream aprobado por los tres revisores en la misma ronda,
+ #      test_quick=ok, diff_sha del staged y, si es numerico, prediccion
+ #      pre-registrada juzgada.
+@@ -145,17 +148,33 @@ for rdir, args in commits:
+                              capture_output=True, text=True, check=True).stdout.strip()
+     except Exception:
+         continue
+-    if not os.path.isfile(os.path.join(top, "scripts", "research", "ledger.py")):
++    LP = "scripts/research/ledger.py"
++    def git_show(rev):
++        return subprocess.run(["git", "-C", top, "show", f"{rev}:{LP}"], capture_output=True, text=True).stdout
++    # la compuerta la decide la herramienta YA APROBADA (HEAD); la del indice solo si HEAD no la tiene,
++    # y la del disco solo si tampoco el indice (repo nuevo). Borrarla o renombrarla no la apaga (WS-K13)
++    tool = git_show("HEAD") or git_show("")
++    if not tool and os.path.isfile(os.path.join(top, LP)):
++        tool = open(os.path.join(top, LP)).read()
++    if not tool:
+         continue   # otro repo
+-    staged = subprocess.run(["git", "-C", top, "diff", "--cached", "--name-only"],
+-                            capture_output=True, text=True).stdout.split()
+-    gated = [f for f in staged if (f.startswith("src/") or f.startswith("tests/"))
++    # --no-renames: un `git mv` de una ruta vigilada lista la ruta vieja Y la nueva (WS-K13)
++    staged = [f for f in subprocess.run(["git", "-C", top, "diff", "--cached", "--name-only", "--no-renames", "-z"],
++                                        capture_output=True, text=True).stdout.split("\0") if f]
++    gated = [f for f in staged if f.startswith(("src/", "tests/", "scripts/research/", ".claude/hooks/",
++                                                 ".claude/workflows/", ".claude/agents/",
++                                                 ".claude/settings.json"))
+              and not f.startswith("tests/golden/") and not f.startswith("tests/research/")]
+     if not gated:
+         continue
+     env = dict(os.environ, RESEARCH_ROOT=top)
+-    r = subprocess.run([sys.executable, os.path.join(top, "scripts", "research", "ledger.py"), "gate"],
+-                       capture_output=True, text=True, cwd=top, env=env)
++    import tempfile
++    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as tf:
++        tf.write(tool)
++    try:
++        r = subprocess.run([sys.executable, tf.name, "gate"], capture_output=True, text=True, cwd=top, env=env)
++    finally:
++        os.unlink(tf.name)
+     if r.returncode == 0:
+         continue
+     if ESCAPE:

@@ -13,6 +13,7 @@ LEDGER = os.path.join(REPO, "scripts", "research", "ledger.py")
 class GuardCierreTest(unittest.TestCase):
     def setUp(self):
         self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, True)
         g = lambda *a: subprocess.run(["git", "-C", self.d, *a], check=True, capture_output=True)
         subprocess.run(["git", "init", "-q", self.d], check=True)
         g("config", "user.email", "t@t"); g("config", "user.name", "t")
@@ -22,6 +23,7 @@ class GuardCierreTest(unittest.TestCase):
         for sub in ("src", "docs", "campaigns"):
             os.makedirs(os.path.join(self.d, sub))
         open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+        g("add", "scripts/research/ledger.py", "Makefile"); g("commit", "-q", "-m", "base")
         self.g = g
 
     def hook(self, tool, ti):
@@ -50,6 +52,24 @@ class GuardCierreTest(unittest.TestCase):
         dec, why = self.commit()
         self.assertEqual(dec, "deny"); self.assertIn("compuerta", why)
 
+    def test_herramienta_del_registro_deny(self):
+        os.makedirs(os.path.join(self.d, "scripts", "research"), exist_ok=True)
+        self.stage("scripts/research/ledger.py", open(LEDGER).read() + "# cambio\n")
+        dec, why = self.commit()
+        self.assertEqual(dec, "deny"); self.assertIn("scripts/research/ledger.py", why)
+
+    def test_hook_y_workflow_deny(self):
+        for path in (".claude/hooks/x.sh", ".claude/workflows/x.js", ".claude/agents/x.md", ".claude/settings.json"):
+            os.makedirs(os.path.join(self.d, os.path.dirname(path)), exist_ok=True)
+            self.stage(path, "x\n")
+            dec, why = self.commit()
+            self.assertEqual(dec, "deny", path); self.assertIn(path, why)
+            self.g("rm", "-q", "--cached", path)
+
+    def test_ruta_no_ascii_deny(self):
+        self.stage("src/año.f90", "x=1\n")
+        self.assertEqual(self.commit()[0], "deny")
+
     def test_docs_allow(self):
         self.stage("docs/a.md", "x\n")
         self.assertEqual(self.commit()[0], "allow")
@@ -73,6 +93,49 @@ class GuardCierreTest(unittest.TestCase):
         self.stage("src/a.f90", "x=2\n")
         dec, why = self.commit()
         self.assertEqual(dec, "deny"); self.assertIn("diff_sha", why)
+
+    def test_ledger_permisivo_en_disco_no_decide(self):
+        # un ledger.py del DISCO que abre la compuerta sin pasar por stage no cuenta (WS-K13)
+        lp = os.path.join(self.d, "scripts", "research", "ledger.py")
+        src = open(lp).read()
+        open(lp, "w").write(src.replace("def gate_errors(st, sha, ev):\n", "def gate_errors(st, sha, ev):\n    return []\n"))
+        self.ledger("ws-init", "WS-T", "--meta", "G1")
+        self.stage("src/a.f90", "x=1\n")
+        dec, why = self.commit()
+        self.assertEqual(dec, "deny"); self.assertIn("compuerta", why)
+
+    def test_ledger_permisivo_staged_no_decide(self):
+        # el ledger.py del INDICE tampoco decide: la compuerta es la de HEAD (ya aprobada)
+        lp = os.path.join(self.d, "scripts", "research", "ledger.py")
+        src = open(lp).read()
+        open(lp, "w").write(src.replace("def gate_errors(st, sha, ev):\n", "def gate_errors(st, sha, ev):\n    return []\n"))
+        self.ledger("ws-init", "WS-T", "--meta", "G1")
+        self.g("add", "scripts/research/ledger.py")
+        self.stage("src/a.f90", "x=1\n")
+        dec, why = self.commit()
+        self.assertEqual(dec, "deny"); self.assertIn("compuerta", why)
+
+    def test_renombrar_la_herramienta_no_apaga_la_compuerta(self):
+        os.makedirs(os.path.join(self.d, "tools"))
+        self.g("mv", "scripts/research/ledger.py", "tools/ledger.py")
+        dec, why = self.commit()
+        self.assertEqual(dec, "deny"); self.assertIn("scripts/research/ledger.py", why)
+
+    def test_borrar_la_herramienta_no_apaga_la_compuerta(self):
+        self.g("rm", "-q", "scripts/research/ledger.py")
+        self.stage("src/a.f90", "x=1\n")
+        dec, why = self.commit()
+        self.assertEqual(dec, "deny"); self.assertIn("compuerta", why)
+
+    def test_quitarla_del_indice_no_usa_la_del_disco(self):
+        lp = os.path.join(self.d, "scripts", "research", "ledger.py")
+        src = open(lp).read()
+        self.g("rm", "-q", "--cached", "scripts/research/ledger.py")
+        open(lp, "w").write(src.replace("def gate_errors(st, sha, ev):\n", "def gate_errors(st, sha, ev):\n    return []\n"))
+        self.ledger("ws-init", "WS-T", "--meta", "G1")
+        self.stage("src/a.f90", "x=1\n")
+        dec, why = self.commit()
+        self.assertEqual(dec, "deny"); self.assertIn("compuerta", why)
 
     def test_escape_queda_en_registro(self):
         self.stage("src/a.f90", "x=1\n")

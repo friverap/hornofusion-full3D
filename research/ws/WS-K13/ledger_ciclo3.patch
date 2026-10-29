@@ -1,0 +1,204 @@
+diff --git a/scripts/research/ledger.py b/scripts/research/ledger.py
+index 99c27d3..b71fe16 100755
+--- a/scripts/research/ledger.py
++++ b/scripts/research/ledger.py
+@@ -31,6 +31,11 @@ ESTADOS = ("propuesta", "pre-registrada", "soportada", "refutada", "en_disputa",
+ # decidir» de otra prediccion; no es soporte, refutacion ni prueba fallida (WS-K12)
+ CERRADOS = ("soportada", "refutada", "fallida", "sin_decidir")
+ ESTADOS_VEREDICTO = ("soportada", "refutada", "fallida", "en_disputa")
++# refutada y fallida son ABSORBENTES en una afirmacion (hipotesis, prediccion o
++# resultado): ningun evento posterior la cita con --ref; quien retome la
++# pregunta registra una afirmacion nueva que la cita en el enunciado (WS-K13)
++PERMANENTES = ("refutada", "fallida")
++AFIRMACIONES = ("hipotesis", "prediccion", "resultado")
+ REVISORES = ("auditor-eaf3d", "revisor-evidencia", "revisor-refutador")
+ WS_ESTADOS = ("abierto", "en_revision", "aprobado", "sin_terminar", "fallido")
+ 
+@@ -93,14 +98,17 @@ def validate(e, ev):
+         ref = ids.get(e.get("ref"))
+         if ref is None:
+             err.append(f"'{t}' exige 'ref' a un evento previo (ref={e.get('ref')})")
++    # la cadena de enmiendas es LINEAL: se enmienda y se juzga su punta (el criterio vigente)
++    if t in ("veredicto", "enmienda") and e.get("ref") in ids and tiene_enmienda(e["ref"], ev):
++        err.append(f"{e['ref']} ya tiene una enmienda: el {t} va sobre la ULTIMA enmienda de la cadena")
+     if t == "veredicto":
+         ref = ids.get(e.get("ref"))
+         if ref is not None:
+-            raiz = ref
+-            while raiz.get("tipo") == "enmienda":
+-                raiz = ids.get(raiz.get("ref"), {})
++            raiz = raiz_enmienda(ref["id"], ids)
+             if raiz.get("tipo") != "prediccion":
+                 err.append("un veredicto juzga una PREDICCION (o su enmienda)")
++            elif juzgada(raiz["id"], ev):
++                err.append(f"{raiz['id']} ya tiene veredicto: un segundo juicio va en una prediccion nueva")
+         if e.get("estado") not in ESTADOS_VEREDICTO:
+             err.append("un veredicto termina en soportada|refutada|fallida|en_disputa")
+     if t == "enmienda":
+@@ -109,8 +117,13 @@ def validate(e, ev):
+         ref = ids.get(e.get("ref"))
+         if ref is not None and ref.get("tipo") == "prediccion" and not e.get("criterio"):
+             err.append("la enmienda de una prediccion trae el criterio NUEVO")
+-        if any(x.get("tipo") == "veredicto" and x.get("ref") == e.get("ref") for x in ev):
+-            err.append("no se enmienda una prediccion ya juzgada: registrar una prediccion nueva")
++        raiz = raiz_enmienda(e.get("ref"), ids)
++        if raiz.get("id") and (juzgada(raiz["id"], ev) or current_state(raiz["id"], ev) in CERRADOS):
++            err.append("no se enmienda una afirmacion ya juzgada o cerrada: registrar una prediccion nueva")
++    ref = ids.get(e.get("ref"))
++    if ref is not None and ref.get("tipo") in AFIRMACIONES and current_state(ref["id"], ev) in PERMANENTES:
++        err.append(f"{ref['id']} esta {current_state(ref['id'], ev)} (permanente): nada la cita con --ref; "
++                   "quien la retome registra una afirmacion nueva que la cite en el enunciado")
+     if e.get("estado") == "sin_decidir":
+         ref = ids.get(e.get("ref"))
+         if t != "resultado" or ref is None:
+@@ -120,6 +133,8 @@ def validate(e, ev):
+                        "no un veredicto ni una enmienda")
+         elif current_state(ref["id"], ev) in CERRADOS:
+             err.append(f"'sin_decidir': {ref['id']} ya esta cerrada ({current_state(ref['id'], ev)})")
++        elif any(v["estado"] != "en_disputa" for v in veredictos(ref["id"], ev)):
++            err.append(f"'sin_decidir': {ref['id']} tiene un veredicto de cierre; solo cabe tras uno en_disputa")
+     if e.get("estado") == "soportada":
+         evd = e.get("evidencia") or {}
+         if not evd.get("rutas") or not evd.get("cmd"):
+@@ -156,14 +171,60 @@ def cmd_add(a):
+ 
+ 
+ def current_state(eid, ev):
+-    """Estado vigente: el del ultimo veredicto/resultado/enmienda que lo referencia."""
+-    st = next(x for x in ev if x["id"] == eid)["estado"]
++    """Estado vigente: el del ultimo veredicto/resultado/enmienda que lo referencia.
++
++    Una enmienda ya juzgada cede al estado de su juicio: la prediccion juzgada a
++    traves de su enmienda toma el estado de ese veredicto (WS-K13). El veredicto
++    de una prediccion HIJA no se propaga a la madre: la madre se cierra con un
++    resultado propio (regla de WS-K12).
++    """
++    st = next(x for x in ev if x["id"] == eid)
++    if st["tipo"] == "veredicto":
++        return st["estado"]   # un veredicto es un juicio: las notas que lo citan no lo cambian (WS-K13)
++    st = st["estado"]
+     for x in ev:
+         if x.get("ref") == eid:
+-            st = "enmendada" if x["tipo"] == "enmienda" else x["estado"]
++            st = estado_enmienda(x["id"], ev) if x["tipo"] == "enmienda" else x["estado"]
+     return st
+ 
+ 
++def estado_enmienda(eid, ev):
++    """Estado que una enmienda transmite a su prediccion: el de su ultimo veredicto o
++    sub-enmienda (recursivo); 'enmendada' si nadie la juzgo. Otros eventos que la citen
++    (notas, resultados) no la juzgan (WS-K13)."""
++    st = "enmendada"
++    for x in ev:
++        if x.get("ref") == eid and x["tipo"] in ("veredicto", "enmienda"):
++            st = estado_enmienda(x["id"], ev) if x["tipo"] == "enmienda" else x["estado"]
++    return st
++
++
++def raiz_enmienda(eid, ids):
++    """Sube por la cadena de enmiendas hasta el evento enmendado (la prediccion)."""
++    x = ids.get(eid, {})
++    while x.get("tipo") == "enmienda":
++        x = ids.get(x.get("ref"), {})
++    return x
++
++
++def tiene_enmienda(eid, ev):
++    return any(x.get("tipo") == "enmienda" and x.get("ref") == eid for x in ev)
++
++
++def veredictos(pid, ev):
++    """Veredictos sobre la prediccion `pid` o sobre CUALQUIER enmienda de su cadena."""
++    cadena, front = {pid}, {pid}
++    while front:
++        front = {x["id"] for x in ev if x.get("tipo") == "enmienda" and x.get("ref") in front} - cadena
++        cadena |= front
++    return [x for x in ev if x.get("tipo") == "veredicto" and x.get("ref") in cadena]
++
++
++def juzgada(pid, ev):
++    """La prediccion `pid` tiene veredicto, directo o sobre una enmienda de su cadena."""
++    return bool(veredictos(pid, ev))
++
++
+ def cmd_show(a):
+     ev = load()
+     chain, front = [], {a.id}
+@@ -198,18 +259,24 @@ def cmd_open(a):
+     abiertas = [(x, s) for x, s in abiertas if s not in CERRADOS]
+     print(f"afirmaciones abiertas: {len(abiertas)} de {len(raices)}")
+     for x, s in abiertas:
+-        print(f"  {x['id']} [{x['ws']}] {s:14s} {x['enunciado'][:90]}")
++        hijas = [y["id"] for y in ev if y.get("ref") == x["id"] and y["tipo"] == "prediccion"
++                 and current_state(y["id"], ev) in CERRADOS]
++        nota = f" (hija juzgada: {', '.join(hijas)}; cerrar la madre con un resultado)" if hijas else ""
++        print(f"  {x['id']} [{x['ws']}] {s:14s} {x['enunciado'][:90]}{nota}")
+     refut = [x for x in raices if current_state(x["id"], ev) in ("refutada", "fallida")]
+     if refut:
+         print(f"refutadas/fallidas (permanentes): {len(refut)}; ultimas:")
+         for x in refut[-5:]:
+             print(f"  {x['id']} [{x['ws']}] {x['enunciado'][:90]}")
+-    sind = [x for x in ev if x.get("estado") == "sin_decidir"]
++    # por el estado VIGENTE de la ref: una retomada con una prediccion nueva ya no cuenta (WS-K13)
++    sind = list(dict.fromkeys(x["ref"] for x in ev if x.get("estado") == "sin_decidir"
++                              and current_state(x["ref"], ev) == "sin_decidir"))
+     if sind:
+-        print(f"cerradas sin decidir: {len(sind)}: " + ", ".join(x["ref"] for x in sind))
++        print(f"cerradas sin decidir: {len(sind)}: " + ", ".join(sind))
+     for ws in all_ws():
+         st = ws_status(ws) or {}
+-        print(f"workstream {ws}: {st.get('estado', '?')} (meta {st.get('meta', '?')}, ronda {st.get('ronda', 0)})")
++        cierre = f"; {st['cierre']}" if st.get("cierre") else ""
++        print(f"workstream {ws}: {st.get('estado', '?')} (meta {st.get('meta', '?')}, ronda {st.get('ronda', 0)}{cierre})")
+ 
+ 
+ def cmd_check(a):
+@@ -228,14 +295,26 @@ def cmd_check(a):
+         st = ws_status(ws)
+         if st and st.get("estado") not in WS_ESTADOS:
+             err.append(f"{ws}: estado '{st.get('estado')}' invalido")
++        if st and st.get("estado") == "fallido":
++            # fallido = cierre APROBADO por el panel con la meta no cumplida (WS-K13)
++            if not str(st.get("cierre") or "").strip():
++                err.append(f"{ws}: fallido sin la clave 'cierre' (motivo en una linea)")
++            for r in REVISORES:
++                v = (st.get("revisores") or {}).get(r)
++                if not v or v.get("veredicto") != "aprueba" or v.get("ronda") != st.get("ronda"):
++                    err.append(f"{ws}: fallido sin la aprobacion de {r} en la ronda {st.get('ronda')}")
+     if err:
+         print("\n".join(err))
+         sys.exit(1)
+     print(f"ledger OK ({len(ev)} eventos, {len(all_ws())} workstreams)")
+ 
+ 
++# rutas cuyo diff staged ata la aprobacion del panel (las mismas que vigila guard_cierre.sh)
++GATED = ("src", "tests", "scripts/research", ".claude/hooks", ".claude/workflows")
++
++
+ def staged_sha():
+-    out = subprocess.run(["git", "diff", "--cached", "--", "src", "tests"], capture_output=True,
++    out = subprocess.run(["git", "diff", "--cached", "--", *GATED], capture_output=True,
+                          cwd=root()).stdout
+     return hashlib.sha256(out).hexdigest()
+ 
+@@ -284,7 +363,8 @@ def gate_errors(st, sha, ev):
+     if st.get("estado") != "aprobado":
+         e.append(f"estado '{st.get('estado')}' (se exige 'aprobado')")
+     if st.get("diff_sha") != sha:
+-        e.append("diff_sha no coincide con el diff staged de src/ y tests/ (la aprobacion es de OTRO diff)")
++        e.append("diff_sha no coincide con el diff staged de " + ", ".join(GATED)
++                 + " (la aprobacion es de OTRO diff)")
+     if st.get("test_quick") != "ok" or st.get("test_quick_sha") != sha:
+         e.append("falta test_quick=ok sobre este diff")
+     ronda = st.get("ronda")
+@@ -294,9 +374,7 @@ def gate_errors(st, sha, ev):
+             e.append(f"{r} no aprueba en la ronda {ronda}")
+     if st.get("numerico"):
+         pid = st.get("prediccion")
+-        if not pid or not any(x.get("tipo") == "veredicto" and x.get("ref") in
+-                              {pid} | {y["id"] for y in ev if y.get("tipo") == "enmienda" and y.get("ref") == pid}
+-                              for x in ev):
++        if not pid or not juzgada(pid, ev):
+             e.append("cambio numerico sin prediccion pre-registrada juzgada")
+     return e
+ 
