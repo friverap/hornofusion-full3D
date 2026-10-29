@@ -615,54 +615,40 @@ guarda sin leer su causa.
   demanda crece paso a paso. Complementariedad con retraso ⇒ Plan K
   (docs/PLAN_K_limitador_en_poisson.md): restricción α_l ≤ cap dentro del Poisson
   como conjunto activo.
-- **Plan K CERRADO: refutado y NO adoptado (23-oct-2026; WS-K1/WS-K2,
-  research/ledger.jsonl)**.
-  - H1, refutada (C-012): convergencia 0 %. Aun así, quitó la oscilación:
-    osc2 bajó de 51.8 kPa a 342 Pa.
-  - H1b, la versión post-auditoría con tope EXACTO, refutada por la letra en
-    sus incisos (b) y (c) (C-028). Su inciso de ciclo (a) pasa por la letra,
-    pero «solo en la mediana» (C-028): osc2 es una MEDIANA (885.7 Pa ≤ 1000) y
-    no ve un ciclo que ocupe menos de la mitad de la ventana. En k1b, |d2p| >
-    1000 Pa en el 47 % de los pasos de la sonda (k1 y k1pa, 22 %). No es
-    prueba de que el ciclo no volviera.
-  - En la sonda (10,60,2), pasos 342510–342533 de una sola trayectoria,
-    reaparece un ciclo de 2 pasos de amplitud 3.4 veces menor que la base:
-    6874 frente a 23362 Pa, medido con la métrica de C-036, que se calibró
-    después y con la propia k1b. Tras el pico queda liso (C-033). Si eso
-    activa la regla de aborto de §4 del plan, que no tiene umbral, es lectura
-    del coordinador, no un veredicto.
-  - Lo que quita el ciclo en la sonda es la HOLGURA de la variante v2 sin A2
-    (C-035/C-037, C-039): la celda queda bajo el tope (ag_min 0.0183) y el
-    limitador no conmuta.
-  - Lectura estructural, sin valor de veredicto: H0 (arriba) muestra la
-    decisión idéntica en los 5 outers y alternando ENTRE pasos, y el hueco de
-    poro está congelado en α^n durante el paso (J-B). Un conjunto activo
-    resuelto DENTRO del paso no quita un retraso ENTRE pasos, y con tope
-    exacto lo reproduce por construcción. Por eso no reintentar el conjunto
-    activo con tope exacto sin atacar ese retraso.
-  - Juez de 3 trayectorias en 340–345.5 s con el brazo K (k1pa; el binario
-    no se identifica en los run.log, así que v2 con o sin A2 no se distingue,
-    ver research/ws/WS-K2/report.md), refutado (C-041):
-    - en 344–345.5 s, 2 de 3 trayectorias limpias (cent_pg 0.1/0.3 % frente a
-      6.7–9.5 % de la base);
-    - k1pa_340_n15: 183 pasos seguidos con p_max ≥ 1 MPa desde 345.318 s
-      (122 en la centinela de 2 MPa; C-311);
-    - OJO: la base también pasa de 1 MPa en las 3 trayectorias y toca 2 MPa
-      en 2 de 3 (C-310/C-311). Que el pegado de n15 sea propio de K NO está
-      probado: desde el mismo estado, el brazo sin K también queda ≥ 1 MPa en
-      los 10 pasos medidos y ninguno de los dos brazos es un control limpio
-      (C-312/C-313); haría falta la base desde un snapshot de n15 anterior a
-      345.25 s;
-    - sin Plan K el campo también llega a 2 MPa desde el mismo reinicio
-      (C-309), así que la causalidad de Plan K en el estallido queda sin
-      decidir. El golpe de ariete de una velocidad fantasma (C-064) es el
-      diagnóstico de un solo evento y está sin verificar.
-  - Si se retoma con un margen o barrera continua bajo el tope, el
-    experimento decisivo es un juez B1 de ≥ 3 trayectorias en 340–345.5 s
-    contra la base de C-040/C-310, no la ventana 342.45–342.56 s: k1pa ya
-    pasó esa ventana y falló el juez. Antes hay que decir en qué difiere de
-    lo ya rechazado: la rampa por encima de ALPHA_BED (4547861), D2.4 (d24
-    refutada en el banco, C-091) y llevar el hueco de la banda al Poisson
-    (A20-2). Detalle en research/ws/WS-K1/report.md.
+- **Plan K CERRADO: refutado y NO adoptado (decisión del 23-oct-2026,
+  C-065; cierre en WS-K1/WS-K2).** Esta entrada solo recoge veredictos del
+  registro y deja nombrado lo abierto. Matices y cifras, en
+  research/ws/WS-K1/report.md y research/ws/WS-K2/report.md: LEERLOS antes de
+  retomar la idea.
+  - H1 refutada (C-012). H1b, con tope exacto, refutada por sus incisos (b) y
+    (c) (C-028); su inciso de ciclo (a) pasa solo en la mediana.
+  - Juez de 3 trayectorias en 340–345.5 s, refutado (C-041). La base también
+    pasa de 1 MPa (C-310/C-311). Que el pegado al tope de la trayectoria
+    k1pa_340_n15 sea propio de K no está probado (C-312/C-313), y la
+    causalidad de K en el estallido queda sin decidir (C-309; C-064, fallida
+    por C-294). C-041 refutó la mejora pre-registrada en B1 (C-040); que 2 de
+    3 trayectorias K mejoraran a la base en 344–345.5 s es una lectura post
+    hoc sin veredicto. No adoptarlo fue una DECISIÓN del usuario (C-065).
+  - ABIERTO, sin veredicto:
+    - La holgura de la variante sin A2 (C-039) quita el ciclo en la sonda.
+      Que el brazo K del juez fuera esa variante solo está declarado en
+      C-040, sin prueba bit a bit.
+    - En B1, K baja p>100k frente a la base, pero en los snapshots finales
+      deja más líquido en el lecho. ¿Mejora o traslado del problema? Falta
+      una serie temporal.
+    - D2.2/D2.2c (Plan D, cierre de caras en el Poisson con el momento
+      congelado; `pc_limiter_faces`) es el precedente más cercano. Se midió
+      solo en el banco `bed_flood`, y es condicional. En B1 no se puede
+      correr tal cual: `pc_limiter_faces` es incompatible con
+      `pc_transport_f28` y la configuración aborta (mod_config_3d; C-091).
+  - Lectura estructural, sin veredicto: el retraso es ENTRE pasos (H0, arriba)
+    con el hueco congelado en α^n (J-B). No reintentar el conjunto activo con
+    tope exacto sin atacar ese retraso. El tope exacto tiene UNA sola
+    trayectoria (k1b ≈ k1pb).
+  - Una retoma (margen, barrera o tope en el Poisson) tiene que decir en qué
+    difiere de lo ya rechazado: D2.2/D2.2c, la rampa por encima de ALPHA_BED
+    (4547861), D2.4 (d24, C-091) y llevar el hueco de la banda al Poisson
+    (A20-2). Su juez es B1 con ≥ 3 trayectorias contra la base de
+    C-040/C-310.
   - Vigencia: código de 1bc9832 (7 commits de src después); los parches en
     research/ws/WS-K1/ ya no aplican.

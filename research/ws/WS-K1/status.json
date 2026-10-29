@@ -1,17 +1,27 @@
 {
  "ws": "WS-K1",
  "meta": "G1",
- "estado": "abierto",
- "ronda": 0,
+ "estado": "fallido",
+ "ronda": 1,
  "numerico": true,
  "prediccion": "C-025",
- "diff_sha": null,
+ "diff_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
  "test_quick": null,
  "revisores": {
-  "auditor-eaf3d": null,
-  "revisor-evidencia": null,
-  "revisor-refutador": null
+  "auditor-eaf3d": {
+   "veredicto": "aprueba",
+   "ronda": 1
+  },
+  "revisor-evidencia": {
+   "veredicto": "aprueba",
+   "ronda": 1
+  },
+  "revisor-refutador": {
+   "veredicto": "aprueba",
+   "ronda": 1
+  }
  },
  "creado": "2026-10-22T17:31:49-06:00",
- "actualizado": "2026-10-22T17:32:08-06:00"
+ "actualizado": "2026-10-29T03:13:36-06:00",
+ "cierre": "G1 no cumplida: H1 y H1b refutadas; Plan K no adoptado"
 }

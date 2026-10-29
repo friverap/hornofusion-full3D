@@ -86,25 +86,24 @@ residuo por los sub-pasos del transporte (medido con `vol_lim`).
 ## 6. Cierre (23-oct-2026; registrado en WS-K1/WS-K2, 29-oct-2026)
 
 **Refutado y no adoptado.** La clave `pc_alpha_implicit` nunca llegó a
-`src/` (0 archivos); el código quedó archivado en
+`src/` (0 archivos). El código quedó archivado en
 `research/ws/WS-K1/plan_k_v2.patch` y `research/ws/WS-K1/patches/`, que ya
 no aplican sobre HEAD.
 
 - H1 (§4) refutada: C-011 → C-012.
-- H1b (versión post-auditoría, tope exacto) refutada por sus incisos (b) y
-  (c): C-025 → C-028. Su inciso de ciclo (a) pasa solo en la mediana (osc2
-  885.7 Pa; en el 47 % de los pasos de la sonda |d2p| > 1000 Pa). Converge,
-  y en la sonda reaparece un ciclo corto de amplitud 3.4× menor que la base,
-  medido con una métrica calibrada después. Si eso dispara la regla de aborto
-  de §4, que no tiene umbral, es lectura del coordinador, no un veredicto.
-- Lo que quitaba el ciclo en la sonda era la holgura de la variante sin A2
-  (C-034 → C-039). Lectura estructural, sin veredicto: el retraso es ENTRE
-  pasos (H0) con el hueco congelado en α^n (J-B), y un conjunto activo dentro
-  del paso con tope exacto lo reproduce.
-- Juez de 3 trayectorias 340–345.5 s con el brazo K (binario no
-  identificado: v2 con o sin A2): refutado (C-040 → C-041). La base también
-  pasa de 1 MPa (C-310/C-311) y que el pegado de una trayectoria K sea propio
-  de K no está probado (C-312/C-313).
-- Detalle y salvedades: `research/ws/WS-K1/report.md`,
-  `research/ws/WS-K2/report.md` y «Plan K CERRADO» en
-  `.claude/rules/acople-pv.md`.
+- H1b (post-auditoría, tope exacto) refutada por sus incisos (b) y (c):
+  C-025 → C-028. Su inciso de ciclo (a) pasa solo en la mediana.
+- Juez de 3 trayectorias en 340–345.5 s refutado: C-040 → C-041.
+  - La base también pasa de 1 MPa (C-310/C-311).
+  - Que el pegado al tope de una trayectoria K sea propio de K no está
+    probado (C-312/C-313).
+- Abierto, sin veredicto:
+  - la holgura de la variante sin A2 (C-039), medida en k1_342 (v1) y en
+    k1pa_342;
+  - si el brazo K del juez fue esa variante (solo declarado en C-040);
+  - si la bajada de p>100k en B1 es una mejora o un traslado de líquido al
+    lecho.
+
+Detalle y salvedades: `research/ws/WS-K1/report.md`,
+`research/ws/WS-K2/report.md` y «Plan K CERRADO» en
+`.claude/rules/acople-pv.md`.
