@@ -1,0 +1,27 @@
+{
+ "ws": "WS-K12",
+ "meta": "G3",
+ "estado": "aprobado",
+ "ronda": 2,
+ "numerico": false,
+ "prediccion": null,
+ "diff_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "test_quick": "ok",
+ "revisores": {
+  "auditor-eaf3d": {
+   "veredicto": "aprueba",
+   "ronda": 2
+  },
+  "revisor-evidencia": {
+   "veredicto": "aprueba",
+   "ronda": 2
+  },
+  "revisor-refutador": {
+   "veredicto": "aprueba",
+   "ronda": 2
+  }
+ },
+ "creado": "2026-10-28T16:18:29-06:00",
+ "actualizado": "2026-10-28T18:19:30-06:00",
+ "test_quick_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

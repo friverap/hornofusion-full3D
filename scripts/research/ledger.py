@@ -24,8 +24,13 @@ Raiz: $RESEARCH_ROOT o la raiz del repo git.
 import argparse, datetime, glob, hashlib, json, os, subprocess, sys
 
 TIPOS = ("hipotesis", "prediccion", "resultado", "veredicto", "enmienda")
-ESTADOS = ("propuesta", "pre-registrada", "soportada", "refutada", "en_disputa", "fallida", "enmendada")
-CERRADOS = ("soportada", "refutada", "fallida")
+ESTADOS = ("propuesta", "pre-registrada", "soportada", "refutada", "en_disputa", "fallida", "enmendada",
+           "sin_decidir")
+# sin_decidir: cierre de una afirmacion cuyo criterio dio la banda intermedia
+# («sin decidir» por la letra), o de un resultado que solo registra ese «sin
+# decidir» de otra prediccion; no es soporte, refutacion ni prueba fallida (WS-K12)
+CERRADOS = ("soportada", "refutada", "fallida", "sin_decidir")
+ESTADOS_VEREDICTO = ("soportada", "refutada", "fallida", "en_disputa")
 REVISORES = ("auditor-eaf3d", "revisor-evidencia", "revisor-refutador")
 WS_ESTADOS = ("abierto", "en_revision", "aprobado", "sin_terminar", "fallido")
 
@@ -96,7 +101,7 @@ def validate(e, ev):
                 raiz = ids.get(raiz.get("ref"), {})
             if raiz.get("tipo") != "prediccion":
                 err.append("un veredicto juzga una PREDICCION (o su enmienda)")
-        if e.get("estado") not in CERRADOS + ("en_disputa",):
+        if e.get("estado") not in ESTADOS_VEREDICTO:
             err.append("un veredicto termina en soportada|refutada|fallida|en_disputa")
     if t == "enmienda":
         if not e.get("motivo"):
@@ -106,6 +111,15 @@ def validate(e, ev):
             err.append("la enmienda de una prediccion trae el criterio NUEVO")
         if any(x.get("tipo") == "veredicto" and x.get("ref") == e.get("ref") for x in ev):
             err.append("no se enmienda una prediccion ya juzgada: registrar una prediccion nueva")
+    if e.get("estado") == "sin_decidir":
+        ref = ids.get(e.get("ref"))
+        if t != "resultado" or ref is None:
+            err.append("'sin_decidir' solo cierra con un resultado cuya --ref es un evento previo")
+        elif ref.get("tipo") in ("veredicto", "enmienda"):
+            err.append("'sin_decidir' cierra la afirmacion (hipotesis, prediccion o resultado), "
+                       "no un veredicto ni una enmienda")
+        elif current_state(ref["id"], ev) in CERRADOS:
+            err.append(f"'sin_decidir': {ref['id']} ya esta cerrada ({current_state(ref['id'], ev)})")
     if e.get("estado") == "soportada":
         evd = e.get("evidencia") or {}
         if not evd.get("rutas") or not evd.get("cmd"):
@@ -190,6 +204,9 @@ def cmd_open(a):
         print(f"refutadas/fallidas (permanentes): {len(refut)}; ultimas:")
         for x in refut[-5:]:
             print(f"  {x['id']} [{x['ws']}] {x['enunciado'][:90]}")
+    sind = [x for x in ev if x.get("estado") == "sin_decidir"]
+    if sind:
+        print(f"cerradas sin decidir: {len(sind)}: " + ", ".join(x["ref"] for x in sind))
     for ws in all_ws():
         st = ws_status(ws) or {}
         print(f"workstream {ws}: {st.get('estado', '?')} (meta {st.get('meta', '?')}, ronda {st.get('ronda', 0)})")

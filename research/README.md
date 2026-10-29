@@ -24,7 +24,11 @@ Tipos: `hipotesis`, `prediccion` (lleva `criterio`, nace `pre-registrada`),
 (cambia el criterio de una predicción AÚN NO juzgada; exige `motivo`).
 
 Estados: `propuesta`, `pre-registrada`, `soportada` (exige rutas que existan y
-comando de reproducción), `refutada`, `en_disputa`, `fallida`, `enmendada`.
+comando de reproducción), `refutada`, `en_disputa`, `fallida`, `enmendada`,
+`sin_decidir` (cierre de una afirmación cuyo criterio dio la banda intermedia,
+o de un resultado que solo registra ese «sin decidir» de otra predicción: no
+soportada ni refutada; solo como `resultado` con `ref` a una afirmación aún no
+cerrada; WS-K12).
 
 Reglas (las verifica `ledger.py check`):
 - Nada se borra ni se edita: una corrección es un evento nuevo con `ref`.
@@ -33,6 +37,9 @@ Reglas (las verifica `ledger.py check`):
   predicción nueva; nunca se reinterpreta el resultado en el texto.
 - Las refutadas y fallidas son permanentes: antes de proponer un cambio se
   consulta `ledger.py open` (sección de refutadas) y `.claude/rules/acople-pv.md`.
+- Las cerradas `sin_decidir` las lista `ledger.py open` («cerradas sin
+  decidir») y su motivo se lee con `ledger.py show C-nnn`. La pregunta que
+  dejaron abierta solo se retoma con una predicción NUEVA.
 
 ## Working paper (`report.md`)
 
