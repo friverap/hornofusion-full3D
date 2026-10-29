@@ -119,6 +119,34 @@ class LedgerTest(unittest.TestCase):
         r = self.run_l("gate", "WS-T", ok=False)
         self.assertIn("diff_sha", r.stdout)
 
+    def test_gate_exige_veredicto_firme(self):
+        # en_disputa (aun cerrada sin_decidir) y fallida no pasan; soportada y refutada si (WS-K14)
+        open(os.path.join(self.d, "src", "a.f90"), "w").write("x = 1\n")
+        subprocess.run(["git", "-C", self.d, "add", "src/a.f90"], check=True)
+        for est, pasa in (("en_disputa", False), ("fallida", False), ("refutada", True), ("soportada", True)):
+            ws = "WS-" + est
+            self.run_l("ws-init", ws, "--meta", "G1", "--numerico")
+            p = self.add("--tipo", "prediccion", "--enunciado", "p", "--criterio", "c")
+            extra = ("--ruta", "campaigns/audit.csv", "--cmd", "c") if est == "soportada" else ()
+            self.add("--tipo", "veredicto", "--enunciado", "v", "--ref", p, "--estado", est, *extra)
+            if est == "en_disputa":
+                self.add("--tipo", "resultado", "--enunciado", "s", "--ref", p, "--estado", "sin_decidir")
+            self.run_l("ws-set", ws, "estado=aprobado", "diff_sha=auto", "test_quick=ok", f"prediccion={p}",
+                       *(f"revisor.{r}=aprueba" for r in ("auditor-eaf3d", "revisor-evidencia", "revisor-refutador")))
+            r = self.run_l("gate", ws, ok=pasa)
+            if not pasa:
+                self.assertIn(f"veredicto '{est}'", r.stdout)
+        # el veredicto sobre la enmienda vigente decide igual
+        for est, pasa in (("en_disputa", False), ("refutada", True)):
+            ws = "WS-enm-" + est
+            self.run_l("ws-init", ws, "--meta", "G1", "--numerico")
+            p = self.add("--tipo", "prediccion", "--enunciado", "p", "--criterio", "c")
+            e = self.add("--tipo", "enmienda", "--enunciado", "e", "--ref", p, "--motivo", "m", "--criterio", "c2")
+            self.add("--tipo", "veredicto", "--enunciado", "v", "--ref", e, "--estado", est)
+            self.run_l("ws-set", ws, "estado=aprobado", "diff_sha=auto", "test_quick=ok", f"prediccion={p}",
+                       *(f"revisor.{r}=aprueba" for r in ("auditor-eaf3d", "revisor-evidencia", "revisor-refutador")))
+            self.run_l("gate", ws, ok=pasa)
+
     def test_open_sin_decidir_por_estado_vigente(self):
         h = self.add("--tipo", "hipotesis", "--enunciado", "h")
         self.add("--tipo", "resultado", "--enunciado", "s", "--ref", h, "--estado", "sin_decidir")

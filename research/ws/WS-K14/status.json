@@ -1,0 +1,27 @@
+{
+ "ws": "WS-K14",
+ "meta": "G3",
+ "estado": "aprobado",
+ "ronda": 1,
+ "numerico": false,
+ "prediccion": null,
+ "diff_sha": "1e21790a247be02f1c5e6e6b5e18df6ddd1618f85c852364f474c8f9ce7b8aaf",
+ "test_quick": "ok",
+ "revisores": {
+  "auditor-eaf3d": {
+   "veredicto": "aprueba",
+   "ronda": 1
+  },
+  "revisor-evidencia": {
+   "veredicto": "aprueba",
+   "ronda": 1
+  },
+  "revisor-refutador": {
+   "veredicto": "aprueba",
+   "ronda": 1
+  }
+ },
+ "creado": "2026-10-29T08:01:11-06:00",
+ "actualizado": "2026-10-29T08:20:53-06:00",
+ "test_quick_sha": "1e21790a247be02f1c5e6e6b5e18df6ddd1618f85c852364f474c8f9ce7b8aaf"
+}

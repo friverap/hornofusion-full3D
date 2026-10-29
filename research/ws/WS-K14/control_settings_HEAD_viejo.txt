@@ -1,0 +1,29 @@
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:22: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp21ngsa9w/Makefile' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "Makefile"), "w").write("all:\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:25: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp21ngsa9w/campaigns/a.csv' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, "campaigns", "a.csv"), "w").write("x\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/xp/lpc9yqh102vb3rt9gb3ppfdm0000gp/T/tmp21ngsa9w/.claude/hooks/guard_cierre.sh' mode='w' encoding='UTF-8'>
+  open(os.path.join(self.d, path), "w").write(txt)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py:159: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/frariv/Horno/hornofusion-full3D/.claude/settings.json' mode='r' encoding='UTF-8'>
+  cfg = json.load(open(os.path.join(REPO, ".claude", "settings.json")))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+F
+======================================================================
+FAIL: test_settings_corre_el_hook_de_HEAD (tests.research.test_guard_cierre.GuardCierreTest.test_settings_corre_el_hook_de_HEAD)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/frariv/Horno/hornofusion-full3D/tests/research/test_guard_cierre.py", line 176, in test_settings_corre_el_hook_de_HEAD
+    self.assertEqual(self.settings_hook("Bash", cmd), "deny")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'allow' != 'deny'
+- allow
++ deny
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.367s
+
+FAILED (failures=1)

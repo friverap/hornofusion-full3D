@@ -20,7 +20,7 @@
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/guard_cierre.sh"
+            "command": "d=\"${CLAUDE_PROJECT_DIR}\"; f=.claude/hooks/guard_cierre.sh; if s=$(git -C \"$d\" show \"HEAD:$f\" 2>/dev/null) && [ -n \"$s\" ]; then exec bash -c \"$s\"; fi; exec \"$d/$f\""
           }
         ]
       },
@@ -33,7 +33,7 @@
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/guard_cierre.sh"
+            "command": "d=\"${CLAUDE_PROJECT_DIR}\"; f=.claude/hooks/guard_cierre.sh; if s=$(git -C \"$d\" show \"HEAD:$f\" 2>/dev/null) && [ -n \"$s\" ]; then exec bash -c \"$s\"; fi; exec \"$d/$f\""
           }
         ]
       }

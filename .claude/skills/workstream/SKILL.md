@@ -12,7 +12,7 @@ Panel de cierre del workstream `$ARGUMENTS`.
      afirmaciones `{C-nnn}` del registro, nota de procedencia (ruta | comando)
      tras cada número, sección «Incertidumbre».
    - Si el cambio es numérico: predicción pre-registrada (`/preregistro`) con
-     veredicto registrado.
+     veredicto firme registrado (soportada o refutada; en_disputa no basta).
    - Sin simulación en curso que vaya a cambiar los datos citados.
 2. Stagea EXACTAMENTE los archivos del workstream (`git add <rutas>`, nunca
    `-a`) y fija el diff revisado:

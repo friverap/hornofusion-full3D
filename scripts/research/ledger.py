@@ -35,6 +35,9 @@ ESTADOS_VEREDICTO = ("soportada", "refutada", "fallida", "en_disputa")
 # resultado): ningun evento posterior la cita con --ref; quien retome la
 # pregunta registra una afirmacion nueva que la cita en el enunciado (WS-K13)
 PERMANENTES = ("refutada", "fallida")
+# un cambio numerico solo pasa la compuerta con su prediccion JUZGADA en firme:
+# en_disputa (y el sin_decidir que la cierra) o fallida no deciden (WS-K14)
+FIRMES = ("soportada", "refutada")
 AFIRMACIONES = ("hipotesis", "prediccion", "resultado")
 REVISORES = ("auditor-eaf3d", "revisor-evidencia", "revisor-refutador")
 WS_ESTADOS = ("abierto", "en_revision", "aprobado", "sin_terminar", "fallido")
@@ -405,8 +408,12 @@ def gate_errors(st, sha, ev):
             e.append(f"{r} no aprueba en la ronda {ronda}")
     if st.get("numerico"):
         pid = st.get("prediccion")
-        if not pid or not juzgada(pid, ev):
+        vs = veredictos(pid, ev) if pid else []
+        if not vs:
             e.append("cambio numerico sin prediccion pre-registrada juzgada")
+        elif vs[-1]["estado"] not in FIRMES:
+            e.append(f"la prediccion {pid} tiene veredicto '{vs[-1]['estado']}' (se exige "
+                     + " o ".join(FIRMES) + ")")
     return e
 
 

@@ -10,7 +10,9 @@
 #      `scripts/research/ledger.py gate` OK para ESE diff (GATED en ledger.py):
 #      workstream aprobado por los tres revisores en la misma ronda,
 #      test_quick=ok, diff_sha del staged y, si es numerico, prediccion
-#      pre-registrada juzgada.
+#      pre-registrada juzgada en firme (soportada o refutada, WS-K14).
+#   .claude/settings.json ejecuta ESTE archivo tal como esta en HEAD (WS-K14):
+#   una copia debilitada en el disco no decide su propio commit.
 #   2. `git commit -a/--all/-i/-o` o con pathspec: denegado (se saltan el
 #      staged que la compuerta verifica); usar `git add` explicito.
 #   3. research/ledger.jsonl es append-only: solo `ledger.py add` lo escribe.

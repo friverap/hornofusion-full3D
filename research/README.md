@@ -105,7 +105,9 @@ Reglas (las verifica `ledger.py check`):
    un revisor de evidencia fresco). Sin consenso → `sin_terminar` y aviso al
    usuario; el reporte queda.
 2. `make test-quick` verde sobre el diff staged → `ws-set WS test_quick=ok diff_sha=auto`.
-3. Si el cambio es numérico: predicción pre-registrada con veredicto.
+3. Si el cambio es numérico: predicción pre-registrada con veredicto FIRME
+   (`soportada` o `refutada`, `FIRMES` en `ledger.py`); un veredicto
+   `en_disputa` (aunque se cierre `sin_decidir`) o `fallida` no basta (WS-K14).
 4. El hook `guard_cierre.sh` bloquea `git commit` de `src/`, `tests/`,
    `scripts/research/`, `.claude/hooks/`, `.claude/workflows/`,
    `.claude/agents/` o `.claude/settings.json` (la herramienta del registro,
@@ -122,9 +124,23 @@ Reglas (las verifica `ledger.py check`):
    el resto del cambio, `status.json` lleva además `diff_sha_gated` (sha256 de
    `git diff --cached -- <rutas de GATED>`), y justo antes del commit de
    arranque se comprueba a mano que el staged lo reproduce.
-   Límite: Claude Code ejecuta el `guard_cierre.sh` del DISCO, así que un hook
-   debilitado decide su propio commit; su cambio exige panel solo mientras el
-   hook vigente sea el honesto.
+   El hook también es el de HEAD (WS-K14): `.claude/settings.json` lo carga
+   con `git show HEAD:.claude/hooks/guard_cierre.sh` y solo usa el del disco
+   si HEAD no lo tiene, así que un hook debilitado en el disco no decide su
+   propio commit. Límite: Claude Code toma los hooks de `settings.json` al
+   iniciar la sesión; un `settings.json` cambiado en el disco (sin commit) rige
+   desde la sesión siguiente. Las sesiones que se lanzan desde `~/Horno` usan
+   `~/Horno/.claude/settings.json`, fuera del repo y sin versionar (C-320).
+   Límites de «HEAD = aprobado» (C-318): el hook solo vigila el subcomando
+   `git commit`; `cherry-pick`, `revert`, `am`, `merge`, `rebase`, `reset` y
+   `commit-tree` + `update-ref` mueven HEAD sin compuerta, y entonces el hook
+   y el `ledger.py` «de HEAD» no son necesariamente los que aprobó un panel.
+   Solo `pore-ramp` tiene el hook: en las demás ramas rige el del disco y, si
+   no está ni en HEAD ni en el disco, la herramienta se PERMITE (el `exec`
+   falla sin JSON). Tampoco ata `status.json` (C-319): no está en `GATED`,
+   `numerico` lo declara el propio workstream y `prediccion` acepta cualquier
+   id. Es una barrera contra errores de proceso, no contra quien reescribe
+   HEAD o el estado del workstream.
 
 Estados de un workstream (`status.json`): `abierto`, `en_revision`,
 `aprobado` (el panel aprobó el reporte), `sin_terminar` (sin consenso en 3

@@ -154,6 +154,37 @@ class GuardCierreTest(unittest.TestCase):
         for c in ("git status", "git log --oneline -3", "grep -n commit src/a.f90", "git diff --cached"):
             self.assertEqual(self.hook("Bash", {"command": f"cd {self.d} && {c}"})[0], "allow", c)
 
+    def settings_hook(self, tool, ti):
+        """El comando de guard_cierre tal como lo registra .claude/settings.json (WS-K14)."""
+        cfg = json.load(open(os.path.join(REPO, ".claude", "settings.json")))
+        cmds = {h["command"] for g in cfg["hooks"]["PreToolUse"] for h in g["hooks"] if "guard_cierre" in h["command"]}
+        self.assertEqual(len(cmds), 1)
+        data = {"tool_name": tool, "tool_input": ti, "cwd": self.d}
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=self.d)
+        r = subprocess.run(["/bin/sh", "-c", cmds.pop()], input=json.dumps(data), capture_output=True, text=True, env=env)
+        return json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"] if r.stdout.strip() else "allow"
+
+    def test_settings_corre_el_hook_de_HEAD(self):
+        # un hook debilitado en el disco (y staged) no certifica su propio commit: corre el de HEAD
+        hp = os.path.join(self.d, ".claude", "hooks", "guard_cierre.sh")
+        os.makedirs(os.path.dirname(hp))
+        shutil.copy(HOOK, hp)
+        self.g("add", ".claude/hooks/guard_cierre.sh"); self.g("commit", "-q", "-m", "hook")
+        self.stage(".claude/hooks/guard_cierre.sh", "#!/bin/bash\nexit 0\n")
+        os.chmod(hp, 0o755)
+        cmd = {"command": f"cd {self.d} && git commit -m x"}
+        self.assertEqual(self.settings_hook("Bash", cmd), "deny")
+        self.assertEqual(self.settings_hook("Write", {"file_path": f"{self.d}/research/ledger.jsonl"}), "deny")
+        self.assertEqual(self.settings_hook("Bash", {"command": "git status"}), "allow")
+
+    def test_settings_sin_hook_en_HEAD_usa_el_del_disco(self):
+        hp = os.path.join(self.d, ".claude", "hooks", "guard_cierre.sh")
+        os.makedirs(os.path.dirname(hp))
+        shutil.copy(HOOK, hp)
+        os.chmod(hp, 0o755)
+        self.stage("src/a.f90", "x=1\n")
+        self.assertEqual(self.settings_hook("Bash", {"command": f"cd {self.d} && git commit -m x"}), "deny")
+
 
 if __name__ == "__main__":
     unittest.main()
