@@ -269,7 +269,8 @@ guarda sin leer su causa.
   de Plan D hay 238 commits de `src/` (89 en esos módulos). Planes D, E, F y G
   NO están refutados para el código actual hasta repetirlos en un banco
   vigente (claves aún en `mod_config_3d`). Vigentes: F2.31 por paso y
-  `n_pc_max = 3` (22-oct), Plan K (23-oct). El «no reintentar» de abajo se lee
+  `n_pc_max = 3` (22-oct), Plan K (23-oct; refutado y no adoptado, ver «Plan K
+  CERRADO» abajo). El «no reintentar» de abajo se lee
   con esta salvedad.
 - **Lo que NO funcionó en la ventana 280–370 s (oct-2026)**: la salvaguarda de
   water packing de RELAP5 §3.4.6 / TRACE cap. 2 (F2.32, archivada en
@@ -614,3 +615,54 @@ guarda sin leer su causa.
   demanda crece paso a paso. Complementariedad con retraso ⇒ Plan K
   (docs/PLAN_K_limitador_en_poisson.md): restricción α_l ≤ cap dentro del Poisson
   como conjunto activo.
+- **Plan K CERRADO: refutado y NO adoptado (23-oct-2026; WS-K1/WS-K2,
+  research/ledger.jsonl)**.
+  - H1, refutada (C-012): convergencia 0 %. Aun así, quitó la oscilación:
+    osc2 bajó de 51.8 kPa a 342 Pa.
+  - H1b, la versión post-auditoría con tope EXACTO, refutada por la letra en
+    sus incisos (b) y (c) (C-028). Su inciso de ciclo (a) pasa por la letra,
+    pero «solo en la mediana» (C-028): osc2 es una MEDIANA (885.7 Pa ≤ 1000) y
+    no ve un ciclo que ocupe menos de la mitad de la ventana. En k1b, |d2p| >
+    1000 Pa en el 47 % de los pasos de la sonda (k1 y k1pa, 22 %). No es
+    prueba de que el ciclo no volviera.
+  - En la sonda (10,60,2), pasos 342510–342533 de una sola trayectoria,
+    reaparece un ciclo de 2 pasos de amplitud 3.4 veces menor que la base:
+    6874 frente a 23362 Pa, medido con la métrica de C-036, que se calibró
+    después y con la propia k1b. Tras el pico queda liso (C-033). Si eso
+    activa la regla de aborto de §4 del plan, que no tiene umbral, es lectura
+    del coordinador, no un veredicto.
+  - Lo que quita el ciclo en la sonda es la HOLGURA de la variante v2 sin A2
+    (C-035/C-037, C-039): la celda queda bajo el tope (ag_min 0.0183) y el
+    limitador no conmuta.
+  - Lectura estructural, sin valor de veredicto: H0 (arriba) muestra la
+    decisión idéntica en los 5 outers y alternando ENTRE pasos, y el hueco de
+    poro está congelado en α^n durante el paso (J-B). Un conjunto activo
+    resuelto DENTRO del paso no quita un retraso ENTRE pasos, y con tope
+    exacto lo reproduce por construcción. Por eso no reintentar el conjunto
+    activo con tope exacto sin atacar ese retraso.
+  - Juez de 3 trayectorias en 340–345.5 s con el brazo K (k1pa; el binario
+    no se identifica en los run.log, así que v2 con o sin A2 no se distingue,
+    ver research/ws/WS-K2/report.md), refutado (C-041):
+    - en 344–345.5 s, 2 de 3 trayectorias limpias (cent_pg 0.1/0.3 % frente a
+      6.7–9.5 % de la base);
+    - k1pa_340_n15: 183 pasos seguidos con p_max ≥ 1 MPa desde 345.318 s
+      (122 en la centinela de 2 MPa; C-311);
+    - OJO: la base también pasa de 1 MPa en las 3 trayectorias y toca 2 MPa
+      en 2 de 3 (C-310/C-311). Que el pegado de n15 sea propio de K NO está
+      probado: desde el mismo estado, el brazo sin K también queda ≥ 1 MPa en
+      los 10 pasos medidos y ninguno de los dos brazos es un control limpio
+      (C-312/C-313); haría falta la base desde un snapshot de n15 anterior a
+      345.25 s;
+    - sin Plan K el campo también llega a 2 MPa desde el mismo reinicio
+      (C-309), así que la causalidad de Plan K en el estallido queda sin
+      decidir. El golpe de ariete de una velocidad fantasma (C-064) es el
+      diagnóstico de un solo evento y está sin verificar.
+  - Si se retoma con un margen o barrera continua bajo el tope, el
+    experimento decisivo es un juez B1 de ≥ 3 trayectorias en 340–345.5 s
+    contra la base de C-040/C-310, no la ventana 342.45–342.56 s: k1pa ya
+    pasó esa ventana y falló el juez. Antes hay que decir en qué difiere de
+    lo ya rechazado: la rampa por encima de ALPHA_BED (4547861), D2.4 (d24
+    refutada en el banco, C-091) y llevar el hueco de la banda al Poisson
+    (A20-2). Detalle en research/ws/WS-K1/report.md.
+  - Vigencia: código de 1bc9832 (7 commits de src después); los parches en
+    research/ws/WS-K1/ ya no aplican.

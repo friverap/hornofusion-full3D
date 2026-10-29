@@ -1,16 +1,27 @@
 {
  "ws": "WS-K2",
  "meta": "G2",
- "estado": "abierto",
- "ronda": 0,
+ "estado": "fallido",
+ "ronda": 2,
  "numerico": true,
- "prediccion": null,
- "diff_sha": null,
+ "prediccion": "C-040",
+ "diff_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
  "test_quick": null,
  "revisores": {
-  "auditor-eaf3d": null,
-  "revisor-evidencia": null,
-  "revisor-refutador": null
+  "auditor-eaf3d": {
+   "veredicto": "aprueba",
+   "ronda": 2
+  },
+  "revisor-evidencia": {
+   "veredicto": "aprueba",
+   "ronda": 2
+  },
+  "revisor-refutador": {
+   "veredicto": "aprueba",
+   "ronda": 2
+  }
  },
- "creado": "2026-10-22T17:31:49-06:00"
+ "creado": "2026-10-22T17:31:49-06:00",
+ "actualizado": "2026-10-29T01:45:09-06:00",
+ "cierre": "G2 no cumplida: juez 340-345.5 s refutado (C-041); 284.3/294.1 s solo medidas (C-014); Plan K no adoptado"
 }

@@ -13,7 +13,9 @@ paths:
 - Criterio de una predicción: numérico, con ventana, base (ruta de la corrida
   de referencia), tolerancia y comando de medida, escrito y commiteado ANTES
   de lanzar la corrida. Pensar la escala física antes (lección de H1 del
-  Plan K: «|p| < 20 kPa» ignoraba la hidrostática de ~70 kPa del fondo).
+  Plan K: «|p| < 20 kPa» suponía líquido en reposo; los ~69 kPa eran la media
+  del ciclo frenando un chorro, no hidrostática, que sobre esa celda era
+  ~6 kPa, C-013/C-031).
 - Comparaciones justas: mismo reinicio, misma ventana, mismo código salvo la
   clave probada; ventanas de ~30 pasos que empiezan con el ciclo en marcha
   son señal temprana, no veredicto.
